@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="SPRITZReact/spritzreact.esproj">
+    <Build />
+    <Deploy />
+  </Project>
+</Solution>
