@@ -346,8 +346,35 @@
   align-items: flex-end;
   justify-content: center;
   margin-bottom: 18px;
+  /* One shared "stage" backdrop behind the whole faces row (theme-agnostic translucent). */
+  padding: 16px 12px 12px;
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 85% at 50% 16%, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 62%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.18));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 -12px 26px rgba(0, 0, 0, 0.13);
 }
 .reader-face { display: block; overflow: visible; }
+
+/* 3D reader faces (WebGL). Each <View> tracks one of these boxes; the pixels are drawn by
+   the shared, click-through canvas overlay. The .reader-face (SVG) rules below still style
+   the FaceSVG fallback and the Face Library thumbnails. */
+.reader-face-3d { display: block; }
+.reader-face-3d.art-neon { background: #05050f; border-radius: 10px; }
+/* Standalone 3D preview (Face Library) gets its own matching stage backdrop. */
+.face-preview-3d {
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 85% at 50% 16%, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 62%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.2));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 -12px 26px rgba(0, 0, 0, 0.14);
+}
+.face-preview-3d.art-neon { background: #05050f; }
+.face-canvas-overlay {
+  /* Below menus (150+) and dialogs (5000) so dashboard faces are naturally occluded by any
+     overlay above them — no per-face hiding needed. */
+  z-index: 50;
+}
 .reader-face .face-iris { transition: fill 700ms ease-out; }
 .reader-face .face-glow { transition: filter 600ms ease; }
 .reader-face .face-brow,

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Dialog from './Dialog.jsx';
-import Face from '../components/Face.jsx';
+import FaceSVG from '../components/FaceSVG.jsx';
+import FacePreview from '../components/FacePreview.jsx';
 import { useApp } from '../state/AppContext.jsx';
 
 const FACE_STYLES = ['Man', 'Owl', 'Robot', 'Alien', 'Wizard', 'Cat', 'Baby', 'Skull', 'Panda', 'Frankenstein', 'Vampire', 'Viking', 'Clown', 'Bunny', 'Dragon', 'Ninja'];
@@ -84,6 +85,16 @@ export default function FaceLibraryDialog({ onClose }) {
         </label>
       </div>
 
+      {/* Large live 3D preview of the currently edited slot's style (own WebGL context). */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+        <div style={{ textAlign: 'center' }}>
+          <FacePreview faceStyle={styles[slot]} artStyle={art} wpm={wpm} size={184} />
+          <div style={{ fontSize: 12, color: 'var(--status-fg)', marginTop: 4 }}>
+            Face {slot + 1}: {styles[slot]}
+          </div>
+        </div>
+      </div>
+
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
         <span style={{ fontSize: 11, color: 'var(--status-fg)' }}>Preview WPM</span>
         <input type="range" min={0} max={1100} step={10} value={wpm} onChange={(e) => setWpm(Number(e.target.value))} style={{ flex: 1 }} />
@@ -109,7 +120,7 @@ export default function FaceLibraryDialog({ onClose }) {
                 borderColor: selected ? 'var(--toggle-active-bg)' : 'var(--btn-border)',
               }}
             >
-              <Face wpm={wpm} lineProgress={0.5} faceStyle={style} artStyle={art} size={72} />
+              <FaceSVG wpm={wpm} lineProgress={0.5} faceStyle={style} artStyle={art} size={72} />
               <span style={{ fontSize: 11 }}>{style}</span>
             </button>
           );

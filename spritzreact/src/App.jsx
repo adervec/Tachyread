@@ -10,6 +10,7 @@ import ControlsBar from './components/ControlsBar.jsx';
 import TocPane from './components/TocPane.jsx';
 import ChapterHeading from './components/ChapterHeading.jsx';
 import PaneLayout from './components/PaneLayout.jsx';
+import FaceStage from './components/FaceStage.jsx';
 import TypingOverlay from './components/TypingOverlay.jsx';
 import FindDialog from './dialogs/FindDialog.jsx';
 import GoToLineDialog from './dialogs/GoToLineDialog.jsx';
@@ -718,6 +719,10 @@ function AppInner() {
       )}
 
       {dragOver && <div className="drop-overlay">Drop file to open</div>}
+
+      {/* Single shared WebGL context for every 3D reader face (drei <View> portals here).
+          Mounted only while faces are actually shown so there's no idle render loop. */}
+      {state.showDash && !!activeTab?.settings?.showEyes && <FaceStage />}
     </div>
   );
 }
