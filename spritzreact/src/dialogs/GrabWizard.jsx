@@ -12,14 +12,17 @@ import {
 } from '../features/screenCapture.js';
 import { recognizeImage, ocrSupported, loadImage } from '../features/ocr.js';
 import { buildGrabbedDoc } from '../document/grab.js';
+import { playGrabClick } from '../features/clickSound.js';
+import { createRecognizer, speechRecognitionSupported } from '../features/speechRecognition.js';
 
 const uid = () => Math.random().toString(36).slice(2);
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const DUP_THRESHOLD = 6;
+const VOICE_WORDS = ['GO', 'SHOOT', 'GRAB', 'HUT', 'CAP', 'TAKE'];
 
 // "Grab Text" wizard — the browser adaptation of TextGrabber. Acquire text from a shared
-// screen/window region or from uploaded images via OCR, keeping the original images so they
-// can be shown side-by-side while speed-reading (like the PDF source pane).
+// screen/window region (manually, on a timer, or by voice command) or from uploaded images,
+// keeping the original images so they can be shown side-by-side while speed-reading.
 export default function GrabWizard({ onClose }) {
   const { openDoc, setStatus } = useApp();
   const [step, setStep] = useState('source'); // source | screen | review
@@ -38,6 +41,14 @@ export default function GrabWizard({ onClose }) {
   const [autoRunning, setAutoRunning] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
 
+  // Voice-command grab
+  const [voiceWord, setVoiceWord] = useState('GRAB');
+  const [voiceOn, setVoiceOn] = useState(false);
+  const recogRef = useRef(null);
+  const lastVoiceGrab = useRef(0);
+  const voiceWordRef = useRef(voiceWord);
+  voiceWordRef.current = voiceWord;
+
   useEffect(() => {
     if (stream && videoRef.current) {
       videoRef.current.srcObject = stream;
@@ -46,6 +57,47 @@ export default function GrabWizard({ onClose }) {
   }, [stream, step]);
 
   useEffect(() => () => stopCapture(stream), [stream]);
+
+  // Voice recognition lifecycle — only while listening on the capture step.
+  useEffect(() => {
+    if (!voiceOn || step !== 'screen') {
+      if (recogRef.current) {
+        try { recogRef.current.stop(); } catch { /* noop */ }
+        recogRef.current = null;
+      }
+      return;
+    }
+    if (!speechRecognitionSupported()) {
+      setMsg('Voice grab needs Chrome/Edge (Web Speech API).');
+      setVoiceOn(false);
+      return;
+    }
+    const r = createRecognizer({
+      onResult: ({ transcript }) => {
+        const toks = (transcript || '').toLowerCase().match(/[a-z']+/g) || [];
+        if (toks.includes(voiceWordRef.current.toLowerCase())) {
+          const now = Date.now();
+          if (now - lastVoiceGrab.current > 700) {
+            lastVoiceGrab.current = now;
+            grabOnce();
+          }
+        }
+      },
+      onError: () => { /* transient — keep listening */ },
+    });
+    if (!r) { setVoiceOn(false); return; }
+    r.onend = () => { if (recogRef.current === r) { try { r.start(); } catch { /* noop */ } } };
+    try { r.start(); } catch { /* noop */ }
+    recogRef.current = r;
+    setMsg(`Listening… say “${voiceWordRef.current}” to grab.`);
+    return () => {
+      if (recogRef.current) {
+        try { recogRef.current.stop(); } catch { /* noop */ }
+        recogRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceOn, step]);
 
   function cropVideoPx() {
     const v = videoRef.current;
@@ -72,9 +124,13 @@ export default function GrabWizard({ onClose }) {
   function grabOnce() {
     const v = videoRef.current;
     if (!v || !v.videoWidth) return;
+    playGrabClick();
     const canvas = captureFrame(v, cropVideoPx());
-    setSegments((arr) => [...arr, { id: uid(), image: canvasToDataUrl(canvas), text: '' }]);
-    setMsg(`Captured ${segments.length + 1} page(s).`);
+    const url = canvasToDataUrl(canvas);
+    setSegments((arr) => {
+      setMsg(`Captured ${arr.length + 1} page(s).`);
+      return [...arr, { id: uid(), image: url, text: '' }];
+    });
   }
 
   async function runAuto() {
@@ -102,6 +158,7 @@ export default function GrabWizard({ onClose }) {
         lastSig = sig;
         consec = 0;
         captured++;
+        playGrabClick();
         const url = canvasToDataUrl(canvas);
         setSegments((arr) => [...arr, { id: uid(), image: url, text: '' }]);
         setMsg(`Auto-grab: captured ${captured} page(s)… (advance the page now)`);
@@ -214,20 +271,22 @@ export default function GrabWizard({ onClose }) {
   }
 
   const hasText = segments.some((s) => (s.text || '').trim());
+  const voiceSupported = speechRecognitionSupported();
 
   return (
     <Dialog
       title="Grab Text"
       onClose={() => {
         abortAuto();
+        setVoiceOn(false);
         stopCapture(stream);
         onClose();
       }}
-      width={760}
+      width={1140}
       buttons={
         <>
           {step !== 'source' && <button onClick={() => setStep('source')}>← Source</button>}
-          {segments.length > 0 && step !== 'review' && <button onClick={() => setStep('review')}>Review ({segments.length}) →</button>}
+          {segments.length > 0 && step !== 'review' && <button onClick={() => setStep('review')}>Review &amp; OCR ({segments.length}) →</button>}
           {step === 'review' && (
             <>
               <button onClick={recognizeAll} disabled={ocrBusy || !segments.length}>
@@ -247,7 +306,7 @@ export default function GrabWizard({ onClose }) {
           <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
             <button style={{ flex: 1, padding: '16px' }} onClick={startScreen} disabled={!displayCaptureSupported()}>
               🖥️ Capture screen / window
-              <div className="settings-note" style={{ margin: '6px 0 0' }}>Share a screen, draw a region, grab pages (you flip the pages).</div>
+              <div className="settings-note" style={{ margin: '6px 0 0' }}>Share a screen, draw a region, grab pages by button, timer, or voice.</div>
             </button>
             <label style={{ flex: 1, padding: '16px', textAlign: 'center', cursor: 'pointer' }} className="grab-upload-btn">
               🖼️ Upload image(s)
@@ -260,31 +319,63 @@ export default function GrabWizard({ onClose }) {
       )}
 
       {step === 'screen' && (
-        <div className="grab-screen">
-          <div
-            className="grab-preview"
-            onPointerDown={onCropDown}
-            onPointerMove={onCropMove}
-            onPointerUp={onCropUp}
-          >
-            <video ref={videoRef} muted playsInline />
-            {crop && (
-              <div
-                className="grab-crop"
-                style={{ left: `${crop.fx * 100}%`, top: `${crop.fy * 100}%`, width: `${crop.fw * 100}%`, height: `${crop.fh * 100}%` }}
-              />
-            )}
+        <div className="grab-screen grab-screen-2col">
+          {/* Left: live preview + capture controls */}
+          <div className="grab-capture-col">
+            <div
+              className="grab-preview"
+              onPointerDown={onCropDown}
+              onPointerMove={onCropMove}
+              onPointerUp={onCropUp}
+            >
+              <video ref={videoRef} muted playsInline />
+              {crop && (
+                <div
+                  className="grab-crop"
+                  style={{ left: `${crop.fx * 100}%`, top: `${crop.fy * 100}%`, width: `${crop.fw * 100}%`, height: `${crop.fh * 100}%` }}
+                />
+              )}
+            </div>
+            <div className="grab-controls">
+              <button onClick={grabOnce} disabled={autoRunning}>📸 Grab page</button>
+              <button onClick={() => setCrop(null)} disabled={!crop}>Clear region</button>
+              <span className="grab-sep" />
+              <label>Auto: <input type="number" min={1} max={200} value={autoCount} onChange={(e) => setAutoCount(e.target.value)} style={{ width: 48 }} /> grabs</label>
+              <label>every <input type="number" min={0.3} step={0.5} value={autoInterval} onChange={(e) => setAutoInterval(e.target.value)} style={{ width: 48 }} /> s</label>
+              <label>stop after <input type="number" min={0} value={stopDupes} onChange={(e) => setStopDupes(e.target.value)} style={{ width: 40 }} /> dupes</label>
+              {autoRunning ? <button onClick={abortAuto}>Abort</button> : <button onClick={runAuto}>▶ Auto-grab</button>}
+            </div>
+            <div className="grab-voice">
+              <label>🎙 Voice word
+                <select value={voiceWord} onChange={(e) => setVoiceWord(e.target.value)} disabled={voiceOn}>
+                  {VOICE_WORDS.map((w) => <option key={w}>{w}</option>)}
+                </select>
+              </label>
+              <button
+                className={voiceOn ? 'toggle-on' : ''}
+                onClick={() => setVoiceOn((v) => !v)}
+                disabled={!voiceSupported}
+                title={voiceSupported ? `Say “${voiceWord}” to grab a page` : 'Voice needs Chrome/Edge'}
+              >
+                {voiceOn ? '■ Stop listening' : '🎙 Listen'}
+              </button>
+              {!voiceSupported && <span className="settings-note" style={{ margin: 0 }}>Voice needs Chrome/Edge.</span>}
+            </div>
           </div>
-          <div className="grab-controls">
-            <button onClick={grabOnce} disabled={autoRunning}>📸 Grab page</button>
-            <button onClick={() => setCrop(null)} disabled={!crop}>Clear region</button>
-            <span className="grab-sep" />
-            <label>Auto: <input type="number" min={1} max={200} value={autoCount} onChange={(e) => setAutoCount(e.target.value)} style={{ width: 48 }} /> grabs</label>
-            <label>every <input type="number" min={0.3} step={0.5} value={autoInterval} onChange={(e) => setAutoInterval(e.target.value)} style={{ width: 48 }} /> s</label>
-            <label>stop after <input type="number" min={0} value={stopDupes} onChange={(e) => setStopDupes(e.target.value)} style={{ width: 40 }} /> dupes</label>
-            {autoRunning ? <button onClick={abortAuto}>Abort</button> : <button onClick={runAuto}>▶ Auto-grab</button>}
-            <span className="grab-sep" />
-            <span className="settings-note" style={{ margin: 0 }}>{segments.length} captured</span>
+
+          {/* Right: the pages grabbed so far, side-by-side with the controls */}
+          <div className="grab-shots-col">
+            <div className="grab-shots-head">{segments.length} captured</div>
+            <div className="grab-shots">
+              {segments.length === 0 && <div className="settings-note">Grabbed pages appear here.</div>}
+              {segments.map((s, i) => (
+                <div key={s.id} className="grab-shot">
+                  <span className="grab-shot-n">{i + 1}</span>
+                  <img src={s.image} alt={`page ${i + 1}`} />
+                  <button className="grab-shot-x" onClick={() => remove(s.id)} title="Remove">×</button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

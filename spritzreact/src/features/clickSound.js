@@ -12,12 +12,12 @@ function getCtx() {
   return ctx;
 }
 
-export function playLineClick(volume = 0.16) {
+// Generic short click. `freq` shifts the tone (a slightly higher tick reads as a "shutter").
+export function playClick(volume = 0.16, freq = 1500, dur = 0.05) {
   try {
     const ac = getCtx();
     if (!ac) return;
     const t = ac.currentTime;
-    const dur = 0.05;
     const buf = ac.createBuffer(1, Math.max(1, Math.ceil(ac.sampleRate * dur)), ac.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
@@ -26,7 +26,7 @@ export function playLineClick(volume = 0.16) {
     src.buffer = buf;
     const bp = ac.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.value = 1500;
+    bp.frequency.value = freq;
     bp.Q.value = 0.7;
     const gain = ac.createGain();
     gain.gain.setValueAtTime(0, t);
@@ -39,4 +39,14 @@ export function playLineClick(volume = 0.16) {
   } catch {
     /* audio not available — ignore */
   }
+}
+
+// Soft tick on line advance (the default tone).
+export function playLineClick(volume = 0.16) {
+  playClick(volume, 1500);
+}
+
+// Slightly brighter, shorter "shutter" tick for a grab/capture action.
+export function playGrabClick(volume = 0.2) {
+  playClick(volume, 2200, 0.04);
 }
