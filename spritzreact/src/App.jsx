@@ -32,18 +32,20 @@ import { cancelSpeech, rateFromIndex } from './features/tts.js';
 import { createReadAloud } from './features/readAloud.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession } from './state/storage.js';
+import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
 import { playLineClick } from './features/clickSound.js';
 import { applyTheme } from './state/themes.js';
 import './App.css';
 
 function AppInner() {
-  const { state, activeTab, openFile, openClipboard, setStatus, patchSettings, patchTab, openDialog, closeDialog, dispatch, updateGlobal, flushReadState } = useApp();
+  const { state, activeTab, openFile, openClipboard, setStatus, patchSettings, patchTab, openDialog, closeDialog, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
   const engineRef = useRef(null);
   if (!engineRef.current) engineRef.current = createEngine();
   const [playing, setPlaying] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [closing, setClosing] = useState(null); // null | 'disconnect' | 'shutdown'
   const [showFootnote, setShowFootnote] = useState(false);
   const [paneWidths, setPaneWidths] = useState({ toc: 220, dash: 260, spritz: 420, source: 380 });
   const resizePane = (id, w) => setPaneWidths((prev) => ({ ...prev, [id]: w }));
@@ -529,6 +531,26 @@ function AppInner() {
       dispatch({ type: 'CLOSE_TAB', id: activeTab.id });
       return;
     }
+    if (action === 'close-all') {
+      closeAllTabs();
+      return;
+    }
+    if (action === 'disconnect') {
+      // Keep the saved session so reopening reconnects to these same files.
+      const open = state.tabs.map((t) => ({ checksum: t.doc.contentChecksum, fileName: t.doc.fileName }));
+      saveSession({ open, active: activeTab?.doc.contentChecksum || null }).catch(() => {});
+      setClosing('disconnect');
+      setTimeout(() => { try { window.close(); } catch { /* tab not script-opened */ } }, 50);
+      return;
+    }
+    if (action === 'shutdown') {
+      // Clear the session and close every file tab so the next run starts clean.
+      closeAllTabs();
+      clearSession().catch(() => {});
+      setClosing('shutdown');
+      setTimeout(() => { try { window.close(); } catch { /* tab not script-opened */ } }, 50);
+      return;
+    }
     if (action === 'find' && activeTab) return openDialog({ kind: 'find' });
     if (action === 'goto' && activeTab) return openDialog({ kind: 'goto' });
     if (action === 'app-settings') return openDialog({ kind: 'app-settings' });
@@ -724,6 +746,18 @@ function AppInner() {
 
       {dragOver && <div className="drop-overlay">Drop file to open</div>}
 
+      {closing && (
+        <div className="closing-overlay">
+          <h1>{closing === 'shutdown' ? 'Shut down' : 'Disconnected'}</h1>
+          <p>
+            {closing === 'shutdown'
+              ? 'All files closed — your next session starts clean.'
+              : 'Your session is saved — it will reconnect next time you open the app.'}
+          </p>
+          <p className="hint">You can close this browser tab now. (Browsers may block a page from closing its own tab automatically.)</p>
+        </div>
+      )}
+
       {/* Single shared WebGL context for every 3D reader face (drei <View> portals here).
           Mounted only while faces are actually shown so there's no idle render loop. */}
       {state.showDash && !!activeTab?.settings?.showEyes && <FaceStage />}
@@ -732,6 +766,19 @@ function AppInner() {
 }
 
 export default function App() {
+  // Single-instance guard: if the app is already open in another browser tab, bow out and
+  // touch nothing (no IndexedDB, no session writes) so the live tab isn't clobbered.
+  const [instance] = useState(() => acquireInstance());
+  if (!instance.primary) {
+    return (
+      <div className="closing-overlay">
+        <h1>SPRITZ Reader</h1>
+        <p>Already open in another browser tab.</p>
+        <p className="hint">This app runs in a single tab so your files and progress stay in sync. Switch to that tab, or close it and reload here.</p>
+        <button onClick={() => window.location.reload()}>Reload</button>
+      </div>
+    );
+  }
   return (
     <AppProvider>
       <AppInner />

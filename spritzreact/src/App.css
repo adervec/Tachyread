@@ -957,6 +957,24 @@
 @keyframes caretBlink { 50% { opacity: 0; } }
 .type-hint { font-size: 12px; color: var(--status-fg); }
 
+/* Single-instance notice + Disconnect/Shut Down screens (above everything). */
+.closing-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: var(--pane-bg);
+  color: var(--menu-fg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 24px;
+}
+.closing-overlay .hint { color: var(--status-fg); font-size: 12px; max-width: 460px; }
+.closing-overlay button { margin-top: 8px; }
+
 /* Legacy typing overlay (unused) */
 .typing-overlay {
   position: absolute;

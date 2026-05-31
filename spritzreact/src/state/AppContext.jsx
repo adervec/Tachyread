@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useReducer, useRef, useCallback } from 'react';
 import { defaultFileSettings, defaultGlobalSettings } from './settings.js';
-import { loadGlobal, saveGlobal, loadFile, saveFile, loadReadState, saveReadState } from './storage.js';
+import { loadGlobal, saveGlobal, loadFile, saveFile, loadReadState, saveReadState, saveDocPayload, loadDocPayload, loadSession, saveSession } from './storage.js';
 import { parseFile, parseClipboardText } from '../document/parsers.js';
 import { readerDocFromText, attachChecksum, ReadStatus } from '../document/readerDocument.js';
 import { createReadingTracker } from '../engine/readingTracker.js';
@@ -55,6 +55,8 @@ function reducer(state, action) {
         : state.activeTabId;
       return { ...state, tabs, activeTabId: active };
     }
+    case 'CLOSE_ALL_TABS':
+      return { ...state, tabs: [], activeTabId: null };
     case 'SET_ACTIVE_TAB':
       return { ...state, activeTabId: action.id };
     case 'PATCH_TAB': {
@@ -96,6 +98,8 @@ export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, init);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const sessionReady = useRef(false); // gate session saves until the restore pass finishes
+  const didRestore = useRef(false);
 
   // Load global settings on mount
   useEffect(() => {
@@ -119,7 +123,8 @@ export function AppProvider({ children }) {
 
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId) || null;
 
-  const openDoc = useCallback(async (doc) => {
+  const openDoc = useCallback(async (doc, opts = {}) => {
+    const { silent = false, persist = true } = opts;
     // Merge stored per-file settings (lookup by checksum)
     const stored = await loadFile(doc.contentChecksum);
     const baseSettings = {
@@ -141,7 +146,18 @@ export function AppProvider({ children }) {
     });
     const tab = makeTab(doc, baseSettings, tracker);
     dispatch({ type: 'ADD_TAB', tab });
-    dispatch({ type: 'SET_STATUS', text: `Opened ${doc.fileName} (${doc.words.length} words)` });
+    if (!silent) dispatch({ type: 'SET_STATUS', text: `Opened ${doc.fileName} (${doc.words.length} words)` });
+    // Persist a rebuildable payload so this tab can be reconnected next session.
+    if (persist) {
+      saveDocPayload({
+        checksum: doc.contentChecksum,
+        fileName: doc.fileName,
+        fullText: doc.fullText,
+        source: doc.source || null,
+        wordToSegment: doc.wordToSegment || null,
+        segmentCount: doc.segmentCount || 0,
+      }).catch(() => {});
+    }
     return tab;
   }, []);
 
@@ -186,6 +202,51 @@ export function AppProvider({ children }) {
     };
   }, [flushReadState]);
 
+  // Reconnect to the previous session: reopen the tabs that were open last time. Runs once,
+  // only in the primary instance (a duplicate tab never mounts this provider).
+  useEffect(() => {
+    if (didRestore.current) return;
+    didRestore.current = true;
+    (async () => {
+      try {
+        const sess = await loadSession();
+        if (sess && Array.isArray(sess.open) && sess.open.length) {
+          const opened = [];
+          for (const entry of sess.open) {
+            try {
+              const rec = await loadDocPayload(entry.checksum);
+              if (!rec?.fullText) continue;
+              const doc = readerDocFromText(rec.fullText, rec.fileName || 'Document');
+              if (rec.source) doc.source = rec.source;
+              if (rec.wordToSegment) doc.wordToSegment = rec.wordToSegment;
+              if (rec.segmentCount) doc.segmentCount = rec.segmentCount;
+              await attachChecksum(doc);
+              const tab = await openDoc(doc, { silent: true, persist: false });
+              opened.push({ checksum: doc.contentChecksum, id: tab.id });
+            } catch { /* skip a doc that can't be rebuilt */ }
+          }
+          if (opened.length) {
+            const act = opened.find((o) => o.checksum === sess.active) || opened[opened.length - 1];
+            dispatch({ type: 'SET_ACTIVE_TAB', id: act.id });
+            dispatch({ type: 'SET_STATUS', text: `Reconnected — restored ${opened.length} file(s).` });
+          }
+        }
+      } finally {
+        sessionReady.current = true;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist the open-tab session whenever it changes (after the restore pass completes, so the
+  // initial empty state can't wipe a saved session before it's read back).
+  useEffect(() => {
+    if (!sessionReady.current) return;
+    const open = state.tabs.map((t) => ({ checksum: t.doc.contentChecksum, fileName: t.doc.fileName }));
+    const active = (state.tabs.find((t) => t.id === state.activeTabId) || null)?.doc.contentChecksum || null;
+    saveSession({ open, active }).catch(() => {});
+  }, [state.tabs, state.activeTabId]);
+
   const openFile = useCallback(async (file) => {
     dispatch({ type: 'SET_STATUS', text: `Parsing ${file.name}…` });
     try {
@@ -209,6 +270,10 @@ export function AppProvider({ children }) {
 
   const closeTab = useCallback((id) => {
     dispatch({ type: 'CLOSE_TAB', id });
+  }, []);
+
+  const closeAllTabs = useCallback(() => {
+    dispatch({ type: 'CLOSE_ALL_TABS' });
   }, []);
 
   const setActiveTab = useCallback((id) => {
@@ -242,6 +307,7 @@ export function AppProvider({ children }) {
     openClipboard,
     openDoc,
     closeTab,
+    closeAllTabs,
     setActiveTab,
     patchSettings,
     patchTab,

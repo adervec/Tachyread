@@ -5,7 +5,7 @@ import { openDB } from 'idb';
 import { defaultGlobalSettings } from './settings.js';
 
 const DB_NAME = 'SPRITZReader';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let _dbPromise = null;
 
@@ -34,6 +34,11 @@ function getDB() {
         // key: checksum → { checksum, name, createdAt, segments:[{text,image,regions,ocr}], ocr }
         // Lets grabbed/OCR'd documents reopen without repeating the capture + OCR.
         db.createObjectStore('grabbed', { keyPath: 'checksum' });
+      }
+      if (!db.objectStoreNames.contains('docs')) {
+        // key: checksum → { checksum, fileName, fullText, source, wordToSegment, segmentCount }
+        // Rebuildable doc payload so the previous session's tabs can be reopened on reconnect.
+        db.createObjectStore('docs', { keyPath: 'checksum' });
       }
     },
   });
@@ -109,6 +114,45 @@ export async function allGrabbed() {
 export async function deleteGrabbed(checksum) {
   const db = await getDB();
   await db.delete('grabbed', checksum);
+}
+
+// Rebuildable doc payloads (text + source) keyed by checksum — used to restore session tabs.
+export async function saveDocPayload(rec) {
+  if (!rec?.checksum) return;
+  const db = await getDB();
+  try {
+    await db.put('docs', { ...rec });
+  } catch {
+    // Source (e.g. a large PDF's bytes) may exceed quota or be non-cloneable — keep the text.
+    try { await db.put('docs', { checksum: rec.checksum, fileName: rec.fileName, fullText: rec.fullText }); } catch { /* give up */ }
+  }
+}
+
+export async function loadDocPayload(checksum) {
+  if (!checksum) return null;
+  const db = await getDB();
+  return (await db.get('docs', checksum)) || null;
+}
+
+export async function deleteDocPayload(checksum) {
+  const db = await getDB();
+  await db.delete('docs', checksum);
+}
+
+// The set of open tabs (ordered) + active tab, so a fresh load can reconnect to the last session.
+export async function loadSession() {
+  const db = await getDB();
+  return (await db.get('global', 'session')) || null;
+}
+
+export async function saveSession(session) {
+  const db = await getDB();
+  await db.put('global', session, 'session');
+}
+
+export async function clearSession() {
+  const db = await getDB();
+  await db.delete('global', 'session');
 }
 
 // Audiobook clips
