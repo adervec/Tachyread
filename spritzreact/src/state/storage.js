@@ -5,7 +5,7 @@ import { openDB } from 'idb';
 import { defaultGlobalSettings } from './settings.js';
 
 const DB_NAME = 'SPRITZReader';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 let _dbPromise = null;
 
@@ -39,6 +39,11 @@ function getDB() {
         // key: checksum → { checksum, fileName, fullText, source, wordToSegment, segmentCount }
         // Rebuildable doc payload so the previous session's tabs can be reopened on reconnect.
         db.createObjectStore('docs', { keyPath: 'checksum' });
+      }
+      if (!db.objectStoreNames.contains('typingRuns')) {
+        // Detailed typing-practice history (separate from reading): one record per completed run
+        // { id, ts, netWpm, grossWpm, accuracy, chars, errors, words, durationMs, docName, errorKeys }
+        db.createObjectStore('typingRuns', { keyPath: 'id', autoIncrement: true });
       }
     },
   });
@@ -153,6 +158,22 @@ export async function saveSession(session) {
 export async function clearSession() {
   const db = await getDB();
   await db.delete('global', 'session');
+}
+
+// Typing-practice history (separate from reading history).
+export async function saveTypingRun(run) {
+  const db = await getDB();
+  await db.add('typingRuns', { ...run });
+}
+
+export async function allTypingRuns() {
+  const db = await getDB();
+  return await db.getAll('typingRuns');
+}
+
+export async function clearTypingRuns() {
+  const db = await getDB();
+  await db.clear('typingRuns');
 }
 
 // Audiobook clips

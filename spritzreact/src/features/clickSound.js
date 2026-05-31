@@ -50,3 +50,35 @@ export function playLineClick(volume = 0.16) {
 export function playGrabClick(volume = 0.2) {
   playClick(volume, 2200, 0.04);
 }
+
+// Light, crisp click for a perfectly typed word.
+export function playPerfectClick(volume = 0.4) {
+  playClick(volume * 0.5, 2000, 0.03);
+}
+
+// Very short, soft low-passed hiss for a word typed with an error.
+export function playErrorHiss(volume = 0.4) {
+  try {
+    const ac = getCtx();
+    if (!ac) return;
+    const t = ac.currentTime;
+    const dur = 0.08;
+    const buf = ac.createBuffer(1, Math.max(1, Math.ceil(ac.sampleRate * dur)), ac.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+    const lp = ac.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 2600;
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(volume * 0.35, t + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(lp).connect(gain).connect(ac.destination);
+    src.start(t);
+    src.stop(t + dur);
+  } catch {
+    /* audio not available — ignore */
+  }
+}

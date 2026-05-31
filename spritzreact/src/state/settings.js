@@ -47,7 +47,7 @@ export function defaultFileSettings() {
     annunciateRate: 0, // -5..+8 → 0.5..2.0×
     hideMode: 'None',
     goal: null,
-    typing: { enabled: false, caseSensitive: false, stripPunctuation: true, perWordTimeoutMs: 0 },
+    typing: { enabled: false, caseSensitive: false, stripPunctuation: true, perWordTimeoutMs: 0, runMode: 'seconds', runLimit: 60, soundVolume: 0.4 },
     speaking: { enabled: false, confidence: 'Medium', perWordTimeoutMs: 0, allowPartial: true },
     centerOnCurrent: true,
     linePaneSplit: false, // split the Lines pane into before / current line / after zones

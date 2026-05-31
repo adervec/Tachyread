@@ -12,7 +12,7 @@ import ChapterHeading from './components/ChapterHeading.jsx';
 import PaneLayout from './components/PaneLayout.jsx';
 import FaceStage from './components/FaceStage.jsx';
 import AudioChat from './components/AudioChat.jsx';
-import TypingOverlay from './components/TypingOverlay.jsx';
+import TypingRun from './components/TypingRun.jsx';
 import FindDialog from './dialogs/FindDialog.jsx';
 import GoToLineDialog from './dialogs/GoToLineDialog.jsx';
 import SettingsDialog from './dialogs/SettingsDialog.jsx';
@@ -23,6 +23,7 @@ import AudiobookDialog from './dialogs/AudiobookDialog.jsx';
 import FootnoteOverlay from './dialogs/FootnoteOverlay.jsx';
 import TtsPopupDialog from './dialogs/TtsPopupDialog.jsx';
 import FaceLibraryDialog from './dialogs/FaceLibraryDialog.jsx';
+import TypingProgressDialog from './dialogs/TypingProgressDialog.jsx';
 import AppSettingsDialog from './dialogs/AppSettingsDialog.jsx';
 import BookFinishedDialog from './dialogs/BookFinishedDialog.jsx';
 import GrabWizard from './dialogs/GrabWizard.jsx';
@@ -33,7 +34,7 @@ import { cancelSpeech, rateFromIndex } from './features/tts.js';
 import { createReadAloud } from './features/readAloud.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip, clearSession, saveSession } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession, saveTypingRun } from './state/storage.js';
 import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
 import { playLineClick } from './features/clickSound.js';
@@ -55,6 +56,11 @@ function AppInner() {
   const audioLogId = useRef(0);
   const pushAudioLog = useCallback((entry) => {
     setAudioLog((l) => [...l.slice(-49), { id: ++audioLogId.current, time: new Date().toLocaleTimeString(), ...entry }]);
+  }, []);
+  const [typingRuns, setTypingRuns] = useState([]); // session killfeed of completed typing runs
+  const onSaveTypingRun = useCallback((run) => {
+    setTypingRuns((r) => [...r, run]);
+    saveTypingRun(run).catch(() => {});
   }, []);
   const [showFootnote, setShowFootnote] = useState(false);
   const [paneWidths, setPaneWidths] = useState({ toc: 220, dash: 260, spritz: 420, source: 380 });
@@ -596,6 +602,7 @@ function AppInner() {
     }
     if (action === 'tts-popup' && activeTab) return openDialog({ kind: 'tts-popup' });
     if (action === 'face-library') return openDialog({ kind: 'face-library' });
+    if (action === 'typing-progress') return openDialog({ kind: 'typing-progress' });
     if (action === 'toggle-dark' && activeTab) {
       patchSettings(activeTab.id, { darkMode: !activeTab.settings.darkMode });
     }
@@ -645,11 +652,13 @@ function AppInner() {
           <div className="main-area">
             <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
             {activeTab.settings.typing?.enabled && (
-              <TypingOverlay
+              <TypingRun
                 tab={activeTab}
-                onAdvance={() => stepWord(1)}
-                onExit={() => patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } })}
                 onPatch={(p) => patchSettings(activeTab.id, p)}
+                onExitDiscard={() => patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } })}
+                onExitContinue={(wi) => { jumpWord(wi); patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } }); }}
+                onSaveRun={onSaveTypingRun}
+                sessionRuns={typingRuns}
               />
             )}
             {showFootnote && <FootnoteOverlay tab={activeTab} onClose={() => setShowFootnote(false)} />}
@@ -741,6 +750,7 @@ function AppInner() {
         <TtsPopupDialog tab={activeTab} onClose={closeDialog} />
       )}
       {dialog?.kind === 'face-library' && <FaceLibraryDialog onClose={closeDialog} />}
+      {dialog?.kind === 'typing-progress' && <TypingProgressDialog onClose={closeDialog} />}
       {dialog?.kind === 'grab' && <GrabWizard onClose={closeDialog} />}
       {dialog?.kind === 'finished' && activeTab && (
         <BookFinishedDialog
