@@ -143,6 +143,22 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ linePaneSplit: e.target.checked })}
         />
       </Field>
+      <Field label="Center current line">
+        <input
+          type="checkbox"
+          checked={s.centerOnCurrent !== false}
+          onChange={(e) => patch({ centerOnCurrent: e.target.checked })}
+        />
+      </Field>
+      <Field label="Reveal mode (hide text ahead)">
+        <select value={s.hideMode || 'None'} onChange={(e) => patch({ hideMode: e.target.value })}>
+          <option>None</option>
+          <option>Words</option>
+          <option>Lines</option>
+          <option>Sentences</option>
+          <option>Paragraphs</option>
+        </select>
+      </Field>
       <Field label="Click sound on line advance">
         <input
           type="checkbox"

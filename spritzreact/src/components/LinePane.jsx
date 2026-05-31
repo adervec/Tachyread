@@ -160,7 +160,7 @@ function Row({ index, style, ariaAttributes, doc, settings, ctx, onJumpWord, pro
       {showSep && (
         <div className="percent-separator">
           <hr />
-          <span>{Math.round((index / doc.lines.length) * 100)}%</span>
+          <span>{((index / doc.lines.length) * 100).toFixed(1)}%</span>
           <hr />
         </div>
       )}
@@ -318,22 +318,6 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None' }) {
     <div className="line-pane">
       <div className="line-pane-toolbar">
         <span>Lines</span>
-        <span style={{ flex: 1 }} />
-        <button
-          className={split ? 'toggle-on' : ''}
-          onClick={() => tab.patchSettings({ linePaneSplit: !split })}
-          title="Split into before / current line / after"
-        >
-          Split
-        </button>
-        <button
-          className={settings.centerOnCurrent ? 'toggle-on' : ''}
-          onClick={() => tab.patchSettings({ centerOnCurrent: !settings.centerOnCurrent })}
-          disabled={split}
-          title={split ? 'Centering is automatic in split view' : 'Center current line on scroll'}
-        >
-          Center
-        </button>
       </div>
       {split ? (
         <SplitView

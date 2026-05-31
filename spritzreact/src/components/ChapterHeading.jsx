@@ -9,7 +9,7 @@ export default function ChapterHeading({ tab, onJumpWord }) {
   const chapter = useMemo(() => currentChapter(entries, idx, doc.words.length), [entries, idx, doc.words.length]);
   if (!chapter) return null;
 
-  const pct = Math.round(chapter.progress * 100);
+  const pct = (chapter.progress * 100).toFixed(1);
   const num = chapter.index >= 0 ? `${chapter.index + 1}/${chapter.count}` : '—';
 
   return (

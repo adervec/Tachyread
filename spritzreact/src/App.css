@@ -735,6 +735,14 @@
 }
 .goal-row select, .goal-row input { font-size: 11px; }
 .goal-row input[type=text] { width: 80px; }
+.goal-bar { width: 120px; height: 8px; background: var(--track-bg); border-radius: 4px; overflow: hidden; }
+.goal-fill { height: 100%; width: 0; background: var(--toggle-active-bg); transition: width 200ms ease; }
+.goal-fill-done { background: #2e9d4f; }
+.goal-status { margin-left: 6px; font-family: Consolas, monospace; }
+.goal-killfeed { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 11px; color: var(--status-fg); padding: 2px 0 4px; }
+.goal-kf-label { font-weight: 600; }
+.goal-kf-item { color: var(--menu-fg); }
+.goal-kf-ts { color: var(--status-fg); font-family: Consolas, monospace; }
 
 /* Status bar (bottom) */
 .app-status {
@@ -974,6 +982,33 @@
 }
 .closing-overlay .hint { color: var(--status-fg); font-size: 12px; max-width: 460px; }
 .closing-overlay button { margin-top: 8px; }
+
+/* Audio-command transcript chat (sanity check; ephemeral) */
+.audio-chat {
+  position: fixed;
+  right: 14px;
+  bottom: 70px;
+  width: 290px;
+  max-height: 300px;
+  display: flex;
+  flex-direction: column;
+  background: var(--pane-bg);
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  z-index: 4000;
+  font-size: 12px;
+  overflow: hidden;
+}
+.audio-chat-head { padding: 6px 10px; background: var(--menu-bg); border-bottom: 1px solid var(--divider); font-weight: 600; font-size: 11px; }
+.audio-chat-body { padding: 6px 10px; overflow-y: auto; }
+.audio-chat-empty { color: var(--status-fg); font-style: italic; }
+.audio-chat-line { display: flex; gap: 6px; align-items: baseline; padding: 1px 0; }
+.audio-chat-line.noop { color: var(--status-fg); }
+.audio-chat-line.valid .audio-chat-text { color: #2e9d4f; font-weight: 600; }
+.audio-chat-ts { font-family: Consolas, monospace; font-size: 10px; color: var(--status-fg); flex: 0 0 auto; }
+.audio-chat-text { flex: 1; word-break: break-word; }
+.audio-chat-action { color: var(--toggle-active-bg); font-weight: 600; flex: 0 0 auto; }
 
 /* Legacy typing overlay (unused) */
 .typing-overlay {

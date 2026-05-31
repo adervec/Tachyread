@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import Trendline from './Trendline.jsx';
 
@@ -9,7 +10,7 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onRestart, playing, onToggleTyping, onToggleSpeaking, onToggleAudiobook, onToggleAudioCtrl, onToggleReadAloud, onCycleHide, hideMode, typing, speaking, audiobook, audioCtrl, readAloud, onConfirmFinished }) {
+export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onRestart, playing, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills }) {
   const { patchSettings } = useApp();
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
@@ -31,7 +32,7 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
         <div className="progress-meta">
           {idx + 1} / {totalWords}
         </div>
-        <div className="progress-meta" title="Percent of the book actually read">📖 {coverage.toFixed(0)}%</div>
+        <div className="progress-meta" title="Percent of the book actually read">📖 {coverage.toFixed(1)}%</div>
         <div className="progress-meta" title="Estimated time remaining at your measured pace">⏱ {formatTime(secs)}</div>
         {atEnd && (
           <button className="finish-btn" title="Mark this book finished and review your stats" onClick={onConfirmFinished}>
@@ -79,10 +80,6 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
 
         <div className="mode-block">
           <div className="mode-pair">
-            <span>SHOW</span>
-            <button onClick={onCycleHide} title="Cycle hide mode">{hideMode}</button>
-          </div>
-          <div className="mode-pair">
             <span>READ</span>
             <button
               className={readAloud ? 'toggle-on' : ''}
@@ -93,63 +90,98 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
             </button>
           </div>
           <div className="mode-pair">
-            <span>TYPE</span>
-            <button className={typing ? 'toggle-on' : ''} onClick={onToggleTyping}>{typing ? 'On' : 'Off'}</button>
-          </div>
-          <div className="mode-pair">
-            <span>SPEAK</span>
-            <button className={speaking ? 'toggle-on' : ''} onClick={onToggleSpeaking}>{speaking ? 'On' : 'Off'}</button>
-          </div>
-          <div className="mode-pair">
-            <span>REC</span>
-            <button className={audiobook ? 'toggle-on' : ''} onClick={onToggleAudiobook}>{audiobook ? 'On' : 'Off'}</button>
-          </div>
-          <div className="mode-pair">
             <span>AUDIO</span>
-            <button className={audioCtrl ? 'toggle-on' : ''} onClick={onToggleAudioCtrl}>{audioCtrl ? 'On' : 'Off'}</button>
+            <button className={audioCtrl ? 'toggle-on' : ''} onClick={onToggleAudioCtrl} title="Voice / clap commands">{audioCtrl ? 'On' : 'Off'}</button>
           </div>
         </div>
       </div>
 
-      <GoalRow tab={tab} />
+      <GoalRow tab={tab} onGoalComplete={onGoalComplete} goalKills={goalKills} />
     </div>
   );
 }
 
-function GoalRow({ tab }) {
+// Fraction (0..1+) of the current goal achieved, or null when there's no measurable goal.
+function goalFraction(tab, goal) {
+  if (!goal || goal.type === 'None') return null;
+  const idx = tab.settings.wordIndex;
+  const total = tab.doc.words.length || 1;
+  const value = Number(goal.value);
+  if (!isFinite(value) || value <= 0) return null;
+  switch (goal.type) {
+    case 'AbsoluteWords': return idx / value;
+    case 'AbsoluteLines': return ((tab.doc.wordToLine[idx] || 0) + 1) / value;
+    case 'AbsolutePercent': return ((idx / total) * 100) / value;
+    case 'RelativeWords': return (idx - (goal.baseline || 0)) / value;
+    case 'RelativeLines': return ((tab.doc.wordToLine[idx] || 0) - (tab.doc.wordToLine[goal.baseline || 0] || 0)) / value;
+    case 'RelativePercent': return (((idx - (goal.baseline || 0)) / total) * 100) / value;
+    case 'ActiveTime': return ((tab.tracker?.sessionActiveMs || 0) / 60000) / value;
+    default: return null;
+  }
+}
+
+function GoalRow({ tab, onGoalComplete, goalKills }) {
   const { patchSettings } = useApp();
   const goal = tab.settings.goal || { type: 'None', value: '' };
   const status = computeGoalStatus(tab, goal);
+  const frac = goalFraction(tab, goal);
+  const complete = frac != null && frac >= 1;
+  const goalKey = goal && goal.type !== 'None' ? `${goal.type}:${goal.value}:${goal.baseline || 0}` : null;
+  const loggedKey = useRef(null);
+
+  // Log a completed goal to the session killfeed exactly once per distinct goal.
+  useEffect(() => {
+    if (complete && goalKey && loggedKey.current !== goalKey) {
+      loggedKey.current = goalKey;
+      onGoalComplete?.(`${goal.type} ${goal.value}`);
+    }
+  }, [complete, goalKey, goal.type, goal.value, onGoalComplete]);
+
   return (
-    <div className="goal-row">
-      <span>GOAL</span>
-      <select
-        value={goal.type}
-        onChange={(e) =>
-          patchSettings(tab.id, {
-            goal: { ...goal, type: e.target.value, baseline: e.target.value.startsWith('Relative') ? tab.settings.wordIndex : 0 },
-          })
-        }
-      >
-        <option>None</option>
-        <option>AbsoluteWords</option>
-        <option>AbsoluteLines</option>
-        <option>AbsolutePercent</option>
-        <option>RelativeWords</option>
-        <option>RelativeLines</option>
-        <option>RelativePercent</option>
-        <option>ActiveTime</option>
-      </select>
-      <input
-        type="text"
-        value={goal.value}
-        onChange={(e) => patchSettings(tab.id, { goal: { ...goal, value: e.target.value } })}
-        placeholder="Goal value"
-      />
-      <button onClick={() => patchSettings(tab.id, { goal: { ...goal, set: true, baseline: tab.settings.wordIndex } })}>Set</button>
-      <button onClick={() => patchSettings(tab.id, { goal: null })}>Clear</button>
-      <span style={{ marginLeft: 10, fontFamily: 'Consolas, monospace' }}>{status}</span>
-    </div>
+    <>
+      <div className="goal-row">
+        <span>GOAL</span>
+        <select
+          value={goal.type}
+          onChange={(e) =>
+            patchSettings(tab.id, {
+              goal: { ...goal, type: e.target.value, baseline: e.target.value.startsWith('Relative') ? tab.settings.wordIndex : 0 },
+            })
+          }
+        >
+          <option>None</option>
+          <option>AbsoluteWords</option>
+          <option>AbsoluteLines</option>
+          <option>AbsolutePercent</option>
+          <option>RelativeWords</option>
+          <option>RelativeLines</option>
+          <option>RelativePercent</option>
+          <option>ActiveTime</option>
+        </select>
+        <input
+          type="text"
+          value={goal.value}
+          onChange={(e) => patchSettings(tab.id, { goal: { ...goal, value: e.target.value } })}
+          placeholder="Goal value"
+        />
+        <button onClick={() => patchSettings(tab.id, { goal: { ...goal, set: true, baseline: tab.settings.wordIndex } })}>Set</button>
+        <button onClick={() => patchSettings(tab.id, { goal: null })}>Clear</button>
+        {frac != null && (
+          <div className="goal-bar" title={status}>
+            <div className={`goal-fill${complete ? ' goal-fill-done' : ''}`} style={{ width: `${Math.max(0, Math.min(1, frac)) * 100}%` }} />
+          </div>
+        )}
+        <span className="goal-status">{status}</span>
+      </div>
+      {goalKills && goalKills.length > 0 && (
+        <div className="goal-killfeed" title="Goals completed this session">
+          <span className="goal-kf-label">🏁 Completed:</span>
+          {goalKills.map((k, i) => (
+            <span key={i} className="goal-kf-item">✓ {k.label} <span className="goal-kf-ts">{k.time}</span></span>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

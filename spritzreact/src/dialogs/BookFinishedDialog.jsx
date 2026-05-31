@@ -90,7 +90,7 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
       </div>
       {coverage < 90 && (
         <p className="settings-note">
-          Note: you've read {coverage.toFixed(0)}% of the book by coverage. Sections you skipped
+          Note: you've read {coverage.toFixed(1)}% of the book by coverage. Sections you skipped
           aren't counted as read.
         </p>
       )}

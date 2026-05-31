@@ -107,7 +107,7 @@ export default function TypingOverlay({ tab, onAdvance, onExit, onPatch }) {
   }, [doc, idx]);
 
   const s = stats.current;
-  const acc = s.typed ? Math.round((s.correct / s.typed) * 100) : 100;
+  const acc = s.typed ? ((s.correct / s.typed) * 100).toFixed(1) : '100.0';
 
   return (
     <div className="type-along" onMouseDown={() => inputRef.current?.focus()}>

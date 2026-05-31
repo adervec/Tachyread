@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppProvider, useApp } from './state/AppContext.jsx';
 import MenuBar from './components/MenuBar.jsx';
 import TabBar from './components/TabBar.jsx';
@@ -11,6 +11,7 @@ import TocPane from './components/TocPane.jsx';
 import ChapterHeading from './components/ChapterHeading.jsx';
 import PaneLayout from './components/PaneLayout.jsx';
 import FaceStage from './components/FaceStage.jsx';
+import AudioChat from './components/AudioChat.jsx';
 import TypingOverlay from './components/TypingOverlay.jsx';
 import FindDialog from './dialogs/FindDialog.jsx';
 import GoToLineDialog from './dialogs/GoToLineDialog.jsx';
@@ -46,6 +47,15 @@ function AppInner() {
   const [playing, setPlaying] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [closing, setClosing] = useState(null); // null | 'disconnect' | 'shutdown'
+  const [goalKills, setGoalKills] = useState([]); // session-only killfeed of completed goals
+  const onGoalComplete = useCallback((label) => {
+    setGoalKills((k) => [...k, { label, time: new Date().toLocaleTimeString() }]);
+  }, []);
+  const [audioLog, setAudioLog] = useState([]); // ephemeral audio-command transcript
+  const audioLogId = useRef(0);
+  const pushAudioLog = useCallback((entry) => {
+    setAudioLog((l) => [...l.slice(-49), { id: ++audioLogId.current, time: new Date().toLocaleTimeString(), ...entry }]);
+  }, []);
   const [showFootnote, setShowFootnote] = useState(false);
   const [paneWidths, setPaneWidths] = useState({ toc: 220, dash: 260, spritz: 420, source: 380 });
   const resizePane = (id, w) => setPaneWidths((prev) => ({ ...prev, [id]: w }));
@@ -496,23 +506,33 @@ function AppInner() {
         try { clapRef.current.stop(); } catch {}
         clapRef.current = null;
       }
+      setAudioLog([]); // ephemeral transcript — clear when listening stops
       return;
     }
+    const CMD_LABEL = { play: '▶ play', pause: '❚❚ pause', next: '→ next word', back: '← prev word' };
     const mode = state.global.audioCtrlMode || 'Both';
     if (mode === 'Voice' || mode === 'Both') {
-      const r = startVoiceCommands((cmd) => {
-        if (cmd === 'play') setPlaying(true);
-        else if (cmd === 'pause') setPlaying(false);
-        else if (cmd === 'next') stepWord(1, { nav: true });
-        else if (cmd === 'back') stepWord(-1, { nav: true });
+      const r = startVoiceCommands({
+        onHeard: ({ transcript, isFinal, command }) => {
+          if (!isFinal) return;
+          pushAudioLog({ transcript, command, action: command ? CMD_LABEL[command] : null });
+        },
+        onCommand: (cmd) => {
+          if (cmd === 'play') setPlaying(true);
+          else if (cmd === 'pause') setPlaying(false);
+          else if (cmd === 'next') stepWord(1, { nav: true });
+          else if (cmd === 'back') stepWord(-1, { nav: true });
+        },
       });
       audioCtrlRef.current = r;
     }
     if (mode === 'Claps' || mode === 'Both') {
       startClapDetector((claps) => {
-        if (claps === 1) setPlaying((p) => !p);
-        else if (claps === 2) stepWord(1, { nav: true });
-        else if (claps === 3) stepWord(-1, { nav: true });
+        let action = null;
+        if (claps === 1) { setPlaying((p) => !p); action = '⏯ play/pause'; }
+        else if (claps === 2) { stepWord(1, { nav: true }); action = '→ next word'; }
+        else if (claps === 3) { stepWord(-1, { nav: true }); action = '← prev word'; }
+        pushAudioLog({ transcript: `👏 × ${claps}`, command: action ? 'clap' : null, action });
       }).then((cd) => (clapRef.current = cd)).catch(() => {});
     }
     return () => {
@@ -566,6 +586,14 @@ function AppInner() {
     if (action === 'proper-names' && activeTab) return openDialog({ kind: 'proper-names' });
     if (action === 'audiobook' && activeTab) return openDialog({ kind: 'audiobook' });
     if (action === 'footnote' && activeTab) return setShowFootnote((s) => !s);
+    if (action === 'typing' && activeTab) {
+      patchSettings(activeTab.id, {
+        typing: { ...activeTab.settings.typing, enabled: !activeTab.settings.typing?.enabled },
+        speaking: { ...activeTab.settings.speaking, enabled: false },
+        readAloud: false,
+      });
+      return;
+    }
     if (action === 'tts-popup' && activeTab) return openDialog({ kind: 'tts-popup' });
     if (action === 'face-library') return openDialog({ kind: 'face-library' });
     if (action === 'toggle-dark' && activeTab) {
@@ -597,13 +625,13 @@ function AppInner() {
         <LinePane
           tab={{ ...activeTab, patchSettings: (p) => patchSettings(activeTab.id, p) }}
           onJumpWord={jumpWord}
-          hideMode={state.hideMode}
+          hideMode={activeTab.settings.hideMode || 'None'}
         />
       ),
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showDash, state.showSource, hideWord, state.hideMode]);
+  }, [activeTab, state.showToc, state.showDash, state.showSource, hideWord]);
 
   const dialog = state.dialog;
 
@@ -639,12 +667,8 @@ function AppInner() {
         <ControlsBar
           tab={activeTab}
           playing={playing}
-          hideMode={state.hideMode}
           onJumpWord={jumpWord}
           onConfirmFinished={() => openDialog({ kind: 'finished' })}
-          typing={!!activeTab.settings.typing?.enabled}
-          speaking={!!activeTab.settings.speaking?.enabled}
-          audiobook={!!activeTab.settings.audiobookRec}
           audioCtrl={!!activeTab.settings.audioCtrl}
           readAloud={!!activeTab.settings.readAloud}
           onToggleReadAloud={() =>
@@ -662,27 +686,9 @@ function AppInner() {
           onPrevPara={() => nav('prevPara')}
           onNextPara={() => nav('nextPara')}
           onRestart={() => nav('restart')}
-          onCycleHide={() => {
-            const order = ['None', 'Words', 'Lines', 'Sentences', 'Paragraphs'];
-            const i = (order.indexOf(state.hideMode) + 1) % order.length;
-            dispatch({ type: 'SET_HIDE_MODE', mode: order[i] });
-          }}
-          onToggleTyping={() =>
-            patchSettings(activeTab.id, {
-              typing: { ...activeTab.settings.typing, enabled: !activeTab.settings.typing?.enabled },
-              speaking: { ...activeTab.settings.speaking, enabled: false },
-              readAloud: false,
-            })
-          }
-          onToggleSpeaking={() =>
-            patchSettings(activeTab.id, {
-              speaking: { ...activeTab.settings.speaking, enabled: !activeTab.settings.speaking?.enabled },
-              typing: { ...activeTab.settings.typing, enabled: false },
-              readAloud: false,
-            })
-          }
-          onToggleAudiobook={() => patchSettings(activeTab.id, { audiobookRec: !activeTab.settings.audiobookRec })}
           onToggleAudioCtrl={() => patchSettings(activeTab.id, { audioCtrl: !activeTab.settings.audioCtrl })}
+          onGoalComplete={onGoalComplete}
+          goalKills={goalKills}
         />
       ) : (
         <div className="controls-bar" style={{ opacity: 0.5 }}>
@@ -757,6 +763,9 @@ function AppInner() {
           <p className="hint">You can close this browser tab now. (Browsers may block a page from closing its own tab automatically.)</p>
         </div>
       )}
+
+      {/* Live audio-command transcript (sanity check). Ephemeral; only while listening. */}
+      {!!activeTab?.settings?.audioCtrl && <AudioChat log={audioLog} />}
 
       {/* Single shared WebGL context for every 3D reader face (drei <View> portals here).
           Mounted only while faces are actually shown so there's no idle render loop. */}

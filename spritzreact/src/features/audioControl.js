@@ -12,18 +12,21 @@ const COMMAND_MAP = {
   stop: 'pause',
 };
 
-export function startVoiceCommands(onCmd) {
+// onHeard({ transcript, isFinal, command }) fires for every result (for the live transcript
+// chat); onCommand(command) fires only when a final transcript matches a known command.
+export function startVoiceCommands({ onHeard, onCommand } = {}) {
   if (!speechRecognitionSupported()) return null;
   const r = createRecognizer({
     onResult: ({ transcript, isFinal }) => {
-      if (!isFinal) return;
-      const t = transcript.toLowerCase().trim();
-      for (const k of Object.keys(COMMAND_MAP)) {
-        if (t.includes(k)) {
-          onCmd(COMMAND_MAP[k]);
-          return;
+      const t = (transcript || '').toLowerCase().trim();
+      let command = null;
+      if (isFinal) {
+        for (const k of Object.keys(COMMAND_MAP)) {
+          if (t.includes(k)) { command = COMMAND_MAP[k]; break; }
         }
       }
+      onHeard?.({ transcript, isFinal, command });
+      if (isFinal && command) onCommand?.(command);
     },
     continuous: true,
   });
