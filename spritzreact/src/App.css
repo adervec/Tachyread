@@ -279,6 +279,26 @@
 .grab-shot-x { position: absolute; top: 2px; right: 2px; padding: 0 5px; line-height: 1.4; }
 .grab-voice { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider); font-size: 12px; }
 .grab-voice label { display: inline-flex; align-items: center; gap: 4px; }
+/* Review step: doc-wide OCR/layout bar + per-page controls */
+.grab-ocr-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 8px 10px; margin-bottom: 10px; background: var(--menu-bg); border: 1px solid var(--divider); border-radius: 6px; font-size: 12px; }
+.grab-ocr-bar label { display: inline-flex; align-items: center; gap: 4px; }
+.grab-seg-main { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.grab-seg-main textarea { width: 100%; resize: vertical; font-size: 12px; }
+.grab-seg-ctl { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; }
+.grab-seg-ctl label { display: inline-flex; align-items: center; gap: 4px; }
+/* Recent grabs (source step) */
+.grab-recent { margin-top: 14px; border-top: 1px solid var(--divider); padding-top: 10px; }
+.grab-recent-head { font-size: 11px; color: var(--status-fg); margin-bottom: 6px; }
+.grab-recent-row { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+.grab-recent-open { flex: 1; text-align: left; }
+/* Region editor */
+.grab-regioned { display: flex; flex-direction: column; gap: 8px; }
+.grab-regioned-head, .grab-regioned-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.grab-regioned-canvas { position: relative; align-self: flex-start; max-width: 100%; max-height: 60vh; overflow: auto; border: 1px solid var(--divider); background: #000; cursor: crosshair; touch-action: none; }
+.grab-regioned-canvas img { display: block; max-width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
+.grab-region { position: absolute; border: 2px solid var(--toggle-active-bg); background: rgba(80, 160, 255, 0.16); pointer-events: none; }
+.grab-region span { position: absolute; top: 0; left: 0; background: var(--toggle-active-bg); color: var(--toggle-active-fg); font-size: 11px; padding: 0 4px; }
+.grab-region-tmp { border-style: dashed; }
 
 /* SPRITZ pane */
 .spritz-pane {

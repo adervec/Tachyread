@@ -5,7 +5,7 @@ import { openDB } from 'idb';
 import { defaultGlobalSettings } from './settings.js';
 
 const DB_NAME = 'SPRITZReader';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let _dbPromise = null;
 
@@ -29,6 +29,11 @@ function getDB() {
       if (!db.objectStoreNames.contains('readstate')) {
         // key: checksum → { maskB64, lifetimeActiveMs, daily:[{date,words,ms}] }
         db.createObjectStore('readstate');
+      }
+      if (!db.objectStoreNames.contains('grabbed')) {
+        // key: checksum → { checksum, name, createdAt, segments:[{text,image,regions,ocr}], ocr }
+        // Lets grabbed/OCR'd documents reopen without repeating the capture + OCR.
+        db.createObjectStore('grabbed', { keyPath: 'checksum' });
       }
     },
   });
@@ -80,6 +85,30 @@ export async function allFiles() {
 export async function deleteFile(checksum) {
   const db = await getDB();
   await db.delete('files', checksum);
+}
+
+// Grabbed/OCR'd documents (text + original images + OCR config) so they reopen without
+// repeating the capture + recognition. Keyed by the doc's content checksum.
+export async function saveGrabbed(record) {
+  if (!record?.checksum) return;
+  const db = await getDB();
+  await db.put('grabbed', { ...record });
+}
+
+export async function loadGrabbed(checksum) {
+  if (!checksum) return null;
+  const db = await getDB();
+  return (await db.get('grabbed', checksum)) || null;
+}
+
+export async function allGrabbed() {
+  const db = await getDB();
+  return await db.getAll('grabbed');
+}
+
+export async function deleteGrabbed(checksum) {
+  const db = await getDB();
+  await db.delete('grabbed', checksum);
 }
 
 // Audiobook clips

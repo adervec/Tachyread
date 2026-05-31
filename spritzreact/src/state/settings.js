@@ -78,5 +78,6 @@ export function defaultGlobalSettings() {
     audioCtrlMode: 'Both', // Voice | Claps | Both
     fileDefaults: defaultFileSettings(),
     recentFiles: [], // {name, checksum, lastOpened}
+    ocrTemplates: [], // saved Grab layout templates: { name, regions:[{fx,fy,fw,fh}] }
   };
 }
