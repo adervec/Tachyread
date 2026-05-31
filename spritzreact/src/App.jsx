@@ -29,6 +29,7 @@ import BookFinishedDialog from './dialogs/BookFinishedDialog.jsx';
 import GrabWizard from './dialogs/GrabWizard.jsx';
 import { createEngine, wordDurationMs } from './engine/spritzEngine.js';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
+import { getTocEntries, sectionSpan } from './document/toc.js';
 import { defaultFileSettings } from './state/settings.js';
 import { cancelSpeech, rateFromIndex } from './features/tts.js';
 import { createReadAloud } from './features/readAloud.js';
@@ -63,7 +64,16 @@ function AppInner() {
     saveTypingRun(run).catch(() => {});
   }, []);
   const [showFootnote, setShowFootnote] = useState(false);
-  const [paneWidths, setPaneWidths] = useState({ toc: 220, dash: 260, spritz: 420, source: 380 });
+  // Bump a token to ask the Lines pane to scroll to a line (without moving the reading position)
+  // or to ask the TOC pane to reveal + flash an entry. The payload travels with the token.
+  const [lineScroll, setLineScroll] = useState({ line: -1, token: 0 });
+  const [tocFlash, setTocFlash] = useState({ index: -1, token: 0 });
+  const scrollLinesToLine = useCallback((line) => setLineScroll((s) => ({ line, token: s.token + 1 })), []);
+  const onTocIcon = useCallback((index) => {
+    if (!state.showToc) dispatch({ type: 'TOGGLE_TOC' });
+    setTocFlash((s) => ({ index, token: s.token + 1 }));
+  }, [dispatch, state.showToc]);
+  const [paneWidths, setPaneWidths] = useState({ toc: 320, dash: 260, spritz: 420, source: 380 });
   const resizePane = (id, w) => setPaneWidths((prev) => ({ ...prev, [id]: w }));
   const recognizerRef = useRef(null);
   const audioRecRef = useRef({ rec: null, lineIndex: -1 });
@@ -112,6 +122,42 @@ function AppInner() {
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [activeTab]);
+
+  // Per-section reading timestamps for the TOC: record when each section was first reached
+  // (started) and when it became fully read (completed). Polled so it's independent of whether
+  // the TOC pane is open; only writes when something actually changes.
+  useEffect(() => {
+    if (!activeTab) return;
+    const id = setInterval(() => {
+      const tab = activeTabRef.current;
+      if (!tab?.tracker) return;
+      const entries = getTocEntries(tab);
+      if (!entries.length) return;
+      const total = tab.doc.words.length || 1;
+      const wi = tab.settings.wordIndex;
+      const stats = { ...(tab.settings.tocReadStats || {}) };
+      let changed = false;
+      // started: deepest section the cursor is currently inside
+      let curStart = null;
+      for (const e of entries) { if (e.wordIndex <= wi) curStart = e.wordIndex; else break; }
+      if (curStart != null && !stats[curStart]?.started) {
+        stats[curStart] = { ...(stats[curStart] || {}), started: Date.now() };
+        changed = true;
+      }
+      // completed: any section now fully read
+      entries.forEach((e, i) => {
+        const span = sectionSpan(entries, i, total);
+        const rs = tab.tracker.rangeStats(span.start, span.end);
+        if (rs.readFrac >= 0.999 && !stats[e.wordIndex]?.completed) {
+          stats[e.wordIndex] = { ...(stats[e.wordIndex] || {}), started: stats[e.wordIndex]?.started || Date.now(), completed: Date.now() };
+          changed = true;
+        }
+      });
+      if (changed) patchSettings(tab.id, { tocReadStats: stats });
+    }, 2500);
+    return () => clearInterval(id);
+    // eslint-disable-next-line
+  }, [activeTab?.id]);
 
   // SPRITZ playback driver. Reschedules on each settings.wordIndex change while playing.
   // When read-aloud is on, speech drives advancement instead of this timer (see below).
@@ -241,6 +287,12 @@ function AppInner() {
       activeTab.sessionNavLinesRead.add(newLine);
     }
     patchSettings(activeTab.id, { wordIndex: next });
+  }
+
+  // Set "finish this section" (start→end words) as the active goal — used by the TOC pane.
+  function setSectionGoal(start, end, label) {
+    if (!activeTab) return;
+    patchSettings(activeTab.id, { goal: { type: 'Section', start, end, label, baseline: start, set: true } });
   }
 
   function nav(kind) {
@@ -619,7 +671,16 @@ function AppInner() {
       arr.push({
         id: 'toc',
         label: 'TOC',
-        node: <TocPane tab={activeTab} onJumpWord={jumpWord} onPatch={(p) => patchSettings(activeTab.id, p)} />,
+        node: (
+          <TocPane
+            tab={activeTab}
+            onJumpWord={jumpWord}
+            onScrollToLine={scrollLinesToLine}
+            onSetSectionGoal={setSectionGoal}
+            onPatch={(p) => patchSettings(activeTab.id, p)}
+            flashSignal={tocFlash}
+          />
+        ),
       });
     if (state.showDash) arr.push({ id: 'dash', label: 'Dashboard', node: <DashboardPane tab={activeTab} /> });
     if (!hideWord) arr.push({ id: 'spritz', label: 'SPRITZ', node: <SpritzPane tab={activeTab} /> });
@@ -633,12 +694,13 @@ function AppInner() {
           tab={{ ...activeTab, patchSettings: (p) => patchSettings(activeTab.id, p) }}
           onJumpWord={jumpWord}
           hideMode={activeTab.settings.hideMode || 'None'}
+          scrollSignal={lineScroll}
         />
       ),
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showDash, state.showSource, hideWord]);
+  }, [activeTab, state.showToc, state.showDash, state.showSource, hideWord, lineScroll, tocFlash]);
 
   const dialog = state.dialog;
 
@@ -698,6 +760,7 @@ function AppInner() {
           onToggleAudioCtrl={() => patchSettings(activeTab.id, { audioCtrl: !activeTab.settings.audioCtrl })}
           onGoalComplete={onGoalComplete}
           goalKills={goalKills}
+          onTocIcon={onTocIcon}
         />
       ) : (
         <div className="controls-bar" style={{ opacity: 0.5 }}>

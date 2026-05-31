@@ -247,7 +247,7 @@ function revealBoundary(doc, idx, mode) {
   return Infinity;
 }
 
-export default function LinePane({ tab, onJumpWord, hideMode = 'None' }) {
+export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSignal }) {
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
   const [menu, setMenu] = useState(null);
@@ -290,6 +290,14 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None' }) {
     if (!api?.scrollToRow) return;
     api.scrollToRow({ index: currentLine, align: 'center' });
   }, [currentLine, settings.centerOnCurrent, split, listRef]);
+
+  // Scroll-to-line requests from the TOC "Scroll" button — moves the view only, never the
+  // reading position. (Not applicable to the split view, which shows a fixed window.)
+  useEffect(() => {
+    if (split || !scrollSignal || scrollSignal.line < 0) return;
+    listRef.current?.scrollToRow?.({ index: scrollSignal.line, align: 'center' });
+    // eslint-disable-next-line
+  }, [scrollSignal?.token]);
 
   const totalLines = doc.lines.length;
   const sepEvery = settings.showPercentSeparators ? Math.max(1, Math.floor(totalLines / 100)) : 0;

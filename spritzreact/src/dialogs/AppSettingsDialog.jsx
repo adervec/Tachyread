@@ -60,6 +60,30 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         Voice commands and clap detection require microphone permission; voice commands need a
         Chromium browser. Enable per tab with the <strong>AUDIO</strong> button.
       </p>
+
+      <div className="field-section">Table of contents</div>
+      <p className="settings-note">
+        Icons shown on the TOC minimap bar for each hierarchy tier (Tier 0 = top, e.g. Book →
+        Part → Chapter). One emoji or character each. Numeral display and per-tier numeral regex
+        are per document — see <strong>View → Tab Settings</strong>.
+      </p>
+      <div className="toc-tier-icons">
+        {Array.from({ length: 5 }, (_, lvl) => (
+          <label key={lvl} className="toc-tier-icon-field">
+            <span>Tier {lvl}</span>
+            <input
+              type="text"
+              maxLength={3}
+              value={(g.tocTierIcons || [])[lvl] || ''}
+              onChange={(e) => {
+                const icons = [...(g.tocTierIcons || [])];
+                icons[lvl] = e.target.value;
+                patch({ tocTierIcons: icons });
+              }}
+            />
+          </label>
+        ))}
+      </div>
     </Dialog>
   );
 }

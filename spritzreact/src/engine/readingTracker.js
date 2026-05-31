@@ -212,11 +212,30 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     return out;
   }
 
+  // Per-section stats for the TOC: fraction of [from,to) actually read + the average recorded
+  // reading pace over the words that were read.
+  function rangeStats(from, to) {
+    const a = Math.max(0, Math.min(wordCount, from | 0));
+    const b = Math.max(a, Math.min(wordCount, to | 0));
+    let read = 0;
+    let sum = 0;
+    let paced = 0;
+    for (let i = a; i < b; i++) {
+      if (mask[i]) {
+        read++;
+        if (wpm[i]) { sum += wpm[i]; paced++; }
+      }
+    }
+    const n = b - a;
+    return { total: n, readWords: read, readFrac: n ? read / n : 0, wpm: paced ? Math.round(sum / paced) : 0 };
+  }
+
   return {
     recordMove,
     setHidden,
     recentWpm,
     sampleTrend,
+    rangeStats,
     sessionWpm: () => wpmFrom(sessionNewWords, sessionActiveMs),
     lifetimeWpm: () => wpmFrom(readCount, lifetimeMs),
     coverage: () => (wordCount ? readCount / wordCount : 0),

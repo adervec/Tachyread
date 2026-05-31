@@ -56,7 +56,16 @@ export function defaultFileSettings() {
     properNames: {}, // name → { aliases:[], notes:'' }
     notes: '',
     rating: 0, // 0–5 stars, set on the Book Finished dialog
-    tocEntries: [], // persisted custom TOC: [{ wordIndex, title }]
+    tocEntries: [], // persisted custom TOC: [{ wordIndex, title, level }]
+    tocReadStats: {}, // per-section reading stats keyed by start wordIndex: { started, completed }
+    tocCollapseCompleted: false, // auto-collapse fully-read sections in the TOC tree
+    tocColumns: { // which TOC columns are visible (the name column is always shown)
+      startLine: true, startWord: true, startPct: true,
+      lenLines: true, lenWords: true, lenPct: true,
+      started: true, completed: true, pctRead: true, wpm: true,
+    },
+    tocBarNumeralStyle: 'none', // none | arabic | roman | words — numeral shown on TOC-bar icons
+    tocNumeralRegex: [], // per-tier custom numeral-extraction regex (capture group 1 = numeral)
     // Animated faces
     showEyes: false,
     faceCount: 1,
@@ -79,5 +88,6 @@ export function defaultGlobalSettings() {
     fileDefaults: defaultFileSettings(),
     recentFiles: [], // {name, checksum, lastOpened}
     ocrTemplates: [], // saved Grab layout templates: { name, regions:[{fx,fy,fw,fh}] }
+    tocTierIcons: ['📖', '📑', '📄', '§', '•'], // TOC-bar icon per hierarchy tier (index = level)
   };
 }

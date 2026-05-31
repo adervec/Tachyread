@@ -183,6 +183,42 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
         </div>
       </Field>
 
+      <Section>Table of contents</Section>
+      <Field label="Auto-collapse completed sections">
+        <input
+          type="checkbox"
+          checked={!!s.tocCollapseCompleted}
+          onChange={(e) => patch({ tocCollapseCompleted: e.target.checked })}
+        />
+      </Field>
+      <Field label="TOC-bar numeral">
+        <select value={s.tocBarNumeralStyle || 'none'} onChange={(e) => patch({ tocBarNumeralStyle: e.target.value })}>
+          <option value="none">None</option>
+          <option value="arabic">Arabic (2)</option>
+          <option value="roman">Roman (II)</option>
+          <option value="words">Words (Two)</option>
+        </select>
+      </Field>
+      {[0, 1, 2].map((lvl) => (
+        <Field key={lvl} label={`Tier ${lvl} numeral regex`}>
+          <input
+            type="text"
+            placeholder="auto (capture group 1)"
+            value={(s.tocNumeralRegex || [])[lvl] || ''}
+            onChange={(e) => {
+              const arr = [...(s.tocNumeralRegex || [])];
+              arr[lvl] = e.target.value;
+              patch({ tocNumeralRegex: arr });
+            }}
+            style={{ width: '100%' }}
+          />
+        </Field>
+      ))}
+      <p className="settings-note">
+        Numeral regex handles odd headings (e.g. <code>Chapter II: Three by 2</code>): the first
+        capture group is the numeral. Leave blank to auto-detect a roman or arabic number.
+      </p>
+
       <Section>Animated faces</Section>
       <Field label="Show faces">
         <input type="checkbox" checked={!!s.showEyes} onChange={(e) => patch({ showEyes: e.target.checked })} />

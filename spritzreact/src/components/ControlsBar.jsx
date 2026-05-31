@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import Trendline from './Trendline.jsx';
+import TocBar from './TocBar.jsx';
+import { goalFraction, computeGoalStatus } from '../engine/goals.js';
 
 function formatTime(secs) {
   if (!isFinite(secs) || secs < 0) return '--:--:--';
@@ -10,7 +12,7 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onRestart, playing, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills }) {
+export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onRestart, playing, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon }) {
   const { patchSettings } = useApp();
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
@@ -40,6 +42,8 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
           </button>
         )}
       </div>
+
+      <TocBar tab={tab} onIconClick={onTocIcon} />
 
       <div className="playback-row">
         <div className="wpm-block">
@@ -101,25 +105,6 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
   );
 }
 
-// Fraction (0..1+) of the current goal achieved, or null when there's no measurable goal.
-function goalFraction(tab, goal) {
-  if (!goal || goal.type === 'None') return null;
-  const idx = tab.settings.wordIndex;
-  const total = tab.doc.words.length || 1;
-  const value = Number(goal.value);
-  if (!isFinite(value) || value <= 0) return null;
-  switch (goal.type) {
-    case 'AbsoluteWords': return idx / value;
-    case 'AbsoluteLines': return ((tab.doc.wordToLine[idx] || 0) + 1) / value;
-    case 'AbsolutePercent': return ((idx / total) * 100) / value;
-    case 'RelativeWords': return (idx - (goal.baseline || 0)) / value;
-    case 'RelativeLines': return ((tab.doc.wordToLine[idx] || 0) - (tab.doc.wordToLine[goal.baseline || 0] || 0)) / value;
-    case 'RelativePercent': return (((idx - (goal.baseline || 0)) / total) * 100) / value;
-    case 'ActiveTime': return ((tab.tracker?.sessionActiveMs || 0) / 60000) / value;
-    default: return null;
-  }
-}
-
 function GoalRow({ tab, onGoalComplete, goalKills }) {
   const { patchSettings } = useApp();
   const goal = tab.settings.goal || { type: 'None', value: '' };
@@ -150,6 +135,7 @@ function GoalRow({ tab, onGoalComplete, goalKills }) {
           }
         >
           <option>None</option>
+          <option value="Section">Section (set via TOC)</option>
           <option>AbsoluteWords</option>
           <option>AbsoluteLines</option>
           <option>AbsolutePercent</option>
@@ -160,7 +146,7 @@ function GoalRow({ tab, onGoalComplete, goalKills }) {
         </select>
         <input
           type="text"
-          value={goal.value}
+          value={goal.value ?? ''}
           onChange={(e) => patchSettings(tab.id, { goal: { ...goal, value: e.target.value } })}
           placeholder="Goal value"
         />
@@ -183,36 +169,4 @@ function GoalRow({ tab, onGoalComplete, goalKills }) {
       )}
     </>
   );
-}
-
-function computeGoalStatus(tab, goal) {
-  if (!goal || goal.type === 'None') return 'No active goal';
-  const idx = tab.settings.wordIndex;
-  const total = tab.doc.words.length;
-  const value = Number(goal.value);
-  if (!isFinite(value) || value <= 0) return 'Set a value to begin';
-  switch (goal.type) {
-    case 'AbsoluteWords':
-      return `${idx} / ${value} words (${((idx / value) * 100).toFixed(1)}%)`;
-    case 'AbsoluteLines': {
-      const cl = tab.doc.wordToLine[idx] + 1 || 0;
-      return `${cl} / ${value} lines`;
-    }
-    case 'AbsolutePercent':
-      return `${((idx / total) * 100).toFixed(1)}% / ${value}%`;
-    case 'RelativeWords':
-      return `${idx - (goal.baseline || 0)} / ${value} words (from start)`;
-    case 'RelativeLines': {
-      const cl = (tab.doc.wordToLine[idx] || 0) - (tab.doc.wordToLine[goal.baseline || 0] || 0);
-      return `${cl} / ${value} lines (from start)`;
-    }
-    case 'RelativePercent': {
-      const delta = ((idx - (goal.baseline || 0)) / total) * 100;
-      return `${delta.toFixed(1)}% / ${value}%`;
-    }
-    case 'ActiveTime':
-      return `${Math.round(((tab.tracker?.sessionActiveMs || 0)) / 60000)} / ${value} min`;
-    default:
-      return '';
-  }
 }
