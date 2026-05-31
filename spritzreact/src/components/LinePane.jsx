@@ -75,20 +75,14 @@ function statusForLine(li, ctx) {
   return ReadStatus.Unread;
 }
 
-// Row component for react-window. Receives `index`, `style`, plus everything passed via `rowProps`.
-function Row({ index, style, ariaAttributes, doc, settings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!ref.current) return;
-    return rowHeightCtl.observeRowElements([ref.current]);
-  }, [rowHeightCtl]);
-
+// Presentational single line — shared by the virtualized list (Row) and the split view.
+// Has no react-window coupling so it can be rendered directly in the split zones.
+function LineRow({ index, doc, settings, ctx, onJumpWord, propNameKeys }) {
   const line = doc.lines[index];
   const status = statusForLine(index, ctx);
   const isCurrent = status === ReadStatus.Current;
   const isHF = doc.headerFooterLines.has(index);
   const inPara = index >= ctx.paraStart && index <= ctx.paraEnd && status !== ReadStatus.Current;
-  const showSep = sepEvery > 0 && index > 0 && index % sepEvery === 0;
 
   // Focus blur: blur lines within the configured window before/after the current line.
   const before = settings.blurLinesBefore || 0;
@@ -119,6 +113,49 @@ function Row({ index, style, ariaAttributes, doc, settings, ctx, onJumpWord, pro
   const pointerBefore = pointer && (placement === 'Left' || placement === 'Above');
 
   return (
+    <div
+      className={`line-row status-${status} ${isHF ? 'is-header-footer' : ''} ${inPara ? 'in-current-para' : ''}`}
+      data-line={index}
+      data-start={line.startWordIndex}
+      onClick={() => {
+        if (line.startWordIndex >= 0) onJumpWord(line.startWordIndex);
+      }}
+    >
+      <div className="num">{line.lineNumber}</div>
+      <div className="accent" />
+      <div className="text" style={textStyle}>
+        {pointerBefore && pointer}
+        {line.isEmpty ? (
+          <span style={{ opacity: 0.4 }}>·</span>
+        ) : (
+          renderWords(line, {
+            isCurrent,
+            currentWordIndex: ctx.currentWordIndex,
+            bionic: settings.bionicFont,
+            highlightORP: settings.highlightORP,
+            currentWordStyles: currentWordStyles(settings),
+            properNamesSet: propNameKeys,
+            isHeaderFooter: isHF,
+            hideBeyond: ctx.hideBeyond,
+          })
+        )}
+        {pointer && !pointerBefore && pointer}
+      </div>
+    </div>
+  );
+}
+
+// Row component for react-window: positions LineRow absolutely and measures its height.
+function Row({ index, style, ariaAttributes, doc, settings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    return rowHeightCtl.observeRowElements([ref.current]);
+  }, [rowHeightCtl]);
+
+  const showSep = sepEvery > 0 && index > 0 && index % sepEvery === 0;
+
+  return (
     <div ref={ref} style={style} {...ariaAttributes}>
       {showSep && (
         <div className="percent-separator">
@@ -127,34 +164,37 @@ function Row({ index, style, ariaAttributes, doc, settings, ctx, onJumpWord, pro
           <hr />
         </div>
       )}
-      <div
-        className={`line-row status-${status} ${isHF ? 'is-header-footer' : ''} ${inPara ? 'in-current-para' : ''}`}
-        data-line={index}
-        data-start={line.startWordIndex}
-        onClick={() => {
-          if (line.startWordIndex >= 0) onJumpWord(line.startWordIndex);
-        }}
-      >
-        <div className="num">{line.lineNumber}</div>
-        <div className="accent" />
-        <div className="text" style={textStyle}>
-          {pointerBefore && pointer}
-          {line.isEmpty ? (
-            <span style={{ opacity: 0.4 }}>·</span>
-          ) : (
-            renderWords(line, {
-              isCurrent,
-              currentWordIndex: ctx.currentWordIndex,
-              bionic: settings.bionicFont,
-              highlightORP: settings.highlightORP,
-              currentWordStyles: currentWordStyles(settings),
-              properNamesSet: propNameKeys,
-              isHeaderFooter: isHF,
-              hideBeyond: ctx.hideBeyond,
-            })
-          )}
-          {pointer && !pointerBefore && pointer}
-        </div>
+      <LineRow index={index} doc={doc} settings={settings} ctx={ctx} onJumpWord={onJumpWord} propNameKeys={propNameKeys} />
+    </div>
+  );
+}
+
+// Split reading view: previous lines (bottom-aligned), the current line pinned in a fixed
+// centre band, and upcoming lines (top-aligned). Renders a bounded window around the current
+// line — no scrolling, so the current line stays fixed in place and never jitters.
+const SPLIT_WINDOW = 60;
+function SplitView({ doc, settings, ctx, onJumpWord, propNameKeys, baseFont, onContextMenu }) {
+  const cur = ctx.currentLine;
+  const total = doc.lines.length;
+  const common = { doc, settings, ctx, onJumpWord, propNameKeys };
+  const before = [];
+  for (let i = Math.max(0, cur - SPLIT_WINDOW); i < cur; i++) before.push(i);
+  const after = [];
+  for (let i = cur + 1; i <= Math.min(total - 1, cur + SPLIT_WINDOW); i++) after.push(i);
+  return (
+    <div className="line-pane-split" style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu}>
+      <div className="lps-zone lps-before">
+        {before.map((i) => (
+          <LineRow key={i} index={i} {...common} />
+        ))}
+      </div>
+      <div className="lps-zone lps-current">
+        {cur < total && <LineRow index={cur} {...common} />}
+      </div>
+      <div className="lps-zone lps-after">
+        {after.map((i) => (
+          <LineRow key={i} index={i} {...common} />
+        ))}
       </div>
     </div>
   );
@@ -242,13 +282,14 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None' }) {
   });
 
   const listRef = useListRef();
+  const split = !!settings.linePaneSplit;
 
   useEffect(() => {
-    if (!settings.centerOnCurrent) return;
+    if (split || !settings.centerOnCurrent) return;
     const api = listRef.current;
     if (!api?.scrollToRow) return;
     api.scrollToRow({ index: currentLine, align: 'center' });
-  }, [currentLine, settings.centerOnCurrent, listRef]);
+  }, [currentLine, settings.centerOnCurrent, split, listRef]);
 
   const totalLines = doc.lines.length;
   const sepEvery = settings.showPercentSeparators ? Math.max(1, Math.floor(totalLines / 100)) : 0;
@@ -279,24 +320,44 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None' }) {
         <span>Lines</span>
         <span style={{ flex: 1 }} />
         <button
+          className={split ? 'toggle-on' : ''}
+          onClick={() => tab.patchSettings({ linePaneSplit: !split })}
+          title="Split into before / current line / after"
+        >
+          Split
+        </button>
+        <button
           className={settings.centerOnCurrent ? 'toggle-on' : ''}
           onClick={() => tab.patchSettings({ centerOnCurrent: !settings.centerOnCurrent })}
-          title="Center current line on scroll"
+          disabled={split}
+          title={split ? 'Centering is automatic in split view' : 'Center current line on scroll'}
         >
           Center
         </button>
       </div>
-      <div className="line-pane-list" style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu}>
-        <List
-          listRef={listRef}
-          rowCount={totalLines}
-          rowHeight={rowHeightCtl}
-          rowComponent={Row}
-          rowProps={rowProps}
-          overscanCount={8}
-          style={{ height: '100%', width: '100%' }}
+      {split ? (
+        <SplitView
+          doc={doc}
+          settings={settings}
+          ctx={ctx}
+          onJumpWord={onJumpWord}
+          propNameKeys={propNameKeys}
+          baseFont={baseFont}
+          onContextMenu={onContextMenu}
         />
-      </div>
+      ) : (
+        <div className="line-pane-list" style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu}>
+          <List
+            listRef={listRef}
+            rowCount={totalLines}
+            rowHeight={rowHeightCtl}
+            rowComponent={Row}
+            rowProps={rowProps}
+            overscanCount={8}
+            style={{ height: '100%', width: '100%' }}
+          />
+        </div>
+      )}
       <WordMenu menu={menu} onClose={() => setMenu(null)} onJumpWord={onJumpWord} />
     </div>
   );

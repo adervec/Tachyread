@@ -34,6 +34,7 @@ import { createRecognizer, wordMatches, speechRecognitionSupported } from './fea
 import { recordClip } from './features/audioRecorder.js';
 import { saveAudioClip } from './state/storage.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
+import { playLineClick } from './features/clickSound.js';
 import { applyTheme } from './state/themes.js';
 import './App.css';
 
@@ -197,6 +198,7 @@ function AppInner() {
     // Line status coloring for the right pane.
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
+    if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick();
     if (delta === 1 && next > cur && !opts.nav) {
       if (newLine !== prevLine) {
         activeTab.sessionLinesRead.add(prevLine);
@@ -214,8 +216,10 @@ function AppInner() {
     const next = Math.max(0, Math.min(activeTab.doc.words.length - 1, wi));
     if (next === cur) return;
     activeTab.tracker?.recordMove(cur, next, Date.now());
+    const prevLine = getLineIndex(activeTab.doc, cur);
+    const newLine = getLineIndex(activeTab.doc, next);
+    if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick();
     if (opts.nav) {
-      const newLine = getLineIndex(activeTab.doc, next);
       activeTab.sessionNavLinesRead.add(newLine);
     }
     patchSettings(activeTab.id, { wordIndex: next });

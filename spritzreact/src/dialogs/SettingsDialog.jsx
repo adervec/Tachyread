@@ -136,6 +136,20 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ showPercentSeparators: e.target.checked })}
         />
       </Field>
+      <Field label="Split pane (before / current / after)">
+        <input
+          type="checkbox"
+          checked={!!s.linePaneSplit}
+          onChange={(e) => patch({ linePaneSplit: e.target.checked })}
+        />
+      </Field>
+      <Field label="Click sound on line advance">
+        <input
+          type="checkbox"
+          checked={!!s.lineAdvanceSound}
+          onChange={(e) => patch({ lineAdvanceSound: e.target.checked })}
+        />
+      </Field>
       <Field label="Bionic font">
         <input type="checkbox" checked={s.bionicFont} onChange={(e) => patch({ bionicFont: e.target.checked })} />
       </Field>

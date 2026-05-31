@@ -50,6 +50,8 @@ export function defaultFileSettings() {
     typing: { enabled: false, caseSensitive: false, stripPunctuation: true, perWordTimeoutMs: 0 },
     speaking: { enabled: false, confidence: 'Medium', perWordTimeoutMs: 0, allowPartial: true },
     centerOnCurrent: true,
+    linePaneSplit: false, // split the Lines pane into before / current line / after zones
+    lineAdvanceSound: false, // soft click when the current line changes
     autoSkipHeadersFooters: false,
     properNames: {}, // name → { aliases:[], notes:'' }
     notes: '',
