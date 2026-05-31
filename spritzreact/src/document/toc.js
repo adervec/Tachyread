@@ -50,7 +50,15 @@ export function autoDetectToc(doc) {
 // numeric `level` present (defaults to 0 for older entries saved before hierarchy existed).
 export function getTocEntries(tab) {
   const stored = tab.settings.tocEntries;
-  const list = stored && stored.length ? stored : autoDetectToc(tab.doc);
+  let list;
+  if (stored && stored.length) {
+    list = stored;
+  } else {
+    // Cache auto-detection on the (immutable) doc — it's a full line scan and getTocEntries is
+    // called from several components plus a polling interval.
+    if (!tab.doc._autoToc) tab.doc._autoToc = autoDetectToc(tab.doc);
+    list = tab.doc._autoToc;
+  }
   return [...list]
     .map((e) => ({ ...e, level: Number.isFinite(e.level) ? e.level : 0 }))
     .sort((a, b) => a.wordIndex - b.wordIndex);
