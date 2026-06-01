@@ -5,7 +5,7 @@ import { openDB } from 'idb';
 import { defaultGlobalSettings } from './settings.js';
 
 const DB_NAME = 'SPRITZReader';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 let _dbPromise = null;
 
@@ -39,6 +39,12 @@ function getDB() {
         // key: checksum → { checksum, fileName, fullText, source, wordToSegment, segmentCount }
         // Rebuildable doc payload so the previous session's tabs can be reopened on reconnect.
         db.createObjectStore('docs', { keyPath: 'checksum' });
+      }
+      if (!db.objectStoreNames.contains('grabSessions')) {
+        // In-progress (not-yet-opened) capture sessions, so an abandoned grab can be resumed
+        // or explicitly discarded. key: id → { id, createdAt, updatedAt, step, voiceWord,
+        // segments:[{text,image,layout,regions,ocrMode}], ocr, pageCount }
+        db.createObjectStore('grabSessions', { keyPath: 'id' });
       }
       if (!db.objectStoreNames.contains('typingRuns')) {
         // Detailed typing-practice history (separate from reading): one record per completed run
@@ -119,6 +125,28 @@ export async function allGrabbed() {
 export async function deleteGrabbed(checksum) {
   const db = await getDB();
   await db.delete('grabbed', checksum);
+}
+
+// In-progress grab sessions (resumable / discardable). Keyed by a generated id.
+export async function saveGrabSession(rec) {
+  if (!rec?.id) return;
+  const db = await getDB();
+  try {
+    await db.put('grabSessions', { ...rec });
+  } catch {
+    /* images may exceed quota — fail quietly rather than break the wizard */
+  }
+}
+
+export async function allGrabSessions() {
+  const db = await getDB();
+  return await db.getAll('grabSessions');
+}
+
+export async function deleteGrabSession(id) {
+  if (!id) return;
+  const db = await getDB();
+  await db.delete('grabSessions', id);
 }
 
 // Rebuildable doc payloads (text + source) keyed by checksum — used to restore session tabs.

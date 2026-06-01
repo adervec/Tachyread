@@ -1,15 +1,15 @@
 import { useEffect } from 'react';
 
-export default function Dialog({ title, onClose, children, buttons, width = 520 }) {
+export default function Dialog({ title, onClose, children, buttons, width = 520, dismissable = true }) {
   useEffect(() => {
     function onKey(e) {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key === 'Escape' && dismissable) onClose?.();
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, dismissable]);
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
+    <div className="dialog-backdrop" onClick={dismissable ? onClose : undefined}>
       <div className="dialog" style={{ width }} onClick={(e) => e.stopPropagation()}>
         <div className="dialog-title">
           <span>{title}</span>

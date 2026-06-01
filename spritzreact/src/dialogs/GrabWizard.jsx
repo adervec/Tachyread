@@ -13,8 +13,8 @@ import {
 import { recognizeImageEx, ocrSupported, loadImage } from '../features/ocr.js';
 import { buildGrabbedDoc } from '../document/grab.js';
 import { playGrabClick } from '../features/clickSound.js';
-import { createRecognizer, speechRecognitionSupported } from '../features/speechRecognition.js';
-import { saveGrabbed, allGrabbed, deleteGrabbed } from '../state/storage.js';
+import { speechRecognitionSupported } from '../features/speechRecognition.js';
+import { saveGrabbed, allGrabbed, deleteGrabbed, saveGrabSession, allGrabSessions, deleteGrabSession } from '../state/storage.js';
 
 const uid = () => Math.random().toString(36).slice(2);
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -119,10 +119,22 @@ export default function GrabWizard({ onClose }) {
   // Voice-command grab
   const [voiceWord, setVoiceWord] = useState('GRAB');
   const [voiceOn, setVoiceOn] = useState(false);
+  const [voiceLog, setVoiceLog] = useState([]); // recent heard phrases / matches / errors
+  const [heardNow, setHeardNow] = useState(''); // live interim transcript
   const recogRef = useRef(null);
   const lastVoiceGrab = useRef(0);
+  const voiceLogId = useRef(0);
   const voiceWordRef = useRef(voiceWord);
   voiceWordRef.current = voiceWord;
+  const pushVoiceLog = (text, matched = false, error = false) =>
+    setVoiceLog((l) => [...l.slice(-11), { id: ++voiceLogId.current, text, matched, error, t: new Date().toLocaleTimeString() }]);
+
+  // Resumable / abandoned grab sessions + accidental-close protection
+  const [sessions, setSessions] = useState([]);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const sessionIdRef = useRef(uid());
+  const createdAtRef = useRef(Date.now());
+  const closingRef = useRef(false);
 
   // OCR config (doc-wide) + region editor + recent grabs
   const [docLayout, setDocLayout] = useState('Single column');
@@ -169,35 +181,89 @@ export default function GrabWizard({ onClose }) {
     allGrabbed().then((list) => setRecent(list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)))).catch(() => {});
   }, []);
 
-  // Voice recognition lifecycle — only while listening on the capture step.
+  // Voice recognition lifecycle — only while listening on the capture step. Chrome's
+  // SpeechRecognition stops itself after each utterance / on silence, so the key to
+  // reliability is restarting it (recreating the instance if a restart throws) and scanning
+  // every result segment — interim included — for the trigger word.
   useEffect(() => {
-    if (!voiceOn || step !== 'screen') {
-      if (recogRef.current) { try { recogRef.current.stop(); } catch { /* noop */ } recogRef.current = null; }
-      return;
-    }
+    if (!voiceOn || step !== 'screen') { setHeardNow(''); return; }
     if (!speechRecognitionSupported()) {
       setMsg('Voice grab needs Chrome/Edge (Web Speech API).');
       setVoiceOn(false);
       return;
     }
-    const r = createRecognizer({
-      onResult: ({ transcript }) => {
-        const toks = (transcript || '').toLowerCase().match(/[a-z']+/g) || [];
-        if (toks.includes(voiceWordRef.current.toLowerCase())) {
-          const now = Date.now();
-          if (now - lastVoiceGrab.current > 700) { lastVoiceGrab.current = now; grabOnce(); }
+    const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const handle = { stopped: false, rec: null, timer: null };
+    function start() {
+      let rec;
+      try { rec = new Ctor(); } catch { return; }
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = 'en-US';
+      rec.onresult = (ev) => {
+        let interim = '', finalText = '';
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          const seg = ev.results[i][0].transcript;
+          if (ev.results[i].isFinal) finalText += seg + ' '; else interim += seg + ' ';
         }
-      },
-      onError: () => { /* transient */ },
-    });
-    if (!r) { setVoiceOn(false); return; }
-    r.onend = () => { if (recogRef.current === r) { try { r.start(); } catch { /* noop */ } } };
-    try { r.start(); } catch { /* noop */ }
-    recogRef.current = r;
+        setHeardNow(interim.trim());
+        const word = voiceWordRef.current.toLowerCase();
+        const toks = (finalText + ' ' + interim).toLowerCase().match(/[a-z']+/g) || [];
+        const matched = toks.includes(word);
+        if (finalText.trim()) pushVoiceLog(finalText.trim(), matched, false);
+        if (matched) {
+          const now = Date.now();
+          if (now - lastVoiceGrab.current > 800) {
+            lastVoiceGrab.current = now;
+            grabOnce();
+            pushVoiceLog(`✓ grabbed on “${voiceWordRef.current}”`, true, false);
+            setHeardNow('');
+          }
+        }
+      };
+      rec.onerror = (ev) => {
+        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+          setMsg('Microphone blocked — allow mic access, then toggle Listen.');
+          handle.stopped = true;
+          setVoiceOn(false);
+        } else if (ev.error && ev.error !== 'no-speech' && ev.error !== 'aborted') {
+          pushVoiceLog(`(mic: ${ev.error})`, false, true);
+        }
+      };
+      rec.onend = () => {
+        if (handle.stopped) return;
+        handle.timer = setTimeout(() => { if (!handle.stopped) start(); }, 300); // auto-restart
+      };
+      try { rec.start(); handle.rec = rec; }
+      catch { handle.timer = setTimeout(() => { if (!handle.stopped) start(); }, 400); }
+    }
+    recogRef.current = handle;
+    setVoiceLog([]);
     setMsg(`Listening… say “${voiceWordRef.current}” to grab.`);
-    return () => { if (recogRef.current) { try { recogRef.current.stop(); } catch { /* noop */ } recogRef.current = null; } };
+    start();
+    return () => {
+      handle.stopped = true;
+      clearTimeout(handle.timer);
+      try { handle.rec?.stop(); } catch { /* noop */ }
+      try { handle.rec?.abort(); } catch { /* noop */ }
+      setHeardNow('');
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceOn, step]);
+
+  // Load resumable (abandoned) sessions when the wizard opens.
+  useEffect(() => {
+    allGrabSessions().then((list) => setSessions(list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)))).catch(() => {});
+  }, []);
+
+  // Auto-cache the in-progress capture (debounced) so an abandoned grab can be resumed even
+  // after a hard browser close. Empty captures aren't saved.
+  useEffect(() => {
+    if (!segments.length || closingRef.current) return;
+    const t = setTimeout(() => { if (!closingRef.current) saveGrabSession(sessionRecord()).catch(() => {}); }, 2000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segments, docLayout, ocrInvert, ocrContrast, useColors, bgColor, textColor, fontHint, voiceWord]);
 
   function cropVideoPx() {
     const v = videoRef.current;
@@ -342,6 +408,7 @@ export default function GrabWizard({ onClose }) {
   async function openInReader() {
     const usable = segments.filter((s) => (s.text || '').trim());
     if (!usable.length) { setMsg('No recognized text yet — run “Recognize text” first.'); return; }
+    closingRef.current = true; // stop the auto-save from re-creating the session
     try {
       const keep = segments.filter((s) => (s.text || '').trim() || s.image);
       const name = `Grab — ${new Date().toLocaleString()}`;
@@ -355,10 +422,12 @@ export default function GrabWizard({ onClose }) {
         ocr: { docLayout, invert: ocrInvert, contrast: ocrContrast, useColors, bgColor, textColor, font: fontHint },
       }).catch(() => {});
       stopCapture(stream);
+      await deleteGrabSession(sessionIdRef.current).catch(() => {}); // no longer abandoned
       await openDoc(doc);
       setStatus(`Opened grabbed text (${doc.words.length} words, ${doc.segmentCount} image(s))`);
       onClose();
     } catch (e) {
+      closingRef.current = false;
       setMsg('Failed to open: ' + (e?.message || e));
     }
   }
@@ -379,6 +448,61 @@ export default function GrabWizard({ onClose }) {
     setRecent((r) => r.filter((x) => x.checksum !== rec.checksum));
   }
 
+  // ── Resumable sessions + accidental-close protection ──
+  function sessionRecord() {
+    return {
+      id: sessionIdRef.current,
+      createdAt: createdAtRef.current,
+      updatedAt: Date.now(),
+      step: step === 'screen' ? 'review' : step,
+      voiceWord,
+      segments: segments.map((s) => ({ text: s.text || '', image: s.image, layout: s.layout || null, regions: s.regions || null, ocrMode: s.ocrMode || 'default' })),
+      ocr: { docLayout, invert: ocrInvert, contrast: ocrContrast, useColors, bgColor, textColor, font: fontHint },
+      pageCount: segments.length,
+    };
+  }
+  function resumeSession(sess) {
+    setSegments((sess.segments || []).map((s) => ({ id: uid(), image: s.image, text: s.text || '', layout: s.layout || null, regions: s.regions || null, ocrMode: s.ocrMode || 'default' })));
+    const o = sess.ocr || {};
+    if (o.docLayout) setDocLayout(o.docLayout);
+    if (o.invert) setOcrInvert(o.invert);
+    if (o.contrast != null) setOcrContrast(o.contrast);
+    setUseColors(!!o.useColors);
+    if (o.bgColor) setBgColor(o.bgColor);
+    if (o.textColor) setTextColor(o.textColor);
+    if (o.font != null) setFontHint(o.font);
+    if (sess.voiceWord) setVoiceWord(sess.voiceWord);
+    sessionIdRef.current = sess.id;
+    createdAtRef.current = sess.createdAt || Date.now();
+    setStep('review');
+    setMsg(`Resumed session — ${(sess.segments || []).length} page(s). Continue OCR/editing, or go back to capture more.`);
+  }
+  async function discardSession(sess) {
+    await deleteGrabSession(sess.id).catch(() => {});
+    setSessions((s) => s.filter((x) => x.id !== sess.id));
+  }
+
+  function doClose() {
+    closingRef.current = true;
+    abortAuto();
+    setVoiceOn(false);
+    stopCapture(stream);
+    onClose();
+  }
+  function requestClose() {
+    if (segments.length > 0) { setConfirmClose(true); return; }
+    doClose();
+  }
+  async function saveAndClose() {
+    await saveGrabSession(sessionRecord()).catch(() => {});
+    doClose();
+  }
+  async function discardAndClose() {
+    closingRef.current = true;
+    await deleteGrabSession(sessionIdRef.current).catch(() => {});
+    doClose();
+  }
+
   const hasText = segments.some((s) => (s.text || '').trim());
   const voiceSupported = speechRecognitionSupported();
   const editingSeg = editingId ? segments.find((s) => s.id === editingId) : null;
@@ -386,7 +510,8 @@ export default function GrabWizard({ onClose }) {
   return (
     <Dialog
       title="Grab Text"
-      onClose={() => { abortAuto(); setVoiceOn(false); stopCapture(stream); onClose(); }}
+      onClose={requestClose}
+      dismissable={false}
       width={1280}
       buttons={
         <>
@@ -418,6 +543,21 @@ export default function GrabWizard({ onClose }) {
             </label>
           </div>
           {!ocrSupported() && <p className="settings-note">⚠ OCR (WebAssembly) is unavailable in this browser.</p>}
+
+          {sessions.length > 0 && (
+            <div className="grab-recent grab-sessions">
+              <div className="grab-recent-head">Resume an unfinished grab session</div>
+              {sessions.map((s) => (
+                <div key={s.id} className="grab-recent-row">
+                  <button className="grab-recent-open" onClick={() => resumeSession(s)} title="Resume this session">
+                    ▶ {(s.pageCount ?? s.segments?.length) || 0} page(s)
+                    <span className="settings-note" style={{ margin: 0 }}> · {s.updatedAt ? new Date(s.updatedAt).toLocaleString() : ''}</span>
+                  </button>
+                  <button onClick={() => discardSession(s)} title="Discard this session">🗑</button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {recent.length > 0 && (
             <div className="grab-recent">
@@ -461,6 +601,20 @@ export default function GrabWizard({ onClose }) {
                 {voiceOn ? '■ Stop listening' : '🎙 Listen'}
               </button>
               {!voiceSupported && <span className="settings-note" style={{ margin: 0 }}>Voice needs Chrome/Edge.</span>}
+              {voiceOn && (
+                <div className="grab-voice-log">
+                  <div className="gvl-head">
+                    <span className="gvl-live">● listening for “{voiceWord}”</span>
+                    {heardNow && <em className="gvl-now">“{heardNow}”</em>}
+                  </div>
+                  {voiceLog.length === 0 && <div className="settings-note" style={{ margin: 0 }}>Heard speech shows here. If nothing appears, check the mic permission.</div>}
+                  {[...voiceLog].reverse().map((e) => (
+                    <div key={e.id} className={`gvl-row${e.matched ? ' match' : ''}${e.error ? ' err' : ''}`}>
+                      <span className="gvl-ts">{e.t}</span> {e.text}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="grab-shots-col">
@@ -557,6 +711,21 @@ export default function GrabWizard({ onClose }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {confirmClose && (
+        <div className="grab-close-confirm">
+          <div className="gcc-box">
+            <h3>Close Grab Text?</h3>
+            <p>You have <b>{segments.length}</b> captured page(s) that haven’t been opened yet.</p>
+            <div className="gcc-actions">
+              <button onClick={() => setConfirmClose(false)}>← Keep working</button>
+              <button className="toggle-on" onClick={saveAndClose}>💾 Save session &amp; close</button>
+              <button className="gcc-discard" onClick={discardAndClose}>🗑 Discard &amp; close</button>
+            </div>
+            <p className="settings-note">Saved sessions can be resumed next time from the Grab Text window.</p>
+          </div>
         </div>
       )}
     </Dialog>

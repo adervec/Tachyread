@@ -302,6 +302,52 @@
 .grab-seg-main textarea { width: 100%; resize: vertical; font-size: 12px; }
 .grab-seg-ctl { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; }
 .grab-seg-ctl label { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Live voice-grab transcript */
+.grab-voice-log {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  background: var(--pane-bg);
+  padding: 6px 8px;
+  max-height: 150px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+.grab-voice-log .gvl-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; flex-wrap: wrap; }
+.gvl-live { color: #2e9d4f; font-weight: 600; animation: gvlPulse 1.4s ease-in-out infinite; }
+@keyframes gvlPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.gvl-now { color: var(--menu-fg); opacity: 0.8; }
+.gvl-row { font-family: Consolas, monospace; padding: 1px 0; color: var(--menu-fg); }
+.gvl-row .gvl-ts { color: var(--status-fg); margin-right: 6px; }
+.gvl-row.match { color: #2e9d4f; font-weight: 600; }
+.gvl-row.err { color: #c0392b; }
+
+/* Grab close-confirmation overlay */
+.grab-close-confirm {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+.gcc-box {
+  background: var(--menu-bg);
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  padding: 18px 22px;
+  max-width: 460px;
+  text-align: center;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+.gcc-box h3 { margin: 0 0 8px; }
+.gcc-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 12px 0 4px; }
+.gcc-actions button { padding: 6px 12px; }
+.gcc-discard { color: #c0392b; }
+
 /* Recent grabs (source step) */
 .grab-recent { margin-top: 14px; border-top: 1px solid var(--divider); padding-top: 10px; }
 .grab-recent-head { font-size: 11px; color: var(--status-fg); margin-bottom: 6px; }
@@ -805,6 +851,7 @@
   max-height: 90vh;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 .dialog-title {
   padding: 10px 14px;
