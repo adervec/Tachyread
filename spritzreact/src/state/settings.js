@@ -50,6 +50,7 @@ export function defaultFileSettings() {
     typing: { enabled: false, caseSensitive: false, stripPunctuation: true, perWordTimeoutMs: 0, runMode: 'seconds', runLimit: 60, soundVolume: 0.4 },
     speaking: { enabled: false, confidence: 'Medium', perWordTimeoutMs: 0, allowPartial: true },
     centerOnCurrent: true,
+    lineLongPressMs: 3000, // hold a line this long to jump to it (0 = instant click)
     linePaneSplit: false, // split the Lines pane into before / current line / after zones
     lineAdvanceSound: false, // soft click when the current line changes
     autoSkipHeadersFooters: false,
@@ -61,7 +62,7 @@ export function defaultFileSettings() {
     tocCollapseCompleted: false, // auto-collapse fully-read sections in the TOC tree
     tocColumns: { // which TOC columns are visible (the name column is always shown)
       startLine: true, startWord: true, startPct: true,
-      lenLines: true, lenWords: true, lenPct: true,
+      lenLines: true, lenWords: true, lenPct: true, childPct: true,
       started: true, completed: true, pctRead: true, wpm: true,
     },
     tocBarNumeralStyle: 'none', // none | arabic | roman | words — numeral shown on TOC-bar icons

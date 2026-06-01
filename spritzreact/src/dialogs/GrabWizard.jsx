@@ -97,6 +97,12 @@ export default function GrabWizard({ onClose }) {
   const [step, setStep] = useState('source'); // source | screen | review
   const [segments, setSegments] = useState([]); // {id, image, text, layout, regions, ocrMode}
   const [msg, setMsg] = useState('');
+  const shotsRef = useRef(null);
+  // Keep the captured-shots preview scrolled to the newest grab.
+  useEffect(() => {
+    const el = shotsRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [segments.length]);
 
   // Screen capture state
   const videoRef = useRef(null);
@@ -381,7 +387,7 @@ export default function GrabWizard({ onClose }) {
     <Dialog
       title="Grab Text"
       onClose={() => { abortAuto(); setVoiceOn(false); stopCapture(stream); onClose(); }}
-      width={1140}
+      width={1280}
       buttons={
         <>
           {step !== 'source' && <button onClick={() => setStep('source')}>← Source</button>}
@@ -459,7 +465,7 @@ export default function GrabWizard({ onClose }) {
           </div>
           <div className="grab-shots-col">
             <div className="grab-shots-head">{segments.length} captured</div>
-            <div className="grab-shots">
+            <div className="grab-shots" ref={shotsRef}>
               {segments.length === 0 && <div className="settings-note">Grabbed pages appear here.</div>}
               {segments.map((s, i) => (
                 <div key={s.id} className="grab-shot">

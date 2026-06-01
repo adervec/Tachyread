@@ -286,7 +286,7 @@
 /* Capture step: live preview + controls beside a strip of the pages grabbed so far. */
 .grab-screen-2col { display: flex; gap: 12px; align-items: flex-start; }
 .grab-capture-col { flex: 1 1 auto; min-width: 0; }
-.grab-shots-col { flex: 0 0 248px; display: flex; flex-direction: column; min-height: 0; }
+.grab-shots-col { flex: 0 0 380px; display: flex; flex-direction: column; min-height: 0; }
 .grab-shots-head { font-size: 11px; color: var(--status-fg); margin-bottom: 6px; }
 .grab-shots { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; max-height: 64vh; padding-right: 4px; }
 .grab-shot { position: relative; border: 1px solid var(--divider); background: #000; }
@@ -525,7 +525,22 @@
   font-size: 12px;
   line-height: 1.5;
   cursor: pointer;
+  position: relative;
 }
+/* Long-press-to-navigate: a growing underline fills over the hold duration. */
+.line-row.pressing { background: var(--current-para-bg); }
+.line-row.pressing::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 0;
+  background: var(--toggle-active-bg);
+  animation: lpFill var(--lp-ms, 3000ms) linear forwards;
+  pointer-events: none;
+}
+@keyframes lpFill { from { width: 0; } to { width: 100%; } }
 .line-row .num {
   text-align: right;
   padding-right: 8px;

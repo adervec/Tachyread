@@ -150,6 +150,16 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ centerOnCurrent: e.target.checked })}
         />
       </Field>
+      <Field label="Line jump: long-press hold (ms, 0 = instant click)">
+        <input
+          type="number"
+          min={0}
+          max={6000}
+          step={250}
+          value={s.lineLongPressMs ?? 3000}
+          onChange={(e) => patch({ lineLongPressMs: Math.max(0, Number(e.target.value)) })}
+        />
+      </Field>
       <Field label="Reveal mode (hide text ahead)">
         <select value={s.hideMode || 'None'} onChange={(e) => patch({ hideMode: e.target.value })}>
           <option>None</option>

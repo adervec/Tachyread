@@ -111,15 +111,14 @@ function LineRow({ index, doc, settings, ctx, onJumpWord, propNameKeys }) {
   ) : null;
   const placement = settings.pointerPlacement || 'Left';
   const pointerBefore = pointer && (placement === 'Left' || placement === 'Above');
+  const pressing = ctx.pressingStart >= 0 && line.startWordIndex === ctx.pressingStart && !line.isEmpty;
 
   return (
     <div
-      className={`line-row status-${status} ${isHF ? 'is-header-footer' : ''} ${inPara ? 'in-current-para' : ''}`}
+      className={`line-row status-${status} ${isHF ? 'is-header-footer' : ''} ${inPara ? 'in-current-para' : ''} ${pressing ? 'pressing' : ''}`}
       data-line={index}
       data-start={line.startWordIndex}
-      onClick={() => {
-        if (line.startWordIndex >= 0) onJumpWord(line.startWordIndex);
-      }}
+      style={pressing ? { '--lp-ms': `${ctx.longPressMs}ms` } : undefined}
     >
       <div className="num">{line.lineNumber}</div>
       <div className="accent" />
@@ -173,7 +172,7 @@ function Row({ index, style, ariaAttributes, doc, settings, ctx, onJumpWord, pro
 // centre band, and upcoming lines (top-aligned). Renders a bounded window around the current
 // line — no scrolling, so the current line stays fixed in place and never jitters.
 const SPLIT_WINDOW = 60;
-function SplitView({ doc, settings, ctx, onJumpWord, propNameKeys, baseFont, onContextMenu }) {
+function SplitView({ doc, settings, ctx, onJumpWord, propNameKeys, baseFont, onContextMenu, pressHandlers }) {
   const cur = ctx.currentLine;
   const total = doc.lines.length;
   const common = { doc, settings, ctx, onJumpWord, propNameKeys };
@@ -182,7 +181,7 @@ function SplitView({ doc, settings, ctx, onJumpWord, propNameKeys, baseFont, onC
   const after = [];
   for (let i = cur + 1; i <= Math.min(total - 1, cur + SPLIT_WINDOW); i++) after.push(i);
   return (
-    <div className="line-pane-split" style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu}>
+    <div className="line-pane-split" style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu} {...pressHandlers}>
       <div className="lps-zone lps-before">
         {before.map((i) => (
           <LineRow key={i} index={i} {...common} />
@@ -251,6 +250,9 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
   const [menu, setMenu] = useState(null);
+  const [pressingStart, setPressingStart] = useState(-1); // wordIndex of the line being long-pressed
+  const pressRef = useRef({});
+  const longPressMs = settings.lineLongPressMs ?? 3000;
   const hideBeyond = useMemo(() => revealBoundary(doc, idx, hideMode), [doc, idx, hideMode]);
 
   function onContextMenu(e) {
@@ -312,8 +314,10 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
       paraStart: paraRange.startLine,
       paraEnd: paraRange.endLine,
       hideBeyond,
+      pressingStart,
+      longPressMs,
     }),
-    [currentLine, idx, tab.sessionLinesRead, tab.sessionNavLinesRead, tab.readLinesAllTime, paraRange, hideBeyond]
+    [currentLine, idx, tab.sessionLinesRead, tab.sessionNavLinesRead, tab.readLinesAllTime, paraRange, hideBeyond, pressingStart, longPressMs]
   );
 
   // rowProps must not contain ariaAttributes/index/style (those are auto-passed by List).
@@ -321,6 +325,50 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
     () => ({ doc, settings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl }),
     [doc, settings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl]
   );
+
+  // Long-press to navigate: a single click no longer jumps — you must hold a line for
+  // lineLongPressMs (default 3000). Pointer drift or release cancels the press. Set 0 for the
+  // old instant-click behaviour. The "pressing" highlight is React state (not a manual class) so
+  // a background re-render mid-hold can't wipe the progress indicator.
+  function cancelPress() {
+    const p = pressRef.current;
+    if (p.timer) clearTimeout(p.timer);
+    pressRef.current = {};
+    setPressingStart((s) => (s === -1 ? s : -1));
+  }
+  function onPressDown(e) {
+    if (e.button != null && e.button !== 0) return; // left button / touch only
+    const row = e.target.closest?.('.line-row');
+    if (!row) return;
+    const start = Number(row.getAttribute('data-start'));
+    if (!(start >= 0)) return;
+    if (pressRef.current.timer) clearTimeout(pressRef.current.timer);
+    pressRef.current = { x: e.clientX, y: e.clientY, start };
+    if (longPressMs > 0) {
+      setPressingStart(start);
+      pressRef.current.timer = setTimeout(() => { onJumpWord(start); cancelPress(); }, longPressMs);
+    }
+  }
+  function onPressMove(e) {
+    const p = pressRef.current;
+    if (p.timer == null && p.start == null) return;
+    if (Math.abs(e.clientX - p.x) > 10 || Math.abs(e.clientY - p.y) > 10) cancelPress();
+  }
+  function onPressUp(e) {
+    const p = pressRef.current;
+    if (longPressMs <= 0 && p.start != null && e.target.closest?.('.line-row')?.getAttribute('data-start') === String(p.start)) {
+      onJumpWord(p.start);
+    }
+    cancelPress();
+  }
+  const pressHandlers = {
+    onPointerDown: onPressDown,
+    onPointerMove: onPressMove,
+    onPointerUp: onPressUp,
+    onPointerLeave: cancelPress,
+    onPointerCancel: cancelPress,
+  };
+  useEffect(() => () => { if (pressRef.current.timer) clearTimeout(pressRef.current.timer); }, []);
 
   return (
     <div className="line-pane">
@@ -336,9 +384,10 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
           propNameKeys={propNameKeys}
           baseFont={baseFont}
           onContextMenu={onContextMenu}
+          pressHandlers={pressHandlers}
         />
       ) : (
-        <div className="line-pane-list" style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu}>
+        <div className="line-pane-list" style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu} {...pressHandlers}>
           <List
             listRef={listRef}
             rowCount={totalLines}

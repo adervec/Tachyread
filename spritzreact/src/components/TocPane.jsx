@@ -10,6 +10,7 @@ const STAT_COLUMNS = [
   { key: 'lenLines', label: '∑Ln', title: 'Lines in this section', get: (c) => c.lenLines },
   { key: 'lenWords', label: '∑Wd', title: 'Words in this section', get: (c) => c.lenWords },
   { key: 'lenPct', label: '%Doc', title: 'Portion of the document', get: (c) => `${c.lenPct.toFixed(1)}%` },
+  { key: 'childPct', label: 'Σ%ch', title: 'Summed % size of immediate children', get: (c) => (c.childPct != null ? `${c.childPct.toFixed(1)}%` : '—') },
   { key: 'pctRead', label: 'Read', title: 'Percent of this section read', get: (c) => `${(c.readFrac * 100).toFixed(1)}%` },
   { key: 'wpm', label: 'WPM', title: 'Average reading pace in this section', get: (c) => (c.wpm ? c.wpm : '—') },
   { key: 'started', label: 'Started', title: 'When you first reached this section', get: (c) => fmtTs(c.started) },
@@ -39,6 +40,22 @@ function flattenVisible(nodes, collapsed, out = []) {
     if (node.children.length && !isCollapsed) flattenVisible(node.children, collapsed, out);
   }
   return out;
+}
+
+// Map of node index → summed % size of its immediate children (null when it has none).
+function childPctMap(nodes, entries, total, map = new Map()) {
+  for (const node of nodes) {
+    if (node.children.length) {
+      let sum = 0;
+      for (const c of node.children) {
+        const sp = sectionSpan(entries, c.index, total);
+        sum += sp.end - sp.start;
+      }
+      map.set(node.index, (sum / total) * 100);
+    }
+    childPctMap(node.children, entries, total, map);
+  }
+  return map;
 }
 
 // Indices of a row's ancestors (so a flash target can be revealed even if collapsed).
@@ -78,6 +95,7 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
   );
   const tree = useMemo(() => buildTocTree(entries), [entries]);
   const cur = useMemo(() => currentChapter(entries, idx, total), [entries, idx, total]);
+  const childSums = useMemo(() => childPctMap(tree, entries, total), [tree, entries, total]);
 
   // Auto-collapse fully-read sections when the option is enabled.
   useEffect(() => {
@@ -159,7 +177,7 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
     mutate([...draft.filter((e) => e.wordIndex !== idx), { wordIndex: idx, title, level: 0 }]);
   }
 
-  const visibleCols = STAT_COLUMNS.filter((c) => columns[c.key]);
+  const visibleCols = STAT_COLUMNS.filter((c) => columns[c.key] !== false);
 
   return (
     <div className="toc-pane" ref={paneRef}>
@@ -189,7 +207,7 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
         <div className="toc-col-menu">
           {STAT_COLUMNS.map((c) => (
             <label key={c.key} title={c.title}>
-              <input type="checkbox" checked={!!columns[c.key]} onChange={() => toggleColumn(c.key)} />
+              <input type="checkbox" checked={columns[c.key] !== false} onChange={() => toggleColumn(c.key)} />
               {c.title}
             </label>
           ))}
@@ -200,14 +218,24 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
         <div className="toc-empty">No entries. {editing ? 'Use “+ Here” or ↻ to build one.' : 'Use ✎ Edit to add entries.'}</div>
       )}
 
-      {entries.length > 0 && !editing && (
+      {entries.length > 0 && (
         <div className="toc-table-scroll">
           <table className="toc-table">
             <thead>
               <tr>
-                <th className="toc-act-h" title="Jump here (move reading position)">▶</th>
-                <th className="toc-act-h" title="Scroll into view (keep reading position)">👁</th>
-                <th className="toc-act-h" title="Set finishing this section as the goal">🎯</th>
+                {editing ? (
+                  <>
+                    <th className="toc-act-h" title="Promote a tier (outdent)">⇤</th>
+                    <th className="toc-act-h" title="Demote a tier (indent)">⇥</th>
+                    <th className="toc-act-h" title="Delete entry">🗑</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="toc-act-h" title="Jump here (move reading position)">▶</th>
+                    <th className="toc-act-h" title="Scroll into view (keep reading position)">👁</th>
+                    <th className="toc-act-h" title="Set finishing this section as the goal">🎯</th>
+                  </>
+                )}
                 <th className="toc-name-h">Section</th>
                 {visibleCols.map((c) => (
                   <th key={c.key} title={c.title}>{c.label}</th>
@@ -215,7 +243,7 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
               </tr>
             </thead>
             <tbody>
-              {flattenVisible(tree, collapsed).map((row) => {
+              {flattenVisible(tree, editing ? EMPTY_SET : collapsed).map((row) => {
                 const e = row.entry;
                 const span = sectionSpan(entries, row.index, total);
                 const rs = tracker?.rangeStats(span.start, span.end) || { readFrac: 0, wpm: 0 };
@@ -229,6 +257,7 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
                   lenLines: Math.max(1, endLine - startLine + 1),
                   lenWords: span.end - span.start,
                   lenPct: ((span.end - span.start) / total) * 100,
+                  childPct: childSums.has(row.index) ? childSums.get(row.index) : null,
                   readFrac: rs.readFrac,
                   wpm: rs.wpm,
                   started: readStat.started,
@@ -242,24 +271,38 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
                     data-toc-index={row.index}
                     className={`toc-row${isCurrent ? ' current' : ''}${done ? ' done' : ''}${row.index === flashIndex ? ' toc-flash' : ''}`}
                   >
-                    <td className="toc-act"><button title="Jump here (move reading position)" onClick={() => onJumpWord(e.wordIndex)}>▶</button></td>
-                    <td className="toc-act"><button title="Scroll into view (keep reading position)" onClick={() => onScrollToLine(getLineIndex(doc, e.wordIndex))}>👁</button></td>
-                    <td className="toc-act">
-                      {!done && (
-                        <button title="Set finishing this section as the goal" onClick={() => onSetSectionGoal(span.start, span.end, e.title)}>🎯</button>
-                      )}
-                    </td>
-                    <td className="toc-name">
-                      <span className="toc-indent" style={{ width: row.level * 12 }} />
-                      {row.hasChildren ? (
-                        <button className="toc-caret" title={row.collapsed ? 'Expand' : 'Collapse'} onClick={() => toggleCollapse(row.index)}>
-                          {row.collapsed ? '▸' : '▾'}
-                        </button>
-                      ) : (
-                        <span className="toc-caret-spacer" />
-                      )}
-                      <span className={`toc-name-text lvl-${row.level}`} title={e.title}>{e.title}</span>
-                    </td>
+                    {editing ? (
+                      <>
+                        <td className="toc-act"><button title="Promote a tier (outdent)" disabled={!(e.level > 0)} onClick={() => outdent(row.index)}>⇤</button></td>
+                        <td className="toc-act"><button title="Demote a tier (indent)" onClick={() => indent(row.index)}>⇥</button></td>
+                        <td className="toc-act"><button className="toc-del" title="Delete" onClick={() => del(row.index)}>🗑</button></td>
+                        <td className="toc-name">
+                          <span className="toc-indent" style={{ width: row.level * 12 }} />
+                          <input className="toc-edit-name" value={e.title} onChange={(ev) => rename(row.index, ev.target.value)} title={`@ word ${e.wordIndex + 1}`} />
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="toc-act"><button title="Jump here (move reading position)" onClick={() => onJumpWord(e.wordIndex)}>▶</button></td>
+                        <td className="toc-act"><button title="Scroll into view (keep reading position)" onClick={() => onScrollToLine(getLineIndex(doc, e.wordIndex))}>👁</button></td>
+                        <td className="toc-act">
+                          {!done && (
+                            <button title="Set finishing this section as the goal" onClick={() => onSetSectionGoal(span.start, span.end, e.title)}>🎯</button>
+                          )}
+                        </td>
+                        <td className="toc-name">
+                          <span className="toc-indent" style={{ width: row.level * 12 }} />
+                          {row.hasChildren ? (
+                            <button className="toc-caret" title={row.collapsed ? 'Expand' : 'Collapse'} onClick={() => toggleCollapse(row.index)}>
+                              {row.collapsed ? '▸' : '▾'}
+                            </button>
+                          ) : (
+                            <span className="toc-caret-spacer" />
+                          )}
+                          <span className={`toc-name-text lvl-${row.level}`} title={e.title}>{e.title}</span>
+                        </td>
+                      </>
+                    )}
                     {visibleCols.map((c) => (
                       <td key={c.key} className={`toc-stat${c.key === 'pctRead' && done ? ' done' : ''}`}>{c.get(ctx)}</td>
                     ))}
@@ -270,25 +313,8 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
           </table>
         </div>
       )}
-
-      {entries.length > 0 && editing && (
-        <div className="toc-edit-list">
-          {sortEntries(draft).map((e, i) => (
-            <div key={`${e.wordIndex}-${i}`} className="toc-edit-row" style={{ paddingLeft: 4 + (e.level || 0) * 14 }}>
-              <span className="toc-edit-lvl" title="Tier">{e.level || 0}</span>
-              <button title="Outdent (promote a tier)" disabled={!(e.level > 0)} onClick={() => outdent(i)}>⇤</button>
-              <button title="Indent (demote a tier)" onClick={() => indent(i)}>⇥</button>
-              <input
-                className="toc-edit-name"
-                value={e.title}
-                onChange={(ev) => rename(i, ev.target.value)}
-                title={`@ word ${e.wordIndex + 1}`}
-              />
-              <button className="toc-del" title="Delete" onClick={() => del(i)}>🗑</button>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
+
+const EMPTY_SET = new Set();
