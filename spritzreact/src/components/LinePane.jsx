@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { List, useDynamicRowHeight, useListRef } from 'react-window';
 import { ReadStatus, orpIndex, getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import Pointer from './Pointer.jsx';
@@ -176,13 +176,21 @@ function SplitView({ doc, settings, ctx, onJumpWord, propNameKeys, baseFont, onC
   const cur = ctx.currentLine;
   const total = doc.lines.length;
   const common = { doc, settings, ctx, onJumpWord, propNameKeys };
+  const beforeRef = useRef(null);
+  const afterRef = useRef(null);
   const before = [];
   for (let i = Math.max(0, cur - SPLIT_WINDOW); i < cur; i++) before.push(i);
   const after = [];
   for (let i = cur + 1; i <= Math.min(total - 1, cur + SPLIT_WINDOW); i++) after.push(i);
+  // Both context zones scroll; by default keep the lines nearest the current line in view
+  // (before → bottom edge, after → top edge). The user can scroll back/forward from there.
+  useLayoutEffect(() => {
+    if (beforeRef.current) beforeRef.current.scrollTop = beforeRef.current.scrollHeight;
+    if (afterRef.current) afterRef.current.scrollTop = 0;
+  }, [cur, baseFont]);
   return (
     <div className="line-pane-split" style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu} {...pressHandlers}>
-      <div className="lps-zone lps-before">
+      <div className="lps-zone lps-before" ref={beforeRef}>
         {before.map((i) => (
           <LineRow key={i} index={i} {...common} />
         ))}
@@ -190,7 +198,7 @@ function SplitView({ doc, settings, ctx, onJumpWord, propNameKeys, baseFont, onC
       <div className="lps-zone lps-current">
         {cur < total && <LineRow index={cur} {...common} />}
       </div>
-      <div className="lps-zone lps-after">
+      <div className="lps-zone lps-after" ref={afterRef}>
         {after.map((i) => (
           <LineRow key={i} index={i} {...common} />
         ))}
