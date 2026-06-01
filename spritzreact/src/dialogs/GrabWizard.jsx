@@ -267,8 +267,24 @@ export default function GrabWizard({ onClose }) {
 
   function cropVideoPx() {
     const v = videoRef.current;
-    if (!v || !crop) return null;
-    return { x: crop.fx * v.videoWidth, y: crop.fy * v.videoHeight, w: crop.fw * v.videoWidth, h: crop.fh * v.videoHeight };
+    if (!v || !crop || !v.videoWidth || !v.videoHeight) return null;
+    // The <video> uses object-fit: contain, so the frame is letter/pillar-boxed inside the
+    // element. crop.* are fractions of the *element* box; map them onto the actual displayed
+    // content rect (not the whole element) before scaling to video pixels — otherwise a
+    // selection captures a narrower/shorter area than what was drawn.
+    const elW = v.clientWidth, elH = v.clientHeight;
+    if (!elW || !elH) return null;
+    const scale = Math.min(elW / v.videoWidth, elH / v.videoHeight); // object-fit: contain
+    const contentW = v.videoWidth * scale;
+    const contentH = v.videoHeight * scale;
+    const offX = (elW - contentW) / 2;
+    const offY = (elH - contentH) / 2;
+    const fx = Math.max(0, Math.min(1, (crop.fx * elW - offX) / contentW));
+    const fy = Math.max(0, Math.min(1, (crop.fy * elH - offY) / contentH));
+    const fw = Math.max(0, Math.min(1 - fx, (crop.fw * elW) / contentW));
+    const fh = Math.max(0, Math.min(1 - fy, (crop.fh * elH) / contentH));
+    if (fw <= 0 || fh <= 0) return null;
+    return { x: fx * v.videoWidth, y: fy * v.videoHeight, w: fw * v.videoWidth, h: fh * v.videoHeight };
   }
 
   async function startScreen() {
