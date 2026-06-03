@@ -482,7 +482,7 @@ function AppInner() {
   useEffect(() => {
     if (!activeTab || !activeTab.settings.speaking?.enabled) {
       if (recognizerRef.current) {
-        try { recognizerRef.current.stop(); } catch {}
+        try { recognizerRef.current.stop(); } catch { /* ignore */ }
         recognizerRef.current = null;
       }
       return;
@@ -507,12 +507,12 @@ function AppInner() {
       },
     });
     if (r) {
-      try { r.start(); } catch {}
+      try { r.start(); } catch { /* ignore */ }
       recognizerRef.current = r;
     }
     return () => {
       if (recognizerRef.current) {
-        try { recognizerRef.current.stop(); } catch {}
+        try { recognizerRef.current.stop(); } catch { /* ignore */ }
         recognizerRef.current = null;
       }
     };
@@ -526,7 +526,7 @@ function AppInner() {
     const curLine = getLineIndex(activeTab.doc, activeTab.settings.wordIndex);
     if (!want) {
       if (audioRecRef.current.rec) {
-        try { audioRecRef.current.rec.stop(); } catch {}
+        try { audioRecRef.current.rec.stop(); } catch { /* ignore */ }
         audioRecRef.current = { rec: null, lineIndex: -1 };
       }
       return;
@@ -534,7 +534,7 @@ function AppInner() {
     if (audioRecRef.current.lineIndex === curLine && audioRecRef.current.rec) return;
     // line changed: stop previous, start new
     if (audioRecRef.current.rec) {
-      try { audioRecRef.current.rec.stop(); } catch {}
+      try { audioRecRef.current.rec.stop(); } catch { /* ignore */ }
     }
     const targetLine = curLine;
     recordClip({
@@ -546,7 +546,7 @@ function AppInner() {
     });
     return () => {
       if (audioRecRef.current.rec) {
-        try { audioRecRef.current.rec.stop(); } catch {}
+        try { audioRecRef.current.rec.stop(); } catch { /* ignore */ }
         audioRecRef.current = { rec: null, lineIndex: -1 };
       }
     };
@@ -557,11 +557,11 @@ function AppInner() {
   useEffect(() => {
     if (!activeTab?.settings.audioCtrl) {
       if (audioCtrlRef.current) {
-        try { audioCtrlRef.current.stop(); } catch {}
+        try { audioCtrlRef.current.stop(); } catch { /* ignore */ }
         audioCtrlRef.current = null;
       }
       if (clapRef.current) {
-        try { clapRef.current.stop(); } catch {}
+        try { clapRef.current.stop(); } catch { /* ignore */ }
         clapRef.current = null;
       }
       setAudioLog([]); // ephemeral transcript — clear when listening stops
@@ -594,9 +594,9 @@ function AppInner() {
       }).then((cd) => (clapRef.current = cd)).catch(() => {});
     }
     return () => {
-      if (audioCtrlRef.current) try { audioCtrlRef.current.stop(); } catch {}
+      if (audioCtrlRef.current) try { audioCtrlRef.current.stop(); } catch { /* ignore */ }
       audioCtrlRef.current = null;
-      if (clapRef.current) try { clapRef.current.stop(); } catch {}
+      if (clapRef.current) try { clapRef.current.stop(); } catch { /* ignore */ }
       clapRef.current = null;
     };
     // eslint-disable-next-line

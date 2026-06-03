@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useReducer, useRef, useCallback }
 import { defaultFileSettings, defaultGlobalSettings } from './settings.js';
 import { loadGlobal, saveGlobal, loadFile, saveFile, loadReadState, saveReadState, saveDocPayload, loadDocPayload, loadSession, saveSession } from './storage.js';
 import { parseFile, parseClipboardText } from '../document/parsers.js';
-import { readerDocFromText, attachChecksum, ReadStatus } from '../document/readerDocument.js';
+import { readerDocFromText, attachChecksum } from '../document/readerDocument.js';
 import { createReadingTracker } from '../engine/readingTracker.js';
 
 const AppCtx = createContext(null);

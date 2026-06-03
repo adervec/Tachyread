@@ -77,7 +77,7 @@ function statusForLine(li, ctx) {
 
 // Presentational single line — shared by the virtualized list (Row) and the split view.
 // Has no react-window coupling so it can be rendered directly in the split zones.
-function LineRow({ index, doc, settings, ctx, onJumpWord, propNameKeys }) {
+function LineRow({ index, doc, settings, ctx, propNameKeys }) {
   const line = doc.lines[index];
   const status = statusForLine(index, ctx);
   const isCurrent = status === ReadStatus.Current;

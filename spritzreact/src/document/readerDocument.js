@@ -36,7 +36,7 @@ export async function computeChecksum(text) {
   return 'fb' + (h >>> 0).toString(16);
 }
 
-const WS_RE = /[ \t ]+/;
+const WS_RE = /[ \t\u00A0]+/;
 
 function detectHeaderFooterLines(lines) {
   const result = new Set();
@@ -119,7 +119,7 @@ function findFootnoteMarkers(doc) {
     fmap.get(num).anchors.push(wi);
   }
   // Match against body lines like "1. ..." or "1) ..."
-  const bodyRe = /^\s*(\d+)[\.\)]\s+(.{2,})$/;
+  const bodyRe = /^\s*(\d+)[.)]\s+(.{2,})$/;
   for (let li = 0; li < doc.lines.length; li++) {
     const m = doc.lines[li].text.match(bodyRe);
     if (!m) continue;
@@ -229,5 +229,5 @@ export function isLongWord(w, threshold) {
 }
 
 export function hasSpecialChars(w) {
-  return /[^\p{L}\p{N}\s'’.,!?;:()\-]/u.test(w);
+  return /[^\p{L}\p{N}\s'’.,!?;:()-]/u.test(w);
 }

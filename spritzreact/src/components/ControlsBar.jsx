@@ -17,7 +17,6 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
   const totalWords = doc.words.length;
-  const pct = totalWords ? (idx / totalWords) * 100 : 0;
   // Coverage = fraction of the book actually read (not just the furthest position reached).
   const coverage = tab.tracker ? tab.tracker.coverage() * 100 : 0;
   // ETA from measured pace (recent → session → set WPM fallback) rather than the setpoint.
