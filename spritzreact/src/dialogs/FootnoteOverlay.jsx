@@ -40,7 +40,7 @@ export default function FootnoteOverlay({ tab, onClose }) {
       <div className="ftnh">
         <span>Footnote [{fn.number}]</span>
         <span>
-          <button onClick={() => setPlaying((p) => !p)}>{playing ? 'Pause' : 'Play SPRITZ'}</button>{' '}
+          <button onClick={() => setPlaying((p) => !p)}>{playing ? 'Pause' : 'Play Flash'}</button>{' '}
           <button onClick={onClose}>Close (Esc)</button>
         </span>
       </div>

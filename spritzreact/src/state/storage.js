@@ -4,7 +4,7 @@
 import { openDB } from 'idb';
 import { defaultGlobalSettings } from './settings.js';
 
-const DB_NAME = 'SPRITZReader';
+const DB_NAME = 'Tachyread';
 const DB_VERSION = 6;
 
 let _dbPromise = null;

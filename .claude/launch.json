@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "spritz-dev",
+      "name": "tachyread-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "spritzreact", "run", "dev"],
       "port": 52593

@@ -9,7 +9,7 @@ services — those are listed below so you can make an informed choice.
 ## What is stored, and where
 
 Everything is stored locally in your browser using **IndexedDB** (database
-`SPRITZReader`) and similar web storage:
+`Tachyread`) and similar web storage:
 
 - the documents/tabs you open and their per-file settings;
 - global settings (fonts, defaults, recent-file list);

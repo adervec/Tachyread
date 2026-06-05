@@ -22,7 +22,7 @@ choice and it fits "I'm not monetizing this."
 
 > Easy to change now while the repo is private. Lock it in before flipping public.
 
-### B. The name "SPRITZ" — _trademark flag (most important legal item)_
+### B. The name — ✅ RESOLVED: renamed to **Tachyread**
 "**Spritz**" is a trademark of **Spritz Technology, Inc.**, the company that
 commercialized this exact one-word-at-a-time ORP reading method. Naming the
 project "SPRITZ Reader" / `SPRITZReact` and using "SPRITZ" throughout could draw
@@ -36,8 +36,12 @@ Options:
 2. **Keep the name** + rely on the non-affiliation disclaimer (already written in
    [`DISCLAIMER.md`](./DISCLAIMER.md)). Lower effort, residual risk.
 
-I did **not** rename anything — that's your branding call. Say the word and I'll
-do a full rename pass.
+✅ Renamed to **Tachyread** across the UI, window title, the core one-word pane
+(now labeled **"Flash"**), the IndexedDB DB name, the package name, and the docs.
+Remaining manual step on your side: rename the GitHub repo `SPRITZReact` →
+`Tachyread` (Settings → General → Repository name), then point your clone at it
+with `git remote set-url origin <new-url>`. The Pages base path in `deploy.yml`
+is already set to `/Tachyread/` to match.
 
 ---
 
@@ -130,7 +134,7 @@ Say the word and I'll build a small dialog + footer link.
 3. Merge `dev` → `main` so docs + CI are on the default branch.
 4. GitHub → **Settings → General → Danger Zone → Change visibility → Public**.
 5. _(Optional demo)_ Settings → **Pages → Source: GitHub Actions**; the deploy
-   workflow publishes to `https://adervec.github.io/SPRITZReact/`.
+   workflow publishes to `https://adervec.github.io/Tachyread/`.
 6. Add a repo **description** + **topics**; optionally `SECURITY.md`,
    `CONTRIBUTING.md`, and issue templates.
 

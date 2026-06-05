@@ -61,7 +61,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
         </>
       }
     >
-      <Section>SPRITZ word display</Section>
+      <Section>Flash word display</Section>
       <Field label="Context words before">
         <input
           type="number"
@@ -80,7 +80,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ contextWordsAfter: Math.max(0, Number(e.target.value)) })}
         />
       </Field>
-      <Field label="Serif font (SPRITZ word)">
+      <Field label="Serif font (Flash word)">
         <input type="checkbox" checked={s.serif} onChange={(e) => patch({ serif: e.target.checked })} />
       </Field>
       <Field label="Show guide lines">
@@ -96,7 +96,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       <Field label="Highlight ORP character">
         <input type="checkbox" checked={s.highlightORP} onChange={(e) => patch({ highlightORP: e.target.checked })} />
       </Field>
-      <Field label="Hide SPRITZ word pane">
+      <Field label="Hide Flash word pane">
         <input type="checkbox" checked={s.hideSpritzPane} onChange={(e) => patch({ hideSpritzPane: e.target.checked })} />
       </Field>
 

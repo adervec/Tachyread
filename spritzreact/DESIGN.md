@@ -1,8 +1,8 @@
-# SPRITZ Reader (React) — As-Built Design Document
+# Tachyread (React) — As-Built Design Document
 
 ## Overview
 
-SPRITZ Reader is a browser-based speed-reading app — a React/Vite port of the original
+Tachyread is a browser-based speed-reading app — a React/Vite port of the original
 WPF desktop application. Text is displayed one word at a time, centered on an Optimal
 Recognition Point (ORP), so the reader absorbs words at high WPM without saccadic eye
 movement.
@@ -21,7 +21,7 @@ Where a desktop capability has no direct web equivalent it is adapted to a Web P
 
 A single-page React 19 app built with Vite. Global state lives in one reducer-backed
 context (`AppProvider`); each open document is a **tab** object held in that state. The UI
-is split into a menu bar, tab strip, a three-column main area (optional TOC pane · SPRITZ
+is split into a menu bar, tab strip, a three-column main area (optional TOC pane · Flash
 pane · line pane), a control bar, and a status bar. Dialogs and overlays render on top.
 
 Theming is done with **CSS custom properties**: a selected palette is written onto
@@ -46,7 +46,7 @@ Theming is done with **CSS custom properties**: a selected palette is written on
 | `src/components/PaneLayout.jsx` | Horizontal resizable pane container with draggable splitters |
 | `src/components/Trendline.jsx` | Mountain-graph progress bar (per-word reading-pace area chart + scrubber) |
 | `src/components/ChapterHeading.jsx` | Current-chapter heading + section progress bar |
-| `src/components/SpritzPane.jsx` | SPRITZ word display: ORP word, context words, guide lines |
+| `src/components/SpritzPane.jsx` | Flash word display: ORP word, context words, guide lines |
 | `src/components/DashboardPane.jsx` | Dedicated pane for the animated faces + live reading stats |
 | `src/components/SourcePane.jsx` | Side-by-side original page: PDF page (pdf.js canvas) / EPUB section, synced to position |
 | `src/document/toc.js` | TOC auto-detection, stored-entry resolution, current-chapter computation |
@@ -77,17 +77,17 @@ to IndexedDB); `PATCH_TAB` updates transient fields.
 The main area is a row of **resizable panes** (`PaneLayout`): each pane can be toggled on/off
 from the menu bar and resized by dragging the splitter between panes. Every pane but the last
 (Lines) takes a draggable pixel width; the Lines pane flexes to fill. The default order is
-TOC · Dashboard (faces + stats) · SPRITZ · Lines.
+TOC · Dashboard (faces + stats) · Flash · Lines.
 
 ```
 +-----------------------------------------------------------------------------+
-| Menu bar (File, View, [TOC][Faces/Stats][Source][Hide SPRITZ], Theme ▾)     |
+| Menu bar (File, View, [TOC][Faces/Stats][Source][Hide Flash], Theme ▾)     |
 +-----------------------------------------------------------------------------+
 | Tab strip (each tab header shows a thin progress bar)                       |
 +-----------------------------------------------------------------------------+
 | ▸ Current chapter title              §3/12  [====section progress====] 47%  |
 +--------+-+-------------+-+-----------+-+-----------+-+----------------------+
-| TOC    |▟| Dashboard   |▟| SPRITZ    |▟| Source    |▟| Line pane            |
+| TOC    |▟| Dashboard   |▟| Flash    |▟| Source    |▟| Line pane            |
 | (edit) | |  faces 1-3  | |  context  | |  PDF page | |  status coloring     |
 |  +Here | |  live WPM   | |  ORP word | |  / EPUB   | |  blur, pointer, %    |
 |  ✎ 🗑   | |  efficiency | |  + guides | |  section  | |  right-click menu     |
@@ -121,7 +121,7 @@ PDF/EPUB and attaches the checksum; `parseClipboardText` reads the clipboard.
 ## Features
 
 ### Core reading
-- **SPRITZ display**: one word at a time centered on the ORP character (`orpIndex` chooses
+- **Flash display**: one word at a time centered on the ORP character (`orpIndex` chooses
   the pivot by word length); long words shrink to keep the right side on screen.
 - **Speed control**: 60–1500 WPM slider, per tab.
 - **Speed units** (`speedUnit`): the slider value is interpreted as **Words**, **Letters**,
@@ -129,7 +129,7 @@ PDF/EPUB and attaches the checksum; `parseClipboardText` reads the clipboard.
 - **Playback controls**: Play/Pause (Space), Prev/Next word (←/→), Prev/Next line (↑/↓),
   Prev/Next paragraph (Ctrl+↑/↓), Restart (Home).
 - **Context words**: independent **before** and **after** counts shown around the current
-  word (Tab Settings → SPRITZ word display); optional ORP highlight on context words.
+  word (Tab Settings → Flash word display); optional ORP highlight on context words.
 - **Double-display-time** multipliers (1.0 = off) for proper names, long words
   (configurable threshold), digit words, and special-character words; punctuation adds a
   small pause.
@@ -193,8 +193,8 @@ relative words/lines/percent, or active-time minutes, with a live status readout
 
 ### Panes & layout
 The main area is a row of resizable panes. Drag any splitter to resize; toggle the TOC,
-Dashboard (faces + stats), Source, and SPRITZ word panes from the menu bar. The faces and
-reading stats live in their **own Dashboard pane**, independent of the SPRITZ word display.
+Dashboard (faces + stats), Source, and Flash word panes from the menu bar. The faces and
+reading stats live in their **own Dashboard pane**, independent of the Flash word display.
 A **current-chapter heading bar** sits above the panes showing the active section title and a
 progress bar for position within that section.
 
@@ -260,14 +260,14 @@ Robot, Alien, Wizard, Cat, Baby, Skull, Panda, Frankenstein, Vampire, Viking, Cl
 Dragon, Ninja) layered with distinctive SVG decorations, and an **ArtStyle** (Cartoon, Flat,
 Sketch, Neon, Watercolor, Pastel) applied as a CSS re-skin. The **Face Library** dialog
 previews every style across the WPM range and assigns faces to the reader's slots. Faces
-render in the Dashboard pane, so the SPRITZ word display can be hidden (Hide SPRITZ)
+render in the Dashboard pane, so the Flash word display can be hidden (Hide Flash)
 independently of them.
 
 ### Read aloud (integrated TTS) — `features/readAloud.js`
 A **READ** toggle that integrates text-to-speech with the main reading position. With it on,
 pressing **Play** speaks the document forward from the current word, one sentence-sized chunk
 at a time, and **advances the reading position in sync** using `speechSynthesis` `boundary`
-events — so the SPRITZ word and line pane follow what's being spoken. It's designed to "read
+events — so the Flash word and line pane follow what's being spoken. It's designed to "read
 at you" hands-free: you can still **manually jump** lines/words (or scrub the trendline) at
 any time and the speech **re-syncs** to wherever you move — letting you push ahead when you
 have a moment of attention. Because every advance flows through the normal position update,
@@ -323,14 +323,14 @@ deletes clips.
   (and optional default serif/sans fonts) and is applied as CSS custom properties on `:root`.
   Selectable per tab from the menu bar or Settings.
 - **Fonts**: default serif/sans font families are an **app-level** setting; the per-tab serif
-  toggle for the SPRITZ word is a tab setting.
+  toggle for the Flash word is a tab setting.
 - **Guide lines**: vertical crosshair flanking the ORP, configurable color.
 
 #### Settings scope (no overlap)
 Settings are split so nothing is both an app and a tab setting:
 - **Application Settings** (File → Application Settings) — global only: default serif/sans font
   families and the hands-free audio-control mode (Voice/Claps/Both).
-- **Tab Settings** (View → Tab Settings) — everything per-document: theme, SPRITZ word display
+- **Tab Settings** (View → Tab Settings) — everything per-document: theme, Flash word display
   (context before/after, guides, serif, ORP highlight), line-view options, faces, pointer,
   playback, double-time multipliers, annunciate, minigames.
 - **Default Tab Settings** (File → Default Tab Settings) — the same tab-setting fields, editing
@@ -341,7 +341,7 @@ Settings are split so nothing is both an app and a tab setting:
 - **Multi-tab** with independent settings; per-tab header progress bar.
 - **Time-remaining ETA** from your *measured* pace (recent → session → setpoint fallback).
 
-## Data storage (IndexedDB, database `SPRITZReader`)
+## Data storage (IndexedDB, database `Tachyread`)
 
 | Store | Key | Content |
 |---|---|---|

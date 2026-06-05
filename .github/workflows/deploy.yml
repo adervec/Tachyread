@@ -40,10 +40,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Project site is served from https://adervec.github.io/SPRITZReact/,
-      # so assets must resolve under the /SPRITZReact/ base path.
+      # Project site is served from https://adervec.github.io/Tachyread/,
+      # so assets must resolve under the /Tachyread/ base path.
       - name: Build
-        run: npm run build -- --base=/SPRITZReact/
+        run: npm run build -- --base=/Tachyread/
 
       # SPA fallback so deep links / refreshes don't 404 on Pages.
       - name: Add SPA fallback (404.html)

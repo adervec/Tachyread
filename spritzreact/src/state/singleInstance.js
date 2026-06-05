@@ -2,7 +2,7 @@
 // two at once would let them clobber each other's session/progress. A heartbeat lock in
 // localStorage marks the live instance; a second tab that finds a fresh lock bows out and
 // must touch nothing (no DB reads/writes, no session changes).
-const KEY = 'spritz-instance-lock';
+const KEY = 'tachyread-instance-lock';
 const HEARTBEAT_MS = 1000;
 const STALE_MS = 3500; // a lock older than this is considered dead (tab crashed without releasing)
 

@@ -149,9 +149,9 @@ export default function MenuBar({ onFileOpen, onAction }) {
       <div
         className={`menu-item ${!state.showSpritz ? 'open' : ''}`}
         onClick={() => dispatch({ type: 'TOGGLE_SHOW_SPRITZ' })}
-        title="Hide the SPRITZ word-display pane"
+        title="Hide the Flash word-display pane"
       >
-        {!state.showSpritz ? '☑ ' : '☐ '}Hide SPRITZ
+        {!state.showSpritz ? '☑ ' : '☐ '}Hide Flash
       </div>
       <div className="grow" />
       <div className="right-toggles">

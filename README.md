@@ -1,4 +1,4 @@
-# SPRITZ Reader (React)
+# Tachyread
 
 A browser-based **speed-reading** app. Text is shown one word at a time, centered
 on an Optimal Recognition Point (ORP) — the **RSVP** technique — so you can read

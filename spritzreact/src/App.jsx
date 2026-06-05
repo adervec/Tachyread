@@ -683,7 +683,7 @@ function AppInner() {
         ),
       });
     if (state.showDash) arr.push({ id: 'dash', label: 'Dashboard', node: <DashboardPane tab={activeTab} /> });
-    if (!hideWord) arr.push({ id: 'spritz', label: 'SPRITZ', node: <SpritzPane tab={activeTab} /> });
+    if (!hideWord) arr.push({ id: 'spritz', label: 'Flash', node: <SpritzPane tab={activeTab} /> });
     if (state.showSource && activeTab.doc.source)
       arr.push({ id: 'source', label: 'Source', node: <SourcePane tab={activeTab} /> });
     arr.push({
@@ -728,7 +728,7 @@ function AppInner() {
         </div>
       ) : (
         <div className="empty-state">
-          <h1>SPRITZ Reader</h1>
+          <h1>Tachyread</h1>
           <p>Open a file (File → Open TXT, Ctrl+O), open a document (Ctrl+D), or drop a file here.</p>
           <p>Supports .txt, .md, .docx, .pdf, .epub.</p>
           <p className="hint">Shortcuts: Space play, ←→ word, ↑↓ line, Ctrl+↑↓ paragraph, Home restart, Ctrl+F find</p>
@@ -854,7 +854,7 @@ export default function App() {
   if (!instance.primary) {
     return (
       <div className="closing-overlay">
-        <h1>SPRITZ Reader</h1>
+        <h1>Tachyread</h1>
         <p>Already open in another browser tab.</p>
         <p className="hint">This app runs in a single tab so your files and progress stay in sync. Switch to that tab, or close it and reload here.</p>
         <button onClick={() => window.location.reload()}>Reload</button>
