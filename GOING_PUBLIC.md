@@ -7,9 +7,9 @@ checked; items needing **your** decision or action are called out.
 
 ---
 
-## 0. Two decisions only you can make
+## 0. Key decisions
 
-### A. License model — _drafted as MIT_
+### A. License model — ✅ RESOLVED: MIT
 [`LICENSE`](./LICENSE) is currently **MIT**: anyone may use, modify, and
 redistribute, **including commercially**. That's the standard, friction-free
 choice and it fits "I'm not monetizing this."
@@ -20,7 +20,7 @@ choice and it fits "I'm not monetizing this."
   or **CC BY-NC** (note: these are **not** OSI "open source," and GitHub won't
   show an open-source badge). Tell me and I'll swap it.
 
-> Easy to change now while the repo is private. Lock it in before flipping public.
+> ✅ Confirmed: staying **MIT**.
 
 ### B. The name — ✅ RESOLVED: renamed to **Tachyread**
 "**Spritz**" is a trademark of **Spritz Technology, Inc.**, the company that
