@@ -28,6 +28,7 @@ import AppSettingsDialog from './dialogs/AppSettingsDialog.jsx';
 import BookFinishedDialog from './dialogs/BookFinishedDialog.jsx';
 import GrabWizard from './dialogs/GrabWizard.jsx';
 import { createEngine, wordDurationMs } from './engine/spritzEngine.js';
+import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan } from './document/toc.js';
 import { defaultFileSettings } from './state/settings.js';
@@ -602,6 +603,15 @@ function AppInner() {
     // eslint-disable-next-line
   }, [activeTab?.id, activeTab?.settings.audioCtrl, state.global.audioCtrlMode]);
 
+  // First-run disclaimer (seizure / not-advice / non-affiliation). Shown once;
+  // reopen any time from View → About / Disclaimer.
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem('tachyread-disclaimer-ack')) openDialog({ kind: 'disclaimer' });
+    } catch { /* storage unavailable */ }
+    // eslint-disable-next-line
+  }, []);
+
   function handleMenuAction(action) {
     if (action === 'open-clip') return openClipboard();
     if (action === 'grab') return openDialog({ kind: 'grab' });
@@ -654,6 +664,7 @@ function AppInner() {
     }
     if (action === 'tts-popup' && activeTab) return openDialog({ kind: 'tts-popup' });
     if (action === 'face-library') return openDialog({ kind: 'face-library' });
+    if (action === 'disclaimer') return openDialog({ kind: 'disclaimer' });
     if (action === 'typing-progress') return openDialog({ kind: 'typing-progress' });
     if (action === 'toggle-dark' && activeTab) {
       patchSettings(activeTab.id, { darkMode: !activeTab.settings.darkMode });
@@ -813,6 +824,14 @@ function AppInner() {
         <TtsPopupDialog tab={activeTab} onClose={closeDialog} />
       )}
       {dialog?.kind === 'face-library' && <FaceLibraryDialog onClose={closeDialog} />}
+      {dialog?.kind === 'disclaimer' && (
+        <DisclaimerDialog
+          onClose={() => {
+            try { localStorage.setItem('tachyread-disclaimer-ack', '1'); } catch { /* ignore */ }
+            closeDialog();
+          }}
+        />
+      )}
       {dialog?.kind === 'typing-progress' && <TypingProgressDialog onClose={closeDialog} />}
       {dialog?.kind === 'grab' && <GrabWizard onClose={closeDialog} />}
       {dialog?.kind === 'finished' && activeTab && (

@@ -34,6 +34,8 @@ const MENUS = {
     { label: 'Audiobook Manager...', shortcut: 'Ctrl+Shift+A', action: 'audiobook' },
     { label: 'Text-to-Speech Reader...', shortcut: 'Ctrl+Shift+T', action: 'tts-popup' },
     { label: 'Face Library...', action: 'face-library' },
+    { kind: 'separator' },
+    { label: 'About / Disclaimer...', action: 'disclaimer' },
   ],
 };
 
