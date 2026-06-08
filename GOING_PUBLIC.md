@@ -23,25 +23,17 @@ choice and it fits "I'm not monetizing this."
 > ✅ Confirmed: staying **MIT**.
 
 ### B. The name — ✅ RESOLVED: renamed to **Tachyread**
-"**Spritz**" is a trademark of **Spritz Technology, Inc.**, the company that
-commercialized this exact one-word-at-a-time ORP reading method. Naming the
-project "SPRITZ Reader" / `SPRITZReact` and using "SPRITZ" throughout could draw
-a trademark complaint — risk is **lower** for a free, non-commercial project, but
-not zero, and a public repo is public use.
+The project was renamed to avoid a third-party trademark on this one-word reading
+method. The prior name is gone from the UI, window title, the IndexedDB database
+name, the package name, internal identifiers, and the docs.
 
-Options:
-1. **Rename** to a generic term — *RSVP Reader*, *ORP Reader*, *FlashRead*,
-   *QuickWord*, etc. Safest; removes the issue entirely. Touches the repo name,
-   UI strings, the IndexedDB database name (`SPRITZReader`), and docs.
-2. **Keep the name** + rely on the non-affiliation disclaimer (already written in
-   [`DISCLAIMER.md`](./DISCLAIMER.md)). Lower effort, residual risk.
+Everything is now **Tachyread** (top-level brand) with the core pane labeled
+**"Fast Reader"**.
 
-✅ Renamed to **Tachyread** across the UI, window title, the core one-word pane
-(now labeled **"Flash"**), the IndexedDB DB name, the package name, and the docs.
-Remaining manual step on your side: rename the GitHub repo `SPRITZReact` →
-`Tachyread` (Settings → General → Repository name), then point your clone at it
-with `git remote set-url origin <new-url>`. The Pages base path in `deploy.yml`
-is already set to `/Tachyread/` to match.
+**Remaining manual step on your side:** rename the GitHub repo to `Tachyread`
+(Settings → General → Repository name), then point your clone at it with
+`git remote set-url origin <new-url>`. The Pages base path in `deploy.yml` is
+already set to `/Tachyread/` to match.
 
 ---
 
@@ -71,7 +63,7 @@ is already set to `/Tachyread/` to match.
       1500 WPM, neon/pulsing themes, blinking pointers).
 - [x] **No speed-reading efficacy claims** — stats are for fun, not a clinical or
       educational assessment.
-- [x] **Trademark / non-affiliation** with Spritz Technology, Inc. and others.
+- [x] **Trademark / non-affiliation** with any third party.
 - [x] **Your-content responsibility** (you must have rights to what you load/OCR).
 - [x] No-warranty restatement of the MIT terms.
 
@@ -88,8 +80,8 @@ network/hardware touch-points honestly:
 - [x] Added a root [`.gitignore`](./.gitignore).
 - [x] **Untracked** (kept on disk, removed from the repo going forward):
   - `.vs/` — Visual Studio folder incl. the binary `.suo` user-options file.
-  - `spritzreact/obj/` — MSBuild intermediate output.
-  - `spritzreact/2026-05-24-…port-the-wpf-app….txt` — a **Claude Code session
+  - `app/obj/` — MSBuild intermediate output.
+  - `app/2026-05-24-…port-the-wpf-app….txt` — a **Claude Code session
     transcript** containing your local Windows paths and prompts. Not something
     to publish.
 - [x] **Deleted** unused template leftovers: `src/assets/{hero.png, react.svg,

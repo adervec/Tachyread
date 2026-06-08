@@ -1,5 +1,5 @@
 // ReaderDocument: parses raw text into words, lines, sentences, with ORP, checksum,
-// header/footer detection, and proper-name extraction. Mirrors SPRITZApp/MainWindow.xaml.cs.
+// header/footer detection, and proper-name extraction. Mirrors the original WPF app.
 
 export const ReadStatus = Object.freeze({
   Unread: 'Unread',

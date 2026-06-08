@@ -61,7 +61,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
         </>
       }
     >
-      <Section>Flash word display</Section>
+      <Section>Fast Reader</Section>
       <Field label="Context words before">
         <input
           type="number"
@@ -80,7 +80,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ contextWordsAfter: Math.max(0, Number(e.target.value)) })}
         />
       </Field>
-      <Field label="Serif font (Flash word)">
+      <Field label="Serif font (Fast Reader word)">
         <input type="checkbox" checked={s.serif} onChange={(e) => patch({ serif: e.target.checked })} />
       </Field>
       <Field label="Show guide lines">
@@ -96,8 +96,8 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       <Field label="Highlight ORP character">
         <input type="checkbox" checked={s.highlightORP} onChange={(e) => patch({ highlightORP: e.target.checked })} />
       </Field>
-      <Field label="Hide Flash word pane">
-        <input type="checkbox" checked={s.hideSpritzPane} onChange={(e) => patch({ hideSpritzPane: e.target.checked })} />
+      <Field label="Hide Fast Reader pane">
+        <input type="checkbox" checked={s.hideRsvpPane} onChange={(e) => patch({ hideRsvpPane: e.target.checked })} />
       </Field>
 
       <Section>Reading theme</Section>

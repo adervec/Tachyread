@@ -17,7 +17,7 @@ permissions:
 defaults:
   run:
     # The app lives in a subdirectory of the repo.
-    working-directory: spritzreact
+    working-directory: app
 
 jobs:
   build:
@@ -32,7 +32,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: spritzreact/package-lock.json
+          cache-dependency-path: app/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -44,7 +44,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: spritzreact/dist
+          path: app/dist
           if-no-files-found: error
           retention-days: 5
 
@@ -60,7 +60,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: spritzreact/package-lock.json
+          cache-dependency-path: app/package-lock.json
 
       - name: Install dependencies
         run: npm ci

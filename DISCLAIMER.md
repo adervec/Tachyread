@@ -47,7 +47,7 @@ headaches. Take regular breaks and stop if you feel discomfort.
 ## No efficacy claims (speed reading)
 
 This app implements **RSVP** (Rapid Serial Visual Presentation) with an
-**ORP** (Optimal Recognition Point) — sometimes informally called "spritzing."
+**ORP** (Optimal Recognition Point).
 The benefits of speed-reading techniques, and the trade-off between reading
 speed and comprehension, are **debated in the scientific literature**.
 
@@ -60,11 +60,10 @@ stat readouts are for fun, not professional instruction.
 
 ## Trademarks & non-affiliation
 
-"**Spritz**" is a trademark of **Spritz Technology, Inc.** This project is an
-independent, non-commercial hobby project and is **not affiliated with, endorsed
-by, sponsored by, or connected to** Spritz Technology, Inc. or any other
-company. The word "spritz" is used here only descriptively, to refer to the
-one-word-at-a-time RSVP/ORP reading style.
+This project is an independent, non-commercial hobby project and is **not
+affiliated with, endorsed by, sponsored by, or connected to** any company. It
+implements the generic **RSVP** (Rapid Serial Visual Presentation) / **ORP**
+(Optimal Recognition Point) reading technique.
 
 All other product names, logos, and brands referenced by the app — including
 Google, Google Translate, Merriam-Webster, Chrome, Microsoft Edge, and others —

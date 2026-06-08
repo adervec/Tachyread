@@ -1,4 +1,4 @@
-// Procedural face expression model — ported from SPRITZApp/MainWindow.xaml.cs
+// Procedural face expression model — ported from the original WPF app
 // (GetFaceExpressionParams / GetFaceTier / ApplyFaceExpression). Faces react to the
 // reader's effective WPM: lids open, brows raise/arch, the mouth curves into a smile,
 // and the irises shift hue / gain glow as speed climbs through 8 tiers.

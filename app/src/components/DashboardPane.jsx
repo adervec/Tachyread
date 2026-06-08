@@ -12,7 +12,7 @@ function fmtDuration(ms) {
 }
 
 // Dedicated pane for the animated reader faces and live, measured reading stats — kept
-// separate from the SPRITZ word display so each can be sized / hidden independently.
+// separate from the RSVP word display so each can be sized / hidden independently.
 export default function DashboardPane({ tab }) {
   const { settings, doc } = tab;
   const idx = settings.wordIndex;
@@ -45,7 +45,7 @@ export default function DashboardPane({ tab }) {
   return (
     <div className="dashboard-pane">
       {settings.showEyes && (
-        <div className="spritz-faces">
+        <div className="rsvp-faces">
           {Array.from({ length: count }, (_, i) => (
             <Face
               key={i}

@@ -18,17 +18,17 @@ non-commercial hobby project**.
 > - **Not professional advice.** The author is a software hobbyist — **not a
 >   doctor, coach, teacher, or lawyer.** Reading stats are for fun, not a clinical
 >   or educational assessment.
-> - **Not affiliated with Spritz Technology, Inc.** "Spritz" is their trademark;
->   it's used here only to describe the reading style.
+> - **Independent project.** Implements the generic RSVP/ORP reading technique;
+>   not affiliated with any company.
 >
 > Full details: **[DISCLAIMER.md](./DISCLAIMER.md)** · **[PRIVACY.md](./PRIVACY.md)**
 
 ## Run it locally
 
-The app lives in [`spritzreact/`](./spritzreact).
+The app lives in [`app/`](./app).
 
 ```bash
-cd spritzreact
+cd app
 npm install
 npm run dev      # start the dev server
 npm run build    # production build to dist/
@@ -51,7 +51,7 @@ React 19 · Vite · three.js / react-three-fiber · pdf.js · mammoth · epub.js
 tesseract.js · react-window · idb. Web Platform APIs: Web Speech, Web Audio,
 MediaRecorder, Screen Capture, IndexedDB, `crypto.subtle`.
 
-See [`spritzreact/DESIGN.md`](./spritzreact/DESIGN.md) for the full as-built
+See [`app/DESIGN.md`](./app/DESIGN.md) for the full as-built
 architecture.
 
 ## License & notices

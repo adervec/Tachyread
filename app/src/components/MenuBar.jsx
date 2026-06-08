@@ -149,11 +149,11 @@ export default function MenuBar({ onFileOpen, onAction }) {
         {state.showIndex ? '☑ ' : '☐ '}Index
       </div>
       <div
-        className={`menu-item ${!state.showSpritz ? 'open' : ''}`}
-        onClick={() => dispatch({ type: 'TOGGLE_SHOW_SPRITZ' })}
-        title="Hide the Flash word-display pane"
+        className={`menu-item ${!state.showRsvp ? 'open' : ''}`}
+        onClick={() => dispatch({ type: 'TOGGLE_SHOW_RSVP' })}
+        title="Hide the Fast Reader pane"
       >
-        {!state.showSpritz ? '☑ ' : '☐ '}Hide Flash
+        {!state.showRsvp ? '☑ ' : '☐ '}Hide Fast Reader
       </div>
       <div className="grow" />
       <div className="right-toggles">

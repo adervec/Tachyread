@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const SRC = process.argv[2] ||
-  'C:/Users/Adam Erik Eryavec/Documents/GitHub/default/SPRITZApp/SPRITZApp/Themes.cs';
+  'path/to/original/Themes.cs';
 const OUT = new URL('../src/state/themes.js', import.meta.url);
 
 const text = readFileSync(SRC, 'utf8');
@@ -78,7 +78,7 @@ for (const dn of allNames) {
   byDisplay[dn] = palettes[varName] || palettes.Light;
 }
 
-const header = `// AUTO-GENERATED from SPRITZApp/Themes.cs by scripts/parse-themes.mjs — do not edit by hand.
+const header = `// AUTO-GENERATED from the original WPF app's Themes.cs by scripts/parse-themes.mjs — do not edit by hand.
 // ThemePalette colors mapped to CSS custom properties (see applyTheme in this file).
 /* eslint-disable */
 `;
@@ -98,9 +98,9 @@ const VAR_MAP = {
   menuHover: ['--menu-highlight'],
   menuHoverFg: ['--menu-hover-fg'],
   textViewBg: ['--textview-bg'],
-  leftPaneBg: ['--spritz-bg'],
+  leftPaneBg: ['--rsvp-bg'],
   lineNumberFg: ['--line-number-fg'],
-  lineUnreadFg: ['--line-unread-fg', '--spritz-fg'],
+  lineUnreadFg: ['--line-unread-fg', '--rsvp-fg'],
   lineReadFg: ['--line-read-fg'],
   sessionReadFg: ['--session-read-fg'],
   navSessionReadFg: ['--nav-session-read-fg'],

@@ -1,4 +1,4 @@
-# spritzreact (app)
+# Tachyread (app)
 
 This folder is the React + Vite application. For the project overview,
 disclaimers, privacy notes, and license, see the **[repository README](../README.md)**.

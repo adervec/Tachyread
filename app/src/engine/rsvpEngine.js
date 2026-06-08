@@ -1,4 +1,4 @@
-// SPRITZ playback engine: per-word timing with multipliers, paragraph/line pauses.
+// RSVP playback engine: per-word timing with multipliers, paragraph/line pauses.
 // Returns a controller that callers drive via subscribe / start / stop / step.
 
 import { isDigitWord, isLongWord, hasSpecialChars } from '../document/readerDocument.js';

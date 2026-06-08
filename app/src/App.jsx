@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppProvider, useApp } from './state/AppContext.jsx';
 import MenuBar from './components/MenuBar.jsx';
 import TabBar from './components/TabBar.jsx';
-import SpritzPane from './components/SpritzPane.jsx';
+import RsvpPane from './components/RsvpPane.jsx';
 import DashboardPane from './components/DashboardPane.jsx';
 import SourcePane from './components/SourcePane.jsx';
 import LinePane from './components/LinePane.jsx';
@@ -27,7 +27,7 @@ import TypingProgressDialog from './dialogs/TypingProgressDialog.jsx';
 import AppSettingsDialog from './dialogs/AppSettingsDialog.jsx';
 import BookFinishedDialog from './dialogs/BookFinishedDialog.jsx';
 import GrabWizard from './dialogs/GrabWizard.jsx';
-import { createEngine, wordDurationMs } from './engine/spritzEngine.js';
+import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan } from './document/toc.js';
@@ -74,7 +74,7 @@ function AppInner() {
     if (!state.showToc) dispatch({ type: 'TOGGLE_TOC' });
     setTocFlash((s) => ({ index, token: s.token + 1 }));
   }, [dispatch, state.showToc]);
-  const [paneWidths, setPaneWidths] = useState({ toc: 320, dash: 260, spritz: 420, source: 380 });
+  const [paneWidths, setPaneWidths] = useState({ toc: 320, dash: 260, rsvp: 420, source: 380 });
   const resizePane = (id, w) => setPaneWidths((prev) => ({ ...prev, [id]: w }));
   const recognizerRef = useRef(null);
   const audioRecRef = useRef({ rec: null, lineIndex: -1 });
@@ -92,7 +92,7 @@ function AppInner() {
     const doc = activeTab.doc;
     if (doc.properNames && doc.properNames.size > 0) return;
     detectProperNames(doc);
-    // Nudge a re-render so the line pane / SPRITZ engine pick up the new Map.
+    // Nudge a re-render so the line pane / RSVP engine pick up the new Map.
     patchTab(activeTab.id, { _propNamesGen: (activeTab._propNamesGen || 0) + 1 });
     // eslint-disable-next-line
   }, [activeTab?.id, activeTab?.settings.enableProperNames]);
@@ -160,7 +160,7 @@ function AppInner() {
     // eslint-disable-next-line
   }, [activeTab?.id]);
 
-  // SPRITZ playback driver. Reschedules on each settings.wordIndex change while playing.
+  // RSVP playback driver. Reschedules on each settings.wordIndex change while playing.
   // When read-aloud is on, speech drives advancement instead of this timer (see below).
   useEffect(() => {
     if (!activeTab || !playing || activeTab.settings.readAloud || activeTab.settings.typing?.enabled) {
@@ -671,7 +671,7 @@ function AppInner() {
     }
   }
 
-  const hideWord = !state.showSpritz || !!activeTab?.settings?.hideSpritzPane;
+  const hideWord = !state.showRsvp || !!activeTab?.settings?.hideRsvpPane;
 
   // Data-driven resizable pane set. Visibility toggles add/remove entries; the last pane
   // (Lines) flexes, the rest take draggable pixel widths from paneWidths.
@@ -694,7 +694,7 @@ function AppInner() {
         ),
       });
     if (state.showDash) arr.push({ id: 'dash', label: 'Dashboard', node: <DashboardPane tab={activeTab} /> });
-    if (!hideWord) arr.push({ id: 'spritz', label: 'Flash', node: <SpritzPane tab={activeTab} /> });
+    if (!hideWord) arr.push({ id: 'rsvp', label: 'Fast Reader', node: <RsvpPane tab={activeTab} /> });
     if (state.showSource && activeTab.doc.source)
       arr.push({ id: 'source', label: 'Source', node: <SourcePane tab={activeTab} /> });
     arr.push({

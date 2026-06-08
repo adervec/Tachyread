@@ -28,7 +28,7 @@ export function defaultFileSettings() {
     blurLinesBefore: 0,
     blurLinesAfter: 0,
     currentLineFontSizeBoost: 0,
-    hideSpritzPane: false,
+    hideRsvpPane: false,
     contextWordCount: 0,
     contextWordsBefore: 0,
     contextWordsAfter: 0,

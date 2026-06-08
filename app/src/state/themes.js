@@ -1,4 +1,4 @@
-// AUTO-GENERATED from SPRITZApp/Themes.cs by scripts/parse-themes.mjs — do not edit by hand.
+// AUTO-GENERATED from the original WPF app's Themes.cs by scripts/parse-themes.mjs — do not edit by hand.
 // ThemePalette colors mapped to CSS custom properties (see applyTheme in this file).
 /* eslint-disable */
 
@@ -1281,9 +1281,9 @@ const VAR_MAP = {
   menuHover: ['--menu-highlight'],
   menuHoverFg: ['--menu-hover-fg'],
   textViewBg: ['--textview-bg'],
-  leftPaneBg: ['--spritz-bg'],
+  leftPaneBg: ['--rsvp-bg'],
   lineNumberFg: ['--line-number-fg'],
-  lineUnreadFg: ['--line-unread-fg', '--spritz-fg'],
+  lineUnreadFg: ['--line-unread-fg', '--rsvp-fg'],
   lineReadFg: ['--line-read-fg'],
   sessionReadFg: ['--session-read-fg'],
   navSessionReadFg: ['--nav-session-read-fg'],

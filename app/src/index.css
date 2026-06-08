@@ -28,8 +28,8 @@
   --line-selection-accent: #338fcc;
   --line-selection-bg: rgba(51, 143, 204, 0.16);
   --pane-bg: #ffffff;
-  --spritz-bg: #ffffff;
-  --spritz-fg: #1a1a1a;
+  --rsvp-bg: #ffffff;
+  --rsvp-fg: #1a1a1a;
   --orp-fg: #c62828;
   --guide-red: #ef5350;
   --guide-pink: #ec407a;
@@ -74,8 +74,8 @@
   --line-selection-accent: #64b5f6;
   --line-selection-bg: rgba(100, 181, 246, 0.16);
   --pane-bg: #161616;
-  --spritz-bg: #0f0f0f;
-  --spritz-fg: #f5f5f5;
+  --rsvp-bg: #0f0f0f;
+  --rsvp-fg: #f5f5f5;
   --orp-fg: #ff7676;
   --status-bg: #1a1a1a;
   --status-fg: #777777;

@@ -32,7 +32,7 @@ const init = {
   activeTabId: null,
   appStatus: 'Ready.',
   dialog: null, // {kind, props}
-  showSpritz: true,
+  showRsvp: true,
   showToc: false,
   showDash: true,
   showSource: false,
@@ -77,8 +77,8 @@ function reducer(state, action) {
       return { ...state, dialog: action.dialog };
     case 'CLOSE_DIALOG':
       return { ...state, dialog: null };
-    case 'TOGGLE_SHOW_SPRITZ':
-      return { ...state, showSpritz: !state.showSpritz };
+    case 'TOGGLE_SHOW_RSVP':
+      return { ...state, showRsvp: !state.showRsvp };
     case 'TOGGLE_TOC':
       return { ...state, showToc: !state.showToc };
     case 'TOGGLE_DASH':

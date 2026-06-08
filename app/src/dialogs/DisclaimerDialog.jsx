@@ -43,8 +43,8 @@ export default function DisclaimerDialog({ onClose }) {
           browser&rsquo;s speech recognition (which, in Chrome, sends audio to Google).
         </p>
         <p style={{ fontSize: 12, opacity: 0.75, lineHeight: 1.4, margin: 0 }}>
-          Provided &ldquo;as is,&rdquo; without warranty. Not affiliated with Spritz
-          Technology,&nbsp;Inc. Full{' '}
+          Provided &ldquo;as is,&rdquo; without warranty. Not affiliated with any
+          company. Full{' '}
           <a href={`${REPO_URL}/blob/main/DISCLAIMER.md`} target="_blank" rel="noopener noreferrer">disclaimer</a>
           {' · '}
           <a href={`${REPO_URL}/blob/main/PRIVACY.md`} target="_blank" rel="noopener noreferrer">privacy</a>.

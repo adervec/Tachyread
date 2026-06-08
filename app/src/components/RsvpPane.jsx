@@ -16,15 +16,15 @@ function ContextWordChar({ word, highlightOrp }) {
   return (
     <>
       {word.slice(0, o)}
-      <span className="spritz-context-orp">{word[o]}</span>
+      <span className="rsvp-context-orp">{word[o]}</span>
       {word.slice(o + 1)}{' '}
     </>
   );
 }
 
-// SPRITZ word display only — the ORP word, context words, and guide lines.
+// RSVP word display only — the ORP word, context words, and guide lines.
 // Animated faces and stats live in DashboardPane so the panes resize independently.
-export default function SpritzPane({ tab }) {
+export default function RsvpPane({ tab }) {
   const { settings, doc } = tab;
   const idx = settings.wordIndex;
   const word = doc.words[idx] || '';
@@ -48,23 +48,23 @@ export default function SpritzPane({ tab }) {
     return out;
   }, [doc, idx, after]);
 
-  const themeClass = `spritz-pane ${settings.serif ? 'serif' : 'sans'} guide-${settings.guideColor || 'Red'}`;
+  const themeClass = `rsvp-pane ${settings.serif ? 'serif' : 'sans'} guide-${settings.guideColor || 'Red'}`;
 
   return (
     <div className={themeClass}>
-      <div className="spritz-context-before">
+      <div className="rsvp-context-before">
         {beforeWords.map((w, i) => (
           <ContextWordChar key={i} word={w} highlightOrp={settings.highlightORP} />
         ))}
       </div>
-      <div className="spritz-word-row" style={{ fontSize: `${fontSize}px` }}>
+      <div className="rsvp-word-row" style={{ fontSize: `${fontSize}px` }}>
         {settings.showGuideLines && <span className={`guide-line left guide-color-${settings.guideColor || 'Red'}`} />}
-        <span className="spritz-left">{left}</span>
-        <span className="spritz-orp">{orpCh}</span>
-        <span className="spritz-right">{right}</span>
+        <span className="rsvp-left">{left}</span>
+        <span className="rsvp-orp">{orpCh}</span>
+        <span className="rsvp-right">{right}</span>
         {settings.showGuideLines && <span className={`guide-line right guide-color-${settings.guideColor || 'Red'}`} />}
       </div>
-      <div className="spritz-context-after">
+      <div className="rsvp-context-after">
         {afterWords.map((w, i) => (
           <ContextWordChar key={i} word={w} highlightOrp={settings.highlightORP} />
         ))}
