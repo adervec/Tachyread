@@ -348,6 +348,23 @@
 .gcc-actions button { padding: 6px 12px; }
 .gcc-discard { color: #c0392b; }
 
+/* OCR profile editor (Grab Text) */
+.ocr-prof-box { max-width: 640px; width: 92%; text-align: left; }
+.ocr-prof-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.ocr-prof-edit { border-top: 1px solid var(--divider); margin-top: 8px; padding-top: 10px; }
+.ocr-prof-meta { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; }
+.ocr-prof-meta label:first-child input { width: 140px; }
+.ocr-prof-glyphs { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; }
+.ocr-prof-glyph { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border: 1px solid var(--divider); border-radius: 6px; }
+.opg-char { width: 34px; height: 34px; text-align: center; font-size: 20px; font-weight: 700; padding: 0; }
+.opg-cat { font-size: 11px; color: var(--text3, #888); min-width: 30px; }
+.opg-samples { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; flex: 1; }
+.opg-sample { position: relative; display: inline-flex; }
+.opg-sample img { width: 32px; height: 32px; object-fit: contain; background: #fff; border: 1px solid var(--divider); border-radius: 4px; }
+.opg-sample button { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; line-height: 14px; padding: 0; border-radius: 50%; font-size: 11px; }
+.opg-add { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px dashed var(--divider); border-radius: 4px; cursor: pointer; font-size: 18px; }
+.opg-del { padding: 2px 6px; }
+
 /* Recent grabs (source step) */
 .grab-recent { margin-top: 14px; border-top: 1px solid var(--divider); padding-top: 10px; }
 .grab-recent-head { font-size: 11px; color: var(--status-fg); margin-bottom: 6px; }

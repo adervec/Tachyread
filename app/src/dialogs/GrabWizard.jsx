@@ -9,8 +9,9 @@ import {
   canvasToDataUrl,
   frameSignature,
   signatureDiff,
+  signatureVariance,
 } from '../features/screenCapture.js';
-import { recognizeImageEx, ocrSupported, loadImage } from '../features/ocr.js';
+import { recognizeImageEx, ocrSupported, loadImage, glyphCategory } from '../features/ocr.js';
 import { buildGrabbedDoc } from '../document/grab.js';
 import { playGrabClick } from '../features/clickSound.js';
 import { speechRecognitionSupported } from '../features/speechRecognition.js';
@@ -19,6 +20,8 @@ import { saveGrabbed, allGrabbed, deleteGrabbed, saveGrabSession, allGrabSession
 const uid = () => Math.random().toString(36).slice(2);
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const DUP_THRESHOLD = 6;
+const STILL_EPS = 2.5; // frame-to-frame diff below this = the page is holding still (settled)
+const BLANK_STD = 8;   // signature std-dev below this = a blank / near-uniform page
 const VOICE_WORDS = ['GO', 'SHOOT', 'GRAB', 'HUT', 'CAP', 'TAKE'];
 
 // Built-in layout templates: ordered regions OCR'd separately so columns don't interleave.
@@ -92,6 +95,102 @@ function RegionEditor({ image, regions, onApply, onClose, onSaveTemplate }) {
 // "Grab Text" wizard — capture from screen/window (manual / timer / voice) or images, OCR with
 // per-page layout templates and colour assist, then open beside the originals. Grabs are saved
 // so they reopen without repeating the process.
+// Downscale a dropped sample to a small dataURL so a profile stays light in stored settings.
+function shrinkSample(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const max = 72;
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.width * scale));
+      c.height = Math.max(1, Math.round(img.height * scale));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/png'));
+    };
+    img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+    img.src = url;
+  });
+}
+
+// Editor for OCR profiles: a profile is a set of characters, each with user-supplied image samples.
+// It drives a tesseract character whitelist + a sample-matching correction pass (see features/ocr.js).
+const CAT_LABEL = { alpha: 'A–Z', num: '0–9', punct: '.,!?', symbol: '§' };
+function OcrProfileEditor({ profiles, onSave, onClose }) {
+  const [list, setList] = useState(() => profiles.map((p) => ({ ...p, glyphs: (p.glyphs || []).map((g) => ({ ...g, samples: [...(g.samples || [])] })) })));
+  const [sel, setSel] = useState(profiles[0]?.id || null);
+  const cur = list.find((p) => p.id === sel) || null;
+  const patchCur = (patch) => setList((l) => l.map((p) => (p.id === sel ? { ...p, ...patch } : p)));
+  const patchGlyph = (gi, patch) => patchCur({ glyphs: cur.glyphs.map((g, i) => (i === gi ? { ...g, ...patch } : g)) });
+
+  function addProfile() {
+    const id = uid();
+    setList((l) => [...l, { id, name: `Profile ${l.length + 1}`, glyphs: [], whitelist: true, templates: true, confThreshold: 70, matchThreshold: 0.6 }]);
+    setSel(id);
+  }
+  function deleteProfile() { setList((l) => l.filter((p) => p.id !== sel)); setSel(null); }
+  function addGlyph() { patchCur({ glyphs: [...cur.glyphs, { ch: '', cat: 'alpha', samples: [] }] }); }
+  function setChar(gi, ch) { const c = ch.slice(0, 1); patchGlyph(gi, { ch: c, cat: c ? glyphCategory(c) : 'alpha' }); }
+  function removeGlyph(gi) { patchCur({ glyphs: cur.glyphs.filter((_, i) => i !== gi) }); }
+  async function addSamples(gi, files) {
+    const urls = [];
+    for (const f of files) { if (!f.type.startsWith('image/')) continue; try { urls.push(await shrinkSample(f)); } catch { /* skip */ } }
+    if (urls.length) patchGlyph(gi, { samples: [...cur.glyphs[gi].samples, ...urls] });
+  }
+  function removeSample(gi, si) { patchGlyph(gi, { samples: cur.glyphs[gi].samples.filter((_, i) => i !== si) }); }
+
+  return (
+    <div className="grab-close-confirm">
+      <div className="gcc-box ocr-prof-box">
+        <h3>OCR profiles — teach the recognizer your characters</h3>
+        <p className="settings-note">Add cropped image samples of the characters in your source. Priority order: letters → digits → punctuation → symbols. A profile constrains OCR to exactly these characters and fixes shaky glyphs by matching your samples.</p>
+        <div className="ocr-prof-bar">
+          <select value={sel || ''} onChange={(e) => setSel(e.target.value || null)}>
+            <option value="">— choose a profile —</option>
+            {list.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <button onClick={addProfile}>+ New profile</button>
+          {cur && <button className="gcc-discard" onClick={deleteProfile}>Delete profile</button>}
+        </div>
+        {cur && (
+          <div className="ocr-prof-edit">
+            <div className="ocr-prof-meta">
+              <label>Name <input value={cur.name} onChange={(e) => patchCur({ name: e.target.value })} /></label>
+              <label title="Constrain OCR output to exactly these characters"><input type="checkbox" checked={cur.whitelist !== false} onChange={(e) => patchCur({ whitelist: e.target.checked })} /> Whitelist</label>
+              <label title="Correct low-confidence glyphs by matching your samples"><input type="checkbox" checked={cur.templates !== false} onChange={(e) => patchCur({ templates: e.target.checked })} /> Sample match</label>
+              <label title="Only correct glyphs the engine is less sure about than this">conf&lt; <input type="number" min={0} max={100} value={cur.confThreshold ?? 70} onChange={(e) => patchCur({ confThreshold: Number(e.target.value) })} style={{ width: 48 }} /></label>
+              <label title="How close a sample must match to substitute (0–1)">match≥ <input type="number" min={0.3} max={0.95} step={0.05} value={cur.matchThreshold ?? 0.6} onChange={(e) => patchCur({ matchThreshold: Number(e.target.value) })} style={{ width: 52 }} /></label>
+            </div>
+            <div className="ocr-prof-glyphs">
+              {cur.glyphs.length === 0 && <div className="settings-note" style={{ margin: 0 }}>No characters yet — add the ones OCR gets wrong.</div>}
+              {cur.glyphs.map((g, gi) => (
+                <div key={gi} className="ocr-prof-glyph">
+                  <input className="opg-char" value={g.ch} maxLength={1} placeholder="?" onChange={(e) => setChar(gi, e.target.value)} />
+                  <span className="opg-cat" title={g.cat}>{CAT_LABEL[g.cat] || g.cat}</span>
+                  <div className="opg-samples">
+                    {g.samples.map((s, si) => (
+                      <span key={si} className="opg-sample"><img src={s} alt="" /><button onClick={() => removeSample(gi, si)} title="Remove sample">×</button></span>
+                    ))}
+                    <label className="opg-add" title="Add sample image(s) of this character">+<input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => addSamples(gi, [...e.target.files])} /></label>
+                  </div>
+                  <button className="opg-del" onClick={() => removeGlyph(gi)} title="Remove character">🗑</button>
+                </div>
+              ))}
+              <button onClick={addGlyph}>+ Add character</button>
+            </div>
+          </div>
+        )}
+        <div className="gcc-actions">
+          <button onClick={onClose}>Cancel</button>
+          <button className="toggle-on" onClick={() => onSave(list)}>Save profiles</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GrabWizard({ onClose }) {
   const { openDoc, setStatus, state, updateGlobal } = useApp();
   const [step, setStep] = useState('source'); // source | screen | review
@@ -115,6 +214,14 @@ export default function GrabWizard({ onClose }) {
   const autoRef = useRef({ running: false });
   const [autoRunning, setAutoRunning] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
+
+  // Advanced "watch" mode — continuously grab each settled new page; skip blanks/loading screens.
+  const [captureMode, setCaptureMode] = useState('timed'); // 'timed' | 'watch'
+  const [watchDwell, setWatchDwell] = useState(0.6); // seconds a page must hold still before it's grabbed
+  const [watching, setWatching] = useState(false);
+  const watchRef = useRef({ running: false });
+  const skipSigsRef = useRef([]); // signatures of frames to ignore (loading screens / blanks the user marked)
+  const [skipCount, setSkipCount] = useState(0);
 
   // Voice-command grab
   const [voiceWord, setVoiceWord] = useState('GRAB');
@@ -146,8 +253,12 @@ export default function GrabWizard({ onClose }) {
   const [fontHint, setFontHint] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [recent, setRecent] = useState([]);
+  const [ocrProfileId, setOcrProfileId] = useState(null);
+  const [editingProfiles, setEditingProfiles] = useState(false);
 
   const savedTemplates = state.global.ocrTemplates || [];
+  const ocrProfiles = state.global.ocrProfiles || [];
+  const activeProfile = ocrProfiles.find((p) => p.id === ocrProfileId) || null;
   const layoutNames = [...Object.keys(BUILTIN_LAYOUTS), ...savedTemplates.map((t) => t.name)];
 
   function regionsForLayout(name) {
@@ -176,6 +287,9 @@ export default function GrabWizard({ onClose }) {
   }, [stream, step]);
 
   useEffect(() => () => stopCapture(stream), [stream]);
+
+  // Stop the watch loop when leaving the capture step.
+  useEffect(() => { if (step !== 'screen' && watchRef.current.running) { watchRef.current.running = false; setWatching(false); } }, [step]);
 
   useEffect(() => {
     allGrabbed().then((list) => setRecent(list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)))).catch(() => {});
@@ -342,6 +456,58 @@ export default function GrabWizard({ onClose }) {
 
   function abortAuto() { autoRef.current.running = false; setAutoRunning(false); }
 
+  // Continuous "watch" capture: poll the shared region; when a NEW page settles (holds still for the
+  // dwell) and isn't blank / a marked loading screen / the page already grabbed, capture it once. The
+  // user just pages through — page-turn animations, blank flashes and loading screens are skipped.
+  async function runWatch() {
+    watchRef.current.running = true;
+    setWatching(true);
+    setMsg('👁 Watching — page through your document; each new page grabs itself.');
+    const dwellMs = Math.max(150, (Number(watchDwell) || 0.6) * 1000);
+    const POLL = 250;
+    let holdSig = null, holdStart = 0, handled = false, lastCapSig = null;
+    let captured = 0, skipped = 0;
+    while (watchRef.current.running) {
+      const v = videoRef.current;
+      if (!v || !v.videoWidth) { await delay(POLL); continue; }
+      const canvas = captureFrame(v, cropVideoPx());
+      const sig = frameSignature(canvas);
+      const now = Date.now();
+      if (!holdSig || signatureDiff(sig, holdSig) > STILL_EPS) {
+        holdSig = sig; holdStart = now; handled = false; // motion / transition — (re)start the settle timer
+      } else if (!handled && now - holdStart >= dwellMs) {
+        handled = true; // the page settled — decide once
+        if (signatureVariance(sig) < BLANK_STD) {
+          skipped++; setMsg(`👁 Skipped a blank page (${captured} grabbed · ${skipped} skipped).`);
+        } else if (skipSigsRef.current.some((s) => signatureDiff(sig, s) < DUP_THRESHOLD)) {
+          skipped++; setMsg(`👁 Skipped a loading / ignored screen (${captured} grabbed · ${skipped} skipped).`);
+        } else if (lastCapSig && signatureDiff(sig, lastCapSig) < DUP_THRESHOLD) {
+          /* same page already grabbed — keep watching for the next one */
+        } else {
+          lastCapSig = sig; captured++;
+          playGrabClick();
+          const url = canvasToDataUrl(canvas);
+          setSegments((arr) => [...arr, newSeg(url)]);
+          setMsg(`👁 Grabbed page ${captured} — advance to the next (${skipped} skipped).`);
+        }
+      }
+      await delay(POLL);
+    }
+    setWatching(false);
+    setMsg(`👁 Watch stopped — ${captured} page(s) grabbed, ${skipped} skipped.`);
+  }
+  function stopWatch() { watchRef.current.running = false; setWatching(false); }
+  // Mark the frame currently on the preview as a pattern to ignore (e.g. a loading spinner / splash).
+  function markSkipPattern() {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth) { setMsg('Nothing on the preview to ignore yet.'); return; }
+    const sig = frameSignature(captureFrame(v, cropVideoPx()));
+    skipSigsRef.current = [...skipSigsRef.current, sig];
+    setSkipCount(skipSigsRef.current.length);
+    setMsg(`👁 Will skip frames like this one — ${skipSigsRef.current.length} ignore pattern(s). Use for loading screens.`);
+  }
+  function clearSkipPatterns() { skipSigsRef.current = []; setSkipCount(0); setMsg('Cleared ignore patterns.'); }
+
   // ── Crop drawing on the live preview ──
   function onCropDown(e) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -387,7 +553,7 @@ export default function GrabWizard({ onClose }) {
     for (let i = 0; i < list.length; i++) {
       setMsg(`Recognizing ${i + 1}/${list.length}… (first run downloads the OCR engine)`);
       try {
-        const { text } = await recognizeImageEx(list[i].image, { regions: segRegions(list[i]), config: segConfig(list[i]) });
+        const { text } = await recognizeImageEx(list[i].image, { regions: segRegions(list[i]), config: segConfig(list[i]), profile: activeProfile });
         setSegments((arr) => arr.map((s) => (s.id === list[i].id ? { ...s, text } : s)));
       } catch (e) {
         setMsg('OCR error: ' + (e?.message || e));
@@ -414,6 +580,12 @@ export default function GrabWizard({ onClose }) {
     const next = [...savedTemplates.filter((t) => t.name !== name), { name, regions }];
     updateGlobal({ ocrTemplates: next });
     setMsg(`Saved layout template “${name}”.`);
+  }
+  function saveProfiles(updated) {
+    updateGlobal({ ocrProfiles: updated });
+    if (!updated.some((p) => p.id === ocrProfileId)) setOcrProfileId(null);
+    setEditingProfiles(false);
+    setMsg(`Saved ${updated.length} OCR profile(s).`);
   }
   function applyRegions(regions, all) {
     if (all) setSegments((arr) => arr.map((s) => ({ ...s, regions, layout: null })));
@@ -501,6 +673,7 @@ export default function GrabWizard({ onClose }) {
   function doClose() {
     closingRef.current = true;
     abortAuto();
+    watchRef.current.running = false;
     setVoiceOn(false);
     stopCapture(stream);
     onClose();
@@ -547,6 +720,7 @@ export default function GrabWizard({ onClose }) {
       {step === 'source' && (
         <div className="grab-source">
           <p>Capture text from anything on screen, or from image files, then speed-read it with the originals beside you.</p>
+          <p className="settings-note">⚠ You are responsible for respecting the copyright of anything you capture. Only grab works you own or are permitted to copy.</p>
           <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
             <button style={{ flex: 1, padding: '16px' }} onClick={startScreen} disabled={!displayCaptureSupported()}>
               🖥️ Capture screen / window
@@ -599,13 +773,32 @@ export default function GrabWizard({ onClose }) {
               {crop && <div className="grab-crop" style={{ left: `${crop.fx * 100}%`, top: `${crop.fy * 100}%`, width: `${crop.fw * 100}%`, height: `${crop.fh * 100}%` }} />}
             </div>
             <div className="grab-controls">
-              <button onClick={grabOnce} disabled={autoRunning}>📸 Grab page</button>
+              <button onClick={grabOnce} disabled={autoRunning || watching}>📸 Grab page</button>
               <button onClick={() => setCrop(null)} disabled={!crop}>Clear region</button>
               <span className="grab-sep" />
-              <label>Auto: <input type="number" min={1} max={200} value={autoCount} onChange={(e) => setAutoCount(e.target.value)} style={{ width: 48 }} /> grabs</label>
-              <label>every <input type="number" min={0.3} step={0.5} value={autoInterval} onChange={(e) => setAutoInterval(e.target.value)} style={{ width: 48 }} /> s</label>
-              <label>stop after <input type="number" min={0} value={stopDupes} onChange={(e) => setStopDupes(e.target.value)} style={{ width: 40 }} /> dupes</label>
-              {autoRunning ? <button onClick={abortAuto}>Abort</button> : <button onClick={runAuto}>▶ Auto-grab</button>}
+              <label>Mode:
+                <select value={captureMode} onChange={(e) => setCaptureMode(e.target.value)} disabled={autoRunning || watching}>
+                  <option value="timed">Auto (timed)</option>
+                  <option value="watch">Watch (continuous)</option>
+                </select>
+              </label>
+              {captureMode === 'timed' ? (
+                <>
+                  <label>Auto: <input type="number" min={1} max={200} value={autoCount} onChange={(e) => setAutoCount(e.target.value)} style={{ width: 48 }} /> grabs</label>
+                  <label>every <input type="number" min={0.3} step={0.5} value={autoInterval} onChange={(e) => setAutoInterval(e.target.value)} style={{ width: 48 }} /> s</label>
+                  <label>stop after <input type="number" min={0} value={stopDupes} onChange={(e) => setStopDupes(e.target.value)} style={{ width: 40 }} /> dupes</label>
+                  {autoRunning ? <button onClick={abortAuto}>Abort</button> : <button onClick={runAuto}>▶ Auto-grab</button>}
+                </>
+              ) : (
+                <>
+                  <label title="How long a page must hold still before it's grabbed — skips page-turn animations and scrolling">settle <input type="number" min={0.2} step={0.1} value={watchDwell} onChange={(e) => setWatchDwell(e.target.value)} style={{ width: 46 }} /> s</label>
+                  {watching
+                    ? <button onClick={stopWatch}>■ Stop watching</button>
+                    : <button className="toggle-on" onClick={runWatch}>👁 Start watching</button>}
+                  <button onClick={markSkipPattern} title="Mark the frame on screen now as a loading/blank pattern to ignore">🚫 Ignore this frame</button>
+                  {skipCount > 0 && <button onClick={clearSkipPatterns} title="Clear ignore patterns">clear {skipCount} ignored</button>}
+                </>
+              )}
             </div>
             <div className="grab-voice">
               <label>🎙 Voice word
@@ -687,6 +880,13 @@ export default function GrabWizard({ onClose }) {
               </>
             )}
             <label title="Stored hint only — the OCR engine can't select a font">Font <input type="text" value={fontHint} onChange={(e) => setFontHint(e.target.value)} placeholder="(hint)" style={{ width: 90 }} /></label>
+            <label title="Use a saved OCR profile — character whitelist + sample matching">Profile
+              <select value={ocrProfileId || ''} onChange={(e) => setOcrProfileId(e.target.value || null)}>
+                <option value="">None</option>
+                {ocrProfiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+            <button onClick={() => setEditingProfiles(true)} title="Create or edit OCR profiles from character samples">Edit profiles…</button>
           </div>
 
           {segments.length === 0 && <p>No captures yet. Go back to add some.</p>}
@@ -728,6 +928,10 @@ export default function GrabWizard({ onClose }) {
             </div>
           ))}
         </div>
+      )}
+
+      {editingProfiles && (
+        <OcrProfileEditor profiles={ocrProfiles} onSave={saveProfiles} onClose={() => setEditingProfiles(false)} />
       )}
 
       {confirmClose && (

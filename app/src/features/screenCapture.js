@@ -58,3 +58,15 @@ export function signatureDiff(a, b) {
   for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]);
   return s / a.length;
 }
+
+// Std-dev of a frame signature's cells — near 0 for a blank / uniform page (one flat colour),
+// high for a dense text page. Lets the watch mode skip blank/near-empty frames.
+export function signatureVariance(sig) {
+  if (!sig || !sig.length) return 0;
+  let mean = 0;
+  for (let i = 0; i < sig.length; i++) mean += sig[i];
+  mean /= sig.length;
+  let v = 0;
+  for (let i = 0; i < sig.length; i++) { const d = sig[i] - mean; v += d * d; }
+  return Math.sqrt(v / sig.length);
+}
