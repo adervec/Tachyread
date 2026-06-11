@@ -96,6 +96,16 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
             <span>AUDIO</span>
             <button className={audioCtrl ? 'toggle-on' : ''} onClick={onToggleAudioCtrl} title="Voice / clap commands">{audioCtrl ? 'On' : 'Off'}</button>
           </div>
+          <div className="mode-pair">
+            <span>ADAPT</span>
+            <button
+              className={tab.settings.adaptivePace ? 'toggle-on' : ''}
+              onClick={() => patchSettings(tab.id, { adaptivePace: !tab.settings.adaptivePace })}
+              title="Adaptive pace: periodic comprehension checks raise or lower your WPM automatically"
+            >
+              {tab.settings.adaptivePace ? 'On' : 'Off'}
+            </button>
+          </div>
         </div>
       </div>
 

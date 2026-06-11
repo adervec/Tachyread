@@ -46,6 +46,7 @@ export function defaultFileSettings() {
     annunciateVoice: '', // voice used by read-aloud + TTS reader
     annunciateRate: 0, // -5..+8 → 0.5..2.0×
     hideMode: 'None',
+    adaptivePace: false, // comprehension-gated adaptive pacing: periodic cloze probes raise/lower WPM
     goal: null,
     typing: { enabled: false, caseSensitive: false, stripPunctuation: true, perWordTimeoutMs: 0, runMode: 'seconds', runLimit: 60, soundVolume: 0.4 },
     speaking: { enabled: false, confidence: 'Medium', perWordTimeoutMs: 0, allowPartial: true },

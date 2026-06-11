@@ -29,6 +29,7 @@ import BookFinishedDialog from './dialogs/BookFinishedDialog.jsx';
 import GrabWizard from './dialogs/GrabWizard.jsx';
 import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
+import AdaptiveProbe from './components/AdaptiveProbe.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan } from './document/toc.js';
 import { defaultFileSettings } from './state/settings.js';
@@ -843,6 +844,16 @@ function AppInner() {
       )}
 
       {dragOver && <div className="drop-overlay">Drop file to open</div>}
+
+      {activeTab && (
+        <AdaptiveProbe
+          tab={activeTab}
+          playing={playing}
+          onPause={() => setPlaying(false)}
+          onResume={() => setPlaying(true)}
+          onSetWpm={(w) => patchSettings(activeTab.id, { wpm: w })}
+        />
+      )}
 
       {closing && (
         <div className="closing-overlay">

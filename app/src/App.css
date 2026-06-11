@@ -365,6 +365,19 @@
 .opg-add { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px dashed var(--divider); border-radius: 4px; cursor: pointer; font-size: 18px; }
 .opg-del { padding: 2px 6px; }
 
+/* Adaptive comprehension probe */
+.adapt-probe-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 6; }
+.adapt-probe { background: var(--menu-bg); border: 1px solid var(--divider); border-radius: 10px; padding: 20px 24px; max-width: 560px; width: 90%; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); }
+.ap-head { font-weight: 700; margin-bottom: 10px; }
+.ap-sentence { font-size: 17px; line-height: 1.65; margin: 0 0 14px; }
+.ap-blank { display: inline-block; min-width: 64px; border-bottom: 2px solid var(--accent, #5b8def); margin: 0 3px; text-align: center; color: var(--accent, #5b8def); font-weight: 700; }
+.ap-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.ap-choice { padding: 8px 14px; font-size: 15px; border-radius: 8px; }
+.ap-choice.correct { background: #2e7d32; color: #fff; border-color: #2e7d32; }
+.ap-choice.wrong { background: #c0392b; color: #fff; border-color: #c0392b; }
+.ap-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
+.ap-skip { padding: 4px 10px; }
+
 /* Recent grabs (source step) */
 .grab-recent { margin-top: 14px; border-top: 1px solid var(--divider); padding-top: 10px; }
 .grab-recent-head { font-size: 11px; color: var(--status-fg); margin-bottom: 6px; }
