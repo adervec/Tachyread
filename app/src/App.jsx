@@ -35,6 +35,7 @@ import SpanDrillDialog from './dialogs/SpanDrillDialog.jsx';
 import FlowWriterDialog from './dialogs/FlowWriterDialog.jsx';
 import VocabDialog from './dialogs/VocabDialog.jsx';
 import RegressionDialog from './dialogs/RegressionDialog.jsx';
+import DictationDialog from './dialogs/DictationDialog.jsx';
 import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan } from './document/toc.js';
@@ -726,6 +727,7 @@ function AppInner() {
     if (action === 'flow-writer') return openDialog({ kind: 'flow-writer' });
     if (action === 'vocab') return openDialog({ kind: 'vocab' });
     if (action === 'regressions' && activeTab) return openDialog({ kind: 'regressions' });
+    if (action === 'dictation') return openDialog({ kind: 'dictation' });
     if (action === 'take-break') return setBreakSignal((n) => n + 1);
     if (action === 'toggle-dark' && activeTab) {
       patchSettings(activeTab.id, { darkMode: !activeTab.settings.darkMode });
@@ -896,6 +898,7 @@ function AppInner() {
       {dialog?.kind === 'typing-progress' && <TypingProgressDialog onClose={closeDialog} />}
       {dialog?.kind === 'span-drill' && <SpanDrillDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'flow-writer' && <FlowWriterDialog doc={activeTab?.doc} onClose={closeDialog} />}
+      {dialog?.kind === 'dictation' && <DictationDialog onClose={closeDialog} />}
       {dialog?.kind === 'vocab' && <VocabDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'regressions' && activeTab && (
         <RegressionDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />

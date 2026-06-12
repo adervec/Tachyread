@@ -32,6 +32,7 @@ const MENUS = {
     { label: 'Typing Progress...', action: 'typing-progress' },
     { label: 'Span Drill...', action: 'span-drill' },
     { label: 'Flow Writer...', action: 'flow-writer' },
+    { label: 'Dictation (speak to write)...', action: 'dictation' },
     { label: 'Vocabulary...', action: 'vocab' },
     { label: 'Take a Break Now', action: 'take-break' },
     { label: 'Preview Footnote', shortcut: 'Ctrl+Shift+F', action: 'footnote' },

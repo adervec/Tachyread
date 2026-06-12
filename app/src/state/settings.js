@@ -96,6 +96,7 @@ export function defaultGlobalSettings() {
     tocTierIcons: ['📖', '📑', '📄', '§', '•'], // TOC-bar icon per hierarchy tier (index = level)
     drillBestSpan: 0, // best perceptual-span drill width (words) reached
     bestFlowWpm: 0, // best Flow Writer net output WPM
+    bestDictationWpm: 0, // best dictation net output WPM
     vocabDeck: [], // spaced-repetition cards: { word, context, addedAt, reps, interval, ease, due, lastGrade }
     // Comfort & calibration: 20-20-20 eye-rest microbreaks + fatigue-aware speed easing.
     comfort: { enabled: true, breakIntervalMin: 20, microbreakSec: 20, autoBackoff: true },
