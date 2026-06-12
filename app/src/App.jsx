@@ -32,6 +32,7 @@ import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import AdaptiveProbe from './components/AdaptiveProbe.jsx';
 import { computeSurprisalWeights } from './engine/surprisal.js';
 import SpanDrillDialog from './dialogs/SpanDrillDialog.jsx';
+import FlowWriterDialog from './dialogs/FlowWriterDialog.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan } from './document/toc.js';
 import { defaultFileSettings } from './state/settings.js';
@@ -680,6 +681,7 @@ function AppInner() {
     if (action === 'disclaimer') return openDialog({ kind: 'disclaimer' });
     if (action === 'typing-progress') return openDialog({ kind: 'typing-progress' });
     if (action === 'span-drill') return openDialog({ kind: 'span-drill' });
+    if (action === 'flow-writer') return openDialog({ kind: 'flow-writer' });
     if (action === 'toggle-dark' && activeTab) {
       patchSettings(activeTab.id, { darkMode: !activeTab.settings.darkMode });
     }
@@ -848,6 +850,7 @@ function AppInner() {
       )}
       {dialog?.kind === 'typing-progress' && <TypingProgressDialog onClose={closeDialog} />}
       {dialog?.kind === 'span-drill' && <SpanDrillDialog doc={activeTab?.doc} onClose={closeDialog} />}
+      {dialog?.kind === 'flow-writer' && <FlowWriterDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'grab' && <GrabWizard onClose={closeDialog} />}
       {dialog?.kind === 'finished' && activeTab && (
         <BookFinishedDialog

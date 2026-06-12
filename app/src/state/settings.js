@@ -94,5 +94,6 @@ export function defaultGlobalSettings() {
     ocrTemplates: [], // saved Grab layout templates: { name, regions:[{fx,fy,fw,fh}] }
     tocTierIcons: ['📖', '📑', '📄', '§', '•'], // TOC-bar icon per hierarchy tier (index = level)
     drillBestSpan: 0, // best perceptual-span drill width (words) reached
+    bestFlowWpm: 0, // best Flow Writer net output WPM
   };
 }

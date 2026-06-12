@@ -17,6 +17,7 @@ const COMMON = (
   'should world high every near add food between own below country plant last school father keep tree never'
 ).split(/\s+/).filter(Boolean);
 
+export const COMMON_WORDS = COMMON; // reused by the predictive Flow Writer
 const RANK = new Map();
 COMMON.forEach((w, i) => { if (!RANK.has(w)) RANK.set(w, i); });
 
