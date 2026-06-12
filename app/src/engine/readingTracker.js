@@ -26,6 +26,11 @@ const REVISIT_WORDS = 50; // backward jump larger than this is a far revisit, no
 const WINDOW_MS = 30000; // sliding window for the live "recent WPM"
 const MIN_MS_PER_WORD = 25; // faster than this (~2400 wpm) over a multi-word move = skim/skip
 const MAX_RECENT_WPM = 2500; // clamp the live readout for sanity
+// Regression awareness: a backward saccade of ≤ this many words is a "short" regression — the kind
+// that is frequently a habitual twitch rather than a deliberate comprehension repair, and the main
+// target of regression-reduction training. Longer backward jumps usually mean genuine re-analysis.
+const SHORT_REGRESSION = 2;
+const REG_CAP = 400; // max recent regression events retained (session-only)
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -93,6 +98,10 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
   let lastTs = null;
   let hidden = false;
   let dirty = false;
+  let regressionCount = 0; // session-only: backward saccades over already-read text
+  let shortRegressions = 0; // of those, jumps of ≤ SHORT_REGRESSION words
+  let longRegressions = 0;
+  const regress = []; // capped recent regressions: {at, back, ms, ts}
   const events = []; // {ts, processed, activeMs}
   const dayMap = new Map(daily.map((d) => [d.date, { date: d.date, words: d.words || 0, ms: d.ms || 0 }]));
 
@@ -147,7 +156,15 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
       }
     } else {
       const back = -d;
-      if (back <= REVISIT_WORDS) processed = back; // re-read: eyes pace only
+      if (back <= REVISIT_WORDS) {
+        processed = back; // re-read: eyes pace only
+        // Regression bookkeeping (a near backward move over text just read). Classify by distance.
+        regressionCount++;
+        if (back <= SHORT_REGRESSION) shortRegressions++;
+        else longRegressions++;
+        regress.push({ at: next, back, ms: activeMs, ts: now });
+        if (regress.length > REG_CAP) regress.shift();
+      }
     }
 
     sessionActiveMs += activeMs;
@@ -230,12 +247,32 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     return { total: n, readWords: read, readFrac: n ? read / n : 0, wpm: paced ? Math.round(sum / paced) : 0 };
   }
 
+  // Session regression summary. `ratePer100` is regressions per 100 words of forward progress this
+  // session; `recent` is the newest-first list (each {at, back, ms, ts}) for a jump-to-spot report.
+  function regressionStats() {
+    return {
+      count: regressionCount,
+      short: shortRegressions,
+      long: longRegressions,
+      ratePer100: sessionNewWords > 0 ? (regressionCount / sessionNewWords) * 100 : 0,
+      recent: regress.slice(-60).reverse(),
+    };
+  }
+  function resetRegressions() {
+    regressionCount = 0;
+    shortRegressions = 0;
+    longRegressions = 0;
+    regress.length = 0;
+  }
+
   return {
     recordMove,
     setHidden,
     recentWpm,
     sampleTrend,
     rangeStats,
+    regressionStats,
+    resetRegressions,
     sessionWpm: () => wpmFrom(sessionNewWords, sessionActiveMs),
     lifetimeWpm: () => wpmFrom(readCount, lifetimeMs),
     coverage: () => (wordCount ? readCount / wordCount : 0),
