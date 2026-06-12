@@ -34,6 +34,7 @@ import { computeSurprisalWeights } from './engine/surprisal.js';
 import SpanDrillDialog from './dialogs/SpanDrillDialog.jsx';
 import FlowWriterDialog from './dialogs/FlowWriterDialog.jsx';
 import VocabDialog from './dialogs/VocabDialog.jsx';
+import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan } from './document/toc.js';
 import { defaultFileSettings } from './state/settings.js';
@@ -70,6 +71,10 @@ function AppInner() {
     saveTypingRun(run).catch(() => {});
   }, []);
   const [showFootnote, setShowFootnote] = useState(false);
+  // Comfort/calibration: voluntary-break trigger token, and a rolling log of recent comprehension
+  // outcomes (1 = passed an adaptive probe, 0 = missed) that feeds the fatigue estimate.
+  const [breakSignal, setBreakSignal] = useState(0);
+  const probeScoresRef = useRef([]);
   // Bump a token to ask the Lines pane to scroll to a line (without moving the reading position)
   // or to ask the TOC pane to reveal + flash an entry. The payload travels with the token.
   const [lineScroll, setLineScroll] = useState({ line: -1, token: 0 });
@@ -684,6 +689,7 @@ function AppInner() {
     if (action === 'span-drill') return openDialog({ kind: 'span-drill' });
     if (action === 'flow-writer') return openDialog({ kind: 'flow-writer' });
     if (action === 'vocab') return openDialog({ kind: 'vocab' });
+    if (action === 'take-break') return setBreakSignal((n) => n + 1);
     if (action === 'toggle-dark' && activeTab) {
       patchSettings(activeTab.id, { darkMode: !activeTab.settings.darkMode });
     }
@@ -869,6 +875,22 @@ function AppInner() {
         <AdaptiveProbe
           tab={activeTab}
           playing={playing}
+          onPause={() => setPlaying(false)}
+          onResume={() => setPlaying(true)}
+          onSetWpm={(w) => patchSettings(activeTab.id, { wpm: w })}
+          onResult={(correct) => {
+            probeScoresRef.current = [...probeScoresRef.current.slice(-9), correct ? 1 : 0];
+          }}
+        />
+      )}
+
+      {activeTab && (
+        <ComfortMonitor
+          tab={activeTab}
+          playing={playing}
+          cfg={state.global.comfort}
+          manualSignal={breakSignal}
+          getRecentScores={() => probeScoresRef.current}
           onPause={() => setPlaying(false)}
           onResume={() => setPlaying(true)}
           onSetWpm={(w) => patchSettings(activeTab.id, { wpm: w })}

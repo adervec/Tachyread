@@ -32,6 +32,7 @@ const MENUS = {
     { label: 'Span Drill...', action: 'span-drill' },
     { label: 'Flow Writer...', action: 'flow-writer' },
     { label: 'Vocabulary...', action: 'vocab' },
+    { label: 'Take a Break Now', action: 'take-break' },
     { label: 'Preview Footnote', shortcut: 'Ctrl+Shift+F', action: 'footnote' },
     { kind: 'separator' },
     { label: 'Audiobook Manager...', shortcut: 'Ctrl+Shift+A', action: 'audiobook' },

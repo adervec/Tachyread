@@ -8,7 +8,7 @@ import { adaptWpm } from '../engine/adaptivePacer.js';
 // playback driver already reads settings.wpm, so we only have to patch wpm — no engine changes.
 const PROBE_EVERY = 90; // words of forward progress between checks
 
-export default function AdaptiveProbe({ tab, playing, onPause, onResume, onSetWpm }) {
+export default function AdaptiveProbe({ tab, playing, onPause, onResume, onSetWpm, onResult }) {
   const [probe, setProbe] = useState(null);
   const [picked, setPicked] = useState(null);
   const lastRef = useRef(tab?.settings.wordIndex || 0);
@@ -47,6 +47,7 @@ export default function AdaptiveProbe({ tab, playing, onPause, onResume, onSetWp
     if (picked != null) return;
     setPicked(i);
     const correct = i === probe.answerIndex;
+    onResult?.(correct); // feed the comfort/fatigue monitor's comprehension-trend signal
     const r = adaptWpm(tab.settings.wpm, correct, streakRef.current);
     streakRef.current = r.streak;
     setTimeout(() => { if (r.delta) onSetWpm(r.wpm); finish(); }, 800); // brief right/wrong flash, then continue

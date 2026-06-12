@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { DEFAULT_COMFORT } from '../engine/comfort.js';
 
 // Application-wide settings only. These are deliberately disjoint from per-tab settings:
 // anything that varies per document lives in Tab Settings / Default Tab Settings instead.
@@ -19,6 +20,11 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
   function patch(p) {
     setG({ ...g, ...p });
     onPatch(p);
+  }
+
+  const comfort = { ...DEFAULT_COMFORT, ...(g.comfort || {}) };
+  function patchComfort(p) {
+    patch({ comfort: { ...comfort, ...p } });
   }
 
   return (
@@ -84,6 +90,57 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
           </label>
         ))}
       </div>
+
+      <div className="field-section">Comfort &amp; breaks</div>
+      <Field label="Eye-rest microbreaks">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!comfort.enabled}
+            onChange={(e) => patchComfort({ enabled: e.target.checked })}
+          />
+          Prompt a 20-20-20 break while reading
+        </label>
+      </Field>
+      <Field label="Break every (minutes of reading)">
+        <input
+          type="number"
+          min={1}
+          max={120}
+          value={comfort.breakIntervalMin}
+          disabled={!comfort.enabled}
+          onChange={(e) => patchComfort({ breakIntervalMin: Math.max(1, Number(e.target.value) || 1) })}
+          style={{ width: 70 }}
+        />
+      </Field>
+      <Field label="Rest length (seconds)">
+        <input
+          type="number"
+          min={1}
+          max={120}
+          value={comfort.microbreakSec}
+          disabled={!comfort.enabled}
+          onChange={(e) => patchComfort({ microbreakSec: Math.max(1, Number(e.target.value) || 1) })}
+          style={{ width: 70 }}
+        />
+      </Field>
+      <Field label="Ease speed when tired">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!comfort.autoBackoff}
+            onChange={(e) => patchComfort({ autoBackoff: e.target.checked })}
+          />
+          Lower WPM after a break if fatigue is high
+        </label>
+      </Field>
+      <p className="settings-note">
+        Speed-reading removes the natural pauses paged reading gives you, so eye strain builds up
+        quietly. Breaks follow the 20-20-20 guideline (every ~20 min, look ~20&nbsp;ft / 6&nbsp;m
+        away for ~20&nbsp;s) and speed-easing nudges WPM down only when comprehension checks and
+        time-on-task both suggest you are tiring. This is a comfort aid, not medical advice. Take a
+        break any time from <strong>View → Take a Break Now</strong>.
+      </p>
     </Dialog>
   );
 }

@@ -378,6 +378,19 @@
 .ap-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
 .ap-skip { padding: 4px 10px; }
 
+/* Comfort & calibration: microbreak overlay */
+.comfort-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.62); display: flex; align-items: center; justify-content: center; z-index: 7; }
+.comfort-card { background: var(--menu-bg); border: 1px solid var(--divider); border-radius: 12px; padding: 26px 30px; max-width: 480px; width: 90%; text-align: center; box-shadow: 0 10px 44px rgba(0, 0, 0, 0.45); }
+.comfort-eyes { font-size: 30px; letter-spacing: 6px; margin-bottom: 6px; }
+.comfort-head { font-weight: 700; font-size: 18px; margin-bottom: 8px; }
+.comfort-tip { font-size: 14px; line-height: 1.55; margin: 0 0 12px; color: var(--menu-fg); }
+.comfort-count { font-size: 56px; font-weight: 800; line-height: 1; margin: 8px 0 14px; color: var(--accent, #5b8def); font-variant-numeric: tabular-nums; }
+.comfort-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.comfort-skip { padding: 5px 12px; }
+.comfort-resume { padding: 8px 20px; font-size: 15px; font-weight: 600; }
+.inline-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--menu-fg); cursor: pointer; }
+.inline-check input { margin: 0; }
+
 /* Span drill */
 .span-drill { min-width: 440px; }
 .sd-stats { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text3, #888); margin-bottom: 10px; }
