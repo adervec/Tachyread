@@ -47,6 +47,8 @@ export function defaultFileSettings() {
     annunciateRate: 0, // -5..+8 → 0.5..2.0×
     hideMode: 'None',
     adaptivePace: false, // comprehension-gated adaptive pacing: periodic cloze probes raise/lower WPM
+    surprisalDwell: false, // spend more time on rare/informative words, less on common ones (mean pace preserved)
+    surprisalStrength: 1, // 0 = off, 1 = full redistribution
     goal: null,
     typing: { enabled: false, caseSensitive: false, stripPunctuation: true, perWordTimeoutMs: 0, runMode: 'seconds', runLimit: 60, soundVolume: 0.4 },
     speaking: { enabled: false, confidence: 'Medium', perWordTimeoutMs: 0, allowPartial: true },

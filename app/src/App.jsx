@@ -30,6 +30,7 @@ import GrabWizard from './dialogs/GrabWizard.jsx';
 import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import AdaptiveProbe from './components/AdaptiveProbe.jsx';
+import { computeSurprisalWeights } from './engine/surprisal.js';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan } from './document/toc.js';
 import { defaultFileSettings } from './state/settings.js';
@@ -161,6 +162,15 @@ function AppInner() {
     // eslint-disable-next-line
   }, [activeTab?.id]);
 
+  // Surprisal-weighted dwell: per-word time weights (mean-normalized so average pace is preserved).
+  // Recomputed only when the doc or the setting changes; the driver multiplies each word's duration by it.
+  const surprisalWeights = useMemo(
+    () => (activeTab?.settings.surprisalDwell && activeTab.doc
+      ? computeSurprisalWeights(activeTab.doc.words, activeTab.settings.surprisalStrength ?? 1)
+      : null),
+    [activeTab?.doc, activeTab?.settings.surprisalDwell, activeTab?.settings.surprisalStrength],
+  );
+
   // RSVP playback driver. Reschedules on each settings.wordIndex change while playing.
   // When read-aloud is on, speech drives advancement instead of this timer (see below).
   useEffect(() => {
@@ -185,7 +195,8 @@ function AppInner() {
       atLineEnd && nextLine < doc.lines.length && doc.lines[nextLine].isEmpty;
     const isProperName = doc.properNames?.has?.((word || '').toLowerCase().replace(/[^\p{L}\p{N}]+$/u, ''));
 
-    const ms = wordDurationMs(word, settings, isProperName, isHF, atParaEnd, atLineEnd);
+    const sw = surprisalWeights ? (surprisalWeights[idx] || 1) : 1;
+    const ms = wordDurationMs(word, settings, isProperName, isHF, atParaEnd, atLineEnd) * sw;
 
     engineRef.current.scheduleNext(ms, () => {
       stepWord(1);

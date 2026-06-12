@@ -392,6 +392,15 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ doubleTimeSpecialWordsMultiplier: Number(e.target.value) })}
         />
       </Field>
+      <Field label="Surprisal-weighted dwell">
+        <input type="checkbox" checked={!!s.surprisalDwell} onChange={(e) => patch({ surprisalDwell: e.target.checked })} />
+      </Field>
+      {s.surprisalDwell && (
+        <Field label="Surprisal strength">
+          <input type="range" min={0} max={1.5} step={0.1} value={s.surprisalStrength ?? 1} onChange={(e) => patch({ surprisalStrength: Number(e.target.value) })} />
+        </Field>
+      )}
+      <p className="settings-note" style={{ margin: '2px 0 0' }}>Spends more time on rare/informative words and less on common ones — your average WPM is unchanged.</p>
 
       <Section>Read aloud (TTS)</Section>
       <Field label={`Voice (${voices.length} available)`}>
