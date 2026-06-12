@@ -401,6 +401,27 @@
 .fw-suggest { margin-top: 8px; font-size: 14px; min-height: 20px; }
 .fw-ghost { color: var(--accent, #5b8def); opacity: 0.85; }
 
+/* Vocabulary deck */
+.vocab { min-width: 460px; }
+.vocab-review { display: flex; align-items: center; justify-content: center; min-height: 168px; }
+.vocab-empty { text-align: center; color: var(--text3, #888); }
+.vocab-card { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.vc-word { font-size: 30px; font-weight: 700; }
+.vc-context { font-size: 14px; color: var(--text3, #888); max-width: 440px; font-style: italic; line-height: 1.5; }
+.vc-dict { font-size: 13px; }
+.vc-grades { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; justify-content: center; }
+.vc-grade { padding: 6px 14px; }
+.vc-grade.g0 { color: #c0392b; }
+.vc-grade.g3 { color: #2e7d32; }
+.vd-actions { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.vd-actions input { flex: 1; min-width: 130px; padding: 5px 8px; }
+.vd-summary { margin: 0 0 8px; }
+.vd-list { max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.vd-row { display: flex; align-items: center; gap: 8px; padding: 3px 6px; border-bottom: 1px solid var(--divider); }
+.vd-row a { flex: 1; }
+.vd-meta { font-size: 11px; color: var(--text3, #888); white-space: nowrap; }
+.vd-x { padding: 0 7px; }
+
 /* Recent grabs (source step) */
 .grab-recent { margin-top: 14px; border-top: 1px solid var(--divider); padding-top: 10px; }
 .grab-recent-head { font-size: 11px; color: var(--status-fg); margin-bottom: 6px; }

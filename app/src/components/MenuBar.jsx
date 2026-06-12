@@ -31,6 +31,7 @@ const MENUS = {
     { label: 'Typing Progress...', action: 'typing-progress' },
     { label: 'Span Drill...', action: 'span-drill' },
     { label: 'Flow Writer...', action: 'flow-writer' },
+    { label: 'Vocabulary...', action: 'vocab' },
     { label: 'Preview Footnote', shortcut: 'Ctrl+Shift+F', action: 'footnote' },
     { kind: 'separator' },
     { label: 'Audiobook Manager...', shortcut: 'Ctrl+Shift+A', action: 'audiobook' },
