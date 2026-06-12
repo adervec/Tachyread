@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useVoices } from '../features/tts.js';
 import { THEME_NAMES } from '../state/themes.js';
+import { createMetronome } from '../features/metronome.js';
+import { DEFAULT_METRONOME } from '../engine/metronome.js';
 
 const FACE_STYLES = ['Man', 'Owl', 'Robot', 'Alien', 'Wizard', 'Cat', 'Baby', 'Skull', 'Panda', 'Frankenstein', 'Vampire', 'Viking', 'Clown', 'Bunny', 'Dragon', 'Ninja'];
 const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel'];
@@ -35,11 +37,24 @@ function Section({ children }) {
 export default function SettingsDialog({ settings, onPatch, onClose, title = 'Tab Settings' }) {
   const [s, setS] = useState(settings);
   const voices = useVoices();
+  const metroRef = useRef(null);
 
   function patch(p) {
     const next = { ...s, ...p };
     setS(next);
     onPatch(p);
+  }
+
+  const metro = { ...DEFAULT_METRONOME, ...(s.metronome || {}) };
+  function patchMetro(p) {
+    patch({ metronome: { ...metro, ...p } });
+  }
+  function tryMetro() {
+    if (!metroRef.current) metroRef.current = createMetronome();
+    metroRef.current.preview(
+      { wpm: s.wpm || 300, subdivision: metro.subdivision, accentEvery: metro.accentEvery, volume: metro.volume },
+      8,
+    );
   }
 
   const cwStyles = readCwStyles(s);
@@ -341,6 +356,49 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ autoSkipHeaders: e.target.checked })}
         />
       </Field>
+
+      <Section>Rhythmic pacing (metronome)</Section>
+      <Field label="Enable beat at reading pace">
+        <input
+          type="checkbox"
+          checked={!!metro.enabled}
+          onChange={(e) => patchMetro({ enabled: e.target.checked })}
+        />
+      </Field>
+      <Field label="Volume">
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={metro.volume}
+          onChange={(e) => patchMetro({ volume: Number(e.target.value) })}
+        />
+      </Field>
+      <Field label="Ticks per word">
+        <select value={metro.subdivision} onChange={(e) => patchMetro({ subdivision: Number(e.target.value) })}>
+          <option value={1}>1 — one beat per word</option>
+          <option value={2}>2 — half-beats</option>
+          <option value={3}>3 — triplets</option>
+          <option value={4}>4 — quarter-beats</option>
+        </select>
+      </Field>
+      <Field label="Accent every N beats (0 = off)">
+        <input
+          type="number"
+          min={0}
+          max={8}
+          value={metro.accentEvery}
+          onChange={(e) => patchMetro({ accentEvery: Math.max(0, Number(e.target.value)) })}
+        />
+      </Field>
+      <Field label="Preview">
+        <button type="button" onClick={tryMetro}>♪ Try 8 beats</button>
+      </Field>
+      <p className="settings-note" style={{ margin: '2px 0 0' }}>
+        A steady pace cue at your current WPM — a cadence to read along with. The adaptive pacer
+        still controls the actual speed, so the beat always matches the words. Plays only while reading.
+      </p>
 
       <Section>Double-time multipliers (1.0 = off)</Section>
       <Field label="Proper names">

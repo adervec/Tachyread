@@ -46,6 +46,7 @@ import { saveAudioClip, clearSession, saveSession, saveTypingRun } from './state
 import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
 import { playLineClick } from './features/clickSound.js';
+import { createMetronome } from './features/metronome.js';
 import { applyTheme } from './state/themes.js';
 import './App.css';
 
@@ -95,6 +96,7 @@ function AppInner() {
   activeTabRef.current = activeTab;
   const readAloudRef = useRef(null);
   const ttsExpectedRef = useRef(-1); // index TTS last set, to tell self-advance from manual nav
+  const metronomeRef = useRef(null); // rhythmic auditory pace cue (Web Audio)
 
   // Run proper-name detection lazily when enabled on a tab (it's opt-in due to memory cost).
   useEffect(() => {
@@ -263,6 +265,39 @@ function AppInner() {
     }
     // eslint-disable-next-line
   }, [activeTab?.settings.wordIndex]);
+
+  // Rhythmic pacing: an optional Web-Audio metronome that ticks at the current reading pace while
+  // playing — a steady cadence cue to read along with. Tempo is read live from settings.wpm, so it
+  // tracks the adaptive pacer with no restart. Silenced during read-aloud / typing (those drive
+  // their own rhythm).
+  useEffect(() => {
+    if (!metronomeRef.current) metronomeRef.current = createMetronome();
+    const m = metronomeRef.current;
+    const cfg = activeTab?.settings.metronome;
+    const on =
+      !!cfg?.enabled && playing && !activeTab?.settings.readAloud && !activeTab?.settings.typing?.enabled;
+    if (on) {
+      m.start({
+        getWpm: () => activeTabRef.current?.settings.wpm || 300,
+        subdivision: cfg.subdivision || 1,
+        accentEvery: cfg.accentEvery || 0,
+        volume: cfg.volume ?? 0.25,
+      });
+    } else {
+      m.stop();
+    }
+    return () => m.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    playing,
+    activeTab?.id,
+    activeTab?.settings.metronome?.enabled,
+    activeTab?.settings.metronome?.subdivision,
+    activeTab?.settings.metronome?.accentEvery,
+    activeTab?.settings.metronome?.volume,
+    activeTab?.settings.readAloud,
+    activeTab?.settings.typing?.enabled,
+  ]);
 
   function stepWord(delta, opts = {}) {
     if (!activeTab) return;
