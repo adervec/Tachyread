@@ -93,5 +93,6 @@ export function defaultGlobalSettings() {
     recentFiles: [], // {name, checksum, lastOpened}
     ocrTemplates: [], // saved Grab layout templates: { name, regions:[{fx,fy,fw,fh}] }
     tocTierIcons: ['📖', '📑', '📄', '§', '•'], // TOC-bar icon per hierarchy tier (index = level)
+    drillBestSpan: 0, // best perceptual-span drill width (words) reached
   };
 }
