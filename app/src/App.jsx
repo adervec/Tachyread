@@ -52,6 +52,8 @@ import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
 import { playLineClick } from './features/clickSound.js';
 import { createMetronome } from './features/metronome.js';
+import { getSyncProvider } from './features/sync/syncProviders.js';
+import { backupToProvider } from './features/sync/syncManager.js';
 import { applyTheme } from './state/themes.js';
 import './App.css';
 
@@ -672,7 +674,45 @@ function AppInner() {
     // eslint-disable-next-line
   }, []);
 
+  // One-click backup to the configured sync target (menu-bar ☁ Sync). Routes the user to setup when
+  // the target isn't ready, otherwise pushes the backup and stamps lastSync.
+  async function doSyncNow() {
+    const cfg = state.global.sync;
+    const p = cfg && getSyncProvider(cfg.provider);
+    if (!p || !p.supported()) { setStatus('This browser can’t use that sync target — see File → Backup & Data.'); return; }
+    const avail = p.available(cfg);
+    if (avail !== true) { setStatus(avail.reason || 'Sync isn’t configured yet.'); openDialog({ kind: 'data' }); return; }
+    setStatus('☁ Backing up…');
+    try {
+      const r = await backupToProvider(cfg.provider, cfg);
+      updateGlobal({ sync: { ...cfg, lastSync: r.at } });
+      setStatus(`☁ Backed up to ${p.label} (${Math.round(r.bytes / 1024)} KB).`);
+    } catch (e) {
+      setStatus('Sync failed: ' + (e?.message || e));
+    }
+  }
+
+  // Auto-backup on an interval. Only fires for a target that's already silently usable (a local
+  // folder whose permission is still granted) — it never pops a picker or a sign-in on a timer.
+  useEffect(() => {
+    const cfg = state.global.sync;
+    if (!cfg?.autoBackup) return;
+    const mins = Math.max(5, Number(cfg.autoBackupMinutes) || 30);
+    const id = setInterval(async () => {
+      try {
+        const p = getSyncProvider(cfg.provider);
+        if (p && (await p.isConnected())) {
+          const r = await backupToProvider(cfg.provider, cfg);
+          updateGlobal({ sync: { ...cfg, lastSync: r.at } });
+        }
+      } catch { /* silent — manual sync surfaces errors */ }
+    }, mins * 60000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.global.sync?.autoBackup, state.global.sync?.autoBackupMinutes, state.global.sync?.provider]);
+
   function handleMenuAction(action) {
+    if (action === 'sync-now') return doSyncNow();
     if (action === 'open-clip') return openClipboard();
     if (action === 'grab') return openDialog({ kind: 'grab' });
     if (action === 'close-tab' && activeTab) {
@@ -687,8 +727,19 @@ function AppInner() {
       // Keep the saved session so reopening reconnects to these same files.
       const open = state.tabs.map((t) => ({ checksum: t.doc.contentChecksum, fileName: t.doc.fileName }));
       saveSession({ open, active: activeTab?.doc.contentChecksum || null }).catch(() => {});
-      setClosing('disconnect');
-      setTimeout(() => { try { window.close(); } catch { /* tab not script-opened */ } }, 50);
+      const finish = () => { setClosing('disconnect'); setTimeout(() => { try { window.close(); } catch { /* tab not script-opened */ } }, 50); };
+      // Best-effort final backup if auto-backup is on and the target is silently usable.
+      const cfg = state.global.sync;
+      const p = cfg?.autoBackup ? getSyncProvider(cfg.provider) : null;
+      if (p) {
+        setClosing('disconnect');
+        (async () => {
+          try { if (await p.isConnected()) { const r = await backupToProvider(cfg.provider, cfg); updateGlobal({ sync: { ...cfg, lastSync: r.at } }); } } catch { /* ignore */ }
+          setTimeout(() => { try { window.close(); } catch { /* ignore */ } }, 50);
+        })();
+      } else {
+        finish();
+      }
       return;
     }
     if (action === 'shutdown') {

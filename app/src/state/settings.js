@@ -104,6 +104,6 @@ export function defaultGlobalSettings() {
     gammaPrimer: { carrierHz: 220, volume: 0.15, durationSec: 60 },
     // Cloud sync / backup target. provider: 'localFolder' | 'googleDrive'; driveClientId is the user's
     // own Google OAuth client ID (kept local). lastSync is a timestamp for the UI.
-    sync: { provider: 'localFolder', driveClientId: '', lastSync: 0 },
+    sync: { provider: 'localFolder', driveClientId: '', lastSync: 0, autoBackup: false, autoBackupMinutes: 30 },
   };
 }

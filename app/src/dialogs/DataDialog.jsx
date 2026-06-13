@@ -213,6 +213,27 @@ export default function DataDialog({ onClose }) {
           <span className="settings-note" style={{ margin: 0 }}>Last sync: {new Date(sync.lastSync).toLocaleString()}</span>
         )}
       </div>
+      <div className="data-row">
+        <label className="inline-check">
+          <input type="checkbox" checked={!!sync.autoBackup} onChange={(e) => patchSync({ autoBackup: e.target.checked })} />
+          Auto-back up every
+        </label>
+        <input
+          type="number"
+          min={5}
+          max={1440}
+          value={sync.autoBackupMinutes}
+          disabled={!sync.autoBackup}
+          onChange={(e) => patchSync({ autoBackupMinutes: Math.max(5, Number(e.target.value) || 30) })}
+          style={{ width: 64 }}
+        />
+        <span className="settings-note" style={{ margin: 0 }}>minutes, and when you disconnect.</span>
+      </div>
+      <p className="settings-note">
+        Auto-backup only runs when the target is silently ready (a local folder you've already granted)
+        — it never pops a folder picker or a sign-in on a timer. Use <strong>☁ Sync</strong> in the menu
+        bar for a one-click backup any time.
+      </p>
     </Dialog>
   );
 }
