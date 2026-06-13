@@ -279,7 +279,12 @@
 .grab-controls .grab-sep { flex: 0 0 1px; align-self: stretch; background: var(--divider); width: 1px; margin: 0 2px; }
 .grab-review { display: flex; flex-direction: column; gap: 10px; }
 .grab-seg { display: flex; gap: 10px; align-items: flex-start; border-bottom: 1px solid var(--divider); padding-bottom: 10px; }
-.grab-thumb { width: 120px; height: auto; max-height: 120px; object-fit: contain; border: 1px solid var(--divider); background: #000; }
+.grab-thumb { width: 120px; height: auto; max-height: 120px; object-fit: contain; border: 1px solid var(--divider); background: #000; cursor: zoom-in; }
+.grab-trash { color: #d9534f; }
+.grab-trash:hover { background: rgba(217, 83, 79, 0.15); border-color: #d9534f; }
+/* Click-to-enlarge lightbox for captured pages */
+.grab-lightbox { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.85); display: flex; align-items: center; justify-content: center; padding: 24px; cursor: zoom-out; }
+.grab-lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6); }
 .grab-seg textarea { flex: 1; resize: vertical; font-size: 12px; }
 .grab-seg-actions { display: flex; flex-direction: column; gap: 4px; }
 .grab-seg-actions button { padding: 2px 6px; }

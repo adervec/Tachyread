@@ -256,6 +256,7 @@ export default function GrabWizard({ onClose }) {
   const [textColor, setTextColor] = useState('#111111');
   const [fontHint, setFontHint] = useState('');
   const [editingId, setEditingId] = useState(null);
+  const [lightbox, setLightbox] = useState(null); // image data-URL shown full-screen, or null
   const [recent, setRecent] = useState([]);
   const [ocrProfileId, setOcrProfileId] = useState(null);
   const [editingProfiles, setEditingProfiles] = useState(false);
@@ -821,7 +822,7 @@ export default function GrabWizard({ onClose }) {
                   <button className="grab-recent-open" onClick={() => openRecent(r)} title="Reopen">
                     📄 {r.name} <span className="settings-note" style={{ margin: 0 }}>· {r.segments?.length || 0} page(s)</span>
                   </button>
-                  <button onClick={() => removeRecent(r)} title="Delete saved grab">🗑</button>
+                  <button className="grab-trash" onClick={() => removeRecent(r)} title="Delete saved grab">🗑</button>
                 </div>
               ))}
             </div>
@@ -970,7 +971,7 @@ export default function GrabWizard({ onClose }) {
           {segments.length === 0 && <p>No captures yet. Go back to add some.</p>}
           {segments.map((s, i) => (
             <div key={s.id} className="grab-seg">
-              <img src={s.image} alt={`capture ${i + 1}`} className="grab-thumb" />
+              <img src={s.image} alt={`capture ${i + 1}`} className="grab-thumb" title="Click to enlarge" onClick={() => setLightbox(s.image)} />
               <div className="grab-seg-main">
                 <div className="grab-seg-ctl">
                   <label>Layout:
@@ -1001,7 +1002,7 @@ export default function GrabWizard({ onClose }) {
               <div className="grab-seg-actions">
                 <button title="Move up" onClick={() => move(i, -1)}>↑</button>
                 <button title="Move down" onClick={() => move(i, 1)}>↓</button>
-                <button title="Remove" onClick={() => remove(s.id)}>🗑</button>
+                <button className="grab-trash" title="Remove" onClick={() => remove(s.id)}>🗑</button>
               </div>
             </div>
           ))}
@@ -1010,6 +1011,12 @@ export default function GrabWizard({ onClose }) {
 
       {editingProfiles && (
         <OcrProfileEditor profiles={ocrProfiles} onSave={saveProfiles} onClose={() => setEditingProfiles(false)} />
+      )}
+
+      {lightbox && (
+        <div className="grab-lightbox" title="Click to close" onClick={(e) => { e.stopPropagation(); setLightbox(null); }}>
+          <img src={lightbox} alt="enlarged page" />
+        </div>
       )}
 
       {confirmClose && (
