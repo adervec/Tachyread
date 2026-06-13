@@ -9,7 +9,8 @@ import {
   canvasToDataUrl,
   frameSignature,
   signatureDiff,
-  signatureVariance,
+  signatureBandDiff,
+  signatureBandVariance,
 } from '../features/screenCapture.js';
 import { recognizeImageEx, ocrSupported, loadImage, glyphCategory } from '../features/ocr.js';
 import { buildGrabbedDoc } from '../document/grab.js';
@@ -22,6 +23,8 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const DUP_THRESHOLD = 6;
 const STILL_EPS = 2.5; // frame-to-frame diff below this = the page is holding still (settled)
 const BLANK_STD = 8;   // signature std-dev below this = a blank / near-uniform page
+const BAND_EPS = 11;   // a single row-band changing more than this = a real (often edge-localised) change
+                       // that the global mean would dilute; below it is sub-cell noise (cursor, jitter)
 const VOICE_WORDS = ['GO', 'SHOOT', 'GRAB', 'HUT', 'CAP', 'TAKE'];
 
 // Built-in layout templates: ordered regions OCR'd separately so columns don't interleave.
@@ -436,7 +439,7 @@ export default function GrabWizard({ onClose }) {
       if (!v || !v.videoWidth) break;
       const canvas = captureFrame(v, cropVideoPx());
       const sig = frameSignature(canvas);
-      if (lastSig && signatureDiff(sig, lastSig) < DUP_THRESHOLD) {
+      if (lastSig && signatureDiff(sig, lastSig) < DUP_THRESHOLD && signatureBandDiff(sig, lastSig) < BAND_EPS) {
         consec++;
         setMsg(`Grab ${i + 1}/${count}: duplicate page (${consec} in a row)`);
         if (limit > 0 && consec >= limit) { setMsg(`Auto-finished — ${consec} consecutive duplicates.`); break; }
@@ -465,7 +468,7 @@ export default function GrabWizard({ onClose }) {
     setMsg('👁 Watching — page through your document; each new page grabs itself.');
     const dwellMs = Math.max(150, (Number(watchDwell) || 0.6) * 1000);
     const POLL = 250;
-    let holdSig = null, holdStart = 0, handled = false, lastCapSig = null;
+    let holdSig = null, holdStart = 0, handled = false, lastCapSig = null, decidedSig = null;
     let captured = 0, skipped = 0;
     while (watchRef.current.running) {
       const v = videoRef.current;
@@ -473,15 +476,22 @@ export default function GrabWizard({ onClose }) {
       const canvas = captureFrame(v, cropVideoPx());
       const sig = frameSignature(canvas);
       const now = Date.now();
-      if (!holdSig || signatureDiff(sig, holdSig) > STILL_EPS) {
-        holdSig = sig; holdStart = now; handled = false; // motion / transition — (re)start the settle timer
+      // A transition is whole-frame motion (global diff) OR — once we've already decided on a page —
+      // a strong change in any single row band vs. that decided frame. The band check is what catches
+      // a NEW page whose only difference is text along the top/bottom edge: it barely moves the global
+      // mean, so without it we'd stay stuck on the previous page and never grab the new one.
+      const moved = !holdSig || signatureDiff(sig, holdSig) > STILL_EPS;
+      const newEdge = handled && decidedSig &&
+        (signatureDiff(sig, decidedSig) > STILL_EPS || signatureBandDiff(sig, decidedSig) > BAND_EPS);
+      if (moved || newEdge) {
+        holdSig = sig; holdStart = now; handled = false; // (re)start the settle timer
       } else if (!handled && now - holdStart >= dwellMs) {
-        handled = true; // the page settled — decide once
-        if (signatureVariance(sig) < BLANK_STD) {
+        handled = true; decidedSig = sig; // the page settled — decide once
+        if (signatureBandVariance(sig) < BLANK_STD) {
           skipped++; setMsg(`👁 Skipped a blank page (${captured} grabbed · ${skipped} skipped).`);
         } else if (skipSigsRef.current.some((s) => signatureDiff(sig, s) < DUP_THRESHOLD)) {
           skipped++; setMsg(`👁 Skipped a loading / ignored screen (${captured} grabbed · ${skipped} skipped).`);
-        } else if (lastCapSig && signatureDiff(sig, lastCapSig) < DUP_THRESHOLD) {
+        } else if (lastCapSig && signatureDiff(sig, lastCapSig) < DUP_THRESHOLD && signatureBandDiff(sig, lastCapSig) < BAND_EPS) {
           /* same page already grabbed — keep watching for the next one */
         } else {
           lastCapSig = sig; captured++;
