@@ -288,6 +288,13 @@
 .grab-seg textarea { flex: 1; resize: vertical; font-size: 12px; }
 .grab-seg-actions { display: flex; flex-direction: column; gap: 4px; }
 .grab-seg-actions button { padding: 2px 6px; }
+.grab-seg.flagged { background: rgba(217, 131, 36, 0.08); box-shadow: inset 3px 0 0 #d98324; }
+.grab-seg-status { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; white-space: nowrap; }
+.grab-seg-status.doing { color: #fff; background: #5b8def; }
+.grab-seg-status.done { color: #2e7d32; background: rgba(46, 125, 50, 0.14); }
+.grab-seg-status.err { color: #fff; background: #c0392b; }
+.grab-seg-status.none { color: var(--status-fg); background: rgba(127, 127, 127, 0.16); }
+.grab-seg-status.flag { color: #d98324; background: rgba(217, 131, 36, 0.16); }
 /* Capture step: live preview + controls beside a strip of the pages grabbed so far. */
 .grab-screen-2col { display: flex; gap: 12px; align-items: flex-start; }
 .grab-capture-col { flex: 1 1 auto; min-width: 0; }

@@ -459,7 +459,7 @@ export default function GrabWizard({ onClose }) {
     }
   }
 
-  const newSeg = (image) => ({ id: uid(), image, text: '', layout: null, regions: null, ocrMode: 'default', ocrStatus: null });
+  const newSeg = (image) => ({ id: uid(), image, text: '', layout: null, regions: null, ocrMode: 'default', ocrStatus: null, flagged: false });
 
   function grabOnce() {
     const v = videoRef.current;
@@ -610,23 +610,42 @@ export default function GrabWizard({ onClose }) {
   }
 
   // ── Review actions ──
-  async function recognizeAll() {
+  // Recognize a specific set of pages (by id), serially, marking each one in-progress so the review
+  // list can show exactly which page is being worked on. A successful scan clears that page's re-scan
+  // flag. Shared by "recognize remaining/flagged" and "re-OCR all".
+  async function runOcrOver(ids) {
     if (!ocrSupported()) { setMsg('OCR is not supported in this browser.'); return; }
+    if (!ids.length) { setMsg('Nothing to recognize.'); return; }
     setOcrBusy(true);
     await ocrChainRef.current; // let any in-flight background OCR finish so we never run two at once
-    const list = segmentsRef.current;
-    for (let i = 0; i < list.length; i++) {
-      setMsg(`Recognizing ${i + 1}/${list.length}… (first run downloads the OCR engine)`);
+    for (let i = 0; i < ids.length; i++) {
+      const seg = segmentsRef.current.find((s) => s.id === ids[i]);
+      if (!seg) continue;
+      patchSeg(seg.id, { ocrStatus: 'doing' });
+      setMsg(`Recognizing page ${i + 1} of ${ids.length}… (first run downloads the OCR engine)`);
       try {
-        const { text } = await recognizeImageEx(list[i].image, { regions: segRegions(list[i]), config: segConfig(list[i]), profile: activeProfile });
-        setSegments((arr) => arr.map((s) => (s.id === list[i].id ? { ...s, text, ocrStatus: 'done' } : s)));
+        const { text } = await recognizeImageEx(seg.image, { regions: segRegions(seg), config: segConfig(seg), profile: activeProfile });
+        setSegments((arr) => arr.map((s) => (s.id === seg.id ? { ...s, text, ocrStatus: 'done', flagged: false } : s)));
       } catch (e) {
-        setMsg('OCR error: ' + (e?.message || e));
+        patchSeg(seg.id, { ocrStatus: 'error' });
+        setMsg('OCR error on a page: ' + (e?.message || e));
       }
     }
     setOcrBusy(false);
     setMsg('Recognition complete — review and edit the text, then open it.');
   }
+  // Re-OCR everything (e.g. after changing OCR settings) — overwrites existing text.
+  function recognizeAll() { runOcrOver(segmentsRef.current.map((s) => s.id)); }
+  // Recognize only what needs it: pages with no text yet, pages that errored, and pages flagged for
+  // re-scan. The everyday button — it won't clobber text you've already edited.
+  function recognizeNeeded() {
+    const ids = segmentsRef.current
+      .filter((s) => s.flagged || s.ocrStatus === 'error' || !(s.text || '').trim())
+      .map((s) => s.id);
+    if (!ids.length) { setMsg('Every page is recognized. Flag a page (🚩) to re-scan it.'); return; }
+    runOcrOver(ids);
+  }
+  function toggleFlag(id) { setSegments((arr) => arr.map((s) => (s.id === id ? { ...s, flagged: !s.flagged } : s))); }
 
   function setText(id, text) { setSegments((arr) => arr.map((s) => (s.id === id ? { ...s, text } : s))); }
   function patchSeg(id, patch) { setSegments((arr) => arr.map((s) => (s.id === id ? { ...s, ...patch } : s))); }
@@ -758,6 +777,10 @@ export default function GrabWizard({ onClose }) {
   }
 
   const hasText = segments.some((s) => (s.text || '').trim());
+  const ocrDoneCount = segments.filter((s) => (s.text || '').trim()).length;
+  const flaggedCount = segments.filter((s) => s.flagged).length;
+  const scanningSeg = segments.find((s) => s.ocrStatus === 'doing');
+  const needCount = segments.filter((s) => s.flagged || s.ocrStatus === 'error' || !(s.text || '').trim()).length;
   const voiceSupported = speechRecognitionSupported();
   const editingSeg = editingId ? segments.find((s) => s.id === editingId) : null;
 
@@ -773,7 +796,19 @@ export default function GrabWizard({ onClose }) {
           {segments.length > 0 && step !== 'review' && <button onClick={() => setStep('review')}>Review &amp; OCR ({segments.length}) →</button>}
           {step === 'review' && !editingId && (
             <>
-              <button onClick={recognizeAll} disabled={ocrBusy || !segments.length}>{ocrBusy ? 'Recognizing…' : 'Recognize text (OCR)'}</button>
+              <span className="settings-note" style={{ margin: '0 4px 0 0' }}>
+                {ocrBusy && scanningSeg
+                  ? `⏳ recognizing page ${segments.indexOf(scanningSeg) + 1}/${segments.length}…`
+                  : `${ocrDoneCount}/${segments.length} recognized${flaggedCount ? ` · ${flaggedCount} flagged` : ''}`}
+              </span>
+              <button
+                onClick={recognizeNeeded}
+                disabled={ocrBusy || !needCount}
+                title="Recognize pages with no text yet, pages that errored, and pages flagged for re-scan"
+              >
+                {ocrBusy ? 'Recognizing…' : needCount ? `Recognize ${needCount} page${needCount > 1 ? 's' : ''}` : 'All recognized'}
+              </button>
+              <button onClick={recognizeAll} disabled={ocrBusy || !segments.length} title="Re-OCR every page (overwrites existing text)">Re-OCR all</button>
               <button className="toggle-on" onClick={openInReader} disabled={!hasText}>Open in reader</button>
             </>
           )}
@@ -970,10 +1005,20 @@ export default function GrabWizard({ onClose }) {
 
           {segments.length === 0 && <p>No captures yet. Go back to add some.</p>}
           {segments.map((s, i) => (
-            <div key={s.id} className="grab-seg">
+            <div key={s.id} className={`grab-seg${s.flagged ? ' flagged' : ''}`}>
               <img src={s.image} alt={`capture ${i + 1}`} className="grab-thumb" title="Click to enlarge" onClick={() => setLightbox(s.image)} />
               <div className="grab-seg-main">
                 <div className="grab-seg-ctl">
+                  {s.ocrStatus === 'doing' ? (
+                    <span className="grab-seg-status doing">⏳ scanning…</span>
+                  ) : s.ocrStatus === 'error' ? (
+                    <span className="grab-seg-status err">⚠ failed</span>
+                  ) : (s.text || '').trim() ? (
+                    <span className="grab-seg-status done">✓ recognized</span>
+                  ) : (
+                    <span className="grab-seg-status none">○ not recognized</span>
+                  )}
+                  {s.flagged && <span className="grab-seg-status flag">🚩 re-scan</span>}
                   <label>Layout:
                     <select
                       value={s.regions ? '(custom)' : (s.layout || '(default)')}
@@ -1002,6 +1047,13 @@ export default function GrabWizard({ onClose }) {
               <div className="grab-seg-actions">
                 <button title="Move up" onClick={() => move(i, -1)}>↑</button>
                 <button title="Move down" onClick={() => move(i, 1)}>↓</button>
+                <button
+                  className={s.flagged ? 'toggle-on' : ''}
+                  title={s.flagged ? 'Unflag (cancel re-scan)' : 'Flag this page to re-scan'}
+                  onClick={() => toggleFlag(s.id)}
+                >
+                  🚩
+                </button>
                 <button className="grab-trash" title="Remove" onClick={() => remove(s.id)}>🗑</button>
               </div>
             </div>
