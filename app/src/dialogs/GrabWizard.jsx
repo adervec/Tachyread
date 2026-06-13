@@ -16,6 +16,7 @@ import { recognizeImageEx, ocrSupported, loadImage, glyphCategory } from '../fea
 import { buildGrabbedDoc } from '../document/grab.js';
 import { playGrabClick } from '../features/clickSound.js';
 import { speechRecognitionSupported } from '../features/speechRecognition.js';
+import { saveTextToFile } from '../features/fileSystem.js';
 import { saveGrabbed, allGrabbed, deleteGrabbed, saveGrabSession, allGrabSessions, deleteGrabSession } from '../state/storage.js';
 
 const uid = () => Math.random().toString(36).slice(2);
@@ -647,6 +648,26 @@ export default function GrabWizard({ onClose }) {
   }
   function toggleFlag(id) { setSegments((arr) => arr.map((s) => (s.id === id ? { ...s, flagged: !s.flagged } : s))); }
 
+  // Save the recognized text to an external file. Where supported this opens a native Save dialog
+  // (pick the folder AND the name); otherwise it downloads. Pages are separated by a blank line.
+  function joinText(segs) {
+    return (segs || []).map((s) => (s.text || '').trim()).filter(Boolean).join('\n\n');
+  }
+  async function saveToFile() {
+    const text = joinText(segmentsRef.current);
+    if (!text) { setMsg('No recognized text yet — recognize the pages first.'); return; }
+    const name = `grab-${new Date().toISOString().slice(0, 10)}.txt`;
+    const res = await saveTextToFile(text, name);
+    setMsg(res.canceled ? 'Save canceled.' : `Saved ${res.name}${res.method === 'download' ? ' to your downloads' : ''}.`);
+  }
+  async function saveRecentToFile(r) {
+    const text = joinText(r.segments);
+    if (!text) { setMsg('That saved grab has no recognized text to export.'); return; }
+    const base = (r.name || 'grab').replace(/\.[^.]+$/, '');
+    const res = await saveTextToFile(text, `${base}.txt`);
+    setMsg(res.canceled ? 'Save canceled.' : `Saved ${res.name}${res.method === 'download' ? ' to your downloads' : ''}.`);
+  }
+
   function setText(id, text) { setSegments((arr) => arr.map((s) => (s.id === id ? { ...s, text } : s))); }
   function patchSeg(id, patch) { setSegments((arr) => arr.map((s) => (s.id === id ? { ...s, ...patch } : s))); }
   function remove(id) { setSegments((arr) => arr.filter((s) => s.id !== id)); }
@@ -809,6 +830,7 @@ export default function GrabWizard({ onClose }) {
                 {ocrBusy ? 'Recognizing…' : needCount ? `Recognize ${needCount} page${needCount > 1 ? 's' : ''}` : 'All recognized'}
               </button>
               <button onClick={recognizeAll} disabled={ocrBusy || !segments.length} title="Re-OCR every page (overwrites existing text)">Re-OCR all</button>
+              <button onClick={saveToFile} disabled={!hasText} title="Save the recognized text to a file — pick the name and location">💾 Save to file…</button>
               <button className="toggle-on" onClick={openInReader} disabled={!hasText}>Open in reader</button>
             </>
           )}
@@ -857,6 +879,7 @@ export default function GrabWizard({ onClose }) {
                   <button className="grab-recent-open" onClick={() => openRecent(r)} title="Reopen">
                     📄 {r.name} <span className="settings-note" style={{ margin: 0 }}>· {r.segments?.length || 0} page(s)</span>
                   </button>
+                  <button onClick={() => saveRecentToFile(r)} title="Save this grab's text to a file">💾</button>
                   <button className="grab-trash" onClick={() => removeRecent(r)} title="Delete saved grab">🗑</button>
                 </div>
               ))}
