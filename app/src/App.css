@@ -658,6 +658,12 @@
   text-align: center;
   padding: 32px;
 }
+.empty-logo {
+  width: 132px;
+  height: 132px;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 6px 20px rgba(124, 58, 237, 0.35));
+}
 .empty-state h1 {
   font-size: 32px;
   font-weight: 300;
