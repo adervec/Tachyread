@@ -3,6 +3,9 @@
 .app {
   display: grid;
   grid-template-rows: auto auto 1fr auto auto;
+  /* minmax(0, 1fr): keep the single column from growing to its widest content's
+     min-content (which would let panes overflow the viewport on narrow screens). */
+  grid-template-columns: minmax(0, 1fr);
   height: 100vh;
   background: var(--pane-bg);
   color: var(--menu-fg);
@@ -1436,4 +1439,52 @@
   color: var(--toggle-active-bg);
   font-weight: 600;
   pointer-events: none;
+}
+
+/* ============================================================
+   Responsive — desktop-first, but smooth on tablet & phone.
+   Kept at the end so these overrides win the cascade.
+   ============================================================ */
+
+/* Tablet & down: the menu bar wraps instead of overflowing (its dropdowns are
+   absolutely positioned, so wrapping — not scrolling — keeps them un-clipped),
+   dialogs drop their desktop minimums, and form rows stack label-over-control. */
+@media (max-width: 860px) {
+  .menu-bar { flex-wrap: wrap; }
+  .menu-bar .grow { display: none; }
+  .dialog { min-width: 0; }
+  .dialog-buttons { flex-wrap: wrap; }
+  .field-row { grid-template-columns: 1fr; gap: 3px; margin-bottom: 10px; }
+  .field-row > label { color: var(--menu-fg); }
+  .playback-row { grid-template-columns: 1fr; justify-items: center; gap: 8px; }
+  .controls-bar { padding: 8px 10px; }
+  .grab-screen-2col { flex-direction: column; }
+  .grab-shots-col { flex: 1 1 auto; width: 100%; }
+  .grab-shots { max-height: 36vh; }
+}
+
+/* Phones & portrait tablets: side-by-side panes get cramped — stack them vertically and let the
+   column scroll. The mouse-only resize splitters are hidden. Landscape tablets/laptops keep the
+   side-by-side layout. */
+@media (max-width: 860px) {
+  .main-split { flex-direction: column; overflow-y: auto; overflow-x: hidden; }
+  .main-split > .pane {
+    width: 100% !important;
+    flex: 0 0 auto !important;
+    min-height: 46vh;
+    border-bottom: 1px solid var(--divider);
+  }
+  .main-split > .pane:last-child { border-bottom: none; }
+  .splitter { display: none; }
+  .chapter-heading { flex-wrap: wrap; row-gap: 2px; }
+  .chapter-heading .ch-title { max-width: 100%; }
+}
+
+/* Coarse pointers (touch): roomier hit targets, without changing the desktop look. */
+@media (pointer: coarse) {
+  .menu-bar > .menu-item { padding: 9px 13px; }
+  .menu-dropdown { min-width: 260px; }
+  .menu-dropdown .item { padding: 11px 16px; }
+  .tab-bar .tab { padding: 10px 12px; }
+  button, select, input[type='text'], input[type='number'] { min-height: 32px; }
 }
