@@ -25,6 +25,7 @@ const MENUS = {
     { label: 'Tab Settings...', action: 'tab-settings' },
     { label: 'Statistics...', shortcut: 'Ctrl+T', action: 'stats' },
     { label: 'Regression Report...', action: 'regressions' },
+    { label: 'Attention Check...', action: 'attention' },
     { label: 'Reading History...', shortcut: 'Ctrl+H', action: 'history' },
     { kind: 'separator' },
     { label: 'Proper Names Index...', shortcut: 'Ctrl+I', action: 'proper-names' },

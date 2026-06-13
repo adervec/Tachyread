@@ -36,6 +36,7 @@ import FlowWriterDialog from './dialogs/FlowWriterDialog.jsx';
 import VocabDialog from './dialogs/VocabDialog.jsx';
 import RegressionDialog from './dialogs/RegressionDialog.jsx';
 import DictationDialog from './dialogs/DictationDialog.jsx';
+import AttentionDialog from './dialogs/AttentionDialog.jsx';
 import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan } from './document/toc.js';
@@ -727,6 +728,7 @@ function AppInner() {
     if (action === 'flow-writer') return openDialog({ kind: 'flow-writer' });
     if (action === 'vocab') return openDialog({ kind: 'vocab' });
     if (action === 'regressions' && activeTab) return openDialog({ kind: 'regressions' });
+    if (action === 'attention' && activeTab) return openDialog({ kind: 'attention' });
     if (action === 'dictation') return openDialog({ kind: 'dictation' });
     if (action === 'take-break') return setBreakSignal((n) => n + 1);
     if (action === 'toggle-dark' && activeTab) {
@@ -902,6 +904,9 @@ function AppInner() {
       {dialog?.kind === 'vocab' && <VocabDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'regressions' && activeTab && (
         <RegressionDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
+      )}
+      {dialog?.kind === 'attention' && activeTab && (
+        <AttentionDialog tab={activeTab} recentScores={probeScoresRef.current} onClose={closeDialog} />
       )}
       {dialog?.kind === 'grab' && <GrabWizard onClose={closeDialog} />}
       {dialog?.kind === 'finished' && activeTab && (

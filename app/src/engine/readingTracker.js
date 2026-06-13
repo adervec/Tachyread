@@ -265,6 +265,28 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     regress.length = 0;
   }
 
+  // Regressions whose timestamp falls in the trailing window — a "burst" signal for attention.
+  function recentRegressionCount(windowMs = 20000, now = Date.now()) {
+    const cutoff = now - windowMs;
+    let n = 0;
+    for (let i = regress.length - 1; i >= 0; i--) {
+      if (regress[i].ts < cutoff) break;
+      n++;
+    }
+    return n;
+  }
+
+  // Coefficient of variation (std/mean) of recent per-move active dwell — a pace-instability signal.
+  function recentPaceCv() {
+    const xs = [];
+    for (const e of events) if (e.activeMs > 0) xs.push(e.activeMs);
+    if (xs.length < 3) return 0;
+    const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+    if (mean <= 0) return 0;
+    const variance = xs.reduce((a, b) => a + (b - mean) * (b - mean), 0) / xs.length;
+    return Math.sqrt(variance) / mean;
+  }
+
   return {
     recordMove,
     setHidden,
@@ -273,6 +295,8 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     rangeStats,
     regressionStats,
     resetRegressions,
+    recentRegressionCount,
+    recentPaceCv,
     sessionWpm: () => wpmFrom(sessionNewWords, sessionActiveMs),
     lifetimeWpm: () => wpmFrom(readCount, lifetimeMs),
     coverage: () => (wordCount ? readCount / wordCount : 0),
