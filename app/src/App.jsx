@@ -806,6 +806,7 @@ function AppInner() {
         </div>
       ) : (
         <div className="empty-state">
+          <img className="empty-logo" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="Tachyread — the astral gavage goose" width="132" height="132" />
           <h1>Tachyread</h1>
           <p>Open a file (File → Open TXT, Ctrl+O), open a document (Ctrl+D), or drop a file here.</p>
           <p>Supports .txt, .md, .docx, .pdf, .epub.</p>

@@ -9,7 +9,8 @@ import {
   canvasToDataUrl,
   frameSignature,
   signatureDiff,
-  signatureVariance,
+  signatureBandDiff,
+  signatureBandVariance,
 } from '../features/screenCapture.js';
 import { recognizeImageEx, ocrSupported, loadImage, glyphCategory } from '../features/ocr.js';
 import { buildGrabbedDoc } from '../document/grab.js';
@@ -22,6 +23,8 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const DUP_THRESHOLD = 6;
 const STILL_EPS = 2.5; // frame-to-frame diff below this = the page is holding still (settled)
 const BLANK_STD = 8;   // signature std-dev below this = a blank / near-uniform page
+const BAND_EPS = 11;   // a single row-band changing more than this = a real (often edge-localised) change
+                       // that the global mean would dilute; below it is sub-cell noise (cursor, jitter)
 const VOICE_WORDS = ['GO', 'SHOOT', 'GRAB', 'HUT', 'CAP', 'TAKE'];
 
 // Built-in layout templates: ordered regions OCR'd separately so columns don't interleave.
@@ -214,6 +217,7 @@ export default function GrabWizard({ onClose }) {
   const autoRef = useRef({ running: false });
   const [autoRunning, setAutoRunning] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
+  const [autoOcr, setAutoOcr] = useState(true); // recognize each page in the background the moment it's captured
 
   // Advanced "watch" mode — continuously grab each settled new page; skip blanks/loading screens.
   const [captureMode, setCaptureMode] = useState('timed'); // 'timed' | 'watch'
@@ -252,6 +256,7 @@ export default function GrabWizard({ onClose }) {
   const [textColor, setTextColor] = useState('#111111');
   const [fontHint, setFontHint] = useState('');
   const [editingId, setEditingId] = useState(null);
+  const [lightbox, setLightbox] = useState(null); // image data-URL shown full-screen, or null
   const [recent, setRecent] = useState([]);
   const [ocrProfileId, setOcrProfileId] = useState(null);
   const [editingProfiles, setEditingProfiles] = useState(false);
@@ -277,6 +282,46 @@ export default function GrabWizard({ onClose }) {
     if (seg.ocrMode === 'exempt') return { invert: 'off', contrast: 1 };
     if (seg.ocrMode === 'invert') return { invert: 'on', contrast: Number(ocrContrast) || 1.6 };
     return docConfig();
+  }
+
+  // Live mirrors so the background OCR worker (a long-running async chain) always reads the latest
+  // segments, settings, and toggle rather than the values captured when it was queued.
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
+  const autoOcrRef = useRef(autoOcr);
+  autoOcrRef.current = autoOcr;
+  const ocrParamsRef = useRef(null);
+  ocrParamsRef.current = { segRegions, segConfig, activeProfile };
+  const ocrChainRef = useRef(Promise.resolve()); // serializes background OCR (one page at a time)
+
+  // Recognize one page in the background. Chained so pages OCR one at a time while the user keeps
+  // capturing; result is patched back by id and never clobbers text the user has already edited.
+  function ocrSeg(seg) {
+    ocrChainRef.current = ocrChainRef.current
+      .then(async () => {
+        if (!seg || !ocrSupported()) return;
+        const params = ocrParamsRef.current;
+        patchSeg(seg.id, { ocrStatus: 'doing' });
+        try {
+          const { text } = await recognizeImageEx(seg.image, {
+            regions: params.segRegions(seg),
+            config: params.segConfig(seg),
+            profile: params.activeProfile,
+          });
+          setSegments((arr) => arr.map((s) => (s.id === seg.id ? { ...s, text: s.text || text, ocrStatus: 'done' } : s)));
+        } catch {
+          patchSeg(seg.id, { ocrStatus: 'error' });
+        }
+      })
+      .catch(() => {});
+  }
+
+  // Add a captured page, kicking off background OCR immediately when the option is on.
+  function addSeg(image) {
+    const seg = newSeg(image);
+    setSegments((arr) => [...arr, seg]);
+    if (autoOcrRef.current && ocrSupported()) ocrSeg(seg);
+    return seg;
   }
 
   useEffect(() => {
@@ -414,14 +459,22 @@ export default function GrabWizard({ onClose }) {
     }
   }
 
-  const newSeg = (image) => ({ id: uid(), image, text: '', layout: null, regions: null, ocrMode: 'default' });
+  const newSeg = (image) => ({ id: uid(), image, text: '', layout: null, regions: null, ocrMode: 'default', ocrStatus: null, flagged: false });
 
   function grabOnce() {
     const v = videoRef.current;
     if (!v || !v.videoWidth) return;
     playGrabClick();
-    const url = canvasToDataUrl(captureFrame(v, cropVideoPx()));
-    setSegments((arr) => { setMsg(`Captured ${arr.length + 1} page(s).`); return [...arr, newSeg(url)]; });
+    const canvas = captureFrame(v, cropVideoPx());
+    // If the watcher is running, mark this frame as the last-captured page so it doesn't grab the
+    // same one again a moment later.
+    if (watchRef.current.running) {
+      const sig = frameSignature(canvas);
+      watchRef.current.lastCapSig = sig;
+      watchRef.current.decidedSig = sig;
+    }
+    addSeg(canvasToDataUrl(canvas));
+    setMsg(`Captured ${segmentsRef.current.length + 1} page(s).`);
   }
 
   async function runAuto() {
@@ -436,15 +489,14 @@ export default function GrabWizard({ onClose }) {
       if (!v || !v.videoWidth) break;
       const canvas = captureFrame(v, cropVideoPx());
       const sig = frameSignature(canvas);
-      if (lastSig && signatureDiff(sig, lastSig) < DUP_THRESHOLD) {
+      if (lastSig && signatureDiff(sig, lastSig) < DUP_THRESHOLD && signatureBandDiff(sig, lastSig) < BAND_EPS) {
         consec++;
         setMsg(`Grab ${i + 1}/${count}: duplicate page (${consec} in a row)`);
         if (limit > 0 && consec >= limit) { setMsg(`Auto-finished — ${consec} consecutive duplicates.`); break; }
       } else {
         lastSig = sig; consec = 0; captured++;
         playGrabClick();
-        const url = canvasToDataUrl(canvas);
-        setSegments((arr) => [...arr, newSeg(url)]);
+        addSeg(canvasToDataUrl(canvas));
         setMsg(`Auto-grab: captured ${captured} page(s)… (advance the page now)`);
       }
       if (i < count - 1 && autoRef.current.running) await delay(interval);
@@ -465,7 +517,11 @@ export default function GrabWizard({ onClose }) {
     setMsg('👁 Watching — page through your document; each new page grabs itself.');
     const dwellMs = Math.max(150, (Number(watchDwell) || 0.6) * 1000);
     const POLL = 250;
-    let holdSig = null, holdStart = 0, handled = false, lastCapSig = null;
+    let holdSig = null, holdStart = 0, handled = false;
+    // lastCapSig / decidedSig live on watchRef so a manual "Grab page" during watch can update them
+    // and stop the watcher from re-grabbing that same page.
+    watchRef.current.lastCapSig = null;
+    watchRef.current.decidedSig = null;
     let captured = 0, skipped = 0;
     while (watchRef.current.running) {
       const v = videoRef.current;
@@ -473,21 +529,29 @@ export default function GrabWizard({ onClose }) {
       const canvas = captureFrame(v, cropVideoPx());
       const sig = frameSignature(canvas);
       const now = Date.now();
-      if (!holdSig || signatureDiff(sig, holdSig) > STILL_EPS) {
-        holdSig = sig; holdStart = now; handled = false; // motion / transition — (re)start the settle timer
+      // A transition is whole-frame motion (global diff) OR — once we've already decided on a page —
+      // a strong change in any single row band vs. that decided frame. The band check is what catches
+      // a NEW page whose only difference is text along the top/bottom edge: it barely moves the global
+      // mean, so without it we'd stay stuck on the previous page and never grab the new one.
+      const decidedSig = watchRef.current.decidedSig;
+      const lastCapSig = watchRef.current.lastCapSig;
+      const moved = !holdSig || signatureDiff(sig, holdSig) > STILL_EPS;
+      const newEdge = handled && decidedSig &&
+        (signatureDiff(sig, decidedSig) > STILL_EPS || signatureBandDiff(sig, decidedSig) > BAND_EPS);
+      if (moved || newEdge) {
+        holdSig = sig; holdStart = now; handled = false; // (re)start the settle timer
       } else if (!handled && now - holdStart >= dwellMs) {
-        handled = true; // the page settled — decide once
-        if (signatureVariance(sig) < BLANK_STD) {
+        handled = true; watchRef.current.decidedSig = sig; // the page settled — decide once
+        if (signatureBandVariance(sig) < BLANK_STD) {
           skipped++; setMsg(`👁 Skipped a blank page (${captured} grabbed · ${skipped} skipped).`);
         } else if (skipSigsRef.current.some((s) => signatureDiff(sig, s) < DUP_THRESHOLD)) {
           skipped++; setMsg(`👁 Skipped a loading / ignored screen (${captured} grabbed · ${skipped} skipped).`);
-        } else if (lastCapSig && signatureDiff(sig, lastCapSig) < DUP_THRESHOLD) {
+        } else if (lastCapSig && signatureDiff(sig, lastCapSig) < DUP_THRESHOLD && signatureBandDiff(sig, lastCapSig) < BAND_EPS) {
           /* same page already grabbed — keep watching for the next one */
         } else {
-          lastCapSig = sig; captured++;
+          watchRef.current.lastCapSig = sig; captured++;
           playGrabClick();
-          const url = canvasToDataUrl(canvas);
-          setSegments((arr) => [...arr, newSeg(url)]);
+          addSeg(canvasToDataUrl(canvas));
           setMsg(`👁 Grabbed page ${captured} — advance to the next (${skipped} skipped).`);
         }
       }
@@ -539,29 +603,49 @@ export default function GrabWizard({ onClose }) {
         canvas.height = img.naturalHeight;
         canvas.getContext('2d').drawImage(img, 0, 0);
         URL.revokeObjectURL(url);
-        setSegments((arr) => [...arr, newSeg(canvasToDataUrl(canvas))]);
+        addSeg(canvasToDataUrl(canvas));
       } catch { /* skip bad image */ }
     }
     setStep('review');
   }
 
   // ── Review actions ──
-  async function recognizeAll() {
+  // Recognize a specific set of pages (by id), serially, marking each one in-progress so the review
+  // list can show exactly which page is being worked on. A successful scan clears that page's re-scan
+  // flag. Shared by "recognize remaining/flagged" and "re-OCR all".
+  async function runOcrOver(ids) {
     if (!ocrSupported()) { setMsg('OCR is not supported in this browser.'); return; }
+    if (!ids.length) { setMsg('Nothing to recognize.'); return; }
     setOcrBusy(true);
-    const list = segments;
-    for (let i = 0; i < list.length; i++) {
-      setMsg(`Recognizing ${i + 1}/${list.length}… (first run downloads the OCR engine)`);
+    await ocrChainRef.current; // let any in-flight background OCR finish so we never run two at once
+    for (let i = 0; i < ids.length; i++) {
+      const seg = segmentsRef.current.find((s) => s.id === ids[i]);
+      if (!seg) continue;
+      patchSeg(seg.id, { ocrStatus: 'doing' });
+      setMsg(`Recognizing page ${i + 1} of ${ids.length}… (first run downloads the OCR engine)`);
       try {
-        const { text } = await recognizeImageEx(list[i].image, { regions: segRegions(list[i]), config: segConfig(list[i]), profile: activeProfile });
-        setSegments((arr) => arr.map((s) => (s.id === list[i].id ? { ...s, text } : s)));
+        const { text } = await recognizeImageEx(seg.image, { regions: segRegions(seg), config: segConfig(seg), profile: activeProfile });
+        setSegments((arr) => arr.map((s) => (s.id === seg.id ? { ...s, text, ocrStatus: 'done', flagged: false } : s)));
       } catch (e) {
-        setMsg('OCR error: ' + (e?.message || e));
+        patchSeg(seg.id, { ocrStatus: 'error' });
+        setMsg('OCR error on a page: ' + (e?.message || e));
       }
     }
     setOcrBusy(false);
     setMsg('Recognition complete — review and edit the text, then open it.');
   }
+  // Re-OCR everything (e.g. after changing OCR settings) — overwrites existing text.
+  function recognizeAll() { runOcrOver(segmentsRef.current.map((s) => s.id)); }
+  // Recognize only what needs it: pages with no text yet, pages that errored, and pages flagged for
+  // re-scan. The everyday button — it won't clobber text you've already edited.
+  function recognizeNeeded() {
+    const ids = segmentsRef.current
+      .filter((s) => s.flagged || s.ocrStatus === 'error' || !(s.text || '').trim())
+      .map((s) => s.id);
+    if (!ids.length) { setMsg('Every page is recognized. Flag a page (🚩) to re-scan it.'); return; }
+    runOcrOver(ids);
+  }
+  function toggleFlag(id) { setSegments((arr) => arr.map((s) => (s.id === id ? { ...s, flagged: !s.flagged } : s))); }
 
   function setText(id, text) { setSegments((arr) => arr.map((s) => (s.id === id ? { ...s, text } : s))); }
   function patchSeg(id, patch) { setSegments((arr) => arr.map((s) => (s.id === id ? { ...s, ...patch } : s))); }
@@ -693,6 +777,10 @@ export default function GrabWizard({ onClose }) {
   }
 
   const hasText = segments.some((s) => (s.text || '').trim());
+  const ocrDoneCount = segments.filter((s) => (s.text || '').trim()).length;
+  const flaggedCount = segments.filter((s) => s.flagged).length;
+  const scanningSeg = segments.find((s) => s.ocrStatus === 'doing');
+  const needCount = segments.filter((s) => s.flagged || s.ocrStatus === 'error' || !(s.text || '').trim()).length;
   const voiceSupported = speechRecognitionSupported();
   const editingSeg = editingId ? segments.find((s) => s.id === editingId) : null;
 
@@ -708,7 +796,19 @@ export default function GrabWizard({ onClose }) {
           {segments.length > 0 && step !== 'review' && <button onClick={() => setStep('review')}>Review &amp; OCR ({segments.length}) →</button>}
           {step === 'review' && !editingId && (
             <>
-              <button onClick={recognizeAll} disabled={ocrBusy || !segments.length}>{ocrBusy ? 'Recognizing…' : 'Recognize text (OCR)'}</button>
+              <span className="settings-note" style={{ margin: '0 4px 0 0' }}>
+                {ocrBusy && scanningSeg
+                  ? `⏳ recognizing page ${segments.indexOf(scanningSeg) + 1}/${segments.length}…`
+                  : `${ocrDoneCount}/${segments.length} recognized${flaggedCount ? ` · ${flaggedCount} flagged` : ''}`}
+              </span>
+              <button
+                onClick={recognizeNeeded}
+                disabled={ocrBusy || !needCount}
+                title="Recognize pages with no text yet, pages that errored, and pages flagged for re-scan"
+              >
+                {ocrBusy ? 'Recognizing…' : needCount ? `Recognize ${needCount} page${needCount > 1 ? 's' : ''}` : 'All recognized'}
+              </button>
+              <button onClick={recognizeAll} disabled={ocrBusy || !segments.length} title="Re-OCR every page (overwrites existing text)">Re-OCR all</button>
               <button className="toggle-on" onClick={openInReader} disabled={!hasText}>Open in reader</button>
             </>
           )}
@@ -757,7 +857,7 @@ export default function GrabWizard({ onClose }) {
                   <button className="grab-recent-open" onClick={() => openRecent(r)} title="Reopen">
                     📄 {r.name} <span className="settings-note" style={{ margin: 0 }}>· {r.segments?.length || 0} page(s)</span>
                   </button>
-                  <button onClick={() => removeRecent(r)} title="Delete saved grab">🗑</button>
+                  <button className="grab-trash" onClick={() => removeRecent(r)} title="Delete saved grab">🗑</button>
                 </div>
               ))}
             </div>
@@ -773,8 +873,12 @@ export default function GrabWizard({ onClose }) {
               {crop && <div className="grab-crop" style={{ left: `${crop.fx * 100}%`, top: `${crop.fy * 100}%`, width: `${crop.fw * 100}%`, height: `${crop.fh * 100}%` }} />}
             </div>
             <div className="grab-controls">
-              <button onClick={grabOnce} disabled={autoRunning || watching}>📸 Grab page</button>
+              <button onClick={grabOnce} disabled={autoRunning} title={watching ? 'Force-capture the current frame even while watching' : 'Capture the current frame'}>📸 Grab page</button>
               <button onClick={() => setCrop(null)} disabled={!crop}>Clear region</button>
+              <label className="inline-check" title="Recognize each page in the background the moment it's captured, so the text is ready by the time you finish">
+                <input type="checkbox" checked={autoOcr} onChange={(e) => setAutoOcr(e.target.checked)} />
+                OCR in background
+              </label>
               <span className="grab-sep" />
               <label>Mode:
                 <select value={captureMode} onChange={(e) => setCaptureMode(e.target.value)} disabled={autoRunning || watching}>
@@ -827,13 +931,23 @@ export default function GrabWizard({ onClose }) {
             </div>
           </div>
           <div className="grab-shots-col">
-            <div className="grab-shots-head">{segments.length} captured</div>
+            <div className="grab-shots-head">
+              {segments.length} captured
+              {autoOcr && segments.length > 0 && (
+                <span className="settings-note" style={{ margin: '0 0 0 6px' }}>
+                  · {segments.filter((s) => s.text).length}/{segments.length} OCR&rsquo;d
+                </span>
+              )}
+            </div>
             <div className="grab-shots" ref={shotsRef}>
               {segments.length === 0 && <div className="settings-note">Grabbed pages appear here.</div>}
               {segments.map((s, i) => (
                 <div key={s.id} className="grab-shot">
                   <span className="grab-shot-n">{i + 1}</span>
                   <img src={s.image} alt={`page ${i + 1}`} />
+                  {s.ocrStatus === 'doing' && <span className="grab-shot-ocr" title="Recognizing…">⏳</span>}
+                  {s.ocrStatus === 'done' && s.text && <span className="grab-shot-ocr done" title="Recognized">✓</span>}
+                  {s.ocrStatus === 'error' && <span className="grab-shot-ocr err" title="OCR failed — recognize again on the review step">⚠</span>}
                   <button className="grab-shot-x" onClick={() => remove(s.id)} title="Remove">×</button>
                 </div>
               ))}
@@ -891,10 +1005,20 @@ export default function GrabWizard({ onClose }) {
 
           {segments.length === 0 && <p>No captures yet. Go back to add some.</p>}
           {segments.map((s, i) => (
-            <div key={s.id} className="grab-seg">
-              <img src={s.image} alt={`capture ${i + 1}`} className="grab-thumb" />
+            <div key={s.id} className={`grab-seg${s.flagged ? ' flagged' : ''}`}>
+              <img src={s.image} alt={`capture ${i + 1}`} className="grab-thumb" title="Click to enlarge" onClick={() => setLightbox(s.image)} />
               <div className="grab-seg-main">
                 <div className="grab-seg-ctl">
+                  {s.ocrStatus === 'doing' ? (
+                    <span className="grab-seg-status doing">⏳ scanning…</span>
+                  ) : s.ocrStatus === 'error' ? (
+                    <span className="grab-seg-status err">⚠ failed</span>
+                  ) : (s.text || '').trim() ? (
+                    <span className="grab-seg-status done">✓ recognized</span>
+                  ) : (
+                    <span className="grab-seg-status none">○ not recognized</span>
+                  )}
+                  {s.flagged && <span className="grab-seg-status flag">🚩 re-scan</span>}
                   <label>Layout:
                     <select
                       value={s.regions ? '(custom)' : (s.layout || '(default)')}
@@ -923,7 +1047,14 @@ export default function GrabWizard({ onClose }) {
               <div className="grab-seg-actions">
                 <button title="Move up" onClick={() => move(i, -1)}>↑</button>
                 <button title="Move down" onClick={() => move(i, 1)}>↓</button>
-                <button title="Remove" onClick={() => remove(s.id)}>🗑</button>
+                <button
+                  className={s.flagged ? 'toggle-on' : ''}
+                  title={s.flagged ? 'Unflag (cancel re-scan)' : 'Flag this page to re-scan'}
+                  onClick={() => toggleFlag(s.id)}
+                >
+                  🚩
+                </button>
+                <button className="grab-trash" title="Remove" onClick={() => remove(s.id)}>🗑</button>
               </div>
             </div>
           ))}
@@ -932,6 +1063,12 @@ export default function GrabWizard({ onClose }) {
 
       {editingProfiles && (
         <OcrProfileEditor profiles={ocrProfiles} onSave={saveProfiles} onClose={() => setEditingProfiles(false)} />
+      )}
+
+      {lightbox && (
+        <div className="grab-lightbox" title="Click to close" onClick={(e) => { e.stopPropagation(); setLightbox(null); }}>
+          <img src={lightbox} alt="enlarged page" />
+        </div>
       )}
 
       {confirmClose && (

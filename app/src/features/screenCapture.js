@@ -70,3 +70,39 @@ export function signatureVariance(sig) {
   for (let i = 0; i < sig.length; i++) { const d = sig[i] - mean; v += d * d; }
   return Math.sqrt(v / sig.length);
 }
+
+const SIG_DIM = 16; // frameSignature is SIG_DIM×SIG_DIM, row-major
+
+// Strongest single horizontal-row-band difference between two signatures. signatureDiff() averages
+// over all 256 cells, so a change confined to the top or bottom edge of the region — one of 16 row
+// bands — is diluted ~16× and can slip under the "still"/"duplicate" thresholds. This scores each
+// row band on its own and returns the max, so edge-localised text changes are not missed.
+export function signatureBandDiff(a, b) {
+  if (!a || !b) return Infinity;
+  let max = 0;
+  for (let r = 0; r < SIG_DIM; r++) {
+    let s = 0;
+    for (let c = 0; c < SIG_DIM; c++) { const i = r * SIG_DIM + c; s += Math.abs(a[i] - b[i]); }
+    const band = s / SIG_DIM;
+    if (band > max) max = band;
+  }
+  return max;
+}
+
+// Max horizontal-contrast (std-dev) over the row bands. signatureVariance() takes the std over the
+// whole frame, so a page with text only along the top or bottom edge reads as near-uniform and is
+// wrongly skipped as blank; this stays high if ANY band holds text.
+export function signatureBandVariance(sig) {
+  if (!sig || !sig.length) return 0;
+  let max = 0;
+  for (let r = 0; r < SIG_DIM; r++) {
+    let mean = 0;
+    for (let c = 0; c < SIG_DIM; c++) mean += sig[r * SIG_DIM + c];
+    mean /= SIG_DIM;
+    let v = 0;
+    for (let c = 0; c < SIG_DIM; c++) { const d = sig[r * SIG_DIM + c] - mean; v += d * d; }
+    const std = Math.sqrt(v / SIG_DIM);
+    if (std > max) max = std;
+  }
+  return max;
+}

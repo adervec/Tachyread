@@ -279,10 +279,22 @@
 .grab-controls .grab-sep { flex: 0 0 1px; align-self: stretch; background: var(--divider); width: 1px; margin: 0 2px; }
 .grab-review { display: flex; flex-direction: column; gap: 10px; }
 .grab-seg { display: flex; gap: 10px; align-items: flex-start; border-bottom: 1px solid var(--divider); padding-bottom: 10px; }
-.grab-thumb { width: 120px; height: auto; max-height: 120px; object-fit: contain; border: 1px solid var(--divider); background: #000; }
+.grab-thumb { width: 120px; height: auto; max-height: 120px; object-fit: contain; border: 1px solid var(--divider); background: #000; cursor: zoom-in; }
+.grab-trash { color: #d9534f; }
+.grab-trash:hover { background: rgba(217, 83, 79, 0.15); border-color: #d9534f; }
+/* Click-to-enlarge lightbox for captured pages */
+.grab-lightbox { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.85); display: flex; align-items: center; justify-content: center; padding: 24px; cursor: zoom-out; }
+.grab-lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6); }
 .grab-seg textarea { flex: 1; resize: vertical; font-size: 12px; }
 .grab-seg-actions { display: flex; flex-direction: column; gap: 4px; }
 .grab-seg-actions button { padding: 2px 6px; }
+.grab-seg.flagged { background: rgba(217, 131, 36, 0.08); box-shadow: inset 3px 0 0 #d98324; }
+.grab-seg-status { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; white-space: nowrap; }
+.grab-seg-status.doing { color: #fff; background: #5b8def; }
+.grab-seg-status.done { color: #2e7d32; background: rgba(46, 125, 50, 0.14); }
+.grab-seg-status.err { color: #fff; background: #c0392b; }
+.grab-seg-status.none { color: var(--status-fg); background: rgba(127, 127, 127, 0.16); }
+.grab-seg-status.flag { color: #d98324; background: rgba(217, 131, 36, 0.16); }
 /* Capture step: live preview + controls beside a strip of the pages grabbed so far. */
 .grab-screen-2col { display: flex; gap: 12px; align-items: flex-start; }
 .grab-capture-col { flex: 1 1 auto; min-width: 0; }
@@ -293,6 +305,9 @@
 .grab-shot img { display: block; width: 100%; height: auto; }
 .grab-shot-n { position: absolute; top: 2px; left: 2px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 10px; padding: 0 4px; border-radius: 3px; }
 .grab-shot-x { position: absolute; top: 2px; right: 2px; padding: 0 5px; line-height: 1.4; }
+.grab-shot-ocr { position: absolute; bottom: 2px; right: 2px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 11px; padding: 0 4px; border-radius: 3px; }
+.grab-shot-ocr.done { color: #6ee7a0; }
+.grab-shot-ocr.err { color: #ffb37a; }
 .grab-voice { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider); font-size: 12px; }
 .grab-voice label { display: inline-flex; align-items: center; gap: 4px; }
 /* Review step: doc-wide OCR/layout bar + per-page controls */
@@ -642,6 +657,12 @@
   color: var(--status-fg);
   text-align: center;
   padding: 32px;
+}
+.empty-logo {
+  width: 132px;
+  height: 132px;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 6px 20px rgba(124, 58, 237, 0.35));
 }
 .empty-state h1 {
   font-size: 32px;
