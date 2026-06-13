@@ -38,6 +38,7 @@ import RegressionDialog from './dialogs/RegressionDialog.jsx';
 import DictationDialog from './dialogs/DictationDialog.jsx';
 import AttentionDialog from './dialogs/AttentionDialog.jsx';
 import GammaPrimerDialog from './dialogs/GammaPrimerDialog.jsx';
+import DataDialog from './dialogs/DataDialog.jsx';
 import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan } from './document/toc.js';
@@ -701,6 +702,7 @@ function AppInner() {
     if (action === 'find' && activeTab) return openDialog({ kind: 'find' });
     if (action === 'goto' && activeTab) return openDialog({ kind: 'goto' });
     if (action === 'app-settings') return openDialog({ kind: 'app-settings' });
+    if (action === 'data') return openDialog({ kind: 'data' });
     if (action === 'def-settings') return openDialog({ kind: 'def-settings' });
     if (action === 'tab-settings' && activeTab) return openDialog({ kind: 'tab-settings' });
     if (action === 'reset-tab' && activeTab) {
@@ -878,6 +880,7 @@ function AppInner() {
           onClose={closeDialog}
         />
       )}
+      {dialog?.kind === 'data' && <DataDialog onClose={closeDialog} />}
       {dialog?.kind === 'stats' && (
         <StatisticsDialog tab={activeTab} onClose={closeDialog} />
       )}

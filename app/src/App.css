@@ -406,6 +406,10 @@
 .inline-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--menu-fg); cursor: pointer; }
 .inline-check input { margin: 0; }
 
+/* Backup & data dialog */
+.data-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+.data-json { width: 100%; box-sizing: border-box; font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace); font-size: 11px; line-height: 1.4; resize: vertical; margin-top: 6px; white-space: pre; }
+
 /* Regression Report */
 .reg-cards { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .reg-card { flex: 1 1 110px; background: var(--panel-bg, rgba(127,127,127,0.08)); border: 1px solid var(--divider); border-radius: 8px; padding: 10px 12px; text-align: center; }

@@ -15,6 +15,7 @@ const MENUS = {
     { label: 'Close All Tabs', action: 'close-all' },
     { kind: 'separator' },
     { label: 'Application Settings...', action: 'app-settings' },
+    { label: 'Backup & Data...', action: 'data' },
     { label: 'Default Tab Settings...', action: 'def-settings' },
     { label: 'Reset Tab to Default Settings', action: 'reset-tab' },
     { kind: 'separator' },
