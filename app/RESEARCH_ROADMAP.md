@@ -57,6 +57,11 @@ minigame is QWERTY‑only — extend it:
 - **Webcam gaze‑contingent training (WebGazer.js, fully local)** — the real perceptual‑span paradigm
   (moving window/mask), live regression detection, fixation biofeedback, attention‑gated RSVP. Low accuracy;
   must stay on‑device (fits our privacy stance).
+  - **Not shipped — license blocker.** WebGazer.js is **GPL‑3.0‑or‑later**, which is incompatible with
+    bundling into this MIT app. Rather than relicense or add a copyleft dependency, the gaze *intent*
+    (attention readout / regression feedback) is delivered behaviorally instead — see **Attention Check**
+    (on‑device focus estimate from regression bursts + comprehension + pace) and the **Regression Report**.
+    A future webcam mode would need a permissively‑licensed tracker or a user‑supplied opt‑in script.
 - **Rhythmic auditory pacing / temporal entrainment** — a subtle adaptive beat to entrain cadence. Low risk.
 - **40 Hz "focus primer" (audio/visual)** — gamma stimulation is exciting for brain health and pairs with
   WM/motor gains via tACS, **but** single‑session sensory 40 Hz entrains EEG **without** acute cognitive
