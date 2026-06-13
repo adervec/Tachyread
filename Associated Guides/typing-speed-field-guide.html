@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Typing Speed Field Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,900;1,9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script>document.documentElement.className = "js";</script>
+<style>
+  :root{
+    --bg:#15110d;
+    --bg-2:#1c1712;
+    --panel:#221c16;
+    --panel-2:#2a231b;
+    --ink:#f2e9dc;
+    --ink-soft:#c9bca9;
+    --ink-dim:#8d8174;
+    --line:#3a3127;
+    --amber:#ff8a2b;
+    --amber-deep:#e0670f;
+    --amber-glow:rgba(255,138,43,.16);
+    --good:#7fc98a;
+    --bad:#ef6d6d;
+    --bad-bg:rgba(239,109,109,.18);
+    --cyan:#5bb6cc;
+    --key-top:#332b22;
+    --key-side:#1a140e;
+    --shadow:0 18px 40px -18px rgba(0,0,0,.7);
+    --display:"Fraunces",Georgia,serif;
+    --body:"IBM Plex Sans",system-ui,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,monospace;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{scroll-behavior:smooth;}
+
+  body{
+    font-family:var(--body);
+    background:var(--bg);
+    color:var(--ink);
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+    background-image:
+      radial-gradient(1200px 700px at 78% -10%, rgba(255,138,43,.10), transparent 60%),
+      radial-gradient(900px 600px at -10% 30%, rgba(91,182,204,.06), transparent 55%);
+  }
+  /* grain */
+  body::before{
+    content:"";
+    position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:.05;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::selection{background:var(--amber);color:#1a140e;}
+
+  .wrap{max-width:980px;margin:0 auto;padding:0 24px;}
+
+  /* ---------- HERO ---------- */
+  header.hero{
+    position:relative;
+    padding:96px 0 70px;
+    border-bottom:1px solid var(--line);
+    overflow:hidden;
+  }
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:.72rem;
+    letter-spacing:.42em;
+    text-transform:uppercase;
+    color:var(--amber);
+    margin-bottom:26px;
+    display:flex;align-items:center;gap:14px;
+  }
+  .eyebrow::after{content:"";height:1px;flex:1;background:linear-gradient(90deg,var(--amber),transparent);}
+
+  h1.title{
+    font-family:var(--display);
+    font-weight:900;
+    font-size:clamp(2.9rem,8.5vw,6rem);
+    line-height:.95;
+    letter-spacing:-.02em;
+    margin-bottom:24px;
+  }
+  h1.title em{
+    font-style:italic;
+    font-weight:600;
+    color:var(--amber);
+  }
+  .lede{
+    max-width:60ch;
+    font-size:clamp(1.05rem,2.2vw,1.28rem);
+    color:var(--ink-soft);
+  }
+  .lede strong{color:var(--ink);font-weight:600;}
+
+  /* decorative keycap row */
+  .keycap-row{
+    display:flex;gap:12px;margin-top:46px;flex-wrap:wrap;
+  }
+  .cap{
+    width:62px;height:62px;border-radius:10px;
+    background:linear-gradient(180deg,var(--key-top),#241d15);
+    border:1px solid #443a2d;
+    box-shadow:0 6px 0 var(--key-side),0 10px 16px -6px rgba(0,0,0,.6);
+    display:grid;place-items:center;
+    font-family:var(--mono);font-weight:700;font-size:1.5rem;
+    color:var(--ink);
+    position:relative;
+  }
+  .cap.lit{
+    background:linear-gradient(180deg,#ff9b45,var(--amber-deep));
+    color:#23150a;
+    box-shadow:0 6px 0 #9c4708,0 0 26px var(--amber-glow);
+    border-color:#ffb16b;
+  }
+  .cap small{position:absolute;top:6px;left:8px;font-size:.5rem;opacity:.55;letter-spacing:.08em;}
+
+  /* ---------- SECTIONS ---------- */
+  section{padding:74px 0;border-bottom:1px solid var(--line);}
+  .sec-head{display:flex;align-items:baseline;gap:18px;margin-bottom:34px;}
+  .sec-num{
+    font-family:var(--mono);font-size:.85rem;color:var(--amber);
+    border:1px solid var(--line);border-radius:6px;padding:4px 9px;flex:none;
+    background:var(--panel);
+  }
+  h2{
+    font-family:var(--display);font-weight:600;
+    font-size:clamp(1.7rem,4.4vw,2.6rem);
+    line-height:1.08;letter-spacing:-.01em;
+  }
+  h3{
+    font-family:var(--display);font-weight:600;
+    font-size:1.32rem;margin:30px 0 10px;letter-spacing:-.01em;
+  }
+  p{margin-bottom:16px;color:var(--ink-soft);}
+  p.tight{margin-bottom:8px;}
+  strong{color:var(--ink);}
+  a{color:var(--amber);text-decoration:none;border-bottom:1px solid rgba(255,138,43,.35);}
+  a:hover{border-color:var(--amber);}
+
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+  @media(max-width:680px){.grid-2{grid-template-columns:1fr;}}
+
+  .card{
+    background:linear-gradient(180deg,var(--panel),var(--bg-2));
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:24px 24px 22px;
+    box-shadow:var(--shadow);
+  }
+  .card h3{margin-top:0;}
+  .card .ico{
+    font-family:var(--mono);font-weight:700;color:var(--amber);
+    font-size:.78rem;letter-spacing:.18em;text-transform:uppercase;
+    display:block;margin-bottom:8px;
+  }
+
+  ul.clean{list-style:none;}
+  ul.clean li{
+    position:relative;padding-left:26px;margin-bottom:11px;color:var(--ink-soft);
+  }
+  ul.clean li::before{
+    content:"▸";position:absolute;left:4px;top:0;color:var(--amber);
+  }
+  ul.clean li strong{color:var(--ink);}
+
+  .callout{
+    border-left:3px solid var(--amber);
+    background:var(--amber-glow);
+    padding:16px 20px;border-radius:0 10px 10px 0;margin:24px 0;
+  }
+  .callout p{margin:0;color:var(--ink);}
+  .callout .tag{
+    font-family:var(--mono);font-size:.7rem;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--amber);display:block;margin-bottom:6px;
+  }
+
+  /* ---------- KEYBOARD MAP ---------- */
+  .kb{
+    background:var(--bg-2);border:1px solid var(--line);border-radius:16px;
+    padding:22px 18px;overflow-x:auto;box-shadow:var(--shadow);
+  }
+  .kb-rows{display:flex;flex-direction:column;gap:8px;min-width:560px;}
+  .kb-row{display:flex;gap:8px;justify-content:center;}
+  .k{
+    height:46px;min-width:46px;flex:1;border-radius:8px;
+    display:grid;place-items:center;
+    font-family:var(--mono);font-size:.92rem;font-weight:500;
+    color:var(--ink);
+    border:1px solid rgba(255,255,255,.06);
+    box-shadow:0 4px 0 rgba(0,0,0,.45);
+    background:var(--key-top);
+  }
+  .k.wide{flex:2.4;}
+  .k.space{flex:7;}
+  .k.home::after{content:"";position:absolute;}
+  .k.home{position:relative;}
+  .k.home::before{
+    content:"";position:absolute;bottom:7px;left:50%;transform:translateX(-50%);
+    width:14px;height:2px;border-radius:2px;background:rgba(255,255,255,.5);
+  }
+  /* finger colors */
+  .f-lp{background:rgba(224,96,126,.30);}
+  .f-lr{background:rgba(232,160,78,.30);}
+  .f-lm{background:rgba(217,203,90,.30);}
+  .f-li{background:rgba(127,201,138,.30);}
+  .f-ri{background:rgba(91,182,204,.30);}
+  .f-rm{background:rgba(108,142,224,.30);}
+  .f-rr{background:rgba(168,127,214,.30);}
+  .f-rp{background:rgba(215,127,192,.30);}
+  .f-th{background:rgba(150,138,124,.28);}
+
+  .legend{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:18px;font-family:var(--mono);font-size:.74rem;}
+  .legend span{display:flex;align-items:center;gap:7px;color:var(--ink-soft);}
+  .sw{width:13px;height:13px;border-radius:3px;display:inline-block;}
+
+  /* ---------- TABLES ---------- */
+  .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;}
+  table{width:100%;border-collapse:collapse;font-size:.95rem;min-width:480px;}
+  th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--line);}
+  th{
+    font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--amber);background:var(--panel);font-weight:700;
+  }
+  td{color:var(--ink-soft);}
+  td strong{color:var(--ink);}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:rgba(255,255,255,.02);}
+
+  /* ---------- TYPING TEST ---------- */
+  .test{
+    background:linear-gradient(180deg,var(--panel),var(--bg-2));
+    border:1px solid var(--line);border-radius:18px;
+    padding:26px;box-shadow:var(--shadow);position:relative;
+  }
+  .test-bar{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:center;margin-bottom:18px;}
+  .stats{display:flex;gap:10px;flex-wrap:wrap;}
+  .stat{
+    background:var(--bg-2);border:1px solid var(--line);border-radius:10px;
+    padding:8px 14px;min-width:78px;text-align:center;
+  }
+  .stat .v{font-family:var(--mono);font-weight:700;font-size:1.35rem;color:var(--ink);line-height:1.1;}
+  .stat .v.hl{color:var(--amber);}
+  .stat .l{font-family:var(--mono);font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-dim);}
+
+  .passage{
+    font-family:var(--mono);font-size:1.18rem;line-height:2;letter-spacing:.01em;
+    padding:18px 20px;border-radius:12px;background:var(--bg);
+    border:1px solid var(--line);cursor:text;user-select:none;
+    transition:border-color .2s;
+  }
+  .passage.active{border-color:var(--amber);box-shadow:0 0 0 3px var(--amber-glow);}
+  .passage .ch{color:var(--ink-dim);position:relative;border-radius:2px;transition:color .05s;}
+  .passage .ch.correct{color:var(--good);}
+  .passage .ch.wrong{color:var(--bad);background:var(--bad-bg);}
+  .passage .ch.wrong.space{background:var(--bad-bg);}
+  .passage .ch.current{
+    color:var(--ink);
+  }
+  .passage .ch.current::before{
+    content:"";position:absolute;left:-1px;top:6%;height:88%;width:2px;
+    background:var(--amber);border-radius:2px;animation:blink 1s steps(2,start) infinite;
+  }
+  @keyframes blink{50%{opacity:0;}}
+
+  .hidden-input{position:absolute;opacity:0;left:-9999px;width:1px;height:1px;}
+
+  .test-actions{display:flex;gap:12px;margin-top:18px;flex-wrap:wrap;}
+  .btn{
+    font-family:var(--mono);font-weight:700;font-size:.82rem;letter-spacing:.06em;
+    padding:11px 20px;border-radius:10px;cursor:pointer;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--ink);transition:all .18s;
+  }
+  .btn:hover{border-color:var(--amber);color:var(--amber);}
+  .btn.primary{background:linear-gradient(180deg,#ff9b45,var(--amber-deep));color:#23150a;border-color:#ffb16b;}
+  .btn.primary:hover{filter:brightness(1.06);color:#23150a;}
+
+  .hint-line{font-family:var(--mono);font-size:.78rem;color:var(--ink-dim);margin-top:14px;}
+  .result-msg{
+    font-family:var(--mono);font-size:.9rem;margin-top:16px;color:var(--good);
+    min-height:1.2em;
+  }
+
+  /* ---------- CHECKLIST ---------- */
+  .checklist{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;}
+  @media(max-width:680px){.checklist{grid-template-columns:1fr;}}
+  .checklist label{
+    display:flex;gap:11px;align-items:flex-start;cursor:pointer;
+    padding:8px 0;color:var(--ink-soft);font-size:.97rem;
+  }
+  .checklist input{
+    appearance:none;width:20px;height:20px;flex:none;margin-top:2px;
+    border:1.5px solid var(--line);border-radius:5px;background:var(--bg-2);
+    cursor:pointer;transition:all .15s;position:relative;
+  }
+  .checklist input:checked{background:var(--amber);border-color:var(--amber);}
+  .checklist input:checked::after{
+    content:"✓";position:absolute;inset:0;display:grid;place-items:center;
+    color:#23150a;font-weight:800;font-size:.85rem;
+  }
+  .checklist input:checked + span{color:var(--ink-dim);text-decoration:line-through;}
+
+  /* footer */
+  footer{padding:46px 0 70px;text-align:center;}
+  footer p{font-family:var(--mono);font-size:.78rem;color:var(--ink-dim);}
+
+  /* reveal animation */
+  .js .reveal{opacity:0;transform:translateY(22px);}
+  .reveal.in{opacity:1;transform:none;transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1);}
+
+  .js .hero-stagger > *{opacity:0;transform:translateY(18px);animation:rise .8s cubic-bezier(.2,.7,.2,1) forwards;}
+  .hero-stagger > *:nth-child(1){animation-delay:.05s;}
+  .hero-stagger > *:nth-child(2){animation-delay:.18s;}
+  .hero-stagger > *:nth-child(3){animation-delay:.31s;}
+  .hero-stagger > *:nth-child(4){animation-delay:.44s;}
+  @keyframes rise{to{opacity:1;transform:none;}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap hero-stagger">
+    <div class="eyebrow">Field Guide &nbsp;//&nbsp; Touch Typing &amp; Speed</div>
+    <h1 class="title">Type at the<br>speed of <em>thought.</em></h1>
+    <p class="lede"><strong>Speed is a byproduct of good technique, not the goal you chase directly.</strong> This guide walks you from finger placement to a structured practice plan — and includes a live typing test so you can measure where you stand right now.</p>
+    <div class="keycap-row" aria-hidden="true">
+      <div class="cap lit"><small>Q</small>T</div>
+      <div class="cap"><small>W</small>Y</div>
+      <div class="cap"><small>E</small>P</div>
+      <div class="cap lit"><small>R</small>E</div>
+      <div class="cap" style="flex:1;min-width:110px;font-size:1rem;letter-spacing:.2em;">SPACE</div>
+    </div>
+  </div>
+</header>
+
+<!-- 01 FOUNDATION -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head"><span class="sec-num">01</span><h2>The foundation: touch typing</h2></div>
+    <p>Fast typing rests on one principle: <strong>your fingers know where the keys are, so your eyes never leave the screen.</strong> This is touch typing. Hunt-and-peck typists plateau around 30–40 WPM because every glance down breaks rhythm and concentration. Touch typists routinely double that.</p>
+
+    <h3>The home row is your anchor</h3>
+    <p>Rest your left fingers on <strong>A S D F</strong> and your right fingers on <strong>J K L ;</strong>. The small bumps on <strong>F</strong> and <strong>J</strong> let you re-find this position without looking. Every other key is reached <em>relative</em> to home row — and your fingers always return home after each stroke.</p>
+
+    <div class="kb" role="img" aria-label="QWERTY keyboard color-coded by which finger types each key">
+      <div class="kb-rows">
+        <div class="kb-row">
+          <div class="k f-lp">`</div><div class="k f-lp">1</div><div class="k f-lr">2</div><div class="k f-lm">3</div><div class="k f-li">4</div><div class="k f-li">5</div><div class="k f-ri">6</div><div class="k f-ri">7</div><div class="k f-rm">8</div><div class="k f-rr">9</div><div class="k f-rp">0</div><div class="k f-rp">-</div><div class="k f-rp">=</div>
+        </div>
+        <div class="kb-row">
+          <div class="k f-lp wide">Tab</div><div class="k f-lp">Q</div><div class="k f-lr">W</div><div class="k f-lm">E</div><div class="k f-li">R</div><div class="k f-li">T</div><div class="k f-ri">Y</div><div class="k f-ri">U</div><div class="k f-rm">I</div><div class="k f-rr">O</div><div class="k f-rp">P</div><div class="k f-rp">[</div><div class="k f-rp">]</div>
+        </div>
+        <div class="kb-row">
+          <div class="k f-lp wide">Caps</div><div class="k f-lp home">A</div><div class="k f-lr home">S</div><div class="k f-lm home">D</div><div class="k f-li home">F</div><div class="k f-li">G</div><div class="k f-ri">H</div><div class="k f-ri home">J</div><div class="k f-rm home">K</div><div class="k f-rr home">L</div><div class="k f-rp home">;</div><div class="k f-rp">'</div>
+        </div>
+        <div class="kb-row">
+          <div class="k f-lp wide">Shift</div><div class="k f-lp">Z</div><div class="k f-lr">X</div><div class="k f-lm">C</div><div class="k f-li">V</div><div class="k f-li">B</div><div class="k f-ri">N</div><div class="k f-ri">M</div><div class="k f-rm">,</div><div class="k f-rr">.</div><div class="k f-rp">/</div><div class="k f-rp wide">Shift</div>
+        </div>
+        <div class="kb-row">
+          <div class="k f-lp" style="flex:1.5;">Ctrl</div><div class="k f-th" style="flex:1.2;">Alt</div><div class="k f-th space">Space (thumb)</div><div class="k f-th" style="flex:1.2;">Alt</div><div class="k f-rp" style="flex:1.5;">Ctrl</div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i class="sw" style="background:#e0607e"></i>L pinky</span>
+        <span><i class="sw" style="background:#e8a04e"></i>L ring</span>
+        <span><i class="sw" style="background:#d9cb5a"></i>L middle</span>
+        <span><i class="sw" style="background:#7fc98a"></i>L index</span>
+        <span><i class="sw" style="background:#5bb6cc"></i>R index</span>
+        <span><i class="sw" style="background:#6c8ee0"></i>R middle</span>
+        <span><i class="sw" style="background:#a87fd6"></i>R ring</span>
+        <span><i class="sw" style="background:#d77fc0"></i>R pinky</span>
+        <span><i class="sw" style="background:#968a7c"></i>Thumb</span>
+      </div>
+    </div>
+    <p class="hint-line" style="margin-top:16px;">The two keys with an underline (F and J) carry the tactile bumps — your index fingers live there.</p>
+  </div>
+</section>
+
+<!-- 02 ERGONOMICS -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head"><span class="sec-num">02</span><h2>Posture &amp; ergonomics</h2></div>
+    <p>You can't sustain speed from a cramped position, and poor form invites repetitive strain injury. Set your body up before you set your fingers loose.</p>
+    <div class="grid-2">
+      <div class="card">
+        <span class="ico">Body</span>
+        <h3>From the chair up</h3>
+        <ul class="clean">
+          <li><strong>Feet flat</strong> on the floor, thighs roughly parallel to the ground.</li>
+          <li><strong>Elbows at ~90°</strong>, close to your sides — not splayed out.</li>
+          <li><strong>Wrists straight and floating</strong>, not bent up or resting hard on the desk while striking keys.</li>
+          <li><strong>Shoulders relaxed</strong>; you are not bracing for impact.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="ico">Setup</span>
+        <h3>The gear around you</h3>
+        <ul class="clean">
+          <li><strong>Monitor at eye level</strong>, about an arm's length away, so you're not craning down.</li>
+          <li><strong>Keyboard flat or slightly negative-tilted.</strong> Those little flip-out feet that raise the back? Most ergonomists say leave them down.</li>
+          <li><strong>Light touch.</strong> Strike keys, don't pound them. Bottoming-out hard is slower and harsher on joints.</li>
+          <li><strong>Micro-breaks:</strong> look away and stretch your hands every 20–30 minutes.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout">
+      <span class="tag">Rule of thumb</span>
+      <p>If your hands hurt, stop. Fatigue and pain destroy form long before they destroy speed. Comfortable beats fast every single time.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 03 METHOD -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head"><span class="sec-num">03</span><h2>The method: accuracy first</h2></div>
+    <p>This is the part most people get wrong. They try to type <em>fast</em>, make errors, backspace constantly, and never actually get faster. <strong>Backspacing is the real speed killer</strong> — every correction costs you the time to notice, the time to delete, and the time to retype.</p>
+
+    <h3>The core training loop</h3>
+    <ul class="clean">
+      <li><strong>Slow down until you're accurate.</strong> Find the speed where you make almost no mistakes, then live there.</li>
+      <li><strong>Hold ~97% accuracy.</strong> Only when you can sustain that do you let speed creep up. Speed follows accuracy automatically; it does not work the other way around.</li>
+      <li><strong>Type in rhythm, not bursts.</strong> A steady, even cadence beats frantic sprints followed by error-recovery. Aim for smooth, metronomic flow.</li>
+      <li><strong>Never look down.</strong> If you don't know a key, glance, then force yourself to find it by feel next time. Cover your hands if you must.</li>
+      <li><strong>Use all ten fingers, always.</strong> Even if a "two-finger shortcut" feels faster today, it caps your ceiling. Commit to correct fingering even while it's slower.</li>
+    </ul>
+
+    <div class="callout">
+      <span class="tag">The mantra</span>
+      <p>Slow is smooth, and smooth is fast. Build the correct movement first; the speed is the reward for getting the movement right.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 04 DRILLS -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Targeted drills</h2></div>
+    <p>General typing helps, but <strong>deliberate practice on your weak spots</strong> helps far more. Drill the specific things your fingers fumble.</p>
+    <div class="grid-2">
+      <div class="card">
+        <span class="ico">Drill 01</span>
+        <h3>Home-row locking</h3>
+        <p class="tight">Type the home keys until they're automatic, returning fingers home each time:</p>
+        <p style="font-family:var(--mono);color:var(--ink);font-size:.95rem;">asdf jkl; asdf jkl; fjdk sla; jfkd ls;a</p>
+      </div>
+      <div class="card">
+        <span class="ico">Drill 02</span>
+        <h3>Reach &amp; return</h3>
+        <p class="tight">Practice the up/down reaches without drifting off home:</p>
+        <p style="font-family:var(--mono);color:var(--ink);font-size:.95rem;">ftf gtg jyj huh ded kik frf juj cdc m,m</p>
+      </div>
+      <div class="card">
+        <span class="ico">Drill 03</span>
+        <h3>Common bigrams</h3>
+        <p class="tight">The letter-pairs English uses most. Make these one fluid motion:</p>
+        <p style="font-family:var(--mono);color:var(--ink);font-size:.95rem;">th he in er an re on at en nd ti es or te</p>
+      </div>
+      <div class="card">
+        <span class="ico">Drill 04</span>
+        <h3>Weak-finger focus</h3>
+        <p class="tight">Pinkies and ring fingers lag for almost everyone. Hammer them:</p>
+        <p style="font-family:var(--mono);color:var(--ink);font-size:.95rem;">qaz wsx pl; oki que was zap pop lax saw</p>
+      </div>
+      <div class="card">
+        <span class="ico">Drill 05</span>
+        <h3>Numbers &amp; symbols</h3>
+        <p class="tight">The top row and shifted symbols are most people's blind spot:</p>
+        <p style="font-family:var(--mono);color:var(--ink);font-size:.95rem;">1q2w 9o0p $5 &amp;7 (8) #3 user@mail.com 50%</p>
+      </div>
+      <div class="card">
+        <span class="ico">Drill 06</span>
+        <h3>Capitalization &amp; flow</h3>
+        <p class="tight">Use the <em>opposite-hand</em> shift, then keep moving:</p>
+        <p style="font-family:var(--mono);color:var(--ink);font-size:.95rem;">The Quick Fox. Anna And Ben. New York City.</p>
+      </div>
+    </div>
+    <div class="callout">
+      <span class="tag">How to drill</span>
+      <p>Pick one drill per session. Run it slowly and perfectly for 3–5 minutes before doing anything else. Identify the keys you keep missing, and make those tomorrow's drill.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 05 LIVE TEST -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head"><span class="sec-num">05</span><h2>Live typing test</h2></div>
+    <p>Click the passage and start typing. The timer begins on your first keystroke and stops when you finish the passage. Correct characters turn <span style="color:var(--good)">green</span>, mistakes turn <span style="color:var(--bad)">red</span>.</p>
+
+    <div class="test">
+      <div class="test-bar">
+        <div class="stats">
+          <div class="stat"><div class="v hl" id="s-net">0</div><div class="l">Net WPM</div></div>
+          <div class="stat"><div class="v" id="s-gross">0</div><div class="l">Gross WPM</div></div>
+          <div class="stat"><div class="v" id="s-acc">100<span style="font-size:.9rem">%</span></div><div class="l">Accuracy</div></div>
+          <div class="stat"><div class="v" id="s-time">0.0<span style="font-size:.9rem">s</span></div><div class="l">Time</div></div>
+        </div>
+      </div>
+
+      <div class="passage" id="passage" tabindex="0" aria-label="Typing test passage — click and type"></div>
+      <input class="hidden-input" id="typer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-hidden="true">
+
+      <div class="test-actions">
+        <button class="btn primary" id="btn-restart">↻ Restart</button>
+        <button class="btn" id="btn-new">⇄ New passage</button>
+      </div>
+      <div class="result-msg" id="result"></div>
+      <div class="hint-line">Tip: don't fix every typo mid-test in real life — but here, accuracy is scored on what you leave behind. Type cleanly.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 06 SCHEDULE -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head"><span class="sec-num">06</span><h2>A four-week practice plan</h2></div>
+    <p><strong>15–20 focused minutes a day beats two unfocused hours on the weekend.</strong> Consistency rewires muscle memory; cramming doesn't. Here's a progression you can repeat:</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Week</th><th>Focus</th><th>Daily session (~15–20 min)</th><th>Goal</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>1</strong></td><td>Placement</td><td>5 min home-row drills · 10 min slow accurate sentences, eyes up</td><td>Stop looking down. Lock home row.</td></tr>
+          <tr><td><strong>2</strong></td><td>Coverage</td><td>5 min reach drills (top/bottom rows) · 10 min full-paragraph practice</td><td>Hit every letter by feel at ~97% accuracy.</td></tr>
+          <tr><td><strong>3</strong></td><td>Fluency</td><td>5 min bigram/weak-finger drills · 10 min real text (articles, emails)</td><td>Smooth rhythm; numbers &amp; punctuation included.</td></tr>
+          <tr><td><strong>4</strong></td><td>Speed</td><td>3 min warm-up · timed tests, nudging pace up while accuracy holds</td><td>Let speed rise without errors climbing.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <span class="tag">Then loop</span>
+      <p>Re-run the cycle, each time starting from a higher baseline. Most people see a noticeable jump within 2–4 weeks of daily practice. Plateaus are normal — push through with targeted drills on your weakest keys.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 07 MILESTONES -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head"><span class="sec-num">07</span><h2>Measuring progress</h2></div>
+    <div class="grid-2" style="margin-bottom:26px;">
+      <div class="card">
+        <span class="ico">Formula</span>
+        <h3>How WPM works</h3>
+        <p class="tight">A "word" is standardized as <strong>5 characters</strong> (including spaces), so "keyboard " counts the same regardless of the actual word.</p>
+        <p style="font-family:var(--mono);font-size:.86rem;color:var(--ink);background:var(--bg);padding:12px 14px;border-radius:8px;border:1px solid var(--line);">Gross WPM = (characters ÷ 5) ÷ minutes</p>
+        <p class="tight" style="margin-top:12px;"><strong>Net WPM</strong> subtracts your uncorrected errors — it's the number that actually matters, because it rewards accuracy.</p>
+      </div>
+      <div class="card">
+        <span class="ico">Target</span>
+        <h3>Accuracy is king</h3>
+        <p class="tight">A blazing 90 WPM at 88% accuracy is often <em>slower in practice</em> than 70 WPM at 99%, once you account for fixing mistakes.</p>
+        <ul class="clean" style="margin-top:8px;">
+          <li><strong>Aim for 97%+</strong> accuracy as your floor.</li>
+          <li>Track <strong>net WPM</strong>, not gross, over time.</li>
+          <li>Test on <strong>real text</strong>, not just easy drills.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Tier</th><th>Net WPM</th><th>What it feels like</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Beginner</strong></td><td>10–30</td><td>Hunt-and-peck, frequent glances at the keyboard.</td></tr>
+          <tr><td><strong>Average</strong></td><td>~40</td><td>The typical adult typist. Functional, not fluid.</td></tr>
+          <tr><td><strong>Proficient</strong></td><td>50–65</td><td>Comfortable touch typing; eyes stay on screen.</td></tr>
+          <tr><td><strong>Fast</strong></td><td>70–90</td><td>Typing keeps pace with thinking. Professional grade.</td></tr>
+          <tr><td><strong>Advanced</strong></td><td>90–110</td><td>Top tier of office workers; rare and noticeable.</td></tr>
+          <tr><td><strong>Exceptional</strong></td><td>110–150+</td><td>Competitive territory. Years of dedicated practice.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 08 MISTAKES -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head"><span class="sec-num">08</span><h2>Common mistakes &amp; fixes</h2></div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>✗ Looking at the keyboard</h3>
+        <p style="margin:0;"><strong>Fix:</strong> Cover your hands with a cloth, or use a keyboard with blank keycaps for practice. Force the recall.</p>
+      </div>
+      <div class="card">
+        <h3>✗ Chasing speed too early</h3>
+        <p style="margin:0;"><strong>Fix:</strong> Drop your pace until errors nearly vanish. Speed is a result, not an input.</p>
+      </div>
+      <div class="card">
+        <h3>✗ Wrong fingers (cheating)</h3>
+        <p style="margin:0;"><strong>Fix:</strong> Commit to the standard finger map even when it's slower. Bad habits cap your ceiling permanently.</p>
+      </div>
+      <div class="card">
+        <h3>✗ Resting wrists while striking</h3>
+        <p style="margin:0;"><strong>Fix:</strong> Float your hands. Wrist rests are for pauses, not for typing.</p>
+      </div>
+      <div class="card">
+        <h3>✗ Tension &amp; pounding keys</h3>
+        <p style="margin:0;"><strong>Fix:</strong> Relax shoulders and hands; use a light, quick touch. Tension is slow and tiring.</p>
+      </div>
+      <div class="card">
+        <h3>✗ Practicing inconsistently</h3>
+        <p style="margin:0;"><strong>Fix:</strong> Short daily reps. 15 minutes a day beats sporadic marathons every time.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 09 CHECKLIST -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head"><span class="sec-num">09</span><h2>Daily session checklist</h2></div>
+    <p>Run through this each time you sit down to practice. (Boxes are interactive — tick them off.)</p>
+    <div class="card">
+      <div class="checklist">
+        <label><input type="checkbox"><span>Posture set: feet flat, elbows ~90°, wrists straight</span></label>
+        <label><input type="checkbox"><span>Fingers resting on home row (F &amp; J bumps found)</span></label>
+        <label><input type="checkbox"><span>Eyes on the screen — hands covered if needed</span></label>
+        <label><input type="checkbox"><span>Warm-up drill done (3–5 min, slow &amp; perfect)</span></label>
+        <label><input type="checkbox"><span>Practiced at accuracy-first pace (~97%+)</span></label>
+        <label><input type="checkbox"><span>Drilled today's weakest keys specifically</span></label>
+        <label><input type="checkbox"><span>Typed some real text, not only drills</span></label>
+        <label><input type="checkbox"><span>Took micro-breaks; no pain or strain</span></label>
+        <label><input type="checkbox"><span>Logged a timed test to track net WPM</span></label>
+        <label><input type="checkbox"><span>Noted tomorrow's focus before stopping</span></label>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 10 RESOURCES -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head"><span class="sec-num">10</span><h2>Tools to practice with</h2></div>
+    <p>Pair this guide with a dedicated trainer that gives instant feedback. Look for ones that:</p>
+    <ul class="clean">
+      <li><strong>Report accuracy and net WPM</strong>, highlight your error-prone keys, and adapt drills to your weaknesses.</li>
+      <li><strong>Offer lessons for beginners</strong> (structured home-row → full-keyboard progressions) if you're starting fresh.</li>
+      <li><strong>Use real words and sentences</strong>, not just random letters, so your practice transfers to real writing.</li>
+      <li><strong>Make it fun</strong> — typing games and short timed tests keep daily practice from feeling like a chore.</li>
+    </ul>
+    <p>Popular free options worth a search include browser-based typing tutors and typing games; many also have an "analysis" mode that shows which keys slow you down most. The trainer matters less than showing up daily — pick one and stick with it.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Slow is smooth · smooth is fast · accuracy before speed</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- scroll reveal ---------- */
+  var revealEls = document.querySelectorAll(".reveal");
+  if ("IntersectionObserver" in window){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){ e.target.classList.add("in"); io.unobserve(e.target); }
+      });
+    }, {threshold:0.12});
+    revealEls.forEach(function(el){ io.observe(el); });
+  } else {
+    revealEls.forEach(function(el){ el.classList.add("in"); });
+  }
+
+  /* ---------- typing test ---------- */
+  var passages = [
+    "The quick brown fox jumps over the lazy dog while the morning sun rises slowly above the quiet hills.",
+    "Practice does not make perfect; practice makes permanent, so it is worth slowing down to get the motion right.",
+    "Good typists do not look at their hands. They trust their fingers to find each key by feel, one stroke at a time.",
+    "Speed is a byproduct of accuracy. Build smooth, even rhythm first, and the words per minute will rise on their own.",
+    "A small bump rests on the F and J keys. Place your index fingers there, and the whole keyboard unfolds around them."
+  ];
+
+  var passageEl = document.getElementById("passage");
+  var input = document.getElementById("typer");
+  var sNet = document.getElementById("s-net");
+  var sGross = document.getElementById("s-gross");
+  var sAcc = document.getElementById("s-acc");
+  var sTime = document.getElementById("s-time");
+  var resultEl = document.getElementById("result");
+  var btnRestart = document.getElementById("btn-restart");
+  var btnNew = document.getElementById("btn-new");
+
+  var current = passages[0];
+  var pIndex = 0;
+  var startTime = null;
+  var finished = false;
+  var tick = null;
+
+  function render(passage){
+    passageEl.innerHTML = "";
+    for (var i = 0; i < passage.length; i++){
+      var span = document.createElement("span");
+      span.className = "ch";
+      var c = passage[i];
+      span.textContent = (c === " ") ? "\u00A0" : c;
+      if (c === " ") span.classList.add("space");
+      passageEl.appendChild(span);
+    }
+    markCurrent(0);
+  }
+
+  function chars(){ return passageEl.querySelectorAll(".ch"); }
+
+  function markCurrent(pos){
+    var cs = chars();
+    for (var i = 0; i < cs.length; i++) cs[i].classList.remove("current");
+    if (pos < cs.length) cs[pos].classList.add("current");
+  }
+
+  function loadPassage(p){
+    current = p;
+    startTime = null;
+    finished = false;
+    if (tick){ clearInterval(tick); tick = null; }
+    input.value = "";
+    resultEl.textContent = "";
+    resultEl.style.color = "var(--good)";
+    sNet.textContent = "0";
+    sGross.textContent = "0";
+    sAcc.innerHTML = "100<span style='font-size:.9rem'>%</span>";
+    sTime.innerHTML = "0.0<span style='font-size:.9rem'>s</span>";
+    render(current);
+    passageEl.classList.remove("active");
+  }
+
+  function liveTimer(){
+    if (!startTime || finished) return;
+    var s = (Date.now() - startTime) / 1000;
+    sTime.innerHTML = s.toFixed(1) + "<span style='font-size:.9rem'>s</span>";
+    // live gross estimate
+    var typed = input.value.length;
+    var mins = s / 60;
+    if (mins > 0){
+      var gross = Math.round((typed / 5) / mins);
+      sGross.textContent = isFinite(gross) ? gross : 0;
+    }
+  }
+
+  function compute(){
+    var typed = input.value;
+    var cs = chars();
+    var correct = 0;
+    var n = Math.min(typed.length, current.length);
+
+    for (var i = 0; i < cs.length; i++){
+      cs[i].classList.remove("correct","wrong");
+    }
+    for (var j = 0; j < n; j++){
+      if (typed[j] === current[j]){ cs[j].classList.add("correct"); correct++; }
+      else { cs[j].classList.add("wrong"); }
+    }
+    markCurrent(typed.length);
+
+    var acc = typed.length ? Math.round((correct / typed.length) * 100) : 100;
+    sAcc.innerHTML = acc + "<span style='font-size:.9rem'>%</span>";
+
+    // completion
+    if (typed.length >= current.length){
+      finish(correct);
+    }
+  }
+
+  function finish(correct){
+    finished = true;
+    if (tick){ clearInterval(tick); tick = null; }
+    var secs = (Date.now() - startTime) / 1000;
+    if (secs <= 0) secs = 0.01;
+    var mins = secs / 60;
+    var typed = input.value.length;
+    var errors = typed - correct;
+
+    var gross = (typed / 5) / mins;
+    var net = ((typed / 5) - errors) / mins;
+    if (net < 0) net = 0;
+    var acc = typed ? Math.round((correct / typed) * 100) : 0;
+
+    sTime.innerHTML = secs.toFixed(1) + "<span style='font-size:.9rem'>s</span>";
+    sGross.textContent = Math.round(gross);
+    sNet.textContent = Math.round(net);
+    sAcc.innerHTML = acc + "<span style='font-size:.9rem'>%</span>";
+
+    var net2 = Math.round(net);
+    var msg;
+    if (acc < 90) msg = "Slow down — accuracy under 90% means you're going too fast. Smooth beats quick.";
+    else if (net2 >= 90) msg = "Outstanding. That's professional-to-advanced territory.";
+    else if (net2 >= 70) msg = "Fast — your typing is keeping pace with your thinking.";
+    else if (net2 >= 50) msg = "Solid, proficient touch typing. Keep nudging the pace up.";
+    else if (net2 >= 40) msg = "Right around average. Daily drills will push this up quickly.";
+    else msg = "A starting point — focus on home row and accuracy, and watch this climb.";
+    resultEl.style.color = acc < 90 ? "var(--bad)" : "var(--good)";
+    resultEl.textContent = "✓ " + net2 + " net WPM · " + acc + "% accuracy — " + msg;
+  }
+
+  function focusInput(){ input.focus(); }
+
+  passageEl.addEventListener("click", focusInput);
+  passageEl.addEventListener("focus", focusInput);
+
+  input.addEventListener("focus", function(){ passageEl.classList.add("active"); });
+  input.addEventListener("blur", function(){ passageEl.classList.remove("active"); });
+
+  input.addEventListener("input", function(){
+    if (finished){ return; }
+    if (!startTime){
+      startTime = Date.now();
+      tick = setInterval(liveTimer, 100);
+    }
+    compute();
+  });
+
+  btnRestart.addEventListener("click", function(){
+    loadPassage(current);
+    focusInput();
+  });
+
+  btnNew.addEventListener("click", function(){
+    pIndex = (pIndex + 1) % passages.length;
+    loadPassage(passages[pIndex]);
+    focusInput();
+  });
+
+  // init
+  loadPassage(passages[0]);
+})();
+</script>
+</body>
+</html>

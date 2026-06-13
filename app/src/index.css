@@ -1,0 +1,168 @@
+/* Theme variables and global resets. Two themes: light (default), dark (.theme-dark). */
+
+:root, .theme-light {
+  color-scheme: light;
+  --menu-fg: #111111;
+  --menu-bg: #fafafa;
+  --menu-highlight: #e8e8e8;
+  --btn-bg: #ffffff;
+  --btn-fg: #333333;
+  --btn-border: #d0d0d0;
+  --btn-hover: #f0f0f0;
+  --btn-pressed: #e0e0e0;
+  --toggle-active-bg: #1565c0;
+  --toggle-active-fg: #ffffff;
+  --input-bg: #ffffff;
+  --input-fg: #333333;
+  --input-border: #d0d0d0;
+  --track-bg: #e0e0e0;
+  --thumb-bg: #bbbbbb;
+  --line-number-fg: #cccccc;
+  --line-unread-fg: #444444;
+  --line-read-fg: #aaaaaa;
+  --session-read-fg: #1565c0;
+  --nav-session-read-fg: #2e7d32;
+  --current-line-bg: #fff9c4;
+  --current-line-fg: #111111;
+  --current-para-bg: #fffdf0;
+  --line-selection-accent: #338fcc;
+  --line-selection-bg: rgba(51, 143, 204, 0.16);
+  --pane-bg: #ffffff;
+  --rsvp-bg: #ffffff;
+  --rsvp-fg: #1a1a1a;
+  --orp-fg: #c62828;
+  --guide-red: #ef5350;
+  --guide-pink: #ec407a;
+  --guide-orange: #fb8c00;
+  --guide-green: #43a047;
+  --guide-blue: #1e88e5;
+  --guide-purple: #8e24aa;
+  --status-bg: #f0f0f0;
+  --status-fg: #999999;
+  --controls-bg: #f5f5f5;
+  --divider: #e0e0e0;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --toc-entry-fg: #1565c0;
+  --toc-entry-bg: rgba(238, 243, 253, 0.6);
+}
+
+.theme-dark {
+  color-scheme: dark;
+  --menu-fg: #e8e8e8;
+  --menu-bg: #1e1e1e;
+  --menu-highlight: #2d2d2d;
+  --btn-bg: #2a2a2a;
+  --btn-fg: #d8d8d8;
+  --btn-border: #404040;
+  --btn-hover: #3a3a3a;
+  --btn-pressed: #1a1a1a;
+  --toggle-active-bg: #64b5f6;
+  --toggle-active-fg: #0d1117;
+  --input-bg: #1a1a1a;
+  --input-fg: #d8d8d8;
+  --input-border: #404040;
+  --track-bg: #2a2a2a;
+  --thumb-bg: #555555;
+  --line-number-fg: #555555;
+  --line-unread-fg: #d8d8d8;
+  --line-read-fg: #6a6a6a;
+  --session-read-fg: #64b5f6;
+  --nav-session-read-fg: #81c784;
+  --current-line-bg: #3a3520;
+  --current-line-fg: #fff9c4;
+  --current-para-bg: #2a2a1f;
+  --line-selection-accent: #64b5f6;
+  --line-selection-bg: rgba(100, 181, 246, 0.16);
+  --pane-bg: #161616;
+  --rsvp-bg: #0f0f0f;
+  --rsvp-fg: #f5f5f5;
+  --orp-fg: #ff7676;
+  --status-bg: #1a1a1a;
+  --status-fg: #777777;
+  --controls-bg: #1a1a1a;
+  --divider: #303030;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --toc-entry-fg: #64b5f6;
+  --toc-entry-bg: rgba(40, 60, 100, 0.3);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  background: var(--pane-bg);
+  color: var(--menu-fg);
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+button {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: 1px solid var(--btn-border);
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+button:hover:not(:disabled) { background: var(--btn-hover); }
+button:active:not(:disabled) { background: var(--btn-pressed); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.toggle-on {
+  background: var(--toggle-active-bg);
+  color: var(--toggle-active-fg);
+  border-color: var(--toggle-active-bg);
+}
+
+input[type=text], input[type=number], input[type=search], textarea, select {
+  background: var(--input-bg);
+  color: var(--input-fg);
+  border: 1px solid var(--input-border);
+  padding: 4px 6px;
+}
+
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  height: 18px;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  height: 3px;
+  background: var(--track-bg);
+  border-radius: 1.5px;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  background: var(--thumb-bg);
+  border-radius: 50%;
+  margin-top: -4.5px;
+  cursor: pointer;
+}
+input[type=range]:hover::-webkit-slider-thumb { background: var(--toggle-active-bg); }
+input[type=range]::-moz-range-track {
+  height: 3px;
+  background: var(--track-bg);
+  border-radius: 1.5px;
+}
+input[type=range]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: var(--thumb-bg);
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--track-bg); }
+::-webkit-scrollbar-thumb { background: var(--thumb-bg); border-radius: 3px; }

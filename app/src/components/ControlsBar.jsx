@@ -1,0 +1,181 @@
+import { useEffect, useRef } from 'react';
+import { useApp } from '../state/AppContext.jsx';
+import Trendline from './Trendline.jsx';
+import TocBar from './TocBar.jsx';
+import { goalFraction, computeGoalStatus } from '../engine/goals.js';
+
+function formatTime(secs) {
+  if (!isFinite(secs) || secs < 0) return '--:--:--';
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = Math.floor(secs % 60);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onRestart, playing, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon }) {
+  const { patchSettings } = useApp();
+  const { doc, settings } = tab;
+  const idx = settings.wordIndex;
+  const totalWords = doc.words.length;
+  // Coverage = fraction of the book actually read (not just the furthest position reached).
+  const coverage = tab.tracker ? tab.tracker.coverage() * 100 : 0;
+  // ETA from measured pace (recent → session → set WPM fallback) rather than the setpoint.
+  const effWpm = (tab.tracker && (tab.tracker.recentWpm() || tab.tracker.sessionWpm())) || settings.wpm;
+  const remainingWords = Math.max(0, totalWords - idx);
+  const secs = effWpm > 0 ? (remainingWords / effWpm) * 60 : 0;
+
+  const atEnd = totalWords > 0 && idx >= totalWords - 1;
+
+  return (
+    <div className="controls-bar">
+      <div className="progress-row">
+        <Trendline tab={tab} onJumpWord={onJumpWord} />
+        <div className="progress-meta">
+          {idx + 1} / {totalWords}
+        </div>
+        <div className="progress-meta" title="Percent of the book actually read">📖 {coverage.toFixed(1)}%</div>
+        <div className="progress-meta" title="Estimated time remaining at your measured pace">⏱ {formatTime(secs)}</div>
+        {atEnd && (
+          <button className="finish-btn" title="Mark this book finished and review your stats" onClick={onConfirmFinished}>
+            ✓ Confirm finished
+          </button>
+        )}
+      </div>
+
+      <TocBar tab={tab} onIconClick={onTocIcon} />
+
+      <div className="playback-row">
+        <div className="wpm-block">
+          <label>WPM</label>
+          <input
+            type="range"
+            min={60}
+            max={1500}
+            step={10}
+            value={settings.wpm}
+            onChange={(e) => patchSettings(tab.id, { wpm: Number(e.target.value) })}
+            style={{ width: 130 }}
+          />
+          <span className="wpm-value">{settings.wpm}</span>
+          <select
+            value={settings.speedUnit || 'Words'}
+            onChange={(e) => patchSettings(tab.id, { speedUnit: e.target.value })}
+            title="Speed unit"
+          >
+            <option>Words</option>
+            <option>Letters</option>
+            <option>Syllables</option>
+          </select>
+        </div>
+
+        <div className="playback-buttons">
+          <button className="ctrl-btn" title="Restart (Home)" onClick={onRestart}>|&lt;</button>
+          <button className="ctrl-btn" title="Previous paragraph (Ctrl+Up)" onClick={onPrevPara}>⇈</button>
+          <button className="ctrl-btn" title="Previous line (Up)" onClick={onPrevLine}>↑</button>
+          <button className="ctrl-btn" title="Previous word (Left)" onClick={onPrevWord}>&lt;</button>
+          <button className="play-btn" title="Play / Pause (Space)" onClick={onPlayPause}>
+            {playing ? '❚❚' : '▶'}
+          </button>
+          <button className="ctrl-btn" title="Next word (Right)" onClick={onNextWord}>&gt;</button>
+          <button className="ctrl-btn" title="Next line (Down)" onClick={onNextLine}>↓</button>
+          <button className="ctrl-btn" title="Next paragraph (Ctrl+Down)" onClick={onNextPara}>⇊</button>
+        </div>
+
+        <div className="mode-block">
+          <div className="mode-pair">
+            <span>READ</span>
+            <button
+              className={readAloud ? 'toggle-on' : ''}
+              onClick={onToggleReadAloud}
+              title="Read aloud: speak from the current position and advance in sync (Play to start)"
+            >
+              {readAloud ? 'On' : 'Off'}
+            </button>
+          </div>
+          <div className="mode-pair">
+            <span>AUDIO</span>
+            <button className={audioCtrl ? 'toggle-on' : ''} onClick={onToggleAudioCtrl} title="Voice / clap commands">{audioCtrl ? 'On' : 'Off'}</button>
+          </div>
+          <div className="mode-pair">
+            <span>ADAPT</span>
+            <button
+              className={tab.settings.adaptivePace ? 'toggle-on' : ''}
+              onClick={() => patchSettings(tab.id, { adaptivePace: !tab.settings.adaptivePace })}
+              title="Adaptive pace: periodic comprehension checks raise or lower your WPM automatically"
+            >
+              {tab.settings.adaptivePace ? 'On' : 'Off'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <GoalRow tab={tab} onGoalComplete={onGoalComplete} goalKills={goalKills} />
+    </div>
+  );
+}
+
+function GoalRow({ tab, onGoalComplete, goalKills }) {
+  const { patchSettings } = useApp();
+  const goal = tab.settings.goal || { type: 'None', value: '' };
+  const status = computeGoalStatus(tab, goal);
+  const frac = goalFraction(tab, goal);
+  const complete = frac != null && frac >= 1;
+  const goalKey = goal && goal.type !== 'None' ? `${goal.type}:${goal.value}:${goal.baseline || 0}` : null;
+  const loggedKey = useRef(null);
+
+  // Log a completed goal to the session killfeed exactly once per distinct goal.
+  useEffect(() => {
+    if (complete && goalKey && loggedKey.current !== goalKey) {
+      loggedKey.current = goalKey;
+      onGoalComplete?.(`${goal.type} ${goal.value}`);
+    }
+  }, [complete, goalKey, goal.type, goal.value, onGoalComplete]);
+
+  return (
+    <>
+      <div className="goal-row">
+        <span>GOAL</span>
+        <select
+          value={goal.type}
+          onChange={(e) =>
+            patchSettings(tab.id, {
+              goal: { ...goal, type: e.target.value, baseline: e.target.value.startsWith('Relative') ? tab.settings.wordIndex : 0 },
+            })
+          }
+        >
+          <option>None</option>
+          <option value="Section">Section (set via TOC)</option>
+          <option>AbsoluteWords</option>
+          <option>AbsoluteLines</option>
+          <option>AbsolutePercent</option>
+          <option>RelativeWords</option>
+          <option>RelativeLines</option>
+          <option>RelativePercent</option>
+          <option>ActiveTime</option>
+        </select>
+        <input
+          type="text"
+          value={goal.value ?? ''}
+          onChange={(e) => patchSettings(tab.id, { goal: { ...goal, value: e.target.value } })}
+          placeholder="Goal value"
+        />
+        <button onClick={() => patchSettings(tab.id, { goal: { ...goal, set: true, baseline: tab.settings.wordIndex } })}>Set</button>
+        <button onClick={() => patchSettings(tab.id, { goal: null })}>Clear</button>
+        {frac != null && (
+          <div className="goal-bar" title={status}>
+            <div className={`goal-fill${complete ? ' goal-fill-done' : ''}`} style={{ width: `${Math.max(0, Math.min(1, frac)) * 100}%` }} />
+          </div>
+        )}
+        <span className="goal-status">{status}</span>
+      </div>
+      {goalKills && goalKills.length > 0 && (
+        <div className="goal-killfeed" title="Goals completed this session">
+          <span className="goal-kf-label">🏁 Completed:</span>
+          {goalKills.map((k, i) => (
+            <span key={i} className="goal-kf-item">✓ {k.label} <span className="goal-kf-ts">{k.time}</span></span>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
