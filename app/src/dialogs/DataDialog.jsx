@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { useApp } from '../state/AppContext.jsx';
 import { exportAllData, exportSummary, importAllData } from '../state/storage.js';
 import { saveBlobToFile, pickFile, readFileText } from '../features/fileSystem.js';
+import { SYNC_PROVIDERS, getSyncProvider } from '../features/sync/syncProviders.js';
+import { backupToProvider, restoreFromProvider } from '../features/sync/syncManager.js';
 
 // Backup & data — export everything (settings, library, reading progress, grabbed pages, typing
 // history, audiobook clips) to a single JSON file you control, and restore it on any device. Two
@@ -14,6 +17,38 @@ export default function DataDialog({ onClose }) {
   const [exportInfo, setExportInfo] = useState(null);
   const [importText, setImportText] = useState('');
   const [pending, setPending] = useState(null); // staged import summary awaiting confirm
+
+  const { state, updateGlobal } = useApp();
+  const sync = { provider: 'localFolder', driveClientId: '', lastSync: 0, ...(state.global.sync || {}) };
+  function patchSync(p) { updateGlobal({ sync: { ...sync, ...p } }); }
+  const provider = getSyncProvider(sync.provider);
+  const providerOk = provider && provider.supported() && (provider.available(sync) === true);
+  const providerReason = provider && provider.available(sync);
+
+  async function cloudBackup() {
+    setBusy(true);
+    setMsg('Backing up to your sync target…');
+    try {
+      const r = await backupToProvider(sync.provider, sync);
+      patchSync({ lastSync: r.at });
+      setMsg(`Backed up to ${provider.label} (${Math.round(r.bytes / 1024)} KB).`);
+    } catch (e) {
+      setMsg('Sync backup failed: ' + (e?.message || e));
+    }
+    setBusy(false);
+  }
+  async function cloudRestore() {
+    setBusy(true);
+    setMsg('Restoring from your sync target…');
+    try {
+      const r = await restoreFromProvider(sync.provider, sync);
+      setMsg(`Restored ${r.written} records — reloading…`);
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (e) {
+      setBusy(false);
+      setMsg('Sync restore failed: ' + (e?.message || e));
+    }
+  }
 
   async function doExport() {
     setBusy(true);
@@ -124,6 +159,60 @@ export default function DataDialog({ onClose }) {
         onChange={(e) => { setImportText(e.target.value); setPending(null); }}
         rows={5}
       />
+
+      <div className="field-section">Cloud sync (beta)</div>
+      <p className="settings-note">
+        Sync the same backup to a folder or to Google Drive — useful across devices. Easiest with no
+        accounts: pick a <strong>local folder</strong> that your Google Drive / Dropbox / OneDrive
+        desktop app already syncs.
+      </p>
+      <div className="field-row">
+        <label>Sync target</label>
+        <div>
+          <select value={sync.provider} onChange={(e) => patchSync({ provider: e.target.value })}>
+            {SYNC_PROVIDERS.map((p) => (
+              <option key={p.id} value={p.id} disabled={!p.supported()}>
+                {p.label}{p.supported() ? '' : ' — unsupported here'}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      {sync.provider === 'googleDrive' && (
+        <>
+          <div className="field-row">
+            <label>Google OAuth client ID</label>
+            <div>
+              <input
+                type="text"
+                value={sync.driveClientId}
+                onChange={(e) => patchSync({ driveClientId: e.target.value.trim() })}
+                placeholder="xxxxx.apps.googleusercontent.com"
+                style={{ width: '100%' }}
+              />
+            </div>
+          </div>
+          <p className="settings-note">
+            Drive needs your own OAuth client ID (kept on this device). In Google Cloud Console: create
+            an <em>OAuth client ID → Web application</em>, add this app's origin to the authorized
+            JavaScript origins, enable the <em>Drive API</em>, and paste the client ID above. Backups
+            go to a private app-data folder — only this app can see them.
+          </p>
+        </>
+      )}
+      <div className="data-row">
+        <button className="toggle-on" onClick={cloudBackup} disabled={busy || !providerOk}>☁ Back up now</button>
+        <button onClick={cloudRestore} disabled={busy || !providerOk}>⬇ Restore from sync</button>
+        {!providerOk && providerReason && providerReason.reason && (
+          <span className="settings-note" style={{ margin: 0 }}>{providerReason.reason}</span>
+        )}
+        {!providerOk && provider && !provider.supported() && (
+          <span className="settings-note" style={{ margin: 0 }}>Needs a Chromium browser.</span>
+        )}
+        {sync.lastSync > 0 && (
+          <span className="settings-note" style={{ margin: 0 }}>Last sync: {new Date(sync.lastSync).toLocaleString()}</span>
+        )}
+      </div>
     </Dialog>
   );
 }

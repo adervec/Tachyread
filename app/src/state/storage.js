@@ -5,7 +5,7 @@ import { openDB } from 'idb';
 import { defaultGlobalSettings } from './settings.js';
 
 const DB_NAME = 'Tachyread';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 let _dbPromise = null;
 
@@ -50,6 +50,11 @@ function getDB() {
         // Detailed typing-practice history (separate from reading): one record per completed run
         // { id, ts, netWpm, grossWpm, accuracy, chars, errors, words, durationMs, docName, errorKeys }
         db.createObjectStore('typingRuns', { keyPath: 'id', autoIncrement: true });
+      }
+      if (!db.objectStoreNames.contains('fsHandles')) {
+        // File System Access handles (e.g. the chosen sync folder). Structured-cloneable but NOT
+        // JSON, so this store is deliberately kept OUT of export/import. key string → handle.
+        db.createObjectStore('fsHandles');
       }
     },
   });
@@ -347,4 +352,15 @@ export async function importAllData(bundle, { replace = true } = {}) {
     }
   } catch { /* storage unavailable */ }
   return { written };
+}
+
+// File System Access handles (sync folder, etc.). Kept out of export (not JSON-serializable).
+export async function getFsHandle(key) {
+  const db = await getDB();
+  return (await db.get('fsHandles', key)) || null;
+}
+export async function setFsHandle(key, handle) {
+  const db = await getDB();
+  if (handle == null) await db.delete('fsHandles', key);
+  else await db.put('fsHandles', handle, key);
 }
