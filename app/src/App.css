@@ -293,6 +293,9 @@
 .grab-shot img { display: block; width: 100%; height: auto; }
 .grab-shot-n { position: absolute; top: 2px; left: 2px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 10px; padding: 0 4px; border-radius: 3px; }
 .grab-shot-x { position: absolute; top: 2px; right: 2px; padding: 0 5px; line-height: 1.4; }
+.grab-shot-ocr { position: absolute; bottom: 2px; right: 2px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 11px; padding: 0 4px; border-radius: 3px; }
+.grab-shot-ocr.done { color: #6ee7a0; }
+.grab-shot-ocr.err { color: #ffb37a; }
 .grab-voice { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider); font-size: 12px; }
 .grab-voice label { display: inline-flex; align-items: center; gap: 4px; }
 /* Review step: doc-wide OCR/layout bar + per-page controls */
