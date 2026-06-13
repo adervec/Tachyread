@@ -100,5 +100,7 @@ export function defaultGlobalSettings() {
     vocabDeck: [], // spaced-repetition cards: { word, context, addedAt, reps, interval, ease, due, lastGrade }
     // Comfort & calibration: 20-20-20 eye-rest microbreaks + fatigue-aware speed easing.
     comfort: { enabled: true, breakIntervalMin: 20, microbreakSec: 20, autoBackoff: true },
+    // 40 Hz auditory focus primer (experimental, opt-in) — last-used config.
+    gammaPrimer: { carrierHz: 220, volume: 0.15, durationSec: 60 },
   };
 }

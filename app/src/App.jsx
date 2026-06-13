@@ -37,6 +37,7 @@ import VocabDialog from './dialogs/VocabDialog.jsx';
 import RegressionDialog from './dialogs/RegressionDialog.jsx';
 import DictationDialog from './dialogs/DictationDialog.jsx';
 import AttentionDialog from './dialogs/AttentionDialog.jsx';
+import GammaPrimerDialog from './dialogs/GammaPrimerDialog.jsx';
 import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan } from './document/toc.js';
@@ -730,6 +731,7 @@ function AppInner() {
     if (action === 'regressions' && activeTab) return openDialog({ kind: 'regressions' });
     if (action === 'attention' && activeTab) return openDialog({ kind: 'attention' });
     if (action === 'dictation') return openDialog({ kind: 'dictation' });
+    if (action === 'gamma') return openDialog({ kind: 'gamma' });
     if (action === 'take-break') return setBreakSignal((n) => n + 1);
     if (action === 'toggle-dark' && activeTab) {
       patchSettings(activeTab.id, { darkMode: !activeTab.settings.darkMode });
@@ -901,6 +903,7 @@ function AppInner() {
       {dialog?.kind === 'span-drill' && <SpanDrillDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'flow-writer' && <FlowWriterDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'dictation' && <DictationDialog onClose={closeDialog} />}
+      {dialog?.kind === 'gamma' && <GammaPrimerDialog onClose={closeDialog} />}
       {dialog?.kind === 'vocab' && <VocabDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'regressions' && activeTab && (
         <RegressionDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />

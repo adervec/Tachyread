@@ -436,6 +436,11 @@
 .att-fill { display: block; height: 100%; background: #c0392b; }
 .att-detail { color: var(--status-fg); text-align: right; font-variant-numeric: tabular-nums; }
 
+/* 40 Hz focus primer (experimental) */
+.gamma-warn { background: rgba(192, 57, 43, 0.12); border: 1px solid rgba(192, 57, 43, 0.5); border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.5; margin-bottom: 12px; }
+.gamma-run { display: flex; align-items: center; gap: 16px; padding: 8px 0; }
+.gamma-count { font-size: 40px; font-weight: 800; color: var(--accent, #5b8def); font-variant-numeric: tabular-nums; }
+
 /* Span drill */
 .span-drill { min-width: 440px; }
 .sd-stats { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text3, #888); margin-bottom: 10px; }
