@@ -124,7 +124,8 @@ export default function DictationDialog({ onClose }) {
 
       <p className="settings-note" style={{ marginTop: 6 }}>
         Net WPM counts words over active (recording) time, pauses included — the honest output rate.
-        Speech recognition runs in your browser; this app never uploads audio.
+        Recognition uses your browser&rsquo;s Web Speech API — in Chrome and Edge the audio is sent to
+        the browser maker&rsquo;s servers to transcribe; this app itself uploads nothing.
       </p>
     </Dialog>
   );

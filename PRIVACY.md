@@ -26,7 +26,7 @@ These run **only when you choose to use them**:
 | Feature | API | What leaves your device |
 |---|---|---|
 | Clap control, audiobook recording | `getUserMedia` (microphone) | Audio is processed locally; recordings are stored locally in IndexedDB. |
-| Voice commands, speaking minigame, voice "grab" | `webkitSpeechRecognition` | **In Chrome, captured audio is sent to Google's speech-recognition servers** for transcription. Microsoft Edge may use a cloud service too. This is the **browser's** behavior, outside this app's control. If you don't want audio leaving your device, don't use voice features. |
+| Voice commands, speaking minigame, dictation, voice "grab" | `webkitSpeechRecognition` | **In Chrome, captured audio is sent to Google's speech-recognition servers** for transcription. Microsoft Edge may use a cloud service too. This is the **browser's** behavior, outside this app's control. If you don't want audio leaving your device, don't use voice features. |
 | Text-to-speech (read aloud, TTS reader) | `speechSynthesis` | Uses your OS/browser voices; **some browsers use cloud voices**. |
 | Grab Text | `getDisplayMedia` (screen capture) | You pick a window/screen to share; frames are processed locally for OCR. |
 | OCR | tesseract.js | On first use, downloads the OCR engine (WASM) and English data (`eng.traineddata`) from a **public CDN** (e.g. jsDelivr/unpkg). That request exposes your IP/timing to the CDN like any web download. The OCR itself runs locally in your browser. |
