@@ -26,6 +26,11 @@ function makeTab(doc, settings, tracker) {
   };
 }
 
+// On phones / portrait tablets the panes stack, so opening with several is a long scroll. Start
+// compact screens with just the reader + lines; the rest are one tap away in the menu bar. Evaluated
+// at load (these view toggles aren't persisted), so a reload picks the right default after a resize.
+const compactStart = typeof window !== 'undefined' && window.innerWidth <= 860;
+
 const init = {
   global: defaultGlobalSettings(),
   tabs: [],
@@ -34,7 +39,7 @@ const init = {
   dialog: null, // {kind, props}
   showRsvp: true,
   showToc: false,
-  showDash: true,
+  showDash: !compactStart,
   showSource: false,
   showIndex: false,
   hideMode: 'None',
