@@ -10,7 +10,11 @@ export default function Dialog({ title, onClose, children, buttons, width = 520,
   }, [onClose, dismissable]);
   return (
     <div className="dialog-backdrop" onClick={dismissable ? onClose : undefined}>
-      <div className="dialog" style={{ width }} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="dialog"
+        style={{ width: typeof width === 'number' ? `min(${width}px, 96vw)` : width }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="dialog-title">
           <span>{title}</span>
           <button className="close-x" onClick={onClose}>×</button>

@@ -31,6 +31,8 @@ These run **only when you choose to use them**:
 | Grab Text | `getDisplayMedia` (screen capture) | You pick a window/screen to share; frames are processed locally for OCR. |
 | OCR | tesseract.js | On first use, downloads the OCR engine (WASM) and English data (`eng.traineddata`) from a **public CDN** (e.g. jsDelivr/unpkg). That request exposes your IP/timing to the CDN like any web download. The OCR itself runs locally in your browser. |
 | Right-click word menu → "Translate (Google)", "Dictionary/Thesaurus (Merriam-Webster)" | Opens a new browser tab | The selected **word** is sent to that third-party site (Google / Merriam-Webster) when you click. Their privacy policies apply. |
+| Backup & sync → Local folder | File System Access (`showDirectoryPicker`) | You pick a folder; the JSON backup is written there. Stays on your device (unless **you** chose a folder that your own Drive/Dropbox app syncs). |
+| Backup & sync → Google Drive | Google Identity Services + Drive API | **Only if you enable it with your own OAuth client ID.** Loads Google's sign-in script, signs you in, and uploads the backup to a **private app-data folder in your Drive**. Your browser talks directly to your Drive — nothing passes through any server of this app. Google's privacy policy applies. |
 
 ## Self-hosting
 

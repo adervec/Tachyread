@@ -5,7 +5,7 @@ import { openDB } from 'idb';
 import { defaultGlobalSettings } from './settings.js';
 
 const DB_NAME = 'Tachyread';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 let _dbPromise = null;
 
@@ -50,6 +50,11 @@ function getDB() {
         // Detailed typing-practice history (separate from reading): one record per completed run
         // { id, ts, netWpm, grossWpm, accuracy, chars, errors, words, durationMs, docName, errorKeys }
         db.createObjectStore('typingRuns', { keyPath: 'id', autoIncrement: true });
+      }
+      if (!db.objectStoreNames.contains('fsHandles')) {
+        // File System Access handles (e.g. the chosen sync folder). Structured-cloneable but NOT
+        // JSON, so this store is deliberately kept OUT of export/import. key string → handle.
+        db.createObjectStore('fsHandles');
       }
     },
   });
@@ -239,4 +244,123 @@ export async function exportDatabase() {
   const db = await getDB();
   const out = { files: await db.getAll('files'), global: await db.get('global', 'settings') };
   return JSON.stringify(out, null, 2);
+}
+
+// ── Full data export / import (local backup, and the unit the sync layer pushes) ──────────────
+// Every store, plus the tachyread-* localStorage keys (minus the volatile instance lock). Binary
+// values (audiobook clips, doc sources) are base64-tagged so the whole thing is plain JSON.
+
+// [storeName, inlineKey?] — inline stores carry their key in the record (keyPath); the rest are
+// out-of-line and exported as {key,value} pairs.
+const ALL_STORES = [
+  ['files', true], ['global', false], ['audiobook', false], ['audiobookManifest', false],
+  ['readstate', false], ['grabbed', true], ['docs', true], ['grabSessions', true], ['typingRuns', true],
+];
+
+function bufToB64(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+  return btoa(bin);
+}
+function b64ToBuf(b64) {
+  const bin = atob(b64 || '');
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+async function packValue(v) {
+  if (v == null) return v;
+  if (v instanceof Blob) return { __bin: 'blob', mime: v.type, b64: bufToB64(await v.arrayBuffer()) };
+  if (v instanceof ArrayBuffer) return { __bin: 'ab', b64: bufToB64(v) };
+  if (ArrayBuffer.isView(v)) return { __bin: 'ta', ctor: v.constructor.name, b64: bufToB64(v.buffer) };
+  if (Array.isArray(v)) { const out = []; for (const x of v) out.push(await packValue(x)); return out; }
+  if (typeof v === 'object') { const o = {}; for (const k of Object.keys(v)) o[k] = await packValue(v[k]); return o; }
+  return v;
+}
+function unpackValue(v) {
+  if (v == null || typeof v !== 'object') return v;
+  if (v.__bin === 'blob') return new Blob([b64ToBuf(v.b64)], { type: v.mime || '' });
+  if (v.__bin === 'ab') return b64ToBuf(v.b64);
+  if (v.__bin === 'ta') { const C = globalThis[v.ctor] || Uint8Array; return new C(b64ToBuf(v.b64)); }
+  if (Array.isArray(v)) return v.map(unpackValue);
+  const o = {};
+  for (const k of Object.keys(v)) o[k] = unpackValue(v[k]);
+  return o;
+}
+
+export async function exportAllData() {
+  const db = await getDB();
+  const out = { app: 'tachyread', version: 1, dbVersion: DB_VERSION, exportedAt: Date.now(), db: {}, local: {} };
+  for (const [store, inline] of ALL_STORES) {
+    if (!db.objectStoreNames.contains(store)) continue;
+    if (inline) {
+      const rows = await db.getAll(store);
+      const packed = [];
+      for (const r of rows) packed.push(await packValue(r));
+      out.db[store] = { inline: true, rows: packed };
+    } else {
+      const keys = await db.getAllKeys(store);
+      const vals = await db.getAll(store);
+      const entries = [];
+      for (let i = 0; i < keys.length; i++) entries.push({ key: keys[i], value: await packValue(vals[i]) });
+      out.db[store] = { inline: false, entries };
+    }
+  }
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('tachyread-') && k !== 'tachyread-instance-lock') out.local[k] = localStorage.getItem(k);
+    }
+  } catch { /* storage unavailable */ }
+  return out;
+}
+
+// Per-store record counts for the UI / confirmation, without touching the DB.
+export function exportSummary(bundle) {
+  const counts = {};
+  let total = 0;
+  for (const [store] of ALL_STORES) {
+    const s = bundle?.db?.[store];
+    const n = !s ? 0 : s.inline ? (s.rows?.length || 0) : (s.entries?.length || 0);
+    counts[store] = n;
+    total += n;
+  }
+  counts.localStorage = Object.keys(bundle?.local || {}).length;
+  return { counts, total };
+}
+
+export async function importAllData(bundle, { replace = true } = {}) {
+  if (!bundle || bundle.app !== 'tachyread' || !bundle.db) throw new Error('Not a Tachyread backup file.');
+  const db = await getDB();
+  let written = 0;
+  for (const [store, inline] of ALL_STORES) {
+    const s = bundle.db[store];
+    if (!s || !db.objectStoreNames.contains(store)) continue;
+    const tx = db.transaction(store, 'readwrite');
+    if (replace) await tx.store.clear();
+    if (inline) {
+      for (const row of (s.rows || [])) { await tx.store.put(unpackValue(row)); written++; }
+    } else {
+      for (const e of (s.entries || [])) { await tx.store.put(unpackValue(e.value), e.key); written++; }
+    }
+    await tx.done;
+  }
+  try {
+    for (const [k, v] of Object.entries(bundle.local || {})) {
+      if (k !== 'tachyread-instance-lock') localStorage.setItem(k, v);
+    }
+  } catch { /* storage unavailable */ }
+  return { written };
+}
+
+// File System Access handles (sync folder, etc.). Kept out of export (not JSON-serializable).
+export async function getFsHandle(key) {
+  const db = await getDB();
+  return (await db.get('fsHandles', key)) || null;
+}
+export async function setFsHandle(key, handle) {
+  const db = await getDB();
+  if (handle == null) await db.delete('fsHandles', key);
+  else await db.put('fsHandles', handle, key);
 }

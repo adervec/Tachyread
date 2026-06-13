@@ -15,6 +15,7 @@ const MENUS = {
     { label: 'Close All Tabs', action: 'close-all' },
     { kind: 'separator' },
     { label: 'Application Settings...', action: 'app-settings' },
+    { label: 'Backup & Data...', action: 'data' },
     { label: 'Default Tab Settings...', action: 'def-settings' },
     { label: 'Reset Tab to Default Settings', action: 'reset-tab' },
     { kind: 'separator' },
@@ -164,6 +165,13 @@ export default function MenuBar({ onFileOpen, onAction }) {
         {!state.showRsvp ? '☑ ' : '☐ '}Hide Fast Reader
       </div>
       <div className="grow" />
+      <div
+        className="menu-item"
+        onClick={() => onAction('sync-now')}
+        title="Back up your data to the configured sync target (File → Backup & Data)"
+      >
+        ☁ Sync
+      </div>
       <div className="right-toggles">
         <label htmlFor="theme-select">Theme</label>
         <select
