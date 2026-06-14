@@ -52,6 +52,7 @@ import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
 import { playLineClick } from './features/clickSound.js';
 import { createMetronome } from './features/metronome.js';
+import { saveTextToFile } from './features/fileSystem.js';
 import { getSyncProvider } from './features/sync/syncProviders.js';
 import { backupToProvider } from './features/sync/syncManager.js';
 import { applyTheme } from './state/themes.js';
@@ -711,8 +712,18 @@ function AppInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.global.sync?.autoBackup, state.global.sync?.autoBackupMinutes, state.global.sync?.provider]);
 
+  // Save a copy of the active tab's text to an external file (native Save dialog where supported).
+  async function doSaveTab() {
+    if (!activeTab) return;
+    const doc = activeTab.doc;
+    const base = (doc.fileName || 'document').replace(/\.[^.]+$/, '') || 'document';
+    const res = await saveTextToFile(doc.fullText || '', `${base}.txt`);
+    if (!res.canceled) setStatus(`Saved ${res.name}${res.method === 'download' ? ' to your downloads' : ''}.`);
+  }
+
   function handleMenuAction(action) {
     if (action === 'sync-now') return doSyncNow();
+    if (action === 'save-tab' && activeTab) return doSaveTab();
     if (action === 'open-clip') return openClipboard();
     if (action === 'grab') return openDialog({ kind: 'grab' });
     if (action === 'close-tab' && activeTab) {
