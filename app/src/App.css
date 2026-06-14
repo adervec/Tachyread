@@ -7,6 +7,9 @@
      min-content (which would let panes overflow the viewport on narrow screens). */
   grid-template-columns: minmax(0, 1fr);
   height: 100vh;
+  /* dvh tracks the *visible* viewport, so the bottom controls bar isn't hidden behind the
+     mobile browser's address bar / toolbar (which 100vh ignores). */
+  height: 100dvh;
   background: var(--pane-bg);
   color: var(--menu-fg);
 }
@@ -1376,6 +1379,9 @@
   z-index: 4000;
   font-size: 12px;
   overflow: hidden;
+  /* Display-only sanity readout — never intercept taps meant for the controls beneath it. */
+  pointer-events: none;
+  opacity: 0.96;
 }
 .audio-chat-head { padding: 6px 10px; background: var(--menu-bg); border-bottom: 1px solid var(--divider); font-weight: 600; font-size: 11px; }
 .audio-chat-body { padding: 6px 10px; overflow-y: auto; }
@@ -1474,8 +1480,14 @@
   .dialog-buttons { flex-wrap: wrap; }
   .field-row { grid-template-columns: 1fr; gap: 3px; margin-bottom: 10px; }
   .field-row > label { color: var(--menu-fg); }
-  .playback-row { grid-template-columns: 1fr; justify-items: center; gap: 8px; }
-  .controls-bar { padding: 8px 10px; }
+  /* Lay the playback controls out in a compact wrapping row instead of three stacked rows, so the
+     controls bar stays short and never crowds the reader off a small screen. */
+  .playback-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 14px; }
+  .controls-bar { padding: 6px 10px; gap: 6px; }
+  .goal-row { flex-wrap: wrap; row-gap: 4px; }
+  /* The heard-speech readout sits up top on phones (out of the way of the bottom controls) and,
+     with pointer-events:none, never blocks them. */
+  .audio-chat { right: 8px; left: 8px; bottom: auto; top: 58px; width: auto; max-height: 26vh; }
   .grab-screen-2col { flex-direction: column; }
   .grab-shots-col { flex: 1 1 auto; width: 100%; }
   .grab-shots { max-height: 36vh; }
