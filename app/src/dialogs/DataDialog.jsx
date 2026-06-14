@@ -42,7 +42,7 @@ export default function DataDialog({ onClose }) {
     setMsg('Restoring from your sync target…');
     try {
       const r = await restoreFromProvider(sync.provider, sync);
-      setMsg(`Restored ${r.written} records — reloading…`);
+      setMsg(`Merged progress for ${r.merged} item(s) — reloading…`);
       setTimeout(() => window.location.reload(), 1000);
     } catch (e) {
       setBusy(false);
@@ -162,10 +162,25 @@ export default function DataDialog({ onClose }) {
 
       <div className="field-section">Cloud sync (beta)</div>
       <p className="settings-note">
-        Sync the same backup to a folder or to Google Drive — useful across devices. Easiest with no
-        accounts: pick a <strong>local folder</strong> that your Google Drive / Dropbox / OneDrive
-        desktop app already syncs.
+        Syncs your <strong>reading progress only</strong> — how far you've read each file (keyed by the
+        file's content, so the same book on two devices stays in step), plus your book groups. Your files,
+        document text, and grabbed pages <strong>never leave this device</strong>; a grab made elsewhere
+        shows up only as a note that it exists. Easiest with no accounts: pick a <strong>local folder</strong>
+        that your Google Drive / Dropbox / OneDrive desktop app already syncs.
       </p>
+      <div className="field-row">
+        <label>This device's name</label>
+        <div>
+          <input
+            type="text"
+            value={state.global.deviceName || ''}
+            onChange={(e) => updateGlobal({ deviceName: e.target.value })}
+            placeholder="e.g. Laptop, Phone"
+            style={{ width: 200 }}
+          />
+          <span className="settings-note" style={{ margin: '0 0 0 8px' }}>Shown to your other devices on grabs made here.</span>
+        </div>
+      </div>
       <div className="field-row">
         <label>Sync target</label>
         <div>

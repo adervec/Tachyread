@@ -105,5 +105,12 @@ export function defaultGlobalSettings() {
     // Cloud sync / backup target. provider: 'localFolder' | 'googleDrive'; driveClientId is the user's
     // own Google OAuth client ID (kept local). lastSync is a timestamp for the UI.
     sync: { provider: 'localFolder', driveClientId: '', lastSync: 0, autoBackup: false, autoBackupMinutes: 30 },
+    deviceName: '', // friendly label this device stamps on synced grab markers (e.g. "Laptop")
+    // Book groups: editions of the same book grouped so progress syncs across them as a percentage.
+    // { id, name, members:[checksum], createdAt }
+    bookGroups: [],
+    // Grabs that exist on OTHER devices (markers only — no images/text travel via sync).
+    // { checksum, name, createdAt, pageCount, device, seenAt }
+    remoteGrabs: [],
   };
 }

@@ -270,6 +270,13 @@
   background: rgba(255, 118, 118, 0.12);
   pointer-events: none;
 }
+/* The buffer margin captured around the crop but kept out of OCR (header/footer/margins). */
+.grab-crop-buffer {
+  position: absolute;
+  border: 1px dashed rgba(120, 200, 255, 0.85);
+  background: rgba(120, 200, 255, 0.07);
+  pointer-events: none;
+}
 .grab-controls {
   display: flex;
   align-items: center;
@@ -412,6 +419,17 @@
 /* Backup & data dialog */
 .data-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
 .data-json { width: 100%; box-sizing: border-box; font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace); font-size: 11px; line-height: 1.4; resize: vertical; margin-top: 6px; white-space: pre; }
+
+/* Book groups + remote-grab markers */
+.bg-group { border: 1px solid var(--divider); border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
+.bg-group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.bg-group-head input { flex: 1; font-weight: 600; }
+.bg-member, .bg-pick-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.bg-member-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-pick { max-height: 220px; overflow: auto; border: 1px solid var(--divider); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
+.bg-pick-row { cursor: pointer; }
+.remote-grab { display: flex; align-items: center; gap: 8px; padding: 4px 6px; opacity: 0.85; }
+.remote-grab .rg-dev { color: var(--accent, #5b8def); font-size: 11px; }
 
 /* Regression Report */
 .reg-cards { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }

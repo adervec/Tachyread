@@ -39,6 +39,7 @@ import DictationDialog from './dialogs/DictationDialog.jsx';
 import AttentionDialog from './dialogs/AttentionDialog.jsx';
 import GammaPrimerDialog from './dialogs/GammaPrimerDialog.jsx';
 import DataDialog from './dialogs/DataDialog.jsx';
+import BookGroupsDialog from './dialogs/BookGroupsDialog.jsx';
 import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan } from './document/toc.js';
@@ -52,6 +53,7 @@ import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
 import { playLineClick } from './features/clickSound.js';
 import { createMetronome } from './features/metronome.js';
+import { saveTextToFile } from './features/fileSystem.js';
 import { getSyncProvider } from './features/sync/syncProviders.js';
 import { backupToProvider } from './features/sync/syncManager.js';
 import { applyTheme } from './state/themes.js';
@@ -711,8 +713,18 @@ function AppInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.global.sync?.autoBackup, state.global.sync?.autoBackupMinutes, state.global.sync?.provider]);
 
+  // Save a copy of the active tab's text to an external file (native Save dialog where supported).
+  async function doSaveTab() {
+    if (!activeTab) return;
+    const doc = activeTab.doc;
+    const base = (doc.fileName || 'document').replace(/\.[^.]+$/, '') || 'document';
+    const res = await saveTextToFile(doc.fullText || '', `${base}.txt`);
+    if (!res.canceled) setStatus(`Saved ${res.name}${res.method === 'download' ? ' to your downloads' : ''}.`);
+  }
+
   function handleMenuAction(action) {
     if (action === 'sync-now') return doSyncNow();
+    if (action === 'save-tab' && activeTab) return doSaveTab();
     if (action === 'open-clip') return openClipboard();
     if (action === 'grab') return openDialog({ kind: 'grab' });
     if (action === 'close-tab' && activeTab) {
@@ -754,6 +766,7 @@ function AppInner() {
     if (action === 'goto' && activeTab) return openDialog({ kind: 'goto' });
     if (action === 'app-settings') return openDialog({ kind: 'app-settings' });
     if (action === 'data') return openDialog({ kind: 'data' });
+    if (action === 'book-groups') return openDialog({ kind: 'book-groups' });
     if (action === 'def-settings') return openDialog({ kind: 'def-settings' });
     if (action === 'tab-settings' && activeTab) return openDialog({ kind: 'tab-settings' });
     if (action === 'reset-tab' && activeTab) {
@@ -932,6 +945,7 @@ function AppInner() {
         />
       )}
       {dialog?.kind === 'data' && <DataDialog onClose={closeDialog} />}
+      {dialog?.kind === 'book-groups' && <BookGroupsDialog onClose={closeDialog} />}
       {dialog?.kind === 'stats' && (
         <StatisticsDialog tab={activeTab} onClose={closeDialog} />
       )}

@@ -2,7 +2,7 @@
 // but keyed by content checksum so renamed/moved files keep their progress.
 
 import { openDB } from 'idb';
-import { defaultGlobalSettings } from './settings.js';
+import { defaultGlobalSettings, defaultFileSettings } from './settings.js';
 
 const DB_NAME = 'Tachyread';
 const DB_VERSION = 7;
@@ -352,6 +352,157 @@ export async function importAllData(bundle, { replace = true } = {}) {
     }
   } catch { /* storage unavailable */ }
   return { written };
+}
+
+// ── Progress-only sync bundle ─────────────────────────────────────────────────────────────────
+// What the CLOUD sync layer pushes — deliberately NOT a full backup. It carries only reading
+// HISTORY/PROGRESS, keyed by each processed file's content checksum, so the same file opened on two
+// devices shares progress. It never carries file bodies, document text, or grab images: a grab made
+// on another device travels only as a lightweight marker (checksum + name + when), so other devices
+// can SEE that a grab exists elsewhere without receiving its contents. Book groups (Feature 4) ride
+// along so the same "these editions are one book" grouping applies everywhere.
+//
+// Merge is union/max — commutative and monotonic, so bidirectional sync needs no clocks and never
+// double-counts: read masks OR together, counters/positions take the max, daily history merges per
+// date by max. Progress only moves forward.
+
+// Reading-progress fields lifted out of a FileSettings record (cosmetic per-file prefs stay local).
+const PROGRESS_FILE_FIELDS = [
+  'wordIndex', 'totalWords', 'persistentWordsRead', 'persistentActiveTimeSecs',
+  'persistentTotalTimeSecs', 'dailyHistory', 'completions', 'rating', 'tocReadStats',
+];
+
+// Bitwise-OR two bit-packed read masks (base64) — a word read on EITHER device stays read.
+function orMaskB64(a, b) {
+  if (!a) return b || '';
+  if (!b) return a || '';
+  const ba = new Uint8Array(b64ToBuf(a));
+  const bb = new Uint8Array(b64ToBuf(b));
+  const n = Math.max(ba.length, bb.length);
+  const out = new Uint8Array(n);
+  for (let i = 0; i < n; i++) out[i] = (ba[i] || 0) | (bb[i] || 0);
+  return bufToB64(out.buffer);
+}
+// Merge tracker daily arrays ({date,words,ms}) by date, taking the max of each (no double-count).
+function mergeDaily(a = [], b = []) {
+  const m = new Map();
+  for (const d of a || []) if (d?.date) m.set(d.date, { date: d.date, words: d.words || 0, ms: d.ms || 0 });
+  for (const d of b || []) {
+    if (!d?.date) continue;
+    const cur = m.get(d.date);
+    if (!cur) m.set(d.date, { date: d.date, words: d.words || 0, ms: d.ms || 0 });
+    else { cur.words = Math.max(cur.words, d.words || 0); cur.ms = Math.max(cur.ms, d.ms || 0); }
+  }
+  return [...m.values()];
+}
+// Merge FileSettings dailyHistory ({date,wordsRead,activeTimeSecs}) by date, by max.
+function mergeDailyHistory(a = [], b = []) {
+  const m = new Map();
+  for (const d of a || []) if (d?.date) m.set(d.date, { date: d.date, wordsRead: d.wordsRead || 0, activeTimeSecs: d.activeTimeSecs || 0 });
+  for (const d of b || []) {
+    if (!d?.date) continue;
+    const cur = m.get(d.date);
+    if (!cur) m.set(d.date, { date: d.date, wordsRead: d.wordsRead || 0, activeTimeSecs: d.activeTimeSecs || 0 });
+    else { cur.wordsRead = Math.max(cur.wordsRead, d.wordsRead || 0); cur.activeTimeSecs = Math.max(cur.activeTimeSecs, d.activeTimeSecs || 0); }
+  }
+  return [...m.values()];
+}
+function unionCompletions(a = [], b = []) {
+  const seen = new Set();
+  const out = [];
+  for (const c of [...(a || []), ...(b || [])]) { const k = JSON.stringify(c); if (!seen.has(k)) { seen.add(k); out.push(c); } }
+  return out;
+}
+// Merge book groups by id: members union (grouping is additive across devices), name = most recent.
+export function mergeBookGroups(a = [], b = []) {
+  const m = new Map();
+  for (const g of a || []) if (g?.id) m.set(g.id, { ...g, members: [...new Set(g.members || [])] });
+  for (const g of b || []) {
+    if (!g?.id) continue;
+    const cur = m.get(g.id);
+    if (!cur) { m.set(g.id, { ...g, members: [...new Set(g.members || [])] }); continue; }
+    cur.members = [...new Set([...(cur.members || []), ...(g.members || [])])];
+    if (g.name && (g.createdAt || 0) >= (cur.createdAt || 0)) cur.name = g.name;
+  }
+  return [...m.values()];
+}
+
+export async function exportProgressData() {
+  const db = await getDB();
+  const g = (await db.get('global', 'settings')) || {};
+  const nameByChecksum = new Map((g.recentFiles || []).map((r) => [r.checksum, r.name]));
+  const out = {
+    app: 'tachyread-progress', version: 1, exportedAt: Date.now(),
+    device: g.deviceName || '', readstate: {}, files: {}, grabMarkers: {}, bookGroups: g.bookGroups || [],
+  };
+  const rsKeys = await db.getAllKeys('readstate');
+  const rsVals = await db.getAll('readstate');
+  for (let i = 0; i < rsKeys.length; i++) {
+    const v = rsVals[i] || {};
+    out.readstate[rsKeys[i]] = { maskB64: v.maskB64 || '', wpmB64: v.wpmB64 || '', lifetimeActiveMs: v.lifetimeActiveMs || 0, daily: v.daily || [] };
+  }
+  for (const f of await db.getAll('files')) {
+    if (!f?.checksum) continue;
+    const rec = { name: nameByChecksum.get(f.checksum) || '' };
+    for (const k of PROGRESS_FILE_FIELDS) if (f[k] !== undefined) rec[k] = f[k];
+    out.files[f.checksum] = rec;
+  }
+  for (const gr of await db.getAll('grabbed')) {
+    if (!gr?.checksum) continue;
+    out.grabMarkers[gr.checksum] = { name: gr.name || 'Grab', createdAt: gr.createdAt || 0, pageCount: gr.segments?.length || 0, device: g.deviceName || '' };
+  }
+  return out;
+}
+
+export async function importProgressData(bundle) {
+  if (!bundle || bundle.app !== 'tachyread-progress') throw new Error('Not a Tachyread progress-sync file.');
+  const db = await getDB();
+  let merged = 0;
+  // Reading state (mask/time/daily) — union/max merge.
+  for (const [checksum, inc] of Object.entries(bundle.readstate || {})) {
+    const tx = db.transaction('readstate', 'readwrite');
+    const cur = (await tx.store.get(checksum)) || {};
+    await tx.store.put({
+      maskB64: orMaskB64(cur.maskB64, inc.maskB64),
+      wpmB64: cur.wpmB64 || inc.wpmB64 || '',
+      lifetimeActiveMs: Math.max(cur.lifetimeActiveMs || 0, inc.lifetimeActiveMs || 0),
+      daily: mergeDaily(cur.daily, inc.daily),
+    }, checksum);
+    await tx.done;
+    merged++;
+  }
+  // File progress (resume cursor + persistent counters) — max merge; create a partial record if the
+  // file has never been opened here, so progress is waiting when its local copy is first opened.
+  for (const [checksum, inc] of Object.entries(bundle.files || {})) {
+    const tx = db.transaction('files', 'readwrite');
+    const cur = (await tx.store.get(checksum)) || { ...defaultFileSettings() };
+    cur.contentChecksum = checksum; cur.checksum = checksum;
+    cur.wordIndex = Math.max(cur.wordIndex || 0, inc.wordIndex || 0);
+    if (!cur.totalWords) cur.totalWords = inc.totalWords || 0;
+    cur.persistentWordsRead = Math.max(cur.persistentWordsRead || 0, inc.persistentWordsRead || 0);
+    cur.persistentActiveTimeSecs = Math.max(cur.persistentActiveTimeSecs || 0, inc.persistentActiveTimeSecs || 0);
+    cur.persistentTotalTimeSecs = Math.max(cur.persistentTotalTimeSecs || 0, inc.persistentTotalTimeSecs || 0);
+    cur.dailyHistory = mergeDailyHistory(cur.dailyHistory, inc.dailyHistory);
+    cur.completions = unionCompletions(cur.completions, inc.completions);
+    cur.rating = Math.max(cur.rating || 0, inc.rating || 0);
+    cur.tocReadStats = { ...(inc.tocReadStats || {}), ...(cur.tocReadStats || {}) };
+    await tx.store.put(cur);
+    await tx.done;
+    merged++;
+  }
+  // Global: remote-grab markers (only for grabs we DON'T already have locally) + book groups.
+  const g = (await db.get('global', 'settings')) || defaultGlobalSettings();
+  const localGrabKeys = new Set(await db.getAllKeys('grabbed'));
+  const remoteMap = new Map((g.remoteGrabs || []).map((r) => [r.checksum, r]));
+  for (const [checksum, inc] of Object.entries(bundle.grabMarkers || {})) {
+    if (localGrabKeys.has(checksum)) { remoteMap.delete(checksum); continue; } // it's local here — not "elsewhere"
+    const prev = remoteMap.get(checksum);
+    if (!prev || (inc.createdAt || 0) >= (prev.createdAt || 0)) remoteMap.set(checksum, { checksum, name: inc.name, createdAt: inc.createdAt || 0, pageCount: inc.pageCount || 0, device: inc.device || bundle.device || '', seenAt: Date.now() });
+  }
+  g.remoteGrabs = [...remoteMap.values()];
+  g.bookGroups = mergeBookGroups(g.bookGroups, bundle.bookGroups);
+  await db.put('global', g, 'settings');
+  return { merged };
 }
 
 // File System Access handles (sync folder, etc.). Kept out of export (not JSON-serializable).
