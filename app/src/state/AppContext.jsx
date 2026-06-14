@@ -115,14 +115,23 @@ export function AppProvider({ children }) {
     })();
   }, []);
 
-  // Persist tab settings on changes (debounced)
+  // Persist tab settings on changes (debounced). Only tabs whose settings object actually changed
+  // since the last save are written — during reading just the active tab changes, so this avoids
+  // re-serialising every open document's settings to IndexedDB on each word step (a real cost with
+  // several large books open on a phone).
   const saveTimer = useRef(null);
+  const savedSettingsRef = useRef(new Map()); // tab.id -> last-saved settings reference
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
+      const live = new Set();
       for (const tab of state.tabs) {
+        live.add(tab.id);
+        if (savedSettingsRef.current.get(tab.id) === tab.settings) continue; // unchanged → skip
+        savedSettingsRef.current.set(tab.id, tab.settings);
         saveFile(tab.settings).catch(() => {});
       }
+      for (const id of [...savedSettingsRef.current.keys()]) if (!live.has(id)) savedSettingsRef.current.delete(id);
     }, 600);
     return () => clearTimeout(saveTimer.current);
   }, [state.tabs]);
