@@ -15,6 +15,20 @@ export async function startDisplayCapture() {
   return { stream, video };
 }
 
+// Document-camera capture — point a device camera (rear by default on phones, where the document
+// usually is) at a physical page. Same still-frame pipeline as screen capture, just a different source.
+export function cameraCaptureSupported() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+}
+
+export async function startCameraCapture(facingMode = 'environment') {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    audio: false,
+  });
+  return { stream };
+}
+
 export function stopCapture(stream) {
   if (stream) for (const t of stream.getTracks()) t.stop();
 }

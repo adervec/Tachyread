@@ -4,6 +4,8 @@ import { useApp } from '../state/AppContext.jsx';
 import {
   displayCaptureSupported,
   startDisplayCapture,
+  cameraCaptureSupported,
+  startCameraCapture,
   stopCapture,
   captureFrame,
   canvasToDataUrl,
@@ -210,6 +212,8 @@ export default function GrabWizard({ onClose }) {
   // Screen capture state
   const videoRef = useRef(null);
   const [stream, setStream] = useState(null);
+  const [streamKind, setStreamKind] = useState(null); // 'screen' | 'camera'
+  const [cameraFacing, setCameraFacing] = useState('environment'); // rear camera by default (document cam)
   const [crop, setCrop] = useState(null);
   const drawRef = useRef(null);
   const [autoCount, setAutoCount] = useState(5);
@@ -452,12 +456,34 @@ export default function GrabWizard({ onClose }) {
     try {
       const { stream: s } = await startDisplayCapture();
       setStream(s);
+      setStreamKind('screen');
       setStep('screen');
       setMsg('Sharing started. Optionally drag a selection rectangle, then Grab.');
       s.getVideoTracks()[0].addEventListener('ended', () => setMsg('Screen sharing ended.'));
     } catch (e) {
       setMsg('Screen capture cancelled: ' + (e?.message || e));
     }
+  }
+
+  // Document camera — point a device camera at a physical page. Reuses the whole capture step
+  // (grab/crop/auto/watch/voice/background-OCR); only the video source differs.
+  async function startCamera(facing = cameraFacing) {
+    if (!cameraCaptureSupported()) { setMsg('Camera capture is not supported in this browser.'); return; }
+    try {
+      stopCapture(stream); // free any current stream first (a camera can't open twice)
+      const { stream: s } = await startCameraCapture(facing);
+      setStream(s);
+      setStreamKind('camera');
+      setCameraFacing(facing);
+      setStep('screen');
+      setMsg('Camera ready — fill the frame with a page, hold steady, then Grab. Draw a region to crop.');
+      s.getVideoTracks()[0].addEventListener('ended', () => setMsg('Camera stopped.'));
+    } catch (e) {
+      setMsg('Could not start the camera: ' + (e?.message || e) + ' — allow camera access and try again.');
+    }
+  }
+  function flipCamera() {
+    startCamera(cameraFacing === 'environment' ? 'user' : 'environment');
   }
 
   const newSeg = (image) => ({ id: uid(), image, text: '', layout: null, regions: null, ocrMode: 'default', ocrStatus: null, flagged: false });
@@ -843,12 +869,16 @@ export default function GrabWizard({ onClose }) {
         <div className="grab-source">
           <p>Capture text from anything on screen, or from image files, then speed-read it with the originals beside you.</p>
           <p className="settings-note">⚠ You are responsible for respecting the copyright of anything you capture. Only grab works you own or are permitted to copy.</p>
-          <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
-            <button style={{ flex: 1, padding: '16px' }} onClick={startScreen} disabled={!displayCaptureSupported()}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
+            <button style={{ flex: '1 1 180px', padding: '16px' }} onClick={startScreen} disabled={!displayCaptureSupported()}>
               🖥️ Capture screen / window
               <div className="settings-note" style={{ margin: '6px 0 0' }}>Share a screen, draw a region, grab pages by button, timer, or voice.</div>
             </button>
-            <label style={{ flex: 1, padding: '16px', textAlign: 'center', cursor: 'pointer' }} className="grab-upload-btn">
+            <button style={{ flex: '1 1 180px', padding: '16px' }} onClick={() => startCamera()} disabled={!cameraCaptureSupported()}>
+              📷 Document camera
+              <div className="settings-note" style={{ margin: '6px 0 0' }}>Point your camera at a physical page and snap pages (great on a phone).</div>
+            </button>
+            <label style={{ flex: '1 1 180px', padding: '16px', textAlign: 'center', cursor: 'pointer' }} className="grab-upload-btn">
               🖼️ Upload image(s)
               <div className="settings-note" style={{ margin: '6px 0 0' }}>Screenshots or photos of pages (PNG/JPG).</div>
               <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => addFiles([...e.target.files])} />
@@ -897,6 +927,9 @@ export default function GrabWizard({ onClose }) {
             </div>
             <div className="grab-controls">
               <button onClick={grabOnce} disabled={autoRunning} title={watching ? 'Force-capture the current frame even while watching' : 'Capture the current frame'}>📸 Grab page</button>
+              {streamKind === 'camera' && (
+                <button onClick={flipCamera} disabled={autoRunning || watching} title="Switch between the front and rear camera">🔄 Flip camera</button>
+              )}
               <button onClick={() => setCrop(null)} disabled={!crop}>Clear region</button>
               <label className="inline-check" title="Recognize each page in the background the moment it's captured, so the text is ready by the time you finish">
                 <input type="checkbox" checked={autoOcr} onChange={(e) => setAutoOcr(e.target.checked)} />
