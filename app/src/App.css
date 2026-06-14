@@ -420,6 +420,17 @@
 .data-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
 .data-json { width: 100%; box-sizing: border-box; font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace); font-size: 11px; line-height: 1.4; resize: vertical; margin-top: 6px; white-space: pre; }
 
+/* Book groups + remote-grab markers */
+.bg-group { border: 1px solid var(--divider); border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
+.bg-group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.bg-group-head input { flex: 1; font-weight: 600; }
+.bg-member, .bg-pick-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.bg-member-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-pick { max-height: 220px; overflow: auto; border: 1px solid var(--divider); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
+.bg-pick-row { cursor: pointer; }
+.remote-grab { display: flex; align-items: center; gap: 8px; padding: 4px 6px; opacity: 0.85; }
+.remote-grab .rg-dev { color: var(--accent, #5b8def); font-size: 11px; }
+
 /* Regression Report */
 .reg-cards { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .reg-card { flex: 1 1 110px; background: var(--panel-bg, rgba(127,127,127,0.08)); border: 1px solid var(--divider); border-radius: 8px; padding: 10px 12px; text-align: center; }

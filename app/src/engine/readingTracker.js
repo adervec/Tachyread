@@ -177,6 +177,15 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     dirty = true;
   }
 
+  // Mark a contiguous prefix [0, n) as read without crediting any time/pace. Used by book-group
+  // catch-up: when a grouped edition resumes at another edition's further position, the coverage
+  // mask is advanced to match the new cursor so "% read" stays consistent with "% position".
+  function markPrefixRead(n) {
+    const to = Math.min(wordCount, Math.max(0, n | 0));
+    for (let i = 0; i < to; i++) if (!mask[i]) { mask[i] = 1; readCount++; }
+    if (to > 0) dirty = true;
+  }
+
   function setHidden(h, now = Date.now()) {
     if (h === hidden) return;
     hidden = h;
@@ -290,6 +299,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
   return {
     recordMove,
     setHidden,
+    markPrefixRead,
     recentWpm,
     sampleTrend,
     rangeStats,

@@ -4,6 +4,7 @@ import { loadGlobal, saveGlobal, loadFile, saveFile, loadReadState, saveReadStat
 import { parseFile, parseClipboardText } from '../document/parsers.js';
 import { readerDocFromText, attachChecksum } from '../document/readerDocument.js';
 import { createReadingTracker } from '../engine/readingTracker.js';
+import { groupForChecksum, bestGroupPercent } from '../features/bookGroups.js';
 
 const AppCtx = createContext(null);
 
@@ -149,9 +150,32 @@ export function AppProvider({ children }) {
       lifetimeActiveMs: rs?.lifetimeActiveMs || 0,
       daily: rs?.daily || [],
     });
+    // Book-group catch-up: if this file is grouped with other editions, resume at the furthest
+    // percent any of them reached (progress shared as a fraction, since masks can't cross editions).
+    let groupNote = '';
+    const group = groupForChecksum(stateRef.current.global.bookGroups, doc.contentChecksum);
+    if (group && doc.words.length > 0) {
+      const sibs = [];
+      for (const m of group.members) {
+        if (m === doc.contentChecksum) continue;
+        const rec = await loadFile(m);
+        if (rec) sibs.push(rec);
+      }
+      const best = bestGroupPercent(baseSettings.wordIndex / doc.words.length, sibs);
+      const target = Math.min(doc.words.length - 1, Math.round(best * doc.words.length));
+      if (target > baseSettings.wordIndex) {
+        baseSettings.wordIndex = target;
+        tracker.markPrefixRead(target); // keep "% read" consistent with the resumed position
+        saveReadState(doc.contentChecksum, {
+          maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(),
+          lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(),
+        }).catch(() => {});
+        groupNote = ` — caught up to ${Math.round(best * 100)}% from “${group.name}”`;
+      }
+    }
     const tab = makeTab(doc, baseSettings, tracker);
     dispatch({ type: 'ADD_TAB', tab });
-    if (!silent) dispatch({ type: 'SET_STATUS', text: `Opened ${doc.fileName} (${doc.words.length} words)` });
+    if (!silent) dispatch({ type: 'SET_STATUS', text: `Opened ${doc.fileName} (${doc.words.length} words)${groupNote}` });
     // Persist a rebuildable payload so this tab can be reconnected next session.
     if (persist) {
       saveDocPayload({
