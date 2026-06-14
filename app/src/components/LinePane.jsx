@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { List, useDynamicRowHeight, useListRef } from 'react-window';
 import { ReadStatus, orpIndex, getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import Pointer from './Pointer.jsx';
@@ -77,7 +77,10 @@ function statusForLine(li, ctx) {
 
 // Presentational single line — shared by the virtualized list (Row) and the split view.
 // Has no react-window coupling so it can be rendered directly in the split zones.
-function LineRow({ index, doc, settings, ctx, propNameKeys }) {
+// `dsettings` is a STABLE display-settings subset (see LinePane) rather than the whole settings
+// object, whose identity changes on every word step; that, plus the memo() comparator below, is
+// what keeps unchanged lines from re-rendering on each tick of playback.
+function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys }) {
   const line = doc.lines[index];
   const status = statusForLine(index, ctx);
   const isCurrent = status === ReadStatus.Current;
@@ -85,31 +88,31 @@ function LineRow({ index, doc, settings, ctx, propNameKeys }) {
   const inPara = index >= ctx.paraStart && index <= ctx.paraEnd && status !== ReadStatus.Current;
 
   // Focus blur: blur lines within the configured window before/after the current line.
-  const before = settings.blurLinesBefore || 0;
-  const after = settings.blurLinesAfter || 0;
+  const before = dsettings.blurLinesBefore || 0;
+  const after = dsettings.blurLinesAfter || 0;
   let blur = 0;
   if (!isCurrent) {
     if (index < ctx.currentLine && ctx.currentLine - index <= before) blur = Math.min(2.5, (ctx.currentLine - index) * 0.9);
     else if (index > ctx.currentLine && index - ctx.currentLine <= after) blur = Math.min(2.5, (index - ctx.currentLine) * 0.9);
   }
 
-  const boost = settings.currentLineFontSizeBoost || 0;
+  const boost = dsettings.currentLineFontSizeBoost || 0;
   const textStyle = {
-    textAlign: (settings.textAlignment || 'Left').toLowerCase(),
+    textAlign: (dsettings.textAlignment || 'Left').toLowerCase(),
     filter: blur ? `blur(${blur}px)` : undefined,
     fontSize: isCurrent && boost ? `calc(1em + ${boost}px)` : undefined,
   };
 
-  const showPointer = settings.showPointer && isCurrent && !line.isEmpty;
+  const showPointer = dsettings.showPointer && isCurrent && !line.isEmpty;
   const pointer = showPointer ? (
     <Pointer
-      style={settings.pointerStyle || 'Arrow'}
-      placement={settings.pointerPlacement || 'Left'}
-      size={settings.pointerSize || 16}
-      blinkMs={settings.pointerBlinkMs || 0}
+      style={dsettings.pointerStyle || 'Arrow'}
+      placement={dsettings.pointerPlacement || 'Left'}
+      size={dsettings.pointerSize || 16}
+      blinkMs={dsettings.pointerBlinkMs || 0}
     />
   ) : null;
-  const placement = settings.pointerPlacement || 'Left';
+  const placement = dsettings.pointerPlacement || 'Left';
   const pointerBefore = pointer && (placement === 'Left' || placement === 'Above');
   const pressing = ctx.pressingStart >= 0 && line.startWordIndex === ctx.pressingStart && !line.isEmpty;
 
@@ -130,9 +133,9 @@ function LineRow({ index, doc, settings, ctx, propNameKeys }) {
           renderWords(line, {
             isCurrent,
             currentWordIndex: ctx.currentWordIndex,
-            bionic: settings.bionicFont,
-            highlightORP: settings.highlightORP,
-            currentWordStyles: currentWordStyles(settings),
+            bionic: dsettings.bionicFont,
+            highlightORP: dsettings.highlightORP,
+            currentWordStyles: dsettings.currentWordStyles,
             properNamesSet: propNameKeys,
             isHeaderFooter: isHF,
             hideBeyond: ctx.hideBeyond,
@@ -144,8 +147,31 @@ function LineRow({ index, doc, settings, ctx, propNameKeys }) {
   );
 }
 
+// Re-render a line only when something it actually shows changed. `ctx` is rebuilt every word step,
+// so without this every visible line (and all ~120 in the split view) would re-render each tick.
+function lineRowEqual(p, n) {
+  if (p.index !== n.index || p.doc !== n.doc || p.dsettings !== n.dsettings || p.propNameKeys !== n.propNameKeys) return false;
+  const pc = p.ctx, nc = n.ctx;
+  if (pc === nc) return true;
+  const i = n.index;
+  if (pc.hideBeyond !== nc.hideBeyond) return false;        // progressive-reveal boundary moved
+  if (pc.pressingStart !== nc.pressingStart) return false;  // long-press highlight
+  if (pc.sessionLines !== nc.sessionLines || pc.sessionNavLines !== nc.sessionNavLines || pc.readLines !== nc.readLines) return false;
+  const pCur = pc.currentLine === i, nCur = nc.currentLine === i;
+  if (pCur !== nCur) return false;                          // gained / lost "current"
+  if (nCur && pc.currentWordIndex !== nc.currentWordIndex) return false; // word highlight moved within this line
+  if ((i < pc.currentLine) !== (i < nc.currentLine)) return false;       // crossed the cursor → read-status flips
+  if ((i >= pc.paraStart && i <= pc.paraEnd) !== (i >= nc.paraStart && i <= nc.paraEnd)) return false; // paragraph highlight
+  if (pc.currentLine !== nc.currentLine) {                  // blur amount changes within the blur window
+    const w = Math.max(n.dsettings.blurLinesBefore || 0, n.dsettings.blurLinesAfter || 0);
+    if (w > 0 && (Math.abs(i - pc.currentLine) <= w || Math.abs(i - nc.currentLine) <= w)) return false;
+  }
+  return true;
+}
+const LineRow = memo(LineRowImpl, lineRowEqual);
+
 // Row component for react-window: positions LineRow absolutely and measures its height.
-function Row({ index, style, ariaAttributes, doc, settings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl }) {
+function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl }) {
   const ref = useRef(null);
   useEffect(() => {
     if (!ref.current) return;
@@ -163,7 +189,7 @@ function Row({ index, style, ariaAttributes, doc, settings, ctx, onJumpWord, pro
           <hr />
         </div>
       )}
-      <LineRow index={index} doc={doc} settings={settings} ctx={ctx} onJumpWord={onJumpWord} propNameKeys={propNameKeys} />
+      <LineRow index={index} doc={doc} dsettings={dsettings} ctx={ctx} onJumpWord={onJumpWord} propNameKeys={propNameKeys} />
     </div>
   );
 }
@@ -172,10 +198,10 @@ function Row({ index, style, ariaAttributes, doc, settings, ctx, onJumpWord, pro
 // centre band, and upcoming lines (top-aligned). Renders a bounded window around the current
 // line — no scrolling, so the current line stays fixed in place and never jitters.
 const SPLIT_WINDOW = 60;
-function SplitView({ doc, settings, ctx, onJumpWord, propNameKeys, baseFont, onContextMenu, pressHandlers }) {
+function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, onContextMenu, pressHandlers }) {
   const cur = ctx.currentLine;
   const total = doc.lines.length;
-  const common = { doc, settings, ctx, onJumpWord, propNameKeys };
+  const common = { doc, dsettings, ctx, onJumpWord, propNameKeys };
   const beforeRef = useRef(null);
   const afterRef = useRef(null);
   const before = [];
@@ -283,6 +309,32 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
     [doc, settings.enableProperNames]
   );
 
+  // Stable display-settings subset handed to each line. Unlike `settings` (new identity on every
+  // word step, via patchSettings), this keeps the same reference until a display option actually
+  // changes — the precondition that lets memo(LineRow) skip unchanged lines during playback.
+  const dsettings = useMemo(
+    () => ({
+      blurLinesBefore: settings.blurLinesBefore || 0,
+      blurLinesAfter: settings.blurLinesAfter || 0,
+      currentLineFontSizeBoost: settings.currentLineFontSizeBoost || 0,
+      textAlignment: settings.textAlignment || 'Left',
+      showPointer: settings.showPointer,
+      pointerStyle: settings.pointerStyle,
+      pointerPlacement: settings.pointerPlacement,
+      pointerSize: settings.pointerSize,
+      pointerBlinkMs: settings.pointerBlinkMs,
+      bionicFont: settings.bionicFont,
+      highlightORP: settings.highlightORP,
+      currentWordStyles: currentWordStyles(settings),
+    }),
+    [
+      settings.blurLinesBefore, settings.blurLinesAfter, settings.currentLineFontSizeBoost,
+      settings.textAlignment, settings.showPointer, settings.pointerStyle, settings.pointerPlacement,
+      settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP,
+      settings.currentWordStyles, settings.currentWordStyle,
+    ]
+  );
+
   // Dynamic row heights — initial guess, then react-window measures via observeRowElements.
   const baseFont = settings.rightPaneFontSize || 12;
   const defaultRowHeight = Math.round(baseFont * 1.55) + 4;
@@ -330,8 +382,8 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
 
   // rowProps must not contain ariaAttributes/index/style (those are auto-passed by List).
   const rowProps = useMemo(
-    () => ({ doc, settings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl }),
-    [doc, settings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl]
+    () => ({ doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl }),
+    [doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl]
   );
 
   // Long-press to navigate: a single click no longer jumps — you must hold a line for
@@ -386,7 +438,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
       {split ? (
         <SplitView
           doc={doc}
-          settings={settings}
+          dsettings={dsettings}
           ctx={ctx}
           onJumpWord={onJumpWord}
           propNameKeys={propNameKeys}
