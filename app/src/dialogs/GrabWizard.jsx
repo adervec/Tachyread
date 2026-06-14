@@ -215,6 +215,7 @@ export default function GrabWizard({ onClose }) {
   const [streamKind, setStreamKind] = useState(null); // 'screen' | 'camera'
   const [cameraFacing, setCameraFacing] = useState('environment'); // rear camera by default (document cam)
   const [crop, setCrop] = useState(null);
+  const [grabBuffer, setGrabBuffer] = useState(0); // % margin captured AROUND the region but kept out of OCR
   const drawRef = useRef(null);
   const [autoCount, setAutoCount] = useState(5);
   const [autoInterval, setAutoInterval] = useState(2.5);
@@ -277,8 +278,16 @@ export default function GrabWizard({ onClose }) {
     return t ? t.regions : null;
   }
   function segRegions(seg) {
-    if (seg.regions) return seg.regions; // custom drawn regions win
-    return regionsForLayout(seg.layout || docLayout);
+    if (seg.regions) return seg.regions; // custom drawn regions win (drawn over the whole captured image)
+    const base = regionsForLayout(seg.layout || docLayout);
+    // A buffer grab captured a margin around the text; confine OCR to the inner region (ocrCrop) and
+    // nest any column layout inside it so the header/footer/margin in the buffer is never read.
+    if (seg.ocrCrop) {
+      const c = seg.ocrCrop;
+      if (!base) return [c];
+      return base.map((r) => ({ fx: c.fx + r.fx * c.fw, fy: c.fy + r.fy * c.fh, fw: r.fw * c.fw, fh: r.fh * c.fh }));
+    }
+    return base;
   }
   function docConfig() {
     return { invert: ocrInvert, contrast: Number(ocrContrast) || 1.6, bgColor: useColors ? bgColor : null, textColor: useColors ? textColor : null };
@@ -321,9 +330,10 @@ export default function GrabWizard({ onClose }) {
       .catch(() => {});
   }
 
-  // Add a captured page, kicking off background OCR immediately when the option is on.
-  function addSeg(image) {
-    const seg = newSeg(image);
+  // Add a captured page, kicking off background OCR immediately when the option is on. ocrCrop, when
+  // set, is the inner OCR region within a buffered capture (the surrounding margin is kept out of OCR).
+  function addSeg(image, ocrCrop = null) {
+    const seg = newSeg(image, ocrCrop);
     setSegments((arr) => [...arr, seg]);
     if (autoOcrRef.current && ocrSupported()) ocrSeg(seg);
     return seg;
@@ -451,6 +461,28 @@ export default function GrabWizard({ onClose }) {
     return { x: fx * v.videoWidth, y: fy * v.videoHeight, w: fw * v.videoWidth, h: fh * v.videoHeight };
   }
 
+  // Expand the OCR crop by the buffer margin (a % of the region's own size on each side) so the
+  // captured image — and the Source view beside the reader — includes surrounding header / footer /
+  // margin content, while OCR is later confined to the inner region via segRegions(seg.ocrCrop).
+  // Returns { rect, ocrCrop }: rect is in video px for captureFrame; ocrCrop is the inner region as
+  // fractions of rect (null when there's no buffer or no region, i.e. OCR the whole captured frame).
+  function bufferedCapture() {
+    const inner = cropVideoPx();
+    const v = videoRef.current;
+    const pct = Math.max(0, Number(grabBuffer) || 0) / 100;
+    if (!inner || pct <= 0 || !v || !v.videoWidth) return { rect: inner, ocrCrop: null };
+    const vw = v.videoWidth, vh = v.videoHeight;
+    const bufX = inner.w * pct, bufY = inner.h * pct;
+    const x = Math.max(0, inner.x - bufX);
+    const y = Math.max(0, inner.y - bufY);
+    const x2 = Math.min(vw, inner.x + inner.w + bufX);
+    const y2 = Math.min(vh, inner.y + inner.h + bufY);
+    const rect = { x, y, w: x2 - x, h: y2 - y };
+    if (rect.w <= 0 || rect.h <= 0) return { rect: inner, ocrCrop: null };
+    const ocrCrop = { fx: (inner.x - x) / rect.w, fy: (inner.y - y) / rect.h, fw: inner.w / rect.w, fh: inner.h / rect.h };
+    return { rect, ocrCrop };
+  }
+
   async function startScreen() {
     if (!displayCaptureSupported()) { setMsg('Screen capture is not supported in this browser.'); return; }
     try {
@@ -486,13 +518,14 @@ export default function GrabWizard({ onClose }) {
     startCamera(cameraFacing === 'environment' ? 'user' : 'environment');
   }
 
-  const newSeg = (image) => ({ id: uid(), image, text: '', layout: null, regions: null, ocrMode: 'default', ocrStatus: null, flagged: false });
+  const newSeg = (image, ocrCrop = null) => ({ id: uid(), image, text: '', layout: null, regions: null, ocrMode: 'default', ocrStatus: null, flagged: false, ocrCrop });
 
   function grabOnce() {
     const v = videoRef.current;
     if (!v || !v.videoWidth) return;
     playGrabClick();
-    const canvas = captureFrame(v, cropVideoPx());
+    const { rect, ocrCrop } = bufferedCapture();
+    const canvas = captureFrame(v, rect);
     // If the watcher is running, mark this frame as the last-captured page so it doesn't grab the
     // same one again a moment later.
     if (watchRef.current.running) {
@@ -500,7 +533,7 @@ export default function GrabWizard({ onClose }) {
       watchRef.current.lastCapSig = sig;
       watchRef.current.decidedSig = sig;
     }
-    addSeg(canvasToDataUrl(canvas));
+    addSeg(canvasToDataUrl(canvas), ocrCrop);
     setMsg(`Captured ${segmentsRef.current.length + 1} page(s).`);
   }
 
@@ -514,7 +547,8 @@ export default function GrabWizard({ onClose }) {
     for (let i = 0; i < count && autoRef.current.running; i++) {
       const v = videoRef.current;
       if (!v || !v.videoWidth) break;
-      const canvas = captureFrame(v, cropVideoPx());
+      const cap = bufferedCapture();
+      const canvas = captureFrame(v, cap.rect);
       const sig = frameSignature(canvas);
       if (lastSig && signatureDiff(sig, lastSig) < DUP_THRESHOLD && signatureBandDiff(sig, lastSig) < BAND_EPS) {
         consec++;
@@ -523,7 +557,7 @@ export default function GrabWizard({ onClose }) {
       } else {
         lastSig = sig; consec = 0; captured++;
         playGrabClick();
-        addSeg(canvasToDataUrl(canvas));
+        addSeg(canvasToDataUrl(canvas), cap.ocrCrop);
         setMsg(`Auto-grab: captured ${captured} page(s)… (advance the page now)`);
       }
       if (i < count - 1 && autoRef.current.running) await delay(interval);
@@ -553,7 +587,8 @@ export default function GrabWizard({ onClose }) {
     while (watchRef.current.running) {
       const v = videoRef.current;
       if (!v || !v.videoWidth) { await delay(POLL); continue; }
-      const canvas = captureFrame(v, cropVideoPx());
+      const cap = bufferedCapture();
+      const canvas = captureFrame(v, cap.rect);
       const sig = frameSignature(canvas);
       const now = Date.now();
       // A transition is whole-frame motion (global diff) OR — once we've already decided on a page —
@@ -578,7 +613,7 @@ export default function GrabWizard({ onClose }) {
         } else {
           watchRef.current.lastCapSig = sig; captured++;
           playGrabClick();
-          addSeg(canvasToDataUrl(canvas));
+          addSeg(canvasToDataUrl(canvas), cap.ocrCrop);
           setMsg(`👁 Grabbed page ${captured} — advance to the next (${skipped} skipped).`);
         }
       }
@@ -592,7 +627,7 @@ export default function GrabWizard({ onClose }) {
   function markSkipPattern() {
     const v = videoRef.current;
     if (!v || !v.videoWidth) { setMsg('Nothing on the preview to ignore yet.'); return; }
-    const sig = frameSignature(captureFrame(v, cropVideoPx()));
+    const sig = frameSignature(captureFrame(v, bufferedCapture().rect));
     skipSigsRef.current = [...skipSigsRef.current, sig];
     setSkipCount(skipSigsRef.current.length);
     setMsg(`👁 Will skip frames like this one — ${skipSigsRef.current.length} ignore pattern(s). Use for loading screens.`);
@@ -737,7 +772,7 @@ export default function GrabWizard({ onClose }) {
         checksum: doc.contentChecksum,
         name,
         createdAt: Date.now(),
-        segments: keep.map((s) => ({ text: s.text || '', image: s.image, layout: s.layout, regions: s.regions, ocrMode: s.ocrMode })),
+        segments: keep.map((s) => ({ text: s.text || '', image: s.image, layout: s.layout, regions: s.regions, ocrMode: s.ocrMode, ocrCrop: s.ocrCrop || null })),
         ocr: { docLayout, invert: ocrInvert, contrast: ocrContrast, useColors, bgColor, textColor, font: fontHint },
       }).catch(() => {});
       stopCapture(stream);
@@ -775,13 +810,13 @@ export default function GrabWizard({ onClose }) {
       updatedAt: Date.now(),
       step: step === 'screen' ? 'review' : step,
       voiceWord,
-      segments: segments.map((s) => ({ text: s.text || '', image: s.image, layout: s.layout || null, regions: s.regions || null, ocrMode: s.ocrMode || 'default' })),
+      segments: segments.map((s) => ({ text: s.text || '', image: s.image, layout: s.layout || null, regions: s.regions || null, ocrMode: s.ocrMode || 'default', ocrCrop: s.ocrCrop || null })),
       ocr: { docLayout, invert: ocrInvert, contrast: ocrContrast, useColors, bgColor, textColor, font: fontHint },
       pageCount: segments.length,
     };
   }
   function resumeSession(sess) {
-    setSegments((sess.segments || []).map((s) => ({ id: uid(), image: s.image, text: s.text || '', layout: s.layout || null, regions: s.regions || null, ocrMode: s.ocrMode || 'default' })));
+    setSegments((sess.segments || []).map((s) => ({ id: uid(), image: s.image, text: s.text || '', layout: s.layout || null, regions: s.regions || null, ocrMode: s.ocrMode || 'default', ocrCrop: s.ocrCrop || null })));
     const o = sess.ocr || {};
     if (o.docLayout) setDocLayout(o.docLayout);
     if (o.invert) setOcrInvert(o.invert);
@@ -822,6 +857,16 @@ export default function GrabWizard({ onClose }) {
     await deleteGrabSession(sessionIdRef.current).catch(() => {});
     doClose();
   }
+
+  // Dashed preview outline of the buffer margin around the crop (element-fraction space, clamped to
+  // the preview box). The actual capture uses bufferedCapture()'s precise video-pixel math.
+  const bufPct = Math.max(0, Number(grabBuffer) || 0) / 100;
+  const bufBox = crop && bufPct > 0 ? {
+    fx: Math.max(0, crop.fx - crop.fw * bufPct),
+    fy: Math.max(0, crop.fy - crop.fh * bufPct),
+    fw: Math.min(1, crop.fx + crop.fw + crop.fw * bufPct) - Math.max(0, crop.fx - crop.fw * bufPct),
+    fh: Math.min(1, crop.fy + crop.fh + crop.fh * bufPct) - Math.max(0, crop.fy - crop.fh * bufPct),
+  } : null;
 
   const hasText = segments.some((s) => (s.text || '').trim());
   const ocrDoneCount = segments.filter((s) => (s.text || '').trim()).length;
@@ -923,6 +968,7 @@ export default function GrabWizard({ onClose }) {
           <div className="grab-capture-col">
             <div className="grab-preview" onPointerDown={onCropDown} onPointerMove={onCropMove} onPointerUp={onCropUp}>
               <video ref={videoRef} muted playsInline />
+              {bufBox && <div className="grab-crop-buffer" style={{ left: `${bufBox.fx * 100}%`, top: `${bufBox.fy * 100}%`, width: `${bufBox.fw * 100}%`, height: `${bufBox.fh * 100}%` }} />}
               {crop && <div className="grab-crop" style={{ left: `${crop.fx * 100}%`, top: `${crop.fy * 100}%`, width: `${crop.fw * 100}%`, height: `${crop.fh * 100}%` }} />}
             </div>
             <div className="grab-controls">
@@ -931,6 +977,9 @@ export default function GrabWizard({ onClose }) {
                 <button onClick={flipCamera} disabled={autoRunning || watching} title="Switch between the front and rear camera">🔄 Flip camera</button>
               )}
               <button onClick={() => setCrop(null)} disabled={!crop}>Clear region</button>
+              <label title="Also capture a margin around your region (header / footer / page margins). It's saved with the image and shown in Source, but kept out of OCR. Needs a region drawn.">
+                buffer <input type="number" min={0} max={50} step={5} value={grabBuffer} onChange={(e) => setGrabBuffer(e.target.value)} style={{ width: 44 }} disabled={!crop} /> %
+              </label>
               <label className="inline-check" title="Recognize each page in the background the moment it's captured, so the text is ready by the time you finish">
                 <input type="checkbox" checked={autoOcr} onChange={(e) => setAutoOcr(e.target.checked)} />
                 OCR in background
