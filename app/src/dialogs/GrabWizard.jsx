@@ -875,6 +875,8 @@ export default function GrabWizard({ onClose }) {
   const needCount = segments.filter((s) => s.flagged || s.ocrStatus === 'error' || !(s.text || '').trim()).length;
   const voiceSupported = speechRecognitionSupported();
   const editingSeg = editingId ? segments.find((s) => s.id === editingId) : null;
+  // Grabs made on other devices (markers synced via progress sync) that we don't already have here.
+  const remoteGrabs = (state.global.remoteGrabs || []).filter((rg) => !recent.some((r) => r.checksum === rg.checksum));
 
   return (
     <Dialog
@@ -956,6 +958,23 @@ export default function GrabWizard({ onClose }) {
                   </button>
                   <button onClick={() => saveRecentToFile(r)} title="Save this grab's text to a file">💾</button>
                   <button className="grab-trash" onClick={() => removeRecent(r)} title="Delete saved grab">🗑</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {remoteGrabs.length > 0 && (
+            <div className="grab-recent">
+              <div className="grab-recent-head">Grabbed on your other devices</div>
+              <p className="settings-note" style={{ margin: '0 0 6px' }}>
+                Captured elsewhere — only a note syncs, the pages stay on that device. Re-grab here to read them.
+              </p>
+              {remoteGrabs.map((rg) => (
+                <div key={rg.checksum} className="remote-grab">
+                  <span className="bg-member-name">📄 {rg.name || 'Grab'}</span>
+                  <span className="settings-note" style={{ margin: 0 }}>{rg.pageCount || 0} page(s)</span>
+                  {rg.device && <span className="rg-dev">· {rg.device}</span>}
+                  {rg.createdAt ? <span className="settings-note" style={{ margin: 0 }}>· {new Date(rg.createdAt).toLocaleDateString()}</span> : null}
                 </div>
               ))}
             </div>

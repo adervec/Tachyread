@@ -16,6 +16,9 @@
 import { getFsHandle, setFsHandle } from '../../state/storage.js';
 
 export const BACKUP_FILE_NAME = 'tachyread-backup.json';
+// Cloud sync carries reading PROGRESS only (see storage.exportProgressData) — a separate, smaller
+// file from the full local backup, so a Drive/Dropbox sync folder never holds your file bodies.
+export const PROGRESS_FILE_NAME = 'tachyread-progress.json';
 
 async function ensureDirPermission(handle, mode = 'readwrite') {
   if (!handle) return false;
