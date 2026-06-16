@@ -98,6 +98,14 @@
   background: var(--pane-bg);
   font-weight: 600;
 }
+/* Not-yet-loaded (restored) tab: muted until tapped to load. */
+.tab-bar .tab.lazy .name { opacity: 0.6; font-style: italic; }
+.tab-bar .tab.lazy::before {
+  content: '○';
+  margin-right: 5px;
+  color: var(--status-fg);
+  font-size: 10px;
+}
 .tab-bar .tab .name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -133,6 +141,31 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
+}
+
+/* Compact-screen reading-view switch (Fast Reader vs Lines) — shown only on phones, where a single
+   reading view is displayed at a time. */
+.reading-view-switch {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px;
+  background: var(--menu-bg);
+  border-bottom: 1px solid var(--divider);
+}
+.reading-view-switch button {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid var(--input-border);
+  background: var(--btn-bg, transparent);
+  color: var(--menu-fg);
+  border-radius: 6px;
+}
+.reading-view-switch button.on {
+  background: var(--toggle-active-bg);
+  color: var(--toggle-active-fg, #fff);
+  border-color: var(--toggle-active-bg);
+  font-weight: 600;
 }
 .main-area {
   position: relative;
@@ -698,6 +731,17 @@
   margin: 0 0 12px 0;
   color: var(--menu-fg);
 }
+/* Lazy-tab "Opening…" spinner shown in place of the landing logo while a restored doc loads. */
+.loading-spin {
+  width: 44px;
+  height: 44px;
+  margin-bottom: 16px;
+  border: 4px solid var(--divider);
+  border-top-color: var(--toggle-active-bg);
+  border-radius: 50%;
+  animation: loadingSpin 0.9s linear infinite;
+}
+@keyframes loadingSpin { to { transform: rotate(360deg); } }
 .empty-state p { margin: 4px 0; }
 .empty-state .hint {
   margin-top: 24px;
@@ -1019,7 +1063,32 @@
   font-family: Consolas, monospace;
   font-size: 11px;
   color: var(--status-fg);
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
+.app-status-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Performance "is it struggling?" meter — a small dot + fps readout in the status bar. */
+.perf-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  color: var(--status-fg);
+  cursor: default;
+  user-select: none;
+}
+.perf-meter .perf-dot { width: 8px; height: 8px; border-radius: 50%; background: #2e9d4f; flex: 0 0 auto; }
+.perf-meter.perf-warn { color: #d98324; }
+.perf-meter.perf-warn .perf-dot { background: #d98324; }
+.perf-meter.perf-bad { color: #c0392b; }
+.perf-meter.perf-bad .perf-dot { background: #c0392b; animation: perfPulse 1s ease-in-out infinite; }
+@keyframes perfPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.perf-meter .perf-unit { opacity: 0.6; margin-left: 1px; }
+.perf-meter .perf-load { opacity: 0.85; }
 
 /* Dialogs */
 .dialog-backdrop {

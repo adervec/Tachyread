@@ -11,6 +11,8 @@ import TocPane from './components/TocPane.jsx';
 import ChapterHeading from './components/ChapterHeading.jsx';
 import PaneLayout from './components/PaneLayout.jsx';
 import FaceStage from './components/FaceStage.jsx';
+import PerfMonitor from './components/PerfMonitor.jsx';
+import { useIsCompact } from './state/device.js';
 import AudioChat from './components/AudioChat.jsx';
 import TypingRun from './components/TypingRun.jsx';
 import FindDialog from './dialogs/FindDialog.jsx';
@@ -60,10 +62,21 @@ import { applyTheme } from './state/themes.js';
 import './App.css';
 
 function AppInner() {
-  const { state, activeTab, openFile, openClipboard, setStatus, patchSettings, patchTab, openDialog, closeDialog, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
+  const { state, activeTab: rawActiveTab, hydrateTab, openFile, openClipboard, setStatus, patchSettings, patchTab, openDialog, closeDialog, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
+  // A lazy (restored, not-yet-loaded) tab has no parsed document — treat it as "no active reader"
+  // until it hydrates, so nothing downstream touches activeTab.doc before it exists.
+  const activeTab = rawActiveTab && !rawActiveTab.lazy ? rawActiveTab : null;
+  const isCompact = useIsCompact();
+  const [mobileView, setMobileView] = useState('rsvp'); // compact-screen single reading view: 'rsvp' | 'lines'
   const engineRef = useRef(null);
   if (!engineRef.current) engineRef.current = createEngine();
   const [playing, setPlaying] = useState(false);
+
+  // When the active tab is a lazy placeholder (e.g. selected via a restored tab strip, or auto-
+  // selected after closing another tab), build its document on demand.
+  useEffect(() => {
+    if (rawActiveTab?.lazy) hydrateTab(rawActiveTab.id);
+  }, [rawActiveTab?.id, rawActiveTab?.lazy, hydrateTab]);
   const [dragOver, setDragOver] = useState(false);
   const [closing, setClosing] = useState(null); // null | 'disconnect' | 'shutdown'
   const [goalKills, setGoalKills] = useState([]); // session-only killfeed of completed goals
@@ -827,10 +840,19 @@ function AppInner() {
         ),
       });
     if (state.showDash) arr.push({ id: 'dash', label: 'Dashboard', node: <DashboardPane tab={activeTab} /> });
-    if (!hideWord) arr.push({ id: 'rsvp', label: 'Fast Reader', node: <RsvpPane tab={activeTab} /> });
+    // On compact screens show exactly one reading view at a time (Fast Reader OR Lines) so the
+    // single column isn't a long scroll past two stacked readers. Desktop keeps both side by side.
+    let showRsvpPane = !hideWord;
+    let showLinesPane = true;
+    if (isCompact) {
+      if (hideWord) { showRsvpPane = false; showLinesPane = true; }
+      else if (mobileView === 'rsvp') { showRsvpPane = true; showLinesPane = false; }
+      else { showRsvpPane = false; showLinesPane = true; }
+    }
+    if (showRsvpPane) arr.push({ id: 'rsvp', label: 'Fast Reader', node: <RsvpPane tab={activeTab} /> });
     if (state.showSource && activeTab.doc.source)
       arr.push({ id: 'source', label: 'Source', node: <SourcePane tab={activeTab} /> });
-    arr.push({
+    if (showLinesPane) arr.push({
       id: 'lines',
       label: 'Lines',
       node: (
@@ -844,7 +866,7 @@ function AppInner() {
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showDash, state.showSource, hideWord, lineScroll, tocFlash]);
+  }, [activeTab, state.showToc, state.showDash, state.showSource, hideWord, lineScroll, tocFlash, isCompact, mobileView]);
 
   const dialog = state.dialog;
 
@@ -855,6 +877,26 @@ function AppInner() {
       {activeTab ? (
         <div className="main-wrap">
           <ChapterHeading tab={activeTab} onJumpWord={jumpWord} />
+          {isCompact && !hideWord && (
+            <div className="reading-view-switch" role="tablist" aria-label="Reading view">
+              <button
+                role="tab"
+                aria-selected={mobileView === 'rsvp'}
+                className={mobileView === 'rsvp' ? 'on' : ''}
+                onClick={() => setMobileView('rsvp')}
+              >
+                ⚡ Fast Reader
+              </button>
+              <button
+                role="tab"
+                aria-selected={mobileView === 'lines'}
+                className={mobileView === 'lines' ? 'on' : ''}
+                onClick={() => setMobileView('lines')}
+              >
+                ☰ Lines
+              </button>
+            </div>
+          )}
           <div className="main-area">
             <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
             {activeTab.settings.typing?.enabled && (
@@ -870,12 +912,19 @@ function AppInner() {
             {showFootnote && <FootnoteOverlay tab={activeTab} onClose={() => setShowFootnote(false)} />}
           </div>
         </div>
+      ) : rawActiveTab?.lazy ? (
+        <div className="empty-state">
+          <div className="loading-spin" aria-hidden="true" />
+          <h1>Opening {rawActiveTab.fileName}…</h1>
+          <p>Loading this document for the first time this session.</p>
+        </div>
       ) : (
         <div className="empty-state">
           <img className="empty-logo" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="Tachyread — the astral gavage goose" width="132" height="132" />
           <h1>Tachyread</h1>
           <p>Open a file (File → Open TXT, Ctrl+O), open a document (Ctrl+D), or drop a file here.</p>
           <p>Supports .txt, .md, .docx, .pdf, .epub.</p>
+          {state.tabs.length > 0 && <p>Or pick one of your {state.tabs.length} open tab(s) above.</p>}
           <p className="hint">Shortcuts: Space play, ←→ word, ↑↓ line, Ctrl+↑↓ paragraph, Home restart, Ctrl+F find</p>
         </div>
       )}
@@ -912,7 +961,10 @@ function AppInner() {
           <div className="progress-row"><div className="progress-bar" /><div className="progress-meta">— / —</div></div>
         </div>
       )}
-      <div className="app-status">{state.appStatus}</div>
+      <div className="app-status">
+        {state.global.showPerfMeter && <PerfMonitor />}
+        <span className="app-status-text">{state.appStatus}</span>
+      </div>
 
       {/* Dialogs */}
       {dialog?.kind === 'find' && activeTab && (

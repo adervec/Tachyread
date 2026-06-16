@@ -112,5 +112,15 @@ export function defaultGlobalSettings() {
     // Grabs that exist on OTHER devices (markers only — no images/text travel via sync).
     // { checksum, name, createdAt, pageCount, device, seenAt }
     remoteGrabs: [],
+    // Start on the landing page even when tabs are restored: no tab is active on launch, so the
+    // last document's text isn't revealed to bystanders until you pick its tab. Default on.
+    startOnLanding: true,
+    // Defer building a restored tab's document until it's first opened (saves memory, esp. on
+    // phones with several large books open). Applied on compact screens; eager on desktop.
+    lazyTabsMobile: true,
+    // Small bottom-bar readout of how hard the app is working (frame pacing). Useful on phones.
+    showPerfMeter: true,
+    // Read-aloud auto-stop: pause speech after this many minutes of playback (0 = never).
+    ttsAutoStopMin: 0,
   };
 }

@@ -12,15 +12,19 @@ export default function TabBar() {
   return (
     <div className="tab-bar">
       {state.tabs.map((tab) => {
-        const pct = tab.doc.words.length ? (tab.settings.wordIndex / tab.doc.words.length) * 100 : 0;
+        // Lazy (restored, not-yet-opened) tabs have no parsed doc — read name/progress from the
+        // lightweight placeholder fields instead.
+        const fileName = tab.lazy ? tab.fileName : tab.doc.fileName;
+        const total = tab.lazy ? (tab.settings.totalWords || 0) : tab.doc.words.length;
+        const pct = total ? (tab.settings.wordIndex / total) * 100 : 0;
         return (
           <div
             key={tab.id}
-            className={`tab ${tab.id === state.activeTabId ? 'active' : ''}`}
+            className={`tab ${tab.id === state.activeTabId ? 'active' : ''} ${tab.lazy ? 'lazy' : ''}`}
             onClick={() => setActiveTab(tab.id)}
-            title={tab.doc.fileName}
+            title={tab.lazy ? `${fileName} — tap to load` : fileName}
           >
-            <span className="name">{tab.doc.fileName}</span>
+            <span className="name">{fileName}</span>
             <button
               className="close"
               onClick={(e) => {

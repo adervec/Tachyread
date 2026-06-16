@@ -54,6 +54,38 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         />
       </Field>
 
+      <div className="field-section">Startup &amp; mobile</div>
+      <Field label="Start on the landing page">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={g.startOnLanding !== false}
+            onChange={(e) => patch({ startOnLanding: e.target.checked })}
+          />
+          Launch with no tab open, so a document isn’t shown until you pick its tab
+        </label>
+      </Field>
+      <Field label="Load tabs on demand (small screens)">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={g.lazyTabsMobile !== false}
+            onChange={(e) => patch({ lazyTabsMobile: e.target.checked })}
+          />
+          On phones, don’t parse a restored document until its tab is opened (saves memory)
+        </label>
+      </Field>
+      <Field label="Show performance meter">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={g.showPerfMeter !== false}
+            onChange={(e) => patch({ showPerfMeter: e.target.checked })}
+          />
+          A small frame-rate / “working hard” readout in the status bar
+        </label>
+      </Field>
+
       <div className="field-section">Audio control</div>
       <Field label="Hands-free mode">
         <select value={g.audioCtrlMode || 'Both'} onChange={(e) => patch({ audioCtrlMode: e.target.value })}>
