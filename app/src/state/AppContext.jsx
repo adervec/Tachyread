@@ -64,6 +64,7 @@ const init = {
   // Incognito reading: when true, ALL tracking + persistence is paused — the app reads like a plain
   // text viewer and, from the reading history's point of view, was never even opened. Session-only.
   incognito: false,
+  incognitoSnap: null, // { tabId: wordIndex } captured on entry, restored on exit (true "nothing happened")
 };
 
 function reducer(state, action) {
@@ -121,8 +122,29 @@ function reducer(state, action) {
       return { ...state, showIndex: !state.showIndex };
     case 'SET_HIDE_MODE':
       return { ...state, hideMode: action.mode };
-    case 'TOGGLE_INCOGNITO':
-      return { ...state, incognito: !state.incognito };
+    case 'TOGGLE_INCOGNITO': {
+      if (!state.incognito) {
+        // Entering: snapshot every open tab's reading position so it can be rewound on exit.
+        const snap = {};
+        for (const t of state.tabs) if (!t.lazy) snap[t.id] = t.settings.wordIndex;
+        return { ...state, incognito: true, incognitoSnap: snap };
+      }
+      // Exiting: rewind each tab to where it was — incognito reading leaves no trace at all.
+      const snap = state.incognitoSnap || {};
+      const tabs = state.tabs.map((t) =>
+        (!t.lazy && snap[t.id] != null && snap[t.id] !== t.settings.wordIndex)
+          ? { ...t, settings: { ...t.settings, wordIndex: snap[t.id] } }
+          : t
+      );
+      return { ...state, incognito: false, incognitoSnap: null, tabs };
+    }
+    case 'SNAP_INCOGNITO_TAB': {
+      // Capture a tab's position the first time it's loaded during incognito, so exit rewinds it too.
+      if (!state.incognito) return state;
+      const snap = { ...(state.incognitoSnap || {}) };
+      if (snap[action.id] == null) snap[action.id] = action.wordIndex;
+      return { ...state, incognitoSnap: snap };
+    }
     default:
       return state;
   }
@@ -275,6 +297,7 @@ export function AppProvider({ children }) {
           findQuery: '', findResults: [], findIndex: -1,
         },
       });
+      if (stateRef.current.incognito) dispatch({ type: 'SNAP_INCOGNITO_TAB', id, wordIndex: baseSettings.wordIndex });
       dispatch({ type: 'SET_STATUS', text: `Opened ${doc.fileName} (${doc.words.length} words)${groupNote}` });
     } catch (e) {
       dispatch({ type: 'SET_STATUS', text: `Couldn’t open ${tab.fileName}: ${e?.message || e}` });

@@ -94,7 +94,7 @@ function AppInner() {
     prevIncog.current = state.incognito;
     setStatus(state.incognito
       ? '🕶 Incognito on — nothing is being recorded; your reading history is untouched.'
-      : 'Incognito off — tracking resumed.');
+      : 'Incognito off — your place was rewound and tracking resumed. Nothing was saved.');
   }, [state.incognito, setStatus]);
   const [dragOver, setDragOver] = useState(false);
   const [closing, setClosing] = useState(null); // null | 'disconnect' | 'shutdown'
@@ -1012,7 +1012,7 @@ function AppInner() {
       {state.incognito && (
         <div className="incognito-banner" role="status">
           <span className="incog-eyes">🕶</span>
-          <span className="incog-text"><b>Incognito reading</b> — tracking is off. Nothing is recorded; your history is untouched.</span>
+          <span className="incog-text"><b>Incognito reading</b> — tracking is off. Nothing is recorded, and your place rewinds when you turn this off.</span>
           <button className="incog-off" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}>Turn off</button>
         </div>
       )}
