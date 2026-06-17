@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getLineIndex } from '../document/readerDocument.js';
-import { autoDetectToc, getTocEntries, buildTocTree, sectionSpan, currentChapter } from '../document/toc.js';
+import { autoDetectToc, getTocEntries, buildTocTree, sectionSpan, currentChapter, mergeSkipRanges } from '../document/toc.js';
 
 // Optional stat columns (the name column is always shown). `get` receives a per-row context.
 const STAT_COLUMNS = [
@@ -78,7 +78,18 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
   const total = doc.words.length || 1;
   const custom = !!(settings.tocEntries && settings.tocEntries.length);
   const columns = settings.tocColumns || {};
+  const skipRanges = settings.skipRanges || [];
   const paneRef = useRef(null);
+
+  // A section is "skipped" (excluded from completion %) when its start falls inside a skip range.
+  const isSkippedSpan = (span) => skipRanges.some((r) => span.start >= r.start && span.start < r.end);
+  function toggleSkip(span, label) {
+    if (isSkippedSpan(span)) {
+      onPatch({ skipRanges: skipRanges.filter((r) => !(span.start >= r.start && span.start < r.end)) });
+    } else {
+      onPatch({ skipRanges: mergeSkipRanges(skipRanges, [{ start: span.start, end: span.end, label }]) });
+    }
+  }
 
   const [editing, setEditing] = useState(false);
   const [collapsed, setCollapsed] = useState(() => new Set());
@@ -204,6 +215,18 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
         )}
       </div>
 
+      {!editing && skipRanges.length > 0 && (
+        <div className="toc-skips" title="These sections don’t count toward your completion % (reading still counts toward WPM)">
+          <span className="toc-skips-label">Excluded from %:</span>
+          {skipRanges.map((r, i) => (
+            <span key={i} className="toc-skip-chip">
+              {r.label || `${r.start + 1}–${r.end}`}
+              <button title="Stop excluding" onClick={() => onPatch({ skipRanges: skipRanges.filter((_, k) => k !== i) })}>✕</button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {!editing && showCols && (
         <div className="toc-col-menu">
           {STAT_COLUMNS.map((c) => (
@@ -235,6 +258,7 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
                     <th className="toc-act-h" title="Jump here (move reading position)">▶</th>
                     <th className="toc-act-h" title="Scroll into view (keep reading position)">👁</th>
                     <th className="toc-act-h" title="Set finishing this section as the goal">🎯</th>
+                    <th className="toc-act-h" title="Exclude this section from completion %">⊘</th>
                   </>
                 )}
                 <th className="toc-name-h">Section</th>
@@ -266,11 +290,12 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
                 };
                 const done = rs.readFrac >= 0.999;
                 const isCurrent = row.index === cur?.index;
+                const skipped = isSkippedSpan(span);
                 return (
                   <tr
                     key={`${e.wordIndex}-${row.index}`}
                     data-toc-index={row.index}
-                    className={`toc-row${isCurrent ? ' current' : ''}${done ? ' done' : ''}${row.index === flashIndex ? ' toc-flash' : ''}`}
+                    className={`toc-row${isCurrent ? ' current' : ''}${done ? ' done' : ''}${skipped ? ' toc-skipped' : ''}${row.index === flashIndex ? ' toc-flash' : ''}`}
                   >
                     {editing ? (
                       <>
@@ -290,6 +315,9 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
                           {!done && (
                             <button title="Set finishing this section as the goal" onClick={() => onSetSectionGoal(span.start, span.end, e.title)}>🎯</button>
                           )}
+                        </td>
+                        <td className="toc-act">
+                          <button className={skipped ? 'toc-skip-on' : ''} title={skipped ? 'Excluded from completion % — click to include' : 'Exclude this section from completion %'} onClick={() => toggleSkip(span, e.title)}>⊘</button>
                         </td>
                         <td className="toc-name">
                           <span className="toc-indent" style={{ width: row.level * 12 }} />

@@ -40,6 +40,19 @@ export default function ResourceWizard({ kind, tab, onApply, onClose }) {
   const [end, setEnd] = useState(detected ? detected.endLine : Math.min(doc.lines.length - 1, 60));
   const [styles, setStyles] = useState({ bracket: true, paren: true, super: true });
   const [items, setItems] = useState([]); // review rows (kind-specific)
+  const [skipFromCompletion, setSkipFromCompletion] = useState(true); // index/notes: exclude from %
+  const [cameFromRegion, setCameFromRegion] = useState(false);
+
+  // The word range covered by the located [start, end] line region (for a skip range).
+  function regionWordSpan() {
+    let a = -1;
+    let b = -1;
+    for (let li = start; li <= end && li < doc.lines.length; li++) {
+      const ln = doc.lines[li];
+      if (ln && ln.startWordIndex >= 0) { if (a < 0) a = ln.startWordIndex; if (ln.endWordIndex >= 0) b = ln.endWordIndex + 1; }
+    }
+    return a >= 0 && b > a ? { start: a, end: b, label: META[kind].title } : null;
+  }
 
   // Live parse of the chosen region (names/index) for the preview.
   const parsed = useMemo(() => {
@@ -56,6 +69,7 @@ export default function ResourceWizard({ kind, tab, onApply, onClose }) {
 
   // ── build (locate path) ──
   function buildLocate() {
+    setCameFromRegion(true);
     if (kind === 'names') {
       const names = parseNamesRegion(doc, start, end);
       const map = buildProperNamesFromList(doc, names);
@@ -70,6 +84,7 @@ export default function ResourceWizard({ kind, tab, onApply, onClose }) {
   }
   // ── build (blind path) ──
   function buildBlind() {
+    setCameFromRegion(false);
     if (kind === 'names') {
       detectProperNames(doc);
       const rows = [];
@@ -84,15 +99,16 @@ export default function ResourceWizard({ kind, tab, onApply, onClose }) {
   }
 
   function apply() {
+    const skip = cameFromRegion && skipFromCompletion ? regionWordSpan() : null;
     if (kind === 'names') {
       const names = items.map((it) => ({ name: it.name, note: it.note || '' }));
       onApply({ kind: 'names', map: buildProperNamesFromList(doc, names), seed: names });
     } else if (kind === 'index') {
-      onApply({ kind: 'index', entries: items.map((it) => ({ term: it.term, pages: it.pages || [], level: it.level || 0 })) });
+      onApply({ kind: 'index', entries: items.map((it) => ({ term: it.term, pages: it.pages || [], level: it.level || 0 })), skip });
     } else {
       const map = new Map();
       for (const it of items) map.set(it.number, it);
-      onApply({ kind: 'notes', map });
+      onApply({ kind: 'notes', map, skip });
     }
     onClose();
   }
@@ -155,6 +171,10 @@ export default function ResourceWizard({ kind, tab, onApply, onClose }) {
               ))}
             </div>
           )}
+          <label className="inline-check" style={{ marginTop: 6, marginBottom: 6 }}>
+            <input type="checkbox" checked={skipFromCompletion} onChange={(e) => setSkipFromCompletion(e.target.checked)} />
+            Don’t count this {meta.noun} toward completion % (reading it still counts toward WPM)
+          </label>
           <div className="tw-preview">
             {Array.from({ length: Math.min(240, Math.max(0, end - start + 1)) }, (_, k) => start + k).map((li) => {
               const line = doc.lines[li];

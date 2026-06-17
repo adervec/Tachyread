@@ -38,7 +38,7 @@ export default function DashboardPane({ tab, dock = false }) {
 
   const recent = tracker ? tracker.recentWpm() : 0;
   const sessionWpm = tracker ? tracker.sessionWpm() : 0;
-  const coverage = tracker ? tracker.coverage() : 0;
+  const coverage = tracker ? tracker.coverageExcluding(settings.skipRanges) : 0;
   const activeMs = tracker ? tracker.sessionActiveMs : 0;
   const newWords = tracker ? tracker.sessionNewWords : 0;
 

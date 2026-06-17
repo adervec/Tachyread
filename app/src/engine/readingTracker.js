@@ -310,6 +310,22 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     sessionWpm: () => wpmFrom(sessionNewWords, sessionActiveMs),
     lifetimeWpm: () => wpmFrom(readCount, lifetimeMs),
     coverage: () => (wordCount ? readCount / wordCount : 0),
+    // Completion fraction with some word ranges excluded from BOTH numerator and denominator —
+    // front/back matter flagged "skip" doesn't count toward % read (but reading it still credits
+    // WPM, which this doesn't touch). Iterates only the (small) skipped ranges, not the whole doc.
+    coverageExcluding: (ranges) => {
+      if (!ranges || !ranges.length) return wordCount ? readCount / wordCount : 0;
+      let skipRead = 0;
+      let skipTotal = 0;
+      for (const r of ranges) {
+        const a = Math.max(0, Math.min(wordCount, r.start | 0));
+        const b = Math.max(a, Math.min(wordCount, r.end | 0));
+        for (let i = a; i < b; i++) { skipTotal++; if (mask[i]) skipRead++; }
+      }
+      const effTotal = wordCount - skipTotal;
+      const effRead = readCount - skipRead;
+      return effTotal > 0 ? Math.max(0, Math.min(1, effRead / effTotal)) : 1;
+    },
     isRead: (i) => !!mask[i],
     get sessionNewWords() {
       return sessionNewWords;

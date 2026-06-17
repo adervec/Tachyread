@@ -48,7 +48,7 @@ import DataDialog from './dialogs/DataDialog.jsx';
 import BookGroupsDialog from './dialogs/BookGroupsDialog.jsx';
 import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
-import { getTocEntries, sectionSpan } from './document/toc.js';
+import { getTocEntries, sectionSpan, mergeSkipRanges } from './document/toc.js';
 import { defaultFileSettings } from './state/settings.js';
 import { cancelSpeech, rateFromIndex } from './features/tts.js';
 import { createReadAloud } from './features/readAloud.js';
@@ -828,11 +828,14 @@ function AppInner() {
       setStatus(`Proper names: ${payload.map.size} name(s) highlighted.`);
       openDialog({ kind: 'proper-names' });
     } else if (payload.kind === 'index') {
-      patchSettings(activeTab.id, { indexEntries: payload.entries });
+      const patch = { indexEntries: payload.entries };
+      if (payload.skip) patch.skipRanges = mergeSkipRanges(activeTab.settings.skipRanges, [payload.skip]);
+      patchSettings(activeTab.id, patch);
       if (!state.showIndex) dispatch({ type: 'TOGGLE_INDEX' });
       setStatus(`Index: ${payload.entries.length} term(s).`);
     } else if (payload.kind === 'notes') {
       activeTab.doc.footnotes = payload.map;
+      if (payload.skip) patchSettings(activeTab.id, { skipRanges: mergeSkipRanges(activeTab.settings.skipRanges, [payload.skip]) });
       patchTab(activeTab.id, { _footnotesGen: (activeTab._footnotesGen || 0) + 1 });
       setStatus(`Footnotes: ${payload.map.size} found.`);
     }
@@ -1182,8 +1185,11 @@ function AppInner() {
       {dialog?.kind === 'toc-wizard' && activeTab && (
         <TocWizard
           tab={activeTab}
-          onApply={(entries) => {
-            patchSettings(activeTab.id, { tocEntries: entries });
+          onApply={(entries, skip) => {
+            patchSettings(activeTab.id, {
+              tocEntries: entries,
+              skipRanges: mergeSkipRanges(activeTab.settings.skipRanges, skip),
+            });
             if (!state.showToc) dispatch({ type: 'TOGGLE_TOC' });
           }}
           onClose={closeDialog}

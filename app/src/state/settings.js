@@ -64,6 +64,7 @@ export function defaultFileSettings() {
     notes: '',
     rating: 0, // 0–5 stars, set on the Book Finished dialog
     tocEntries: [], // persisted custom TOC: [{ wordIndex, title, level }]
+    skipRanges: [], // word ranges excluded from the completion % (front/back matter): [{ start, end, label }]
     tocReadStats: {}, // per-section reading stats keyed by start wordIndex: { started, completed }
     tocCollapseCompleted: false, // auto-collapse fully-read sections in the TOC tree
     tocColumns: { // which TOC columns are visible (the name column is always shown)

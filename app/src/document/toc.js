@@ -64,6 +64,49 @@ export function getTocEntries(tab) {
     .sort((a, b) => a.wordIndex - b.wordIndex);
 }
 
+// "Matter" sections that, by default, shouldn't count toward the completion % — copyright, the
+// contents pages, index, foot/endnotes, acknowledgements, about-the-author, etc. The wizards
+// pre-check these; the user can always override.
+const MATTER_PATTERNS = [
+  /copyright/i, /^\s*(table of\s+)?contents\s*$/i, /^\s*index\b/i, /index of\b/i,
+  /foot\s?notes?/i, /end\s?notes?/i, /^\s*notes\s*$/i, /acknowledge?ments?/i,
+  /about the author/i, /about the publisher/i, /^\s*dedication\s*$/i, /title page/i,
+  /^\s*colophon\s*$/i,
+];
+export function isMatterTitle(title) {
+  const s = String(title || '');
+  return MATTER_PATTERNS.some((rx) => rx.test(s));
+}
+
+// Combine skip-range lists, sorting and merging overlapping/adjacent ranges (keeps a label).
+export function mergeSkipRanges(...lists) {
+  const all = [];
+  for (const l of lists) {
+    for (const r of l || []) {
+      if (Number.isFinite(r.start) && Number.isFinite(r.end) && r.end > r.start) {
+        all.push({ start: r.start, end: r.end, label: r.label || '' });
+      }
+    }
+  }
+  all.sort((a, b) => a.start - b.start);
+  const out = [];
+  for (const r of all) {
+    const last = out[out.length - 1];
+    if (last && r.start <= last.end) { last.end = Math.max(last.end, r.end); if (!last.label && r.label) last.label = r.label; }
+    else out.push({ ...r });
+  }
+  return out;
+}
+
+// Highest word index that still counts toward completion (skip trailing flagged matter, e.g. an
+// index/notes section at the back), so "finished" can trigger when the real content ends.
+export function lastCountableWord(totalWords, ranges) {
+  let i = totalWords - 1;
+  const inSkip = (x) => (ranges || []).some((r) => x >= r.start && x < r.end);
+  while (i > 0 && inSkip(i)) i--;
+  return i;
+}
+
 // Build a nested tree from the flat, level-tagged, sorted list. Each node carries the entry's
 // index in the flat list (a stable id for stats / edit / flash) and its children.
 export function buildTocTree(entries) {

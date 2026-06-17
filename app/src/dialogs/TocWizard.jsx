@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { getLineIndex } from '../document/readerDocument.js';
-import { autoDetectToc } from '../document/toc.js';
+import { autoDetectToc, isMatterTitle, sectionSpan } from '../document/toc.js';
 import { detectTocRegion, parsePrintedToc, buildFromPrintedToc, finalizeEntries } from '../document/tocWizard.js';
 
 // Robust TOC-generation wizard. Three paths, with the printed-Contents path as the headline feature:
@@ -17,6 +17,7 @@ export default function TocWizard({ tab, onApply, onClose }) {
   const [end, setEnd] = useState(detected ? detected.endLine : Math.min(doc.lines.length - 1, 40));
   const [candidates, setCandidates] = useState([]);
   const [showUnmatched, setShowUnmatched] = useState(true);
+  const [skipContents, setSkipContents] = useState(true); // exclude the printed contents pages from completion %
 
   // Parse preview of the chosen region (which lines become entries).
   const parsed = useMemo(() => parsePrintedToc(doc, start, end), [doc, start, end]);
@@ -37,14 +38,15 @@ export default function TocWizard({ tab, onApply, onClose }) {
   }
   function buildFromHeadings() {
     setMethod('headings');
-    const list = autoDetectToc(doc).map((e) => ({ wordIndex: e.wordIndex, title: e.title, level: e.level || 0, matched: true }));
+    const list = autoDetectToc(doc).map((e) => ({ wordIndex: e.wordIndex, title: e.title, level: e.level || 0, matched: true, skip: isMatterTitle(e.title) }));
     setCandidates(list);
     setStep('review');
   }
   function buildFromRegion() {
-    setCandidates(buildFromPrintedToc(doc, start, end));
+    setCandidates(buildFromPrintedToc(doc, start, end).map((c) => ({ ...c, skip: isMatterTitle(c.title) })));
     setStep('review');
   }
+  const setSkip = (i, v) => setCandidates((cs) => cs.map((c, k) => (k === i ? { ...c, skip: v } : c)));
 
   const matchedCount = candidates.filter((c) => c.matched && Number.isFinite(c.wordIndex)).length;
 
@@ -62,7 +64,25 @@ export default function TocWizard({ tab, onApply, onClose }) {
 
   function apply() {
     const entries = finalizeEntries(candidates);
-    onApply(entries);
+    // Skip ranges from checked entries' section spans (+ the printed contents pages themselves).
+    const skip = [];
+    for (const c of candidates) {
+      if (!c.skip || !c.matched || !Number.isFinite(c.wordIndex)) continue;
+      const i = entries.findIndex((e) => e.wordIndex === c.wordIndex && e.title === c.title);
+      if (i < 0) continue;
+      const sp = sectionSpan(entries, i, total);
+      skip.push({ start: sp.start, end: sp.end, label: c.title });
+    }
+    if (method === 'printed' && skipContents) {
+      let a = -1;
+      let b = -1;
+      for (let li = start; li <= end && li < doc.lines.length; li++) {
+        const ln = doc.lines[li];
+        if (ln && ln.startWordIndex >= 0) { if (a < 0) a = ln.startWordIndex; if (ln.endWordIndex >= 0) b = ln.endWordIndex + 1; }
+      }
+      if (a >= 0 && b > a) skip.push({ start: a, end: b, label: 'Contents' });
+    }
+    onApply(entries, skip);
     onClose();
   }
 
@@ -152,6 +172,15 @@ export default function TocWizard({ tab, onApply, onClose }) {
               <label className="inline-check"><input type="checkbox" checked={showUnmatched} onChange={(e) => setShowUnmatched(e.target.checked)} /> show unmatched</label>
             )}
           </div>
+          {method === 'printed' && (
+            <label className="inline-check" style={{ marginBottom: 6 }}>
+              <input type="checkbox" checked={skipContents} onChange={(e) => setSkipContents(e.target.checked)} /> Exclude the contents pages themselves from completion %
+            </label>
+          )}
+          <p className="settings-note" style={{ marginTop: 0 }}>
+            Tick <b>skip</b> to leave a section out of your completion % (reading it still counts toward WPM).
+            Copyright, contents, index, notes, acknowledgements and about-the-author are pre-checked.
+          </p>
           {candidates.length === 0 && <p className="settings-note">No entries — go back and widen the region, or use detected headings.</p>}
           <div className="tw-rev-list">
             {candidates.map((c, i) => {
@@ -168,6 +197,9 @@ export default function TocWizard({ tab, onApply, onClose }) {
                   {c.matched
                     ? <span className="tw-rev-pos" title={`Line ${line}`}>{pct.toFixed(1)}%</span>
                     : <input className="tw-rev-line" type="number" min={1} placeholder="line #" onChange={(e) => assignLine(i, e.target.value)} title="Type the line where this section starts" />}
+                  <label className="tw-rev-skip" title="Exclude this section from the completion %">
+                    <input type="checkbox" checked={!!c.skip} onChange={(e) => setSkip(i, e.target.checked)} />skip
+                  </label>
                   <button className="tw-rev-x" title="Remove" onClick={() => remove(i)}>✕</button>
                 </div>
               );

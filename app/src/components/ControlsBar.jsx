@@ -3,6 +3,7 @@ import { useApp } from '../state/AppContext.jsx';
 import Trendline from './Trendline.jsx';
 import TocBar from './TocBar.jsx';
 import { goalFraction, computeGoalStatus } from '../engine/goals.js';
+import { lastCountableWord } from '../document/toc.js';
 
 function formatTime(secs) {
   if (!isFinite(secs) || secs < 0) return '--:--:--';
@@ -17,14 +18,18 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
   const totalWords = doc.words.length;
-  // Coverage = fraction of the book actually read (not just the furthest position reached).
-  const coverage = tab.tracker ? tab.tracker.coverage() * 100 : 0;
+  const skipRanges = settings.skipRanges || [];
+  // Coverage = fraction of the COUNTABLE book actually read — flagged front/back matter is excluded.
+  const coverage = tab.tracker ? tab.tracker.coverageExcluding(skipRanges) * 100 : 0;
   // ETA from measured pace (recent → session → set WPM fallback) rather than the setpoint.
   const effWpm = (tab.tracker && (tab.tracker.recentWpm() || tab.tracker.sessionWpm())) || settings.wpm;
   const remainingWords = Math.max(0, totalWords - idx);
   const secs = effWpm > 0 ? (remainingWords / effWpm) * 60 : 0;
 
-  const atEnd = totalWords > 0 && idx >= totalWords - 1;
+  // "Finished" once you reach the end of the countable content (e.g. past the body into a skipped
+  // index/notes section), or the countable book is essentially fully read.
+  const lastContent = lastCountableWord(totalWords, skipRanges);
+  const atEnd = totalWords > 0 && (idx >= lastContent || coverage >= 99.5);
 
   return (
     <div className="controls-bar">
@@ -33,7 +38,7 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
         <div className="progress-meta">
           {idx + 1} / {totalWords}
         </div>
-        <div className="progress-meta" title="Percent of the book actually read">📖 {coverage.toFixed(1)}%</div>
+        <div className="progress-meta" title={skipRanges.length ? 'Percent of the countable book read (flagged front/back matter excluded)' : 'Percent of the book actually read'}>📖 {coverage.toFixed(1)}%{skipRanges.length ? '*' : ''}</div>
         <div className="progress-meta" title="Estimated time remaining at your measured pace">⏱ {formatTime(secs)}</div>
         {atEnd && (
           <button className="finish-btn" title="Mark this book finished and review your stats" onClick={onConfirmFinished}>
