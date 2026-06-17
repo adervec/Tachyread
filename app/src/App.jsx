@@ -64,7 +64,7 @@ import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
 
 const WEBCAM_LABEL = {
-  starting: 'starting camera…', watching: 'watching', away: 'looked away — paused',
+  starting: 'starting camera…', watching: 'watching', away: 'looked away — paused', drowsy: 'drowsy',
   unsupported: 'face detection not supported here', denied: 'camera blocked', error: 'camera error', off: '',
 };
 import { getSyncProvider } from './features/sync/syncProviders.js';
@@ -535,9 +535,15 @@ function AppInner() {
   const onRsvpVisible = useCallback((v) => reportPaneVisible('rsvp', v), [reportPaneVisible]);
   const onLinesVisible = useCallback((v) => reportPaneVisible('lines', v), [reportPaneVisible]);
 
-  // Webcam attention monitor (opt-in). Pauses non-TTS reading when it can't see you facing the screen.
+  // Webcam monitor (opt-in). The camera runs if EITHER guard is on; each behaviour is gated live so
+  // toggling one doesn't restart the camera. attention → pause non-TTS reading; doze → stop read-aloud.
+  const webcamAttentionRef = useRef(state.global.webcamAttention);
+  webcamAttentionRef.current = state.global.webcamAttention;
+  const webcamDozeRef = useRef(state.global.webcamDoze);
+  webcamDozeRef.current = state.global.webcamDoze;
+  const camOn = state.global.webcamAttention || state.global.webcamDoze;
   useEffect(() => {
-    if (!state.global.webcamAttention) {
+    if (!camOn) {
       webcamRef.current?.stop();
       webcamRef.current = null;
       blockRef.current.away = false;
@@ -545,17 +551,29 @@ function AppInner() {
       return undefined;
     }
     const mon = createAttentionMonitor({
-      onState: (s) => {
-        setWebcamState(s);
-        blockRef.current.away = s === 'away';
+      onState: (s) => setWebcamState(s),
+      onAttention: (attentive) => {
+        // visual reading pause — only when the attention guard is on
+        blockRef.current.away = webcamAttentionRef.current ? !attentive : false;
         evalBlock();
+      },
+      onDoze: (dozing) => {
+        // doze → stop read-aloud (it's otherwise exempt from the guards). No auto-resume: if you
+        // nodded off, it just stops, like the wind-down timer.
+        if (dozing && webcamDozeRef.current && playingRef.current && activeTabRef.current?.settings.readAloud) {
+          engineRef.current.pause();
+          setPlaying(false);
+          cancelSpeech();
+          if (activeTabRef.current) flushReadState(activeTabRef.current);
+          setStatus('Read-aloud stopped — you seemed to nod off.');
+        }
       },
     });
     webcamRef.current = mon;
     mon.start();
     return () => { mon.stop(); webcamRef.current = null; blockRef.current.away = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.global.webcamAttention]);
+  }, [camOn]);
 
   function playPause() {
     if (!activeTab) return;
@@ -1214,8 +1232,8 @@ function AppInner() {
       <div className="app-status">
         {state.global.showPerfMeter && <PerfMonitor />}
         <span className="app-status-text">{state.appStatus}</span>
-        {state.global.webcamAttention && webcamState !== 'off' && (
-          <span className={`webcam-badge wb-${webcamState}`} title="Webcam attention — frames are analysed on your device and never leave it">
+        {camOn && webcamState !== 'off' && (
+          <span className={`webcam-badge wb-${webcamState}`} title="Webcam — frames are analysed on your device and never leave it">
             📷 {WEBCAM_LABEL[webcamState] || webcamState}
           </span>
         )}

@@ -124,14 +124,25 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
             checked={!!g.webcamAttention}
             onChange={(e) => patch({ webcamAttention: e.target.checked })}
           />
-          Pause fast reading when the camera can’t see you facing the screen
+          Pause fast reading when the camera can’t see you facing the screen with eyes open
+        </label>
+      </Field>
+      <Field label="Doze detection (experimental)">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.webcamDoze}
+            onChange={(e) => patch({ webcamDoze: e.target.checked })}
+          />
+          Stop read-aloud if your eyes stay shut or you’re away for a while
         </label>
       </Field>
       <p className="settings-note">
-        Webcam attention uses your browser’s on-device face detection — the camera frames are analysed
-        locally and are never recorded, saved, or uploaded. It needs camera permission and a browser
-        that supports the FaceDetector API (mainly Chromium); where it isn’t supported it simply does
-        nothing. Read-aloud and typing are never paused by these guards.
+        Both use on-device face detection — camera frames are analysed locally and are never recorded,
+        saved, or uploaded; the camera only runs while one of these is on. Eye-open detection loads a
+        small face-landmark model on first use (needs network once, like the OCR data) and a WebGL
+        browser; without it, attention falls back to “facing the screen” and doze to “away for a while.”
+        Typing and (for the attention guard) read-aloud are never paused.
       </p>
 
       <div className="field-section">Audio control</div>

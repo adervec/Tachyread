@@ -1336,6 +1336,7 @@
 .webcam-badge { flex: 0 0 auto; font-size: 11px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
 .webcam-badge.wb-watching { color: #2e9d4f; }
 .webcam-badge.wb-away { color: #d98324; font-weight: 600; }
+.webcam-badge.wb-drowsy { color: #9b59b6; font-weight: 600; }
 .webcam-badge.wb-starting { color: var(--status-fg); }
 .webcam-badge.wb-denied, .webcam-badge.wb-error, .webcam-badge.wb-unsupported { color: #c0392b; }
 
