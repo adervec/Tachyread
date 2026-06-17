@@ -59,6 +59,8 @@ export function defaultFileSettings() {
     lineAdvanceSound: false, // soft click when the current line changes
     autoSkipHeadersFooters: false,
     properNames: {}, // name → { aliases:[], notes:'' }
+    properNameSeed: [], // wizard-located cast list [{name, note}] — seeds precise name highlighting
+    indexEntries: [], // wizard-built index from the book's printed index: [{ term, pages:[], level }]
     notes: '',
     rating: 0, // 0–5 stars, set on the Book Finished dialog
     tocEntries: [], // persisted custom TOC: [{ wordIndex, title, level }]

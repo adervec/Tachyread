@@ -30,6 +30,9 @@ import AppSettingsDialog from './dialogs/AppSettingsDialog.jsx';
 import BookFinishedDialog from './dialogs/BookFinishedDialog.jsx';
 import GrabWizard from './dialogs/GrabWizard.jsx';
 import TocWizard from './dialogs/TocWizard.jsx';
+import ResourceWizard from './dialogs/ResourceWizard.jsx';
+import IndexPane from './components/IndexPane.jsx';
+import { buildProperNamesFromList } from './document/resourceWizard.js';
 import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import AdaptiveProbe from './components/AdaptiveProbe.jsx';
@@ -127,16 +130,20 @@ function AppInner() {
   const ttsExpectedRef = useRef(-1); // index TTS last set, to tell self-advance from manual nav
   const metronomeRef = useRef(null); // rhythmic auditory pace cue (Web Audio)
 
-  // Run proper-name detection lazily when enabled on a tab (it's opt-in due to memory cost).
+  // Run proper-name detection lazily when enabled on a tab (it's opt-in due to memory cost). If the
+  // wizard located a cast list (properNameSeed), build precisely from that; otherwise fall back to
+  // the blind capitalisation heuristic.
   useEffect(() => {
     if (!activeTab?.settings.enableProperNames) return;
     const doc = activeTab.doc;
     if (doc.properNames && doc.properNames.size > 0) return;
-    detectProperNames(doc);
+    const seed = activeTab.settings.properNameSeed;
+    if (seed && seed.length) doc.properNames = buildProperNamesFromList(doc, seed);
+    else detectProperNames(doc);
     // Nudge a re-render so the line pane / RSVP engine pick up the new Map.
     patchTab(activeTab.id, { _propNamesGen: (activeTab._propNamesGen || 0) + 1 });
     // eslint-disable-next-line
-  }, [activeTab?.id, activeTab?.settings.enableProperNames]);
+  }, [activeTab?.id, activeTab?.settings.enableProperNames, activeTab?.settings.properNameSeed]);
 
   // Apply the active tab's theme (one of ~30 named palettes) via CSS custom properties.
   // Falls back to the legacy darkMode flag when no themeName is set.
@@ -811,6 +818,26 @@ function AppInner() {
     if (!res.canceled) setStatus(`Saved ${res.name}${res.method === 'download' ? ' to your downloads' : ''}.`);
   }
 
+  // Apply a resource-wizard result (proper names / index / footnotes) to the active tab.
+  function applyResource(payload) {
+    if (!activeTab) return;
+    if (payload.kind === 'names') {
+      activeTab.doc.properNames = payload.map;
+      patchSettings(activeTab.id, { enableProperNames: true, properNameSeed: payload.seed || [] });
+      patchTab(activeTab.id, { _propNamesGen: (activeTab._propNamesGen || 0) + 1 });
+      setStatus(`Proper names: ${payload.map.size} name(s) highlighted.`);
+      openDialog({ kind: 'proper-names' });
+    } else if (payload.kind === 'index') {
+      patchSettings(activeTab.id, { indexEntries: payload.entries });
+      if (!state.showIndex) dispatch({ type: 'TOGGLE_INDEX' });
+      setStatus(`Index: ${payload.entries.length} term(s).`);
+    } else if (payload.kind === 'notes') {
+      activeTab.doc.footnotes = payload.map;
+      patchTab(activeTab.id, { _footnotesGen: (activeTab._footnotesGen || 0) + 1 });
+      setStatus(`Footnotes: ${payload.map.size} found.`);
+    }
+  }
+
   function handleMenuAction(action) {
     if (action === 'sync-now') return doSyncNow();
     if (action === 'save-tab' && activeTab) return doSaveTab();
@@ -867,6 +894,9 @@ function AppInner() {
     if (action === 'history') return openDialog({ kind: 'history' });
     if (action === 'proper-names' && activeTab) return openDialog({ kind: 'proper-names' });
     if (action === 'toc-wizard' && activeTab) return openDialog({ kind: 'toc-wizard' });
+    if (action === 'names-wizard' && activeTab) return openDialog({ kind: 'resource-wizard', resourceKind: 'names' });
+    if (action === 'index-wizard' && activeTab) return openDialog({ kind: 'resource-wizard', resourceKind: 'index' });
+    if (action === 'notes-wizard' && activeTab) return openDialog({ kind: 'resource-wizard', resourceKind: 'notes' });
     if (action === 'audiobook' && activeTab) return openDialog({ kind: 'audiobook' });
     if (action === 'footnote' && activeTab) return setShowFootnote((s) => !s);
     if (action === 'typing' && activeTab) {
@@ -931,6 +961,8 @@ function AppInner() {
     if (showRsvpPane) arr.push({ id: 'rsvp', label: 'Fast Reader', node: <RsvpPane tab={activeTab} /> });
     if (state.showSource && activeTab.doc.source)
       arr.push({ id: 'source', label: 'Source', node: <SourcePane tab={activeTab} /> });
+    if (state.showIndex)
+      arr.push({ id: 'index', label: 'Index', node: <IndexPane tab={activeTab} onJumpWord={jumpWord} onWizard={() => openDialog({ kind: 'resource-wizard', resourceKind: 'index' })} /> });
     if (showLinesPane) arr.push({
       id: 'lines',
       label: 'Lines',
@@ -946,7 +978,7 @@ function AppInner() {
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showDash, state.showSource, hideWord, lineScroll, tocFlash, isCompact, mobileView]);
+  }, [activeTab, state.showToc, state.showDash, state.showSource, state.showIndex, hideWord, lineScroll, tocFlash, isCompact, mobileView]);
 
   const dialog = state.dialog;
 
@@ -1112,7 +1144,12 @@ function AppInner() {
       )}
       {dialog?.kind === 'history' && <HistoryDialog onClose={closeDialog} />}
       {dialog?.kind === 'proper-names' && activeTab && (
-        <ProperNamesDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
+        <ProperNamesDialog
+          tab={activeTab}
+          onJumpWord={jumpWord}
+          onWizard={() => openDialog({ kind: 'resource-wizard', resourceKind: 'names' })}
+          onClose={closeDialog}
+        />
       )}
       {dialog?.kind === 'audiobook' && activeTab && (
         <AudiobookDialog tab={activeTab} onClose={closeDialog} />
@@ -1149,6 +1186,14 @@ function AppInner() {
             patchSettings(activeTab.id, { tocEntries: entries });
             if (!state.showToc) dispatch({ type: 'TOGGLE_TOC' });
           }}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog?.kind === 'resource-wizard' && activeTab && (
+        <ResourceWizard
+          kind={dialog.resourceKind}
+          tab={activeTab}
+          onApply={applyResource}
           onClose={closeDialog}
         />
       )}

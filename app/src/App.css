@@ -520,6 +520,18 @@
 .tw-rev-pos { flex: 0 0 auto; font-family: Consolas, monospace; font-size: 11px; color: var(--meta-fg, var(--status-fg)); width: 52px; text-align: right; }
 .tw-rev-line { flex: 0 0 auto; width: 72px; font-size: 11px; }
 .tw-rev-x { border: none; background: transparent; color: #c0392b; cursor: pointer; padding: 0 4px; }
+.tw-rev-note { flex: 0 1 auto; min-width: 0; font-size: 11px; color: var(--status-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
+.tw-rev-fnbody { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tw-rev-row.tw-sub { opacity: 0.9; }
+
+/* Index pane (built by the resource wizard) */
+.index-list { padding: 2px 0; }
+.index-row { display: flex; align-items: baseline; gap: 8px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
+.index-row:hover { background: var(--menu-highlight); }
+.index-row.lvl-1 { padding-left: 28px; }
+.index-term { flex: 1; min-width: 0; color: var(--menu-fg); }
+.index-row.lvl-1 .index-term { color: var(--status-fg); }
+.index-pages { flex: 0 0 auto; font-family: Consolas, monospace; font-size: 11px; color: var(--meta-fg, var(--status-fg)); }
 
 /* Adaptive comprehension probe */
 .adapt-probe-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 6; }
