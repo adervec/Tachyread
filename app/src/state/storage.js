@@ -108,6 +108,20 @@ export async function deleteFile(checksum) {
   await db.delete('files', checksum);
 }
 
+// Lightweight {checksum, fileName} for every persisted doc payload — lets the reading history label
+// books (even ones opened before names were stored in FileSettings) without holding every full text
+// in memory at once (cursor walk, one record live at a time).
+export async function allDocMeta() {
+  const db = await getDB();
+  const out = [];
+  let cursor = await db.transaction('docs').store.openCursor();
+  while (cursor) {
+    out.push({ checksum: cursor.value.checksum, fileName: cursor.value.fileName });
+    cursor = await cursor.continue();
+  }
+  return out;
+}
+
 // Grabbed/OCR'd documents (text + original images + OCR config) so they reopen without
 // repeating the capture + recognition. Keyed by the doc's content checksum.
 export async function saveGrabbed(record) {

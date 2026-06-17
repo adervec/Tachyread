@@ -173,6 +173,8 @@ export function AppProvider({ children }) {
       ...(stateRef.current.global.fileDefaults || {}),
       ...(stored || {}),
     };
+    // Record the book's name on its settings so the reading history can label it without a payload load.
+    baseSettings.fileName = doc.fileName || baseSettings.fileName || '';
     // Clamp wordIndex if it overruns the new doc length
     if (baseSettings.wordIndex >= doc.words.length)
       baseSettings.wordIndex = Math.max(0, doc.words.length - 1);

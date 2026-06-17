@@ -113,6 +113,9 @@ export function defaultGlobalSettings() {
     // Grabs that exist on OTHER devices (markers only — no images/text travel via sync).
     // { checksum, name, createdAt, pageCount, device, seenAt }
     remoteGrabs: [],
+    // Reading list / literary journey scaffolding: per-book shelf overrides keyed by checksum
+    // ('reading' | 'finished' | 'toread' | 'paused'). Absent → shelf is inferred from progress.
+    readingList: { shelves: {} },
     // Start on the landing page even when tabs are restored: no tab is active on launch, so the
     // last document's text isn't revealed to bystanders until you pick its tab. Default on.
     startOnLanding: true,
