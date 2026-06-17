@@ -137,6 +137,27 @@ export default function AppSettingsDialog({ global, onPatch, onCalibrate, onClos
           Stop read-aloud if your eyes stay shut or you’re away for a while
         </label>
       </Field>
+      <Field label="Away alarm (experimental)">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.webcamAwayAlarm}
+            onChange={(e) => patch({ webcamAwayAlarm: e.target.checked })}
+          />
+          Sound an alarm if you look away for too long
+        </label>
+      </Field>
+      <Field label="Alarm after (seconds)">
+        <input
+          type="number"
+          min={3}
+          max={300}
+          value={g.webcamAwayAlarmSec ?? 15}
+          disabled={!g.webcamAwayAlarm}
+          onChange={(e) => patch({ webcamAwayAlarmSec: Math.max(3, Math.min(300, Number(e.target.value) || 15)) })}
+          style={{ width: 70 }}
+        />
+      </Field>
       <Field label="Camera preview">
         <label className="inline-check">
           <input

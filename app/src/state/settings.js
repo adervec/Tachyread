@@ -142,6 +142,9 @@ export function defaultGlobalSettings() {
     webcamAttention: false,
     // Webcam doze detection (opt-in): stop read-aloud if your eyes stay shut / you're gone a while.
     webcamDoze: false,
+    // Away alarm (opt-in): sound an alert if you look away from the screen for this many seconds.
+    webcamAwayAlarm: false,
+    webcamAwayAlarmSec: 15,
     // Show a small live camera preview (with a status ring) while a webcam guard is on. Default on
     // so you can confirm framing and that the camera is active.
     webcamPreview: true,

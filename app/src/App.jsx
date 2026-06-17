@@ -64,6 +64,7 @@ import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
 import WebcamPreview from './components/WebcamPreview.jsx';
 import WebcamCalibrationDialog from './dialogs/WebcamCalibrationDialog.jsx';
+import { createAlarm } from './features/alarm.js';
 
 const WEBCAM_LABEL = {
   starting: 'starting camera…', watching: 'watching', away: 'looked away — paused', drowsy: 'drowsy',
@@ -544,7 +545,19 @@ function AppInner() {
   webcamAttentionRef.current = state.global.webcamAttention;
   const webcamDozeRef = useRef(state.global.webcamDoze);
   webcamDozeRef.current = state.global.webcamDoze;
-  const camOn = state.global.webcamAttention || state.global.webcamDoze;
+  const awayAlarmRef = useRef(state.global.webcamAwayAlarm);
+  awayAlarmRef.current = state.global.webcamAwayAlarm;
+  const awayAlarmSecRef = useRef(state.global.webcamAwayAlarmSec);
+  awayAlarmSecRef.current = state.global.webcamAwayAlarmSec;
+  const alarmEngineRef = useRef(null);
+  const alarmDismissedRef = useRef(false);
+  const [awayAlarmActive, setAwayAlarmActive] = useState(false);
+  const dismissAwayAlarm = useCallback(() => {
+    alarmEngineRef.current?.stop();
+    setAwayAlarmActive(false);
+    alarmDismissedRef.current = true; // suppress until attention returns
+  }, []);
+  const camOn = state.global.webcamAttention || state.global.webcamDoze || state.global.webcamAwayAlarm;
   useEffect(() => {
     if (!camOn) {
       webcamRef.current?.stop();
@@ -573,10 +586,30 @@ function AppInner() {
           setStatus('Read-aloud stopped — you seemed to nod off.');
         }
       },
+      onAway: (awayMs) => {
+        // Escalating alarm: sound an alert once you've been away longer than the configured delay.
+        const running = alarmEngineRef.current?.isRunning?.();
+        if (!awayAlarmRef.current || awayMs === 0) {
+          if (awayMs === 0) alarmDismissedRef.current = false; // attention back → re-arm
+          if (running) { alarmEngineRef.current.stop(); setAwayAlarmActive(false); }
+          return;
+        }
+        if (!alarmDismissedRef.current && awayMs >= (awayAlarmSecRef.current || 15) * 1000) {
+          if (!alarmEngineRef.current) alarmEngineRef.current = createAlarm();
+          if (!alarmEngineRef.current.isRunning()) { alarmEngineRef.current.start(); setAwayAlarmActive(true); }
+        }
+      },
     });
     webcamRef.current = mon;
     mon.start();
-    return () => { mon.stop(); webcamRef.current = null; blockRef.current.away = false; };
+    return () => {
+      mon.stop();
+      webcamRef.current = null;
+      blockRef.current.away = false;
+      alarmEngineRef.current?.stop();
+      setAwayAlarmActive(false);
+      alarmDismissedRef.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camOn]);
 
@@ -1408,6 +1441,17 @@ function AppInner() {
           onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
           onHide={() => updateGlobal({ webcamPreview: false })}
         />
+      )}
+
+      {/* Looking-away alarm — flashing alert + beeper until you return or dismiss. */}
+      {awayAlarmActive && (
+        <div className="away-alarm" role="alertdialog" onClick={dismissAwayAlarm}>
+          <div className="away-alarm-box">
+            <div className="away-alarm-title">👀 Eyes on the page!</div>
+            <p>You’ve been looking away. Look back to silence it, or tap to dismiss.</p>
+            <button onClick={(e) => { e.stopPropagation(); dismissAwayAlarm(); }}>Dismiss</button>
+          </div>
+        </div>
       )}
 
       {/* Single shared WebGL context for every 3D reader face (drei <View> portals here).

@@ -101,7 +101,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // onState: starting | watching | away | drowsy | unsupported | denied | error | off
 export function createAttentionMonitor({
-  onState, onAttention, onDoze, onStream, blinkThreshold = BLINK_CLOSED,
+  onState, onAttention, onDoze, onAway, onStream, blinkThreshold = BLINK_CLOSED,
   intervalMs = 250, attentionGraceMs = 1300, dozeMs = 7000, absentMs = 20000,
 } = {}) {
   let stream = null;
@@ -112,6 +112,7 @@ export function createAttentionMonitor({
   let lastAttentive = 0;
   let lastEyesOpen = 0;
   let lastPresent = 0;
+  let attentiveLostAt = 0; // when attention was continuously lost (for the away alarm)
   let lastBlinkScore = null; // latest raw blink score (for calibration), null when no eye data
   let threshold = blinkThreshold;
   let state = 'off';
@@ -171,6 +172,10 @@ export function createAttentionMonitor({
 
     setAttentive(att);
     setDozing(dz);
+    // Continuous time not-attentive, for the escalating away alarm (0 while engaged).
+    if (att) attentiveLostAt = 0;
+    else if (!attentiveLostAt) attentiveLostAt = now;
+    onAway?.(att ? 0 : now - attentiveLostAt);
     setState(dz ? 'drowsy' : att ? 'watching' : 'away');
   }
 

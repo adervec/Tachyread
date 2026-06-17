@@ -1364,6 +1364,34 @@
 .webcam-preview-bar button { border: none; background: transparent; color: var(--status-fg); cursor: pointer; padding: 0 4px; font-size: 13px; }
 .webcam-preview-bar button:hover { color: var(--menu-fg); }
 @media (max-width: 860px) { .webcam-preview { width: 128px; bottom: 56px; } .webcam-preview-vid { height: 96px; } }
+
+/* Looking-away alarm overlay */
+.away-alarm {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  animation: awayFlash 0.7s steps(1, end) infinite;
+}
+@keyframes awayFlash {
+  0%, 100% { background: rgba(192, 57, 43, 0.28); }
+  50% { background: rgba(192, 57, 43, 0.06); }
+}
+.away-alarm-box {
+  background: var(--menu-bg);
+  border: 3px solid #c0392b;
+  border-radius: 14px;
+  padding: 22px 28px;
+  text-align: center;
+  max-width: 420px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+.away-alarm-title { font-size: 26px; font-weight: 800; color: #c0392b; margin-bottom: 8px; }
+.away-alarm-box p { margin: 0 0 14px; font-size: 14px; }
+.away-alarm-box button { padding: 8px 22px; font-weight: 600; }
 .webcam-badge.wb-starting { color: var(--status-fg); }
 .webcam-badge.wb-denied, .webcam-badge.wb-error, .webcam-badge.wb-unsupported { color: #c0392b; }
 
