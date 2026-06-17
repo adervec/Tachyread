@@ -2,6 +2,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'rea
 import { List, useDynamicRowHeight, useListRef } from 'react-window';
 import { ReadStatus, orpIndex, getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import Pointer from './Pointer.jsx';
+import { useReportVisibility } from '../state/useReportVisibility.js';
 
 function stripPunct(w) {
   return w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
@@ -280,8 +281,9 @@ function revealBoundary(doc, idx, mode) {
   return Infinity;
 }
 
-export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSignal, visibleRef }) {
+export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSignal, visibleRef, onVisible }) {
   const { doc, settings } = tab;
+  const paneVisRef = useReportVisibility(onVisible || (() => {}));
   const idx = settings.wordIndex;
   const [menu, setMenu] = useState(null);
   const [pressingStart, setPressingStart] = useState(-1); // wordIndex of the line being long-pressed
@@ -468,7 +470,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
   });
 
   return (
-    <div className="line-pane">
+    <div className="line-pane" ref={paneVisRef}>
       <div className="line-pane-toolbar">
         <span>Lines</span>
       </div>

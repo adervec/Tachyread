@@ -61,6 +61,12 @@ import { playLineClick } from './features/clickSound.js';
 import { createMetronome } from './features/metronome.js';
 import { saveTextToFile } from './features/fileSystem.js';
 import { ambient } from './features/ambient.js';
+import { createAttentionMonitor } from './features/webcamAttention.js';
+
+const WEBCAM_LABEL = {
+  starting: 'starting camera…', watching: 'watching', away: 'looked away — paused',
+  unsupported: 'face detection not supported here', denied: 'camera blocked', error: 'camera error', off: '',
+};
 import { getSyncProvider } from './features/sync/syncProviders.js';
 import { backupToProvider } from './features/sync/syncManager.js';
 import { applyTheme } from './state/themes.js';
@@ -481,8 +487,79 @@ function AppInner() {
     jumpWord(wi);
   }
 
+  // ── Pause when the reader isn't engaged ─────────────────────────────────────────────────────
+  // Two guards pause NON-TTS reading (read-aloud / typing are exempt): the text scrolling off-screen,
+  // and — with the webcam feature — the user looking away. An auto-pause is remembered and resumed
+  // when the blocker clears, so a brief glance away doesn't lose your place.
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
+  const blockRef = useRef({ offscreen: false, away: false });
+  const autoPausedRef = useRef(false);
+  const offscreenTimer = useRef(null);
+  const paneVis = useRef({ rsvp: false, lines: false });
+  const pauseTextHiddenRef = useRef(state.global.pauseWhenTextHidden);
+  pauseTextHiddenRef.current = state.global.pauseWhenTextHidden;
+  const [webcamState, setWebcamState] = useState('off');
+  const webcamRef = useRef(null);
+
+  const evalBlock = useCallback(() => {
+    const tab = activeTabRef.current;
+    if (!tab) return;
+    const nonTts = !tab.settings.readAloud && !tab.settings.typing?.enabled;
+    const blocked = blockRef.current.offscreen || blockRef.current.away;
+    if (blocked) {
+      if (playingRef.current && nonTts) {
+        autoPausedRef.current = true;
+        engineRef.current.pause();
+        setPlaying(false);
+      }
+    } else if (autoPausedRef.current && !playingRef.current && nonTts) {
+      autoPausedRef.current = false;
+      engineRef.current.start();
+      setPlaying(true);
+    }
+  }, []);
+
+  const reportPaneVisible = useCallback((id, v) => {
+    paneVis.current[id] = v;
+    if (offscreenTimer.current) { clearTimeout(offscreenTimer.current); offscreenTimer.current = null; }
+    const anyVisible = paneVis.current.rsvp || paneVis.current.lines;
+    if (!pauseTextHiddenRef.current || anyVisible) {
+      blockRef.current.offscreen = false;
+      evalBlock();
+    } else {
+      // brief delay so a pane unmount / view switch / re-layout isn't mistaken for "hidden"
+      offscreenTimer.current = setTimeout(() => { blockRef.current.offscreen = true; evalBlock(); }, 500);
+    }
+  }, [evalBlock]);
+  const onRsvpVisible = useCallback((v) => reportPaneVisible('rsvp', v), [reportPaneVisible]);
+  const onLinesVisible = useCallback((v) => reportPaneVisible('lines', v), [reportPaneVisible]);
+
+  // Webcam attention monitor (opt-in). Pauses non-TTS reading when it can't see you facing the screen.
+  useEffect(() => {
+    if (!state.global.webcamAttention) {
+      webcamRef.current?.stop();
+      webcamRef.current = null;
+      blockRef.current.away = false;
+      evalBlock();
+      return undefined;
+    }
+    const mon = createAttentionMonitor({
+      onState: (s) => {
+        setWebcamState(s);
+        blockRef.current.away = s === 'away';
+        evalBlock();
+      },
+    });
+    webcamRef.current = mon;
+    mon.start();
+    return () => { mon.stop(); webcamRef.current = null; blockRef.current.away = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.global.webcamAttention]);
+
   function playPause() {
     if (!activeTab) return;
+    autoPausedRef.current = false; // manual control overrides any auto-pause memory
     if (playing) {
       engineRef.current.pause();
       setPlaying(false);
@@ -980,7 +1057,7 @@ function AppInner() {
       else if (mobileView === 'rsvp') { showRsvpPane = true; showLinesPane = false; }
       else { showRsvpPane = false; showLinesPane = true; }
     }
-    if (showRsvpPane) arr.push({ id: 'rsvp', label: 'Fast Reader', node: <RsvpPane tab={activeTab} /> });
+    if (showRsvpPane) arr.push({ id: 'rsvp', label: 'Fast Reader', node: <RsvpPane tab={activeTab} onVisible={onRsvpVisible} /> });
     if (state.showSource && activeTab.doc.source)
       arr.push({ id: 'source', label: 'Source', node: <SourcePane tab={activeTab} /> });
     if (state.showIndex)
@@ -995,12 +1072,13 @@ function AppInner() {
           hideMode={activeTab.settings.hideMode || 'None'}
           scrollSignal={lineScroll}
           visibleRef={linesVisibleRef}
+          onVisible={onLinesVisible}
         />
       ),
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showDash, state.showSource, state.showIndex, hideWord, lineScroll, tocFlash, isCompact, mobileView]);
+  }, [activeTab, state.showToc, state.showDash, state.showSource, state.showIndex, hideWord, lineScroll, tocFlash, isCompact, mobileView, onRsvpVisible, onLinesVisible]);
 
   const dialog = state.dialog;
 
@@ -1136,6 +1214,11 @@ function AppInner() {
       <div className="app-status">
         {state.global.showPerfMeter && <PerfMonitor />}
         <span className="app-status-text">{state.appStatus}</span>
+        {state.global.webcamAttention && webcamState !== 'off' && (
+          <span className={`webcam-badge wb-${webcamState}`} title="Webcam attention — frames are analysed on your device and never leave it">
+            📷 {WEBCAM_LABEL[webcamState] || webcamState}
+          </span>
+        )}
       </div>
 
       {/* Dialogs */}

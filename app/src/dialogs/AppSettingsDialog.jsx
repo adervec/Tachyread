@@ -106,6 +106,34 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         </label>
       </Field>
 
+      <div className="field-section">Reading guard</div>
+      <Field label="Pause when text isn’t visible">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={g.pauseWhenTextHidden !== false}
+            onChange={(e) => patch({ pauseWhenTextHidden: e.target.checked })}
+          />
+          Pause fast reading if the text scrolls off-screen (read-aloud keeps going)
+        </label>
+      </Field>
+      <Field label="Webcam attention (experimental)">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.webcamAttention}
+            onChange={(e) => patch({ webcamAttention: e.target.checked })}
+          />
+          Pause fast reading when the camera can’t see you facing the screen
+        </label>
+      </Field>
+      <p className="settings-note">
+        Webcam attention uses your browser’s on-device face detection — the camera frames are analysed
+        locally and are never recorded, saved, or uploaded. It needs camera permission and a browser
+        that supports the FaceDetector API (mainly Chromium); where it isn’t supported it simply does
+        nothing. Read-aloud and typing are never paused by these guards.
+      </p>
+
       <div className="field-section">Audio control</div>
       <Field label="Hands-free mode">
         <select value={g.audioCtrlMode || 'Both'} onChange={(e) => patch({ audioCtrlMode: e.target.value })}>

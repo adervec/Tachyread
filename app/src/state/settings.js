@@ -134,5 +134,11 @@ export function defaultGlobalSettings() {
     gestureControls: false,
     // Auto-minimize the controls dock while playing on compact screens, for more text room.
     autoMinimizeControls: false,
+    // Pause non-TTS playback when the reading text scrolls off-screen (you can't read what you can't
+    // see). Read-aloud / typing are exempt. Default on.
+    pauseWhenTextHidden: true,
+    // Webcam attention (opt-in, experimental): pause non-TTS reading when the camera can't see you
+    // facing the screen. Processed entirely on-device; nothing leaves the machine. Default off.
+    webcamAttention: false,
   };
 }

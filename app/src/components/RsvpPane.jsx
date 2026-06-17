@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { orpIndex } from '../document/readerDocument.js';
+import { useReportVisibility } from '../state/useReportVisibility.js';
 
 function calcFontSize(word) {
   const BASE = 64;
@@ -24,8 +25,9 @@ function ContextWordChar({ word, highlightOrp }) {
 
 // RSVP word display only — the ORP word, context words, and guide lines.
 // Animated faces and stats live in DashboardPane so the panes resize independently.
-export default function RsvpPane({ tab }) {
+export default function RsvpPane({ tab, onVisible }) {
   const { settings, doc } = tab;
+  const visRef = useReportVisibility(onVisible || (() => {}));
   const idx = settings.wordIndex;
   const word = doc.words[idx] || '';
   const orp = orpIndex(word.length);
@@ -51,7 +53,7 @@ export default function RsvpPane({ tab }) {
   const themeClass = `rsvp-pane ${settings.serif ? 'serif' : 'sans'} guide-${settings.guideColor || 'Red'}`;
 
   return (
-    <div className={themeClass}>
+    <div className={themeClass} ref={visRef}>
       <div className="rsvp-context-before">
         {beforeWords.map((w, i) => (
           <ContextWordChar key={i} word={w} highlightOrp={settings.highlightORP} />
