@@ -6,7 +6,7 @@
 
 import { getLineIndex } from './readerDocument.js';
 
-const HEAD_RX = /^\s*(chapter|part|book|volume|section|prologue|epilogue|appendix|introduction|foreword|preface)\b/i;
+export const HEAD_RX = /^\s*(chapter|part|book|volume|section|prologue|epilogue|appendix|introduction|foreword|preface)\b/i;
 
 // Keyword → tier. Lower = higher in the hierarchy. Generic capitalised lines fall to leaf tier.
 const TIER_KEYWORDS = [
@@ -15,14 +15,14 @@ const TIER_KEYWORDS = [
   { rx: /^\s*(chapter|section|prologue|epilogue|appendix|introduction|foreword|preface)\b/i, level: 2 },
 ];
 
-function keywordLevel(text) {
+export function keywordLevel(text) {
   for (const k of TIER_KEYWORDS) if (k.rx.test(text)) return k.level;
   return 2; // generic short heading → leaf tier
 }
 
 // Shift the smallest present level to 0 so a chapters-only document shows its chapters at the
 // top tier instead of indented under empty book/part tiers.
-function normalizeLevels(entries) {
+export function normalizeLevels(entries) {
   if (!entries.length) return entries;
   const min = Math.min(...entries.map((e) => e.level || 0));
   if (!min) return entries;

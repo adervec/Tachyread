@@ -29,6 +29,7 @@ import TypingProgressDialog from './dialogs/TypingProgressDialog.jsx';
 import AppSettingsDialog from './dialogs/AppSettingsDialog.jsx';
 import BookFinishedDialog from './dialogs/BookFinishedDialog.jsx';
 import GrabWizard from './dialogs/GrabWizard.jsx';
+import TocWizard from './dialogs/TocWizard.jsx';
 import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import AdaptiveProbe from './components/AdaptiveProbe.jsx';
@@ -865,6 +866,7 @@ function AppInner() {
     if (action === 'stats') return openDialog({ kind: 'stats' });
     if (action === 'history') return openDialog({ kind: 'history' });
     if (action === 'proper-names' && activeTab) return openDialog({ kind: 'proper-names' });
+    if (action === 'toc-wizard' && activeTab) return openDialog({ kind: 'toc-wizard' });
     if (action === 'audiobook' && activeTab) return openDialog({ kind: 'audiobook' });
     if (action === 'footnote' && activeTab) return setShowFootnote((s) => !s);
     if (action === 'typing' && activeTab) {
@@ -910,6 +912,7 @@ function AppInner() {
             onScrollToLine={scrollLinesToLine}
             onSetSectionGoal={setSectionGoal}
             onPatch={(p) => patchSettings(activeTab.id, p)}
+            onWizard={() => openDialog({ kind: 'toc-wizard' })}
             flashSignal={tocFlash}
           />
         ),
@@ -1139,6 +1142,16 @@ function AppInner() {
         <AttentionDialog tab={activeTab} recentScores={probeScoresRef.current} onClose={closeDialog} />
       )}
       {dialog?.kind === 'grab' && <GrabWizard onClose={closeDialog} />}
+      {dialog?.kind === 'toc-wizard' && activeTab && (
+        <TocWizard
+          tab={activeTab}
+          onApply={(entries) => {
+            patchSettings(activeTab.id, { tocEntries: entries });
+            if (!state.showToc) dispatch({ type: 'TOGGLE_TOC' });
+          }}
+          onClose={closeDialog}
+        />
+      )}
       {dialog?.kind === 'finished' && activeTab && (
         <BookFinishedDialog
           tab={activeTab}

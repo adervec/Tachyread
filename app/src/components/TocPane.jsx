@@ -72,7 +72,7 @@ function ancestorsOf(entries, index) {
 
 // Editable, hierarchical table of contents. Navigable by default (no structural edits); an
 // explicit Edit mode exposes add/rename/delete/indent with undo / redo / commit / discard.
-export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSetSectionGoal, flashSignal }) {
+export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSetSectionGoal, onWizard, flashSignal }) {
   const { doc, settings, tracker } = tab;
   const idx = settings.wordIndex;
   const total = doc.words.length || 1;
@@ -186,6 +186,7 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
         <span style={{ flex: 1 }} />
         {!editing && (
           <>
+            {onWizard && <button title="Generate the table of contents (wizard)" onClick={onWizard}>🪄</button>}
             <button className={showCols ? 'on' : ''} title="Show / hide columns" onClick={() => setShowCols((v) => !v)}>▦</button>
             <button title="Edit the table of contents" onClick={beginEdit}>✎ Edit</button>
           </>

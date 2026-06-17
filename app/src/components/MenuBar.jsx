@@ -32,6 +32,7 @@ const MENUS = {
     { label: 'Attention Check...', action: 'attention' },
     { label: 'Reading History...', shortcut: 'Ctrl+H', action: 'history' },
     { kind: 'separator' },
+    { label: 'Generate Contents (Wizard)...', action: 'toc-wizard' },
     { label: 'Proper Names Index...', shortcut: 'Ctrl+I', action: 'proper-names' },
     { label: 'Typing Practice', action: 'typing' },
     { label: 'Typing Progress...', action: 'typing-progress' },
