@@ -69,6 +69,8 @@ function AppInner() {
   const activeTab = rawActiveTab && !rawActiveTab.lazy ? rawActiveTab : null;
   const isCompact = useIsCompact();
   const [mobileView, setMobileView] = useState('rsvp'); // compact-screen single reading view: 'rsvp' | 'lines'
+  const [controlsCollapsed, setControlsCollapsed] = useState(false); // minimize the bottom dock for text room
+  const touchRef = useRef(null); // swipe-gesture start point
   const engineRef = useRef(null);
   if (!engineRef.current) engineRef.current = createEngine();
   const [playing, setPlaying] = useState(false);
@@ -486,6 +488,33 @@ function AppInner() {
   useEffect(() => {
     ambient.setDucked(playing && !!activeTab?.settings?.readAloud);
   }, [playing, activeTab?.settings?.readAloud]);
+
+  // Adaptive minimize: on compact screens, collapse the controls dock while playing to give the
+  // text the most room, and restore it on pause. Opt-in.
+  useEffect(() => {
+    if (!state.global.autoMinimizeControls || !isCompact) return;
+    setControlsCollapsed(playing);
+  }, [playing, isCompact, state.global.autoMinimizeControls]);
+
+  // Optional swipe gestures over the reading area: horizontal swipe = prev/next line, a long swipe
+  // = prev/next paragraph. Off by default (vertical scroll/selection are left untouched either way).
+  const gestureHandlers = state.global.gestureControls
+    ? {
+        onTouchStart: (e) => { const t = e.touches[0]; touchRef.current = { x: t.clientX, y: t.clientY }; },
+        onTouchEnd: (e) => {
+          const s = touchRef.current;
+          touchRef.current = null;
+          if (!s) return;
+          const t = e.changedTouches[0];
+          const dx = t.clientX - s.x;
+          const dy = t.clientY - s.y;
+          if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.3) return; // need a clear horizontal swipe
+          const far = Math.abs(dx) > 170;
+          if (dx < 0) nav(far ? 'nextPara' : 'nextLine');
+          else nav(far ? 'prevPara' : 'prevLine');
+        },
+      }
+    : {};
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -945,7 +974,7 @@ function AppInner() {
               </button>
             </div>
           )}
-          <div className="main-area">
+          <div className="main-area" {...gestureHandlers}>
             <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
             {activeTab.settings.typing?.enabled && (
               <TypingRun
@@ -976,7 +1005,25 @@ function AppInner() {
           <p className="hint">Shortcuts: Space play, ←→ word, ↑↓ line, Ctrl+↑↓ paragraph, Home restart, Ctrl+F find</p>
         </div>
       )}
-      <div className="bottom-dock">
+      <div className={`controls-dock${controlsCollapsed ? ' collapsed' : ''}`}>
+        <button
+          className="dock-handle"
+          onClick={() => setControlsCollapsed((c) => !c)}
+          title={controlsCollapsed ? 'Show controls' : 'Minimize controls — more room for text'}
+          aria-label={controlsCollapsed ? 'Show controls' : 'Minimize controls'}
+        >
+          <span className="dock-grip" />
+          <span className="dock-handle-label">{controlsCollapsed ? '⌃ controls' : '⌄'}</span>
+        </button>
+        {controlsCollapsed ? (
+          activeTab && (
+            <div className="dock-mini">
+              <button className="play-btn-mini" title="Play / Pause (Space)" onClick={playPause}>{playing ? '❚❚' : '▶'}</button>
+              <span className="dock-mini-meta">{activeTab.settings.wordIndex + 1} / {activeTab.doc.words.length}</span>
+            </div>
+          )
+        ) : (
+        <div className="dock-row">
         {activeTab && state.showDash && (
           <div className="dock-dash">
             <DashboardPane tab={activeTab} dock />
@@ -1016,6 +1063,8 @@ function AppInner() {
           <div className="controls-bar" style={{ opacity: 0.5 }}>
             <div className="progress-row"><div className="progress-bar" /><div className="progress-meta">— / —</div></div>
           </div>
+        )}
+        </div>
         )}
       </div>
       <div className="app-status">

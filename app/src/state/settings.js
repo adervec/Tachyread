@@ -123,5 +123,10 @@ export function defaultGlobalSettings() {
     showPerfMeter: true,
     // Read-aloud auto-stop: pause speech after this many minutes of playback (0 = never).
     ttsAutoStopMin: 0,
+    // Touch gesture navigation (off by default — it can interfere with text selection/scroll):
+    // horizontal swipes over the reading area step lines (long swipes step paragraphs).
+    gestureControls: false,
+    // Auto-minimize the controls dock while playing on compact screens, for more text room.
+    autoMinimizeControls: false,
   };
 }

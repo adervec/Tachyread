@@ -85,6 +85,26 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
           A small frame-rate / “working hard” readout in the status bar
         </label>
       </Field>
+      <Field label="Swipe gestures">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.gestureControls}
+            onChange={(e) => patch({ gestureControls: e.target.checked })}
+          />
+          Horizontal swipe over the text steps lines (long swipe = paragraph)
+        </label>
+      </Field>
+      <Field label="Auto-minimize controls while reading">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.autoMinimizeControls}
+            onChange={(e) => patch({ autoMinimizeControls: e.target.checked })}
+          />
+          On phones, collapse the bottom controls during playback for more text room
+        </label>
+      </Field>
 
       <div className="field-section">Audio control</div>
       <Field label="Hands-free mode">

@@ -941,13 +941,45 @@
   border-top: 1px solid var(--line-number-fg);
 }
 
-/* Bottom dock: Face & Stats sit to the LEFT of the controls bar (not among the reading panes). */
-.bottom-dock {
+/* Bottom dock: a collapse handle on top, then Face & Stats to the LEFT of the controls bar. */
+.controls-dock { display: flex; flex-direction: column; min-width: 0; }
+.dock-row {
   display: flex;
   align-items: stretch;
   min-width: 0;
 }
-.bottom-dock > .controls-bar { flex: 1 1 auto; min-width: 0; }
+.dock-row > .controls-bar { flex: 1 1 auto; min-width: 0; }
+/* Slide-down handle to minimize the controls for more text room. */
+.dock-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--divider);
+  background: var(--menu-bg);
+  color: var(--status-fg);
+  cursor: pointer;
+  padding: 2px 0;
+  line-height: 1;
+}
+.dock-handle:hover { background: var(--menu-highlight); }
+.dock-grip { width: 40px; height: 4px; border-radius: 2px; background: var(--divider); }
+.dock-handle-label { font-size: 11px; }
+.controls-dock.collapsed .dock-handle { border-top-color: var(--divider); }
+.dock-mini {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;
+  background: var(--controls-bg);
+}
+.dock-mini .play-btn-mini {
+  width: 40px; height: 40px; font-size: 18px; font-weight: bold; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.dock-mini-meta { font-size: 12px; color: var(--meta-fg, var(--status-fg)); font-family: Consolas, monospace; }
 .dock-dash {
   flex: 0 0 auto;
   width: 250px;
@@ -1627,7 +1659,9 @@
   .playback-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 14px; }
   .controls-bar { padding: 6px 10px; gap: 6px; }
   /* Stack the docked Face/Stats above the controls (full width) instead of squeezing beside them. */
-  .bottom-dock { flex-direction: column; }
+  .dock-row { flex-direction: column; }
+  /* Bigger tap target for the collapse handle on touch screens. */
+  .dock-handle { padding: 7px 0; }
   .dock-dash {
     width: 100%;
     max-width: none;
