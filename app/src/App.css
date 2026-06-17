@@ -1392,6 +1392,24 @@
 .away-alarm-title { font-size: 26px; font-weight: 800; color: #c0392b; margin-bottom: 8px; }
 .away-alarm-box p { margin: 0 0 14px; font-size: 14px; }
 .away-alarm-box button { padding: 8px 22px; font-weight: 600; }
+
+/* Posture / distance nudge (gentle, non-alarming) */
+.distance-nudge {
+  position: fixed;
+  left: 50%;
+  bottom: 70px;
+  transform: translateX(-50%);
+  z-index: 4500;
+  background: var(--menu-bg);
+  border: 1px solid #d98324;
+  border-left: 4px solid #d98324;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--menu-fg);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
 .webcam-badge.wb-starting { color: var(--status-fg); }
 .webcam-badge.wb-denied, .webcam-badge.wb-error, .webcam-badge.wb-unsupported { color: #c0392b; }
 

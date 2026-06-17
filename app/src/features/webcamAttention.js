@@ -65,7 +65,9 @@ async function createLandmarkBackend() {
           facing = r > 0.27 && r < 0.73;
         }
       }
-      return { present: true, facing, blinkScore };
+      // face width as a fraction of the frame (left/right face-contour landmarks) — a distance proxy.
+      const faceSpan = lm[234] && lm[454] ? Math.abs(lm[454].x - lm[234].x) : null;
+      return { present: true, facing, blinkScore, faceSpan };
     },
     close() { try { landmarker.close(); } catch { /* ignore */ } },
   };
@@ -91,7 +93,9 @@ function createFaceDetectorBackend() {
       let faces = [];
       try { faces = await det.detect(video); } catch { /* transient */ }
       const present = faces.length > 0;
-      return { present, facing: present && looksForward(faces[0] || {}), blinkScore: null };
+      const w = video.videoWidth || 320;
+      const faceSpan = present && faces[0].boundingBox ? faces[0].boundingBox.width / w : null;
+      return { present, facing: present && looksForward(faces[0] || {}), blinkScore: null, faceSpan };
     },
     close() {},
   };
@@ -101,8 +105,9 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // onState: starting | watching | away | drowsy | unsupported | denied | error | off
 export function createAttentionMonitor({
-  onState, onAttention, onDoze, onAway, onStream, blinkThreshold = BLINK_CLOSED,
+  onState, onAttention, onDoze, onAway, onProximity, onStream, blinkThreshold = BLINK_CLOSED,
   intervalMs = 250, attentionGraceMs = 1300, dozeMs = 7000, absentMs = 20000,
+  proximityThreshold = 0.52, proximityHoldMs = 2500,
 } = {}) {
   let stream = null;
   let video = null;
@@ -113,6 +118,8 @@ export function createAttentionMonitor({
   let lastEyesOpen = 0;
   let lastPresent = 0;
   let attentiveLostAt = 0; // when attention was continuously lost (for the away alarm)
+  let tooCloseSince = 0;   // when the face first looked too close (for the posture nudge)
+  let tooClose = false;
   let lastBlinkScore = null; // latest raw blink score (for calibration), null when no eye data
   let threshold = blinkThreshold;
   let state = 'off';
@@ -122,6 +129,7 @@ export function createAttentionMonitor({
   const setState = (s) => { if (s !== state) { state = s; onState?.(s); } };
   const setAttentive = (v) => { if (v !== attentive) { attentive = v; onAttention?.(v); } };
   const setDozing = (v) => { if (v !== dozing) { dozing = v; onDoze?.(v); } };
+  const setTooClose = (v) => { if (v !== tooClose) { tooClose = v; onProximity?.(v); } };
 
   async function start() {
     if (running) return;
@@ -176,6 +184,12 @@ export function createAttentionMonitor({
     if (att) attentiveLostAt = 0;
     else if (!attentiveLostAt) attentiveLostAt = now;
     onAway?.(att ? 0 : now - attentiveLostAt);
+
+    // Posture nudge: face filling too much of the frame, sustained.
+    const closeNow = typeof r.faceSpan === 'number' && r.faceSpan > proximityThreshold;
+    if (closeNow) { if (!tooCloseSince) tooCloseSince = now; } else { tooCloseSince = 0; }
+    setTooClose(!!tooCloseSince && now - tooCloseSince > proximityHoldMs);
+
     setState(dz ? 'drowsy' : att ? 'watching' : 'away');
   }
 

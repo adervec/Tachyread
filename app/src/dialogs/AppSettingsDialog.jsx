@@ -158,6 +158,37 @@ export default function AppSettingsDialog({ global, onPatch, onCalibrate, onClos
           style={{ width: 70 }}
         />
       </Field>
+      <Field label="Escalating alarm">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.webcamEscalatingAlarm}
+            disabled={!g.webcamAwayAlarm}
+            onChange={(e) => patch({ webcamEscalatingAlarm: e.target.checked })}
+          />
+          Start quiet and get louder the longer you stay away
+        </label>
+      </Field>
+      <Field label="Posture nudge (experimental)">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.webcamDistanceNudge}
+            onChange={(e) => patch({ webcamDistanceNudge: e.target.checked })}
+          />
+          Remind me to ease back when I’m sitting too close to the screen
+        </label>
+      </Field>
+      <Field label="Look-away analytics (experimental)">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.webcamFocusStats}
+            onChange={(e) => patch({ webcamFocusStats: e.target.checked })}
+          />
+          Log focus % and distractions per session into Reading History
+        </label>
+      </Field>
       <Field label="Camera preview">
         <label className="inline-check">
           <input

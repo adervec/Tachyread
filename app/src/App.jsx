@@ -54,7 +54,7 @@ import { cancelSpeech, rateFromIndex } from './features/tts.js';
 import { createReadAloud } from './features/readAloud.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip, clearSession, saveSession, saveTypingRun } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession } from './state/storage.js';
 import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
 import { playLineClick } from './features/clickSound.js';
@@ -549,15 +549,24 @@ function AppInner() {
   awayAlarmRef.current = state.global.webcamAwayAlarm;
   const awayAlarmSecRef = useRef(state.global.webcamAwayAlarmSec);
   awayAlarmSecRef.current = state.global.webcamAwayAlarmSec;
+  const escalatingRef = useRef(state.global.webcamEscalatingAlarm);
+  escalatingRef.current = state.global.webcamEscalatingAlarm;
+  const distanceNudgeRef = useRef(state.global.webcamDistanceNudge);
+  distanceNudgeRef.current = state.global.webcamDistanceNudge;
+  const focusStatsRef = useRef(state.global.webcamFocusStats);
+  focusStatsRef.current = state.global.webcamFocusStats;
+  const focusRef = useRef(null); // current camera-on focus session accumulator
   const alarmEngineRef = useRef(null);
   const alarmDismissedRef = useRef(false);
   const [awayAlarmActive, setAwayAlarmActive] = useState(false);
+  const [tooClose, setTooClose] = useState(false);
   const dismissAwayAlarm = useCallback(() => {
     alarmEngineRef.current?.stop();
     setAwayAlarmActive(false);
     alarmDismissedRef.current = true; // suppress until attention returns
   }, []);
-  const camOn = state.global.webcamAttention || state.global.webcamDoze || state.global.webcamAwayAlarm;
+  const camOn = state.global.webcamAttention || state.global.webcamDoze || state.global.webcamAwayAlarm
+    || state.global.webcamDistanceNudge || state.global.webcamFocusStats;
   useEffect(() => {
     if (!camOn) {
       webcamRef.current?.stop();
@@ -566,6 +575,7 @@ function AppInner() {
       evalBlock();
       return undefined;
     }
+    focusRef.current = { startTs: Date.now(), lastTs: Date.now(), attentive: true, watchedMs: 0, awayMs: 0, distractions: 0 };
     const mon = createAttentionMonitor({
       blinkThreshold: state.global.webcamCalib?.threshold ?? 0.5,
       onStream: (s) => setWebcamStream(s),
@@ -574,6 +584,15 @@ function AppInner() {
         // visual reading pause — only when the attention guard is on
         blockRef.current.away = webcamAttentionRef.current ? !attentive : false;
         evalBlock();
+        // look-away analytics: tally watched vs away time + distraction count
+        const f = focusRef.current;
+        if (f) {
+          const now = Date.now();
+          if (f.attentive) f.watchedMs += now - f.lastTs; else f.awayMs += now - f.lastTs;
+          f.lastTs = now;
+          if (!attentive) f.distractions += 1;
+          f.attentive = attentive;
+        }
       },
       onDoze: (dozing) => {
         // doze → stop read-aloud (it's otherwise exempt from the guards). No auto-resume: if you
@@ -596,8 +615,11 @@ function AppInner() {
         }
         if (!alarmDismissedRef.current && awayMs >= (awayAlarmSecRef.current || 15) * 1000) {
           if (!alarmEngineRef.current) alarmEngineRef.current = createAlarm();
-          if (!alarmEngineRef.current.isRunning()) { alarmEngineRef.current.start(); setAwayAlarmActive(true); }
+          if (!alarmEngineRef.current.isRunning()) { alarmEngineRef.current.start({ escalate: !!escalatingRef.current }); setAwayAlarmActive(true); }
         }
+      },
+      onProximity: (close) => {
+        setTooClose(distanceNudgeRef.current ? close : false);
       },
     });
     webcamRef.current = mon;
@@ -608,7 +630,18 @@ function AppInner() {
       blockRef.current.away = false;
       alarmEngineRef.current?.stop();
       setAwayAlarmActive(false);
+      setTooClose(false);
       alarmDismissedRef.current = false;
+      // finalize the focus session
+      const f = focusRef.current;
+      focusRef.current = null;
+      if (f && focusStatsRef.current) {
+        const now = Date.now();
+        if (f.attentive) f.watchedMs += now - f.lastTs; else f.awayMs += now - f.lastTs;
+        if (f.watchedMs + f.awayMs > 30000) {
+          saveFocusSession({ ts: f.startTs, watchedMs: f.watchedMs, awayMs: f.awayMs, distractions: f.distractions, docName: activeTabRef.current?.doc?.fileName || '' }).catch(() => {});
+        }
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camOn]);
@@ -1441,6 +1474,11 @@ function AppInner() {
           onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
           onHide={() => updateGlobal({ webcamPreview: false })}
         />
+      )}
+
+      {/* Posture nudge — gentle reminder when you're sitting too close to the screen. */}
+      {camOn && tooClose && (
+        <div className="distance-nudge" role="status">↔ Ease back a little — you’re close to the screen.</div>
       )}
 
       {/* Looking-away alarm — flashing alert + beeper until you return or dismiss. */}

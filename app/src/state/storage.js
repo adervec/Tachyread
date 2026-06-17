@@ -5,7 +5,7 @@ import { openDB } from 'idb';
 import { defaultGlobalSettings, defaultFileSettings } from './settings.js';
 
 const DB_NAME = 'Tachyread';
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 let _dbPromise = null;
 
@@ -50,6 +50,11 @@ function getDB() {
         // Detailed typing-practice history (separate from reading): one record per completed run
         // { id, ts, netWpm, grossWpm, accuracy, chars, errors, words, durationMs, docName, errorKeys }
         db.createObjectStore('typingRuns', { keyPath: 'id', autoIncrement: true });
+      }
+      if (!db.objectStoreNames.contains('focusSessions')) {
+        // Webcam look-away analytics: one record per reading session a camera guard was active.
+        // { id, ts, watchedMs, awayMs, distractions, docName }
+        db.createObjectStore('focusSessions', { keyPath: 'id', autoIncrement: true });
       }
       if (!db.objectStoreNames.contains('fsHandles')) {
         // File System Access handles (e.g. the chosen sync folder). Structured-cloneable but NOT
@@ -223,6 +228,20 @@ export async function clearTypingRuns() {
   await db.clear('typingRuns');
 }
 
+// Webcam look-away analytics (one record per camera-on reading session).
+export async function saveFocusSession(rec) {
+  const db = await getDB();
+  await db.add('focusSessions', { ...rec });
+}
+export async function allFocusSessions() {
+  const db = await getDB();
+  return db.getAll('focusSessions');
+}
+export async function clearFocusSessions() {
+  const db = await getDB();
+  await db.clear('focusSessions');
+}
+
 // Audiobook clips
 export async function saveAudioClip(checksum, lineIndex, blob, durationMs) {
   const db = await getDB();
@@ -269,6 +288,7 @@ export async function exportDatabase() {
 const ALL_STORES = [
   ['files', true], ['global', false], ['audiobook', false], ['audiobookManifest', false],
   ['readstate', false], ['grabbed', true], ['docs', true], ['grabSessions', true], ['typingRuns', true],
+  ['focusSessions', true],
 ];
 
 function bufToB64(buf) {

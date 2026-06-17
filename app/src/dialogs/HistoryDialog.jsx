@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
-import { allFiles, allDocMeta } from '../state/storage.js';
+import { allFiles, allDocMeta, allFocusSessions } from '../state/storage.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────────────────────
 function fmtInt(n) { return (Math.round(n) || 0).toLocaleString(); }
@@ -76,6 +76,7 @@ export default function HistoryDialog({ onClose }) {
   const { state, updateGlobal } = useApp();
   const [files, setFiles] = useState(null);
   const [nameMap, setNameMap] = useState({});
+  const [focus, setFocus] = useState(null);
   const [tab, setTab] = useState('overview'); // overview | calendar | library
   const [selected, setSelected] = useState(null); // checksum of the book being inspected
   const [shelfFilter, setShelfFilter] = useState('all');
@@ -88,7 +89,18 @@ export default function HistoryDialog({ onClose }) {
       for (const r of m) if (r.checksum) map[r.checksum] = r.fileName;
       setNameMap(map);
     }).catch(() => {});
+    allFocusSessions().then(setFocus).catch(() => setFocus([]));
   }, []);
+
+  const focusAgg = useMemo(() => {
+    if (!focus || !focus.length) return null;
+    let watched = 0;
+    let away = 0;
+    let distractions = 0;
+    for (const s of focus) { watched += s.watchedMs || 0; away += s.awayMs || 0; distractions += s.distractions || 0; }
+    const total = watched + away;
+    return { sessions: focus.length, watchedSecs: Math.round(watched / 1000), focusPct: total > 0 ? (watched / total) * 100 : 0, distractions };
+  }, [focus]);
 
   const shelves = state.global.readingList?.shelves || {};
   function setShelf(checksum, shelf) {
@@ -275,6 +287,18 @@ export default function HistoryDialog({ onClose }) {
                   </span>
                 ))}
               </div>
+
+              {focusAgg && (
+                <>
+                  <div className="rh-section-h">Focus &amp; attention</div>
+                  <div className="rh-stat-grid">
+                    <Stat v={`${focusAgg.focusPct.toFixed(0)}%`} l="focus" sub="eyes on the page" />
+                    <Stat v={fmtInt(focusAgg.distractions)} l="distractions" />
+                    <Stat v={fmtDur(focusAgg.watchedSecs)} l="watched" />
+                    <Stat v={focusAgg.sessions} l="tracked sessions" />
+                  </div>
+                </>
+              )}
             </div>
           )}
 
