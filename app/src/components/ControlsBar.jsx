@@ -13,7 +13,7 @@ function formatTime(secs) {
 }
 
 export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onRestart, playing, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon }) {
-  const { patchSettings } = useApp();
+  const { patchSettings, state, updateGlobal } = useApp();
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
   const totalWords = doc.words.length;
@@ -95,6 +95,23 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
           <div className="mode-pair">
             <span>AUDIO</span>
             <button className={audioCtrl ? 'toggle-on' : ''} onClick={onToggleAudioCtrl} title="Voice / clap commands">{audioCtrl ? 'On' : 'Off'}</button>
+          </div>
+          <div className="mode-pair">
+            <span>TIMER</span>
+            <select
+              value={state.global.ttsAutoStopMin || 0}
+              onChange={(e) => updateGlobal({ ttsAutoStopMin: Number(e.target.value) })}
+              title="Auto-stop reading / read-aloud after this long — handy for winding down"
+            >
+              <option value={0}>Off</option>
+              <option value={5}>5m</option>
+              <option value={10}>10m</option>
+              <option value={15}>15m</option>
+              <option value={20}>20m</option>
+              <option value={30}>30m</option>
+              <option value={45}>45m</option>
+              <option value={60}>60m</option>
+            </select>
           </div>
           <div className="mode-pair">
             <span>ADAPT</span>

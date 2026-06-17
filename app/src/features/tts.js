@@ -33,13 +33,41 @@ export function useVoices() {
   return voices;
 }
 
+// Pick a sensible default voice when the user hasn't chosen one. Preference order, best first:
+// Google UK English → any English Google voice → any Google voice → any en-GB → any English. Google's
+// neural voices read markedly better than the Microsoft/eSpeak system voices, so we steer to them.
+export function pickDefaultVoice(voices = listVoices()) {
+  if (!voices || !voices.length) return null;
+  const find = (pred) => voices.find(pred);
+  const isGoogle = (v) => /\bgoogle\b/i.test(v.name);
+  const isEn = (v) => /^en\b|^en[-_]/i.test(v.lang || '');
+  const isEnGb = (v) => /^en[-_]?gb/i.test(v.lang || '') || /uk english/i.test(v.name);
+  return (
+    find((v) => /google uk english female/i.test(v.name)) ||
+    find((v) => /google uk english/i.test(v.name)) ||
+    find((v) => isGoogle(v) && isEnGb(v)) ||
+    find((v) => isGoogle(v) && isEn(v)) ||
+    find(isGoogle) ||
+    find(isEnGb) ||
+    find(isEn) ||
+    null
+  );
+}
+
+// Resolve the voice to actually use: the named one if it still exists, otherwise the smart default.
+export function resolveVoice(voiceName, voices = listVoices()) {
+  if (voiceName) {
+    const v = voices.find((vv) => vv.name === voiceName);
+    if (v) return v;
+  }
+  return pickDefaultVoice(voices);
+}
+
 export function speak(text, { voiceName, rate = 1, pitch = 1, onEnd, onError } = {}) {
   if (!synth) return null;
   const u = new SpeechSynthesisUtterance(text);
-  if (voiceName) {
-    const v = listVoices().find((vv) => vv.name === voiceName);
-    if (v) u.voice = v;
-  }
+  const v = resolveVoice(voiceName);
+  if (v) u.voice = v;
   u.rate = rate;
   u.pitch = pitch;
   if (onEnd) u.onend = onEnd;

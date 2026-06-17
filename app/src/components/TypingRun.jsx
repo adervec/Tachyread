@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { playPerfectClick, playErrorHiss } from '../features/clickSound.js';
+import { deviceKind } from '../state/device.js';
 
 // Typing practice as self-contained "runs". A run types the document text forward from the
 // reading position WITHOUT moving the reading index mid-run — so the reading panes don't jump
@@ -93,6 +94,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       docName: doc.fileName || 'text',
       errorKeys: { ...s.errorKeys },
       tier: netTier(Math.round(m.net)),
+      device: deviceKind(), // 'Mobile' | 'Desktop' — which device this run was typed on
     };
     setSummary(run);
     setPhase('done');

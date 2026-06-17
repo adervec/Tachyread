@@ -447,6 +447,22 @@ function AppInner() {
     }
   }
 
+  // Auto-stop timer: after this many minutes of continuous playback, pause and silence speech.
+  // Handy for winding down to read-aloud without it running all night. Restarts on each Play.
+  useEffect(() => {
+    const mins = state.global.ttsAutoStopMin || 0;
+    if (!playing || mins <= 0) return undefined;
+    const id = setTimeout(() => {
+      engineRef.current.pause();
+      setPlaying(false);
+      cancelSpeech();
+      if (activeTabRef.current) flushReadState(activeTabRef.current);
+      setStatus(`Auto-stopped after ${mins} min.`);
+    }, mins * 60000);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, state.global.ttsAutoStopMin]);
+
   // Keyboard shortcuts
   useEffect(() => {
     function onKey(e) {

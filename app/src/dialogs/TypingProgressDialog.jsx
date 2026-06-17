@@ -97,12 +97,13 @@ export default function TypingProgressDialog({ onClose }) {
           <div className="tp-table-wrap">
             <table className="tp-table">
               <thead>
-                <tr><th>When</th><th>Net</th><th>Gross</th><th>Acc</th><th>Words</th><th>Time</th><th>Tier</th></tr>
+                <tr><th>When</th><th>Device</th><th>Net</th><th>Gross</th><th>Acc</th><th>Words</th><th>Time</th><th>Tier</th></tr>
               </thead>
               <tbody>
                 {[...runs].reverse().slice(0, 50).map((r, i) => (
                   <tr key={i}>
                     <td>{new Date(r.ts).toLocaleString()}</td>
+                    <td>{r.device ? <span className={`tp-dev tp-dev-${String(r.device).toLowerCase()}`}>{r.device === 'Mobile' ? '📱' : '🖥'} {r.device}</span> : '—'}</td>
                     <td>{r.netWpm}</td>
                     <td>{r.grossWpm}</td>
                     <td>{r.accuracy}%</td>
