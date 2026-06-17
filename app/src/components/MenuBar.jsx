@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { THEME_NAMES } from '../state/themes.js';
+import { useIsCompact } from '../state/device.js';
 
 const MENUS = {
   file: [
@@ -50,8 +51,30 @@ const MENUS = {
   ],
 };
 
+// One menu entry (file/view list) rendered as a drawer/dropdown row.
+function MenuItem({ it, onPick }) {
+  if (it.kind === 'separator') return <div className="separator" />;
+  return (
+    <div className="item" onClick={() => onPick(it.action)}>
+      <span>{it.label}</span>
+      {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
+    </div>
+  );
+}
+
+// A checkable panel-toggle row for the mobile drawer.
+function ToggleItem({ on, label, onClick }) {
+  return (
+    <div className="item" onClick={onClick}>
+      <span className="check">{on ? '☑' : '☐'}</span>
+      <span>{label}</span>
+    </div>
+  );
+}
+
 export default function MenuBar({ onFileOpen, onAction }) {
   const { state, dispatch, activeTab, patchSettings } = useApp();
+  const isCompact = useIsCompact();
   const themeName =
     activeTab?.settings?.themeName || (activeTab?.settings?.darkMode ? 'Dark' : 'Light');
   const [openMenu, setOpenMenu] = useState(null);
@@ -85,6 +108,58 @@ export default function MenuBar({ onFileOpen, onAction }) {
     if (action === 'open-txt') chooseFile();
     else if (action === 'open-doc') chooseDoc();
     else onAction(action);
+  }
+
+  // Compact (phone/tablet) menu: a single hamburger that opens a scrollable drawer with the panel
+  // toggles, the full File/View lists, theme, and Sync — instead of a desktop menu bar that wraps.
+  if (isCompact) {
+    const open = openMenu === 'mobile';
+    return (
+      <div className="menu-bar compact" ref={ref}>
+        <button
+          className={`menu-burger${open ? ' open' : ''}`}
+          onClick={() => setOpenMenu(open ? null : 'mobile')}
+          aria-expanded={open}
+          aria-label="Menu"
+        >
+          ☰ Menu
+        </button>
+        <div className="grow" />
+        <select
+          className="menu-theme-compact"
+          value={themeName}
+          disabled={!activeTab}
+          title="Reading theme for the current tab"
+          aria-label="Theme"
+          onChange={(e) => activeTab && patchSettings(activeTab.id, { themeName: e.target.value })}
+        >
+          {THEME_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+        {open && (
+          <div className="menu-drawer">
+            <div className="menu-drawer-section">Panels</div>
+            <ToggleItem on={state.showToc} label="Table of Contents" onClick={() => dispatch({ type: 'TOGGLE_TOC' })} />
+            <ToggleItem on={state.showDash} label="Faces / Stats" onClick={() => dispatch({ type: 'TOGGLE_DASH' })} />
+            {activeTab?.doc?.source && (
+              <ToggleItem on={state.showSource} label="Source page" onClick={() => dispatch({ type: 'TOGGLE_SOURCE' })} />
+            )}
+            <ToggleItem on={state.showIndex} label="Index" onClick={() => dispatch({ type: 'TOGGLE_INDEX' })} />
+            <ToggleItem on={!state.showRsvp} label="Hide Fast Reader" onClick={() => dispatch({ type: 'TOGGLE_SHOW_RSVP' })} />
+
+            <div className="menu-drawer-section">File</div>
+            {MENUS.file.map((it, i) => <MenuItem key={`f${i}`} it={it} onPick={handle} />)}
+
+            <div className="menu-drawer-section">View &amp; tools</div>
+            {MENUS.view.map((it, i) => <MenuItem key={`v${i}`} it={it} onPick={handle} />)}
+
+            <div className="menu-drawer-section">Backup</div>
+            <div className="item" onClick={() => { setOpenMenu(null); onAction('sync-now'); }}>
+              <span>☁ Sync / Back up now</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
