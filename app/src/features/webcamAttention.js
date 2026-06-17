@@ -48,13 +48,13 @@ async function createLandmarkBackend() {
     detect(video, tsMs) {
       const res = landmarker.detectForVideo(video, tsMs);
       const lm = res.faceLandmarks?.[0];
-      if (!lm) return { present: false, facing: false, eyesOpen: null };
-      // eyes-open from blink blendshapes
-      let eyesOpen = null;
+      if (!lm) return { present: false, facing: false, blinkScore: null };
+      // raw eye-blink score (0 = open, 1 = shut); the monitor applies the (calibrated) threshold.
+      let blinkScore = null;
       const cats = res.faceBlendshapes?.[0]?.categories;
       if (cats) {
         const score = (name) => cats.find((c) => c.categoryName === name)?.score ?? 0;
-        eyesOpen = (score('eyeBlinkLeft') + score('eyeBlinkRight')) / 2 < BLINK_CLOSED;
+        blinkScore = (score('eyeBlinkLeft') + score('eyeBlinkRight')) / 2;
       }
       // rough yaw: nose tip relative to the two outer eye corners (0.5 = centred / facing forward)
       let facing = true;
@@ -65,7 +65,7 @@ async function createLandmarkBackend() {
           facing = r > 0.27 && r < 0.73;
         }
       }
-      return { present: true, facing, eyesOpen };
+      return { present: true, facing, blinkScore };
     },
     close() { try { landmarker.close(); } catch { /* ignore */ } },
   };
@@ -91,15 +91,17 @@ function createFaceDetectorBackend() {
       let faces = [];
       try { faces = await det.detect(video); } catch { /* transient */ }
       const present = faces.length > 0;
-      return { present, facing: present && looksForward(faces[0] || {}), eyesOpen: null };
+      return { present, facing: present && looksForward(faces[0] || {}), blinkScore: null };
     },
     close() {},
   };
 }
 
+const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
 // onState: starting | watching | away | drowsy | unsupported | denied | error | off
 export function createAttentionMonitor({
-  onState, onAttention, onDoze,
+  onState, onAttention, onDoze, onStream, blinkThreshold = BLINK_CLOSED,
   intervalMs = 250, attentionGraceMs = 1300, dozeMs = 7000, absentMs = 20000,
 } = {}) {
   let stream = null;
@@ -110,6 +112,8 @@ export function createAttentionMonitor({
   let lastAttentive = 0;
   let lastEyesOpen = 0;
   let lastPresent = 0;
+  let lastBlinkScore = null; // latest raw blink score (for calibration), null when no eye data
+  let threshold = blinkThreshold;
   let state = 'off';
   let attentive = true;
   let dozing = false;
@@ -131,6 +135,7 @@ export function createAttentionMonitor({
       return;
     }
     if (!running) { stream.getTracks().forEach((t) => t.stop()); return; }
+    onStream?.(stream);
     video = document.createElement('video');
     video.srcObject = stream;
     video.muted = true;
@@ -152,9 +157,12 @@ export function createAttentionMonitor({
     try { r = await backend.detect(video, performance.now()); } catch { return; }
     if (!r) return;
     const now = Date.now();
+    const score = typeof r.blinkScore === 'number' ? r.blinkScore : null;
+    lastBlinkScore = score;
+    const eyesOpen = score != null ? score < threshold : null; // null = no eye data (presence-only)
     if (r.present) lastPresent = now;
-    if (r.eyesOpen === true) lastEyesOpen = now;
-    if (r.facing && r.eyesOpen !== false) lastAttentive = now;
+    if (eyesOpen === true) lastEyesOpen = now;
+    if (r.facing && eyesOpen !== false) lastAttentive = now;
 
     const att = now - lastAttentive <= attentionGraceMs;
     const eyesClosedLong = backend.eyesAvail && now - lastEyesOpen > dozeMs && now - lastPresent < absentMs;
@@ -172,10 +180,44 @@ export function createAttentionMonitor({
     if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
     if (backend) { backend.close(); backend = null; }
     if (video) { video.srcObject = null; video = null; }
+    onStream?.(null);
     setState('off');
     setAttentive(true);
     setDozing(false);
   }
 
-  return { start, stop, getState: () => state, eyesAvailable: () => !!backend?.eyesAvail };
+  // Learn the user's eyes-open vs eyes-shut blink scores so the threshold fits their face / glasses /
+  // lighting. Samples the live score over an open phase then a closed phase; returns the chosen
+  // threshold (and applies it). Needs the eye-capable backend; returns null otherwise.
+  async function runCalibration({ openMs = 2800, closedMs = 2800 } = {}, onTick) {
+    if (!backend?.eyesAvail) return null;
+    const sampleAvg = async (ms, phase) => {
+      const scores = [];
+      const startTs = Date.now();
+      while (running && Date.now() - startTs < ms) {
+        if (typeof lastBlinkScore === 'number') scores.push(lastBlinkScore);
+        onTick?.(phase, Math.ceil((ms - (Date.now() - startTs)) / 1000));
+        await delay(120);
+      }
+      return scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+    };
+    const open = await sampleAvg(openMs, 'open');
+    const closed = await sampleAvg(closedMs, 'closed');
+    let t;
+    if (open != null && closed != null && closed > open + 0.1) t = (open + closed) / 2;
+    else if (open != null) t = Math.min(0.6, open + 0.3);
+    else return null;
+    threshold = t;
+    return { open, closed, threshold: t };
+  }
+
+  return {
+    start,
+    stop,
+    getState: () => state,
+    eyesAvailable: () => !!backend?.eyesAvail,
+    getBlinkScore: () => lastBlinkScore,
+    setBlinkThreshold: (v) => { if (typeof v === 'number') threshold = v; },
+    runCalibration,
+  };
 }

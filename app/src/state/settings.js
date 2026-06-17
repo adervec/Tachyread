@@ -142,5 +142,10 @@ export function defaultGlobalSettings() {
     webcamAttention: false,
     // Webcam doze detection (opt-in): stop read-aloud if your eyes stay shut / you're gone a while.
     webcamDoze: false,
+    // Show a small live camera preview (with a status ring) while a webcam guard is on. Default on
+    // so you can confirm framing and that the camera is active.
+    webcamPreview: true,
+    // Calibrated eye-blink threshold from the calibration step ({ open, closed, threshold }).
+    webcamCalib: {},
   };
 }

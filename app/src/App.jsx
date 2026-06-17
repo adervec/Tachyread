@@ -62,6 +62,8 @@ import { createMetronome } from './features/metronome.js';
 import { saveTextToFile } from './features/fileSystem.js';
 import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
+import WebcamPreview from './components/WebcamPreview.jsx';
+import WebcamCalibrationDialog from './dialogs/WebcamCalibrationDialog.jsx';
 
 const WEBCAM_LABEL = {
   starting: 'starting camera…', watching: 'watching', away: 'looked away — paused', drowsy: 'drowsy',
@@ -500,6 +502,7 @@ function AppInner() {
   const pauseTextHiddenRef = useRef(state.global.pauseWhenTextHidden);
   pauseTextHiddenRef.current = state.global.pauseWhenTextHidden;
   const [webcamState, setWebcamState] = useState('off');
+  const [webcamStream, setWebcamStream] = useState(null);
   const webcamRef = useRef(null);
 
   const evalBlock = useCallback(() => {
@@ -551,6 +554,8 @@ function AppInner() {
       return undefined;
     }
     const mon = createAttentionMonitor({
+      blinkThreshold: state.global.webcamCalib?.threshold ?? 0.5,
+      onStream: (s) => setWebcamStream(s),
       onState: (s) => setWebcamState(s),
       onAttention: (attentive) => {
         // visual reading pause — only when the attention guard is on
@@ -1266,6 +1271,7 @@ function AppInner() {
         <AppSettingsDialog
           global={state.global}
           onPatch={(p) => updateGlobal(p)}
+          onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
           onClose={closeDialog}
         />
       )}
@@ -1332,6 +1338,16 @@ function AppInner() {
           onClose={closeDialog}
         />
       )}
+      {dialog?.kind === 'webcam-calib' && (
+        <WebcamCalibrationDialog
+          monitor={webcamRef.current}
+          onSave={(threshold) => {
+            webcamRef.current?.setBlinkThreshold(threshold);
+            updateGlobal({ webcamCalib: { ...(state.global.webcamCalib || {}), threshold } });
+          }}
+          onClose={closeDialog}
+        />
+      )}
       {dialog?.kind === 'finished' && activeTab && (
         <BookFinishedDialog
           tab={activeTab}
@@ -1382,6 +1398,17 @@ function AppInner() {
 
       {/* Live audio-command transcript (sanity check). Ephemeral; only while listening. */}
       {!!activeTab?.settings?.audioCtrl && <AudioChat log={audioLog} />}
+
+      {/* Small webcam self-view while a guard is on — confirm framing; nothing leaves the device. */}
+      {camOn && state.global.webcamPreview && webcamStream && (
+        <WebcamPreview
+          stream={webcamStream}
+          state={webcamState}
+          canCalibrate={!!webcamRef.current?.eyesAvailable?.()}
+          onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
+          onHide={() => updateGlobal({ webcamPreview: false })}
+        />
+      )}
 
       {/* Single shared WebGL context for every 3D reader face (drei <View> portals here).
           Mounted only while faces are actually shown so there's no idle render loop. */}

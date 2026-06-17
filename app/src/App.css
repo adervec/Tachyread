@@ -1337,6 +1337,33 @@
 .webcam-badge.wb-watching { color: #2e9d4f; }
 .webcam-badge.wb-away { color: #d98324; font-weight: 600; }
 .webcam-badge.wb-drowsy { color: #9b59b6; font-weight: 600; }
+
+/* Small live webcam self-view (status ring reflects watching / away / drowsy) */
+.webcam-preview {
+  position: fixed;
+  right: 12px;
+  bottom: 64px;
+  width: 168px;
+  z-index: 4000;
+  background: #000;
+  border: 2px solid var(--divider);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.webcam-preview.wb-watching { border-color: #2e9d4f; }
+.webcam-preview.wb-away { border-color: #d98324; }
+.webcam-preview.wb-drowsy { border-color: #9b59b6; }
+.webcam-preview.wb-denied, .webcam-preview.wb-error, .webcam-preview.wb-unsupported { border-color: #c0392b; }
+.webcam-preview-vid { display: block; width: 100%; height: 126px; object-fit: cover; transform: scaleX(-1); background: #000; }
+.webcam-preview-bar { display: flex; align-items: center; gap: 6px; padding: 3px 6px; background: var(--menu-bg); font-size: 11px; color: var(--menu-fg); }
+.webcam-preview-bar .wpv-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.webcam-preview.wb-watching .wpv-dot { color: #2e9d4f; }
+.webcam-preview.wb-away .wpv-dot { color: #d98324; }
+.webcam-preview.wb-drowsy .wpv-dot { color: #9b59b6; }
+.webcam-preview-bar button { border: none; background: transparent; color: var(--status-fg); cursor: pointer; padding: 0 4px; font-size: 13px; }
+.webcam-preview-bar button:hover { color: var(--menu-fg); }
+@media (max-width: 860px) { .webcam-preview { width: 128px; bottom: 56px; } .webcam-preview-vid { height: 96px; } }
 .webcam-badge.wb-starting { color: var(--status-fg); }
 .webcam-badge.wb-denied, .webcam-badge.wb-error, .webcam-badge.wb-unsupported { color: #c0392b; }
 

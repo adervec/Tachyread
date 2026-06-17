@@ -15,7 +15,7 @@ function Field({ label, children }) {
 
 const AUDIO_MODES = ['Voice', 'Claps', 'Both'];
 
-export default function AppSettingsDialog({ global, onPatch, onClose }) {
+export default function AppSettingsDialog({ global, onPatch, onCalibrate, onClose }) {
   const [g, setG] = useState(global);
   function patch(p) {
     setG({ ...g, ...p });
@@ -137,12 +137,26 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
           Stop read-aloud if your eyes stay shut or you’re away for a while
         </label>
       </Field>
+      <Field label="Camera preview">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={g.webcamPreview !== false}
+            onChange={(e) => patch({ webcamPreview: e.target.checked })}
+          />
+          Show a small live self-view while a webcam guard is on
+        </label>
+      </Field>
+      <Field label="Eye calibration">
+        <button onClick={onCalibrate} disabled={!onCalibrate}>⚙ Calibrate eye detection…</button>
+      </Field>
       <p className="settings-note">
         Both use on-device face detection — camera frames are analysed locally and are never recorded,
         saved, or uploaded; the camera only runs while one of these is on. Eye-open detection loads a
         small face-landmark model on first use (needs network once, like the OCR data) and a WebGL
         browser; without it, attention falls back to “facing the screen” and doze to “away for a while.”
-        Typing and (for the attention guard) read-aloud are never paused.
+        Calibration tunes eyes-open vs eyes-shut to your face/glasses. Typing and (for the attention
+        guard) read-aloud are never paused.
       </p>
 
       <div className="field-section">Audio control</div>
