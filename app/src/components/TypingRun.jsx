@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { playPerfectClick, playErrorHiss } from '../features/clickSound.js';
 import { deviceKind } from '../state/device.js';
+import { buildPassage, TYPING_MODES, TYPING_MODE_BY_ID } from '../engine/typingModes.js';
 
 // Typing practice as self-contained "runs". A run types the document text forward from the
 // reading position WITHOUT moving the reading index mid-run — so the reading panes don't jump
@@ -36,9 +37,14 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
   // Reading position captured once, when typing opened. Discard returns here.
   const startIndex = useRef(settings.wordIndex);
+  // Typing game mode: 'passage' (from the book) is the Monkeytype baseline; the rest are
+  // Mavis-Beacon-style drills generated independently of the document. `seed` varies drills on reattempt.
+  const [gameMode, setGameMode] = useState(cfg.mode || 'passage');
+  const [seed, setSeed] = useState(0);
+  const isDocMode = (TYPING_MODE_BY_ID[gameMode]?.kind || 'doc') === 'doc';
   const passage = useMemo(
-    () => doc.words.slice(startIndex.current, Math.min(doc.words.length, startIndex.current + PASSAGE_MAX)),
-    [doc]
+    () => buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: PASSAGE_MAX, seed }),
+    [doc, gameMode, seed]
   );
 
   const [mode, setMode] = useState(cfg.runMode || 'seconds'); // 'seconds' | 'words' | 'endless'
@@ -95,11 +101,12 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       errorKeys: { ...s.errorKeys },
       tier: netTier(Math.round(m.net)),
       device: deviceKind(), // 'Mobile' | 'Desktop' — which device this run was typed on
+      mode: gameMode,       // which typing mode/drill this run used
     };
     setSummary(run);
     setPhase('done');
     onSaveRun?.(run);
-  }, [metrics, doc, onSaveRun]);
+  }, [metrics, doc, onSaveRun, gameMode]);
 
   const armIdle = useCallback(() => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -147,6 +154,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     setResults([]);
     setSummary(null);
     setTrend([]);
+    setSeed((s) => s + 1); // fresh drill text (no-op for the document passage mode)
     stats.current = freshStats();
     wordErrors.current = 0;
     if (linesRef.current) linesRef.current.style.transform = 'translateY(0)';
@@ -234,6 +242,13 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         <div className="tr-controls">
           {phase !== 'running' && (
             <>
+              <select
+                value={gameMode}
+                title="Typing mode — Passage types your book; the rest are drills"
+                onChange={(e) => { setGameMode(e.target.value); onPatch?.({ typing: { ...cfg, mode: e.target.value } }); reattempt(); }}
+              >
+                {TYPING_MODES.map((tm) => <option key={tm.id} value={tm.id}>{tm.label}</option>)}
+              </select>
               <select value={mode} onChange={(e) => { setMode(e.target.value); onPatch?.({ typing: { ...cfg, runMode: e.target.value } }); }}>
                 <option value="seconds">Seconds</option>
                 <option value="words">Words</option>
@@ -292,8 +307,10 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           </div>
           <div className="tr-results-actions">
             <button className="toggle-on" onClick={reattempt}>↻ Reattempt</button>
-            <button onClick={() => onExitContinue?.(startIndex.current + stats.current.words)}>Continue (count as read)</button>
-            <button onClick={onExitDiscard}>Discard</button>
+            {isDocMode && (
+              <button onClick={() => onExitContinue?.(startIndex.current + stats.current.words)}>Continue (count as read)</button>
+            )}
+            <button onClick={onExitDiscard}>{isDocMode ? 'Discard' : 'Exit'}</button>
           </div>
         </div>
       )}
