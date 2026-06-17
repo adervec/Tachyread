@@ -61,6 +61,9 @@ const init = {
   showSource: false,
   showIndex: false,
   hideMode: 'None',
+  // Incognito reading: when true, ALL tracking + persistence is paused — the app reads like a plain
+  // text viewer and, from the reading history's point of view, was never even opened. Session-only.
+  incognito: false,
 };
 
 function reducer(state, action) {
@@ -118,6 +121,8 @@ function reducer(state, action) {
       return { ...state, showIndex: !state.showIndex };
     case 'SET_HIDE_MODE':
       return { ...state, hideMode: action.mode };
+    case 'TOGGLE_INCOGNITO':
+      return { ...state, incognito: !state.incognito };
     default:
       return state;
   }
@@ -147,6 +152,7 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
+      if (stateRef.current.incognito) return; // incognito: don't persist tab settings / progress
       const live = new Set();
       for (const tab of state.tabs) {
         live.add(tab.id);
@@ -203,10 +209,12 @@ export function AppProvider({ children }) {
       if (target > baseSettings.wordIndex) {
         baseSettings.wordIndex = target;
         tracker.markPrefixRead(target); // keep "% read" consistent with the resumed position
-        saveReadState(doc.contentChecksum, {
-          maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(),
-          lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(),
-        }).catch(() => {});
+        if (!stateRef.current.incognito) {
+          saveReadState(doc.contentChecksum, {
+            maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(),
+            lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(),
+          }).catch(() => {});
+        }
         groupNote = ` — caught up to ${Math.round(best * 100)}% from “${group.name}”`;
       }
     }
@@ -219,8 +227,8 @@ export function AppProvider({ children }) {
     const tab = makeTab(doc, baseSettings, tracker);
     dispatch({ type: 'ADD_TAB', tab });
     if (!silent) dispatch({ type: 'SET_STATUS', text: `Opened ${doc.fileName} (${doc.words.length} words)${groupNote}` });
-    // Persist a rebuildable payload so this tab can be reconnected next session.
-    if (persist) {
+    // Persist a rebuildable payload so this tab can be reconnected next session (never in incognito).
+    if (persist && !stateRef.current.incognito) {
       saveDocPayload({
         checksum: doc.contentChecksum,
         fileName: doc.fileName,
@@ -278,6 +286,7 @@ export function AppProvider({ children }) {
   // Throttled persistence of reading state: mask → readstate store, counters/daily → settings
   // (so the Statistics / History dialogs, which read FileSettings, see real data).
   const flushReadState = useCallback((tab) => {
+    if (stateRef.current.incognito) return; // incognito: never write reading state
     const tr = tab?.tracker;
     if (!tr || !tr.dirty) return;
     saveReadState(tab.doc.contentChecksum, {
@@ -390,6 +399,7 @@ export function AppProvider({ children }) {
   // initial empty state can't wipe a saved session before it's read back).
   useEffect(() => {
     if (!sessionReady.current) return;
+    if (state.incognito) return; // incognito: don't record the open-tab session
     const open = state.tabs.map((t) => (
       t.lazy ? { checksum: t.checksum, fileName: t.fileName } : { checksum: t.doc.contentChecksum, fileName: t.doc.fileName }
     ));

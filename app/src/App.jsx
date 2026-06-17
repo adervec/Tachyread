@@ -84,6 +84,18 @@ function AppInner() {
   useEffect(() => {
     if (rawActiveTab?.lazy) hydrateTab(rawActiveTab.id);
   }, [rawActiveTab?.id, rawActiveTab?.lazy, hydrateTab]);
+
+  // Incognito: a live ref so the move-recording paths read the current value without re-subscribing.
+  const incognitoRef = useRef(state.incognito);
+  incognitoRef.current = state.incognito;
+  const prevIncog = useRef(state.incognito);
+  useEffect(() => {
+    if (prevIncog.current === state.incognito) return;
+    prevIncog.current = state.incognito;
+    setStatus(state.incognito
+      ? '🕶 Incognito on — nothing is being recorded; your reading history is untouched.'
+      : 'Incognito off — tracking resumed.');
+  }, [state.incognito, setStatus]);
   const [dragOver, setDragOver] = useState(false);
   const [closing, setClosing] = useState(null); // null | 'disconnect' | 'shutdown'
   const [goalKills, setGoalKills] = useState([]); // session-only killfeed of completed goals
@@ -178,6 +190,7 @@ function AppInner() {
   useEffect(() => {
     if (!activeTab) return;
     const id = setInterval(() => {
+      if (incognitoRef.current) return; // incognito: don't record per-section reading timestamps
       const tab = activeTabRef.current;
       if (!tab?.tracker) return;
       const entries = getTocEntries(tab);
@@ -259,10 +272,11 @@ function AppInner() {
     if (!tab) return;
     const cur = tab.settings.wordIndex;
     if (wi === cur) return;
-    tab.tracker?.recordMove(cur, wi, Date.now());
+    const inc = incognitoRef.current;
+    if (!inc) tab.tracker?.recordMove(cur, wi, Date.now());
     const prevLine = getLineIndex(tab.doc, cur);
     const newLine = getLineIndex(tab.doc, wi);
-    if (wi > cur && newLine !== prevLine) {
+    if (!inc && wi > cur && newLine !== prevLine) {
       tab.sessionLinesRead.add(prevLine);
       tab.readLinesAllTime.add(prevLine);
     }
@@ -349,19 +363,22 @@ function AppInner() {
       }
     }
     if (next === cur) return;
+    const inc = incognitoRef.current;
     // Reading-efficiency tracking (classifies read / skip / re-read / revisit + active time).
-    activeTab.tracker?.recordMove(cur, next, Date.now());
+    if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now());
     // Line status coloring for the right pane.
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
     if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick();
-    if (delta === 1 && next > cur && !opts.nav) {
-      if (newLine !== prevLine) {
-        activeTab.sessionLinesRead.add(prevLine);
-        activeTab.readLinesAllTime.add(prevLine);
+    if (!inc) {
+      if (delta === 1 && next > cur && !opts.nav) {
+        if (newLine !== prevLine) {
+          activeTab.sessionLinesRead.add(prevLine);
+          activeTab.readLinesAllTime.add(prevLine);
+        }
+      } else if (opts.nav) {
+        activeTab.sessionNavLinesRead.add(newLine);
       }
-    } else if (opts.nav) {
-      activeTab.sessionNavLinesRead.add(newLine);
     }
     patchSettings(activeTab.id, { wordIndex: next });
   }
@@ -371,11 +388,12 @@ function AppInner() {
     const cur = activeTab.settings.wordIndex;
     const next = Math.max(0, Math.min(activeTab.doc.words.length - 1, wi));
     if (next === cur) return;
-    activeTab.tracker?.recordMove(cur, next, Date.now());
+    const inc = incognitoRef.current;
+    if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now());
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
     if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick();
-    if (opts.nav) {
+    if (!inc && opts.nav) {
       activeTab.sessionNavLinesRead.add(newLine);
     }
     patchSettings(activeTab.id, { wordIndex: next });
@@ -922,6 +940,7 @@ function AppInner() {
     if (action === 'dictation') return openDialog({ kind: 'dictation' });
     if (action === 'ambient') return openDialog({ kind: 'ambient' });
     if (action === 'take-break') return setBreakSignal((n) => n + 1);
+    if (action === 'toggle-incognito') { dispatch({ type: 'TOGGLE_INCOGNITO' }); return; }
     if (action === 'toggle-dark' && activeTab) {
       patchSettings(activeTab.id, { darkMode: !activeTab.settings.darkMode });
     }
@@ -986,9 +1005,17 @@ function AppInner() {
   const dialog = state.dialog;
 
   return (
-    <div className="app">
+    <div className={`app${state.incognito ? ' incognito' : ''}`}>
       <MenuBar onFileOpen={openFile} onAction={handleMenuAction} />
       <TabBar />
+      <div className="content-area">
+      {state.incognito && (
+        <div className="incognito-banner" role="status">
+          <span className="incog-eyes">🕶</span>
+          <span className="incog-text"><b>Incognito reading</b> — tracking is off. Nothing is recorded; your history is untouched.</span>
+          <button className="incog-off" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}>Turn off</button>
+        </div>
+      )}
       {activeTab ? (
         <div className="main-wrap">
           <ChapterHeading tab={activeTab} onJumpWord={jumpWord} />
@@ -1043,6 +1070,7 @@ function AppInner() {
           <p className="hint">Shortcuts: Space play, ←→ word, ↑↓ line, Ctrl+↑↓ paragraph, Home restart, Ctrl+F find</p>
         </div>
       )}
+      </div>
       <div className={`controls-dock${controlsCollapsed ? ' collapsed' : ''}`}>
         <button
           className="dock-handle"

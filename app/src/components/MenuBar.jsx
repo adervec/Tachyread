@@ -44,6 +44,7 @@ const MENUS = {
     { label: 'Dictation (speak to write)...', action: 'dictation' },
     { label: 'Vocabulary...', action: 'vocab' },
     { label: 'Take a Break Now', action: 'take-break' },
+    { label: 'Incognito Reading (no tracking)', action: 'toggle-incognito' },
     { label: 'Preview Footnote', shortcut: 'Ctrl+Shift+F', action: 'footnote' },
     { kind: 'separator' },
     { label: 'Audiobook Manager...', shortcut: 'Ctrl+Shift+A', action: 'audiobook' },
@@ -149,6 +150,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
             )}
             <ToggleItem on={state.showIndex} label="Index" onClick={() => dispatch({ type: 'TOGGLE_INDEX' })} />
             <ToggleItem on={!state.showRsvp} label="Hide Fast Reader" onClick={() => dispatch({ type: 'TOGGLE_SHOW_RSVP' })} />
+            <ToggleItem on={state.incognito} label="🕶 Incognito (no tracking)" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })} />
 
             <div className="menu-drawer-section">File</div>
             {MENUS.file.map((it, i) => <MenuItem key={`f${i}`} it={it} onPick={handle} />)}
@@ -244,6 +246,13 @@ export default function MenuBar({ onFileOpen, onAction }) {
         title="Hide the Fast Reader pane"
       >
         {!state.showRsvp ? '☑ ' : '☐ '}Hide Fast Reader
+      </div>
+      <div
+        className={`menu-item incognito-menu ${state.incognito ? 'open' : ''}`}
+        onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}
+        title="Incognito reading — pause all tracking and persistence"
+      >
+        {state.incognito ? '🕶 ' : '☐ '}Incognito
       </div>
       <div className="grow" />
       <div
