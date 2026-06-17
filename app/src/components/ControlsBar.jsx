@@ -12,7 +12,7 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onRestart, playing, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon }) {
+export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon }) {
   const { patchSettings, state, updateGlobal } = useApp();
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
@@ -70,6 +70,7 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
 
         <div className="playback-buttons">
           <button className="ctrl-btn" title="Restart (Home)" onClick={onRestart}>|&lt;</button>
+          <button className="ctrl-btn" title="Page up — current line jumps to the top visible line (PgUp)" onClick={onPageUp}>⇞</button>
           <button className="ctrl-btn" title="Previous paragraph (Ctrl+Up)" onClick={onPrevPara}>⇈</button>
           <button className="ctrl-btn" title="Previous line (Up)" onClick={onPrevLine}>↑</button>
           <button className="ctrl-btn" title="Previous word (Left)" onClick={onPrevWord}>&lt;</button>
@@ -79,6 +80,7 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
           <button className="ctrl-btn" title="Next word (Right)" onClick={onNextWord}>&gt;</button>
           <button className="ctrl-btn" title="Next line (Down)" onClick={onNextLine}>↓</button>
           <button className="ctrl-btn" title="Next paragraph (Ctrl+Down)" onClick={onNextPara}>⇊</button>
+          <button className="ctrl-btn" title="Page down — current line jumps to the bottom visible line (PgDn)" onClick={onPageDown}>⇟</button>
         </div>
 
         <div className="mode-block">

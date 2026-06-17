@@ -13,7 +13,7 @@ function fmtDuration(ms) {
 
 // Dedicated pane for the animated reader faces and live, measured reading stats — kept
 // separate from the RSVP word display so each can be sized / hidden independently.
-export default function DashboardPane({ tab }) {
+export default function DashboardPane({ tab, dock = false }) {
   const { settings, doc } = tab;
   const idx = settings.wordIndex;
   const tracker = tab.tracker;
@@ -43,7 +43,7 @@ export default function DashboardPane({ tab }) {
   const newWords = tracker ? tracker.sessionNewWords : 0;
 
   return (
-    <div className="dashboard-pane">
+    <div className={`dashboard-pane${dock ? ' dock' : ''}`}>
       {settings.showEyes && (
         <div className="rsvp-faces">
           {Array.from({ length: count }, (_, i) => (
@@ -53,7 +53,7 @@ export default function DashboardPane({ tab }) {
               lineProgress={lineProgress}
               faceStyle={styles[i] || 'Man'}
               artStyle={settings.artStyle || 'Cartoon'}
-              size={120}
+              size={dock ? 72 : 120}
             />
           ))}
         </div>

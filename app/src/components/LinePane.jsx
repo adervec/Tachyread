@@ -280,7 +280,7 @@ function revealBoundary(doc, idx, mode) {
   return Infinity;
 }
 
-export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSignal }) {
+export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSignal, visibleRef }) {
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
   const [menu, setMenu] = useState(null);
@@ -344,6 +344,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
   });
 
   const listRef = useListRef();
+  const listWrapRef = useRef(null); // scroll container, queried for the visible-line range
   const split = !!settings.linePaneSplit;
 
   useEffect(() => {
@@ -430,6 +431,42 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
   };
   useEffect(() => () => { if (pressRef.current.timer) clearTimeout(pressRef.current.timer); }, []);
 
+  // Report the top/bottom currently-visible line so the parent's PgUp/PgDn can move the reading
+  // position by a screenful. Blurred (within the focus-blur window) and unrevealed (beyond the
+  // progressive-reveal boundary) lines don't count as visible. Returns null in the split view (no
+  // scroll) or when nothing qualifies, so the parent can fall back to paragraph paging.
+  function pageTargetLine(dir) {
+    const wrap = listWrapRef.current;
+    if (!wrap) return null;
+    const rows = wrap.querySelectorAll('.line-row[data-line]');
+    if (!rows.length) return null;
+    const cr = wrap.getBoundingClientRect();
+    const before = settings.blurLinesBefore || 0;
+    const after = settings.blurLinesAfter || 0;
+    let top = Infinity;
+    let bottom = -Infinity;
+    rows.forEach((el) => {
+      const i = Number(el.getAttribute('data-line'));
+      const r = el.getBoundingClientRect();
+      const shown = Math.min(r.bottom, cr.bottom) - Math.max(r.top, cr.top);
+      if (shown < Math.max(4, r.height * 0.5)) return; // need ~half the row inside the viewport
+      const blurred =
+        (before > 0 && i < currentLine && currentLine - i <= before) ||
+        (after > 0 && i > currentLine && i - currentLine <= after);
+      const ln = doc.lines[i];
+      const unrevealed = hideBeyond !== Infinity && ln && ln.startWordIndex > hideBeyond;
+      if (blurred || unrevealed) return;
+      if (i < top) top = i;
+      if (i > bottom) bottom = i;
+    });
+    if (top === Infinity) return null;
+    return dir > 0 ? bottom : top;
+  }
+  useEffect(() => {
+    if (visibleRef) visibleRef.current = { page: pageTargetLine };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  });
+
   return (
     <div className="line-pane">
       <div className="line-pane-toolbar">
@@ -447,7 +484,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
           pressHandlers={pressHandlers}
         />
       ) : (
-        <div className="line-pane-list" style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu} {...pressHandlers}>
+        <div className="line-pane-list" ref={listWrapRef} style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu} {...pressHandlers}>
           <List
             listRef={listRef}
             rowCount={totalLines}

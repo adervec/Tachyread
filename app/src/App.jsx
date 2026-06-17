@@ -109,6 +109,9 @@ function AppInner() {
   }, [dispatch, state.showToc]);
   const [paneWidths, setPaneWidths] = useState({ toc: 320, dash: 260, rsvp: 420, source: 380 });
   const resizePane = (id, w) => setPaneWidths((prev) => ({ ...prev, [id]: w }));
+  // Filled by the Lines pane: page(dir) → the top/bottom currently-visible line index (excluding
+  // blurred / unrevealed lines). Drives the PgUp/PgDn buttons + keys.
+  const linesVisibleRef = useRef(null);
   const recognizerRef = useRef(null);
   const audioRecRef = useRef({ rec: null, lineIndex: -1 });
   const audioCtrlRef = useRef(null);
@@ -434,6 +437,21 @@ function AppInner() {
     }
   }
 
+  // Page by a screenful of the Lines pane: move the reading position so the current line becomes
+  // the line that was at the top (PgUp) / bottom (PgDn) of the visible area. Blurred and unrevealed
+  // lines don't count as visible. Falls back to paragraph paging when the Lines pane isn't mounted
+  // (e.g. mobile Fast-Reader view) or can't report a range.
+  function pageLines(dir) {
+    if (!activeTab) return;
+    const target = linesVisibleRef.current?.page?.(dir);
+    if (target == null) { nav(dir > 0 ? 'nextPara' : 'prevPara'); return; }
+    const doc = activeTab.doc;
+    const li = Math.max(0, Math.min(doc.lines.length - 1, target));
+    const wi = doc.lines[li].startWordIndex;
+    if (wi === activeTab.settings.wordIndex) { nav(dir > 0 ? 'nextPara' : 'prevPara'); return; }
+    jumpWord(wi);
+  }
+
   function playPause() {
     if (!activeTab) return;
     if (playing) {
@@ -492,6 +510,12 @@ function AppInner() {
       } else if (e.key === 'ArrowDown' && ctrl) {
         e.preventDefault();
         nav('nextPara');
+      } else if (e.key === 'PageUp') {
+        e.preventDefault();
+        pageLines(-1);
+      } else if (e.key === 'PageDown') {
+        e.preventDefault();
+        pageLines(1);
       } else if (e.key === 'Home') {
         nav('restart');
       } else if (ctrl && !shift && (e.key === 'o' || e.key === 'O')) {
@@ -855,7 +879,8 @@ function AppInner() {
           />
         ),
       });
-    if (state.showDash) arr.push({ id: 'dash', label: 'Dashboard', node: <DashboardPane tab={activeTab} /> });
+    // Face & Stats no longer live among the reading panes — they sit to the left of the controls
+    // bar (see the bottom dock below), so the reading area is just the reading views.
     // On compact screens show exactly one reading view at a time (Fast Reader OR Lines) so the
     // single column isn't a long scroll past two stacked readers. Desktop keeps both side by side.
     let showRsvpPane = !hideWord;
@@ -877,6 +902,7 @@ function AppInner() {
           onJumpWord={jumpWord}
           hideMode={activeTab.settings.hideMode || 'None'}
           scrollSignal={lineScroll}
+          visibleRef={linesVisibleRef}
         />
       ),
     });
@@ -944,39 +970,48 @@ function AppInner() {
           <p className="hint">Shortcuts: Space play, ←→ word, ↑↓ line, Ctrl+↑↓ paragraph, Home restart, Ctrl+F find</p>
         </div>
       )}
-      {activeTab ? (
-        <ControlsBar
-          tab={activeTab}
-          playing={playing}
-          onJumpWord={jumpWord}
-          onConfirmFinished={() => openDialog({ kind: 'finished' })}
-          audioCtrl={!!activeTab.settings.audioCtrl}
-          readAloud={!!activeTab.settings.readAloud}
-          onToggleReadAloud={() =>
-            patchSettings(activeTab.id, {
-              readAloud: !activeTab.settings.readAloud,
-              typing: { ...activeTab.settings.typing, enabled: false },
-              speaking: { ...activeTab.settings.speaking, enabled: false },
-            })
-          }
-          onPlayPause={playPause}
-          onPrevWord={() => nav('prevWord')}
-          onNextWord={() => nav('nextWord')}
-          onPrevLine={() => nav('prevLine')}
-          onNextLine={() => nav('nextLine')}
-          onPrevPara={() => nav('prevPara')}
-          onNextPara={() => nav('nextPara')}
-          onRestart={() => nav('restart')}
-          onToggleAudioCtrl={() => patchSettings(activeTab.id, { audioCtrl: !activeTab.settings.audioCtrl })}
-          onGoalComplete={onGoalComplete}
-          goalKills={goalKills}
-          onTocIcon={onTocIcon}
-        />
-      ) : (
-        <div className="controls-bar" style={{ opacity: 0.5 }}>
-          <div className="progress-row"><div className="progress-bar" /><div className="progress-meta">— / —</div></div>
-        </div>
-      )}
+      <div className="bottom-dock">
+        {activeTab && state.showDash && (
+          <div className="dock-dash">
+            <DashboardPane tab={activeTab} dock />
+          </div>
+        )}
+        {activeTab ? (
+          <ControlsBar
+            tab={activeTab}
+            playing={playing}
+            onJumpWord={jumpWord}
+            onConfirmFinished={() => openDialog({ kind: 'finished' })}
+            audioCtrl={!!activeTab.settings.audioCtrl}
+            readAloud={!!activeTab.settings.readAloud}
+            onToggleReadAloud={() =>
+              patchSettings(activeTab.id, {
+                readAloud: !activeTab.settings.readAloud,
+                typing: { ...activeTab.settings.typing, enabled: false },
+                speaking: { ...activeTab.settings.speaking, enabled: false },
+              })
+            }
+            onPlayPause={playPause}
+            onPrevWord={() => nav('prevWord')}
+            onNextWord={() => nav('nextWord')}
+            onPrevLine={() => nav('prevLine')}
+            onNextLine={() => nav('nextLine')}
+            onPrevPara={() => nav('prevPara')}
+            onNextPara={() => nav('nextPara')}
+            onPageUp={() => pageLines(-1)}
+            onPageDown={() => pageLines(1)}
+            onRestart={() => nav('restart')}
+            onToggleAudioCtrl={() => patchSettings(activeTab.id, { audioCtrl: !activeTab.settings.audioCtrl })}
+            onGoalComplete={onGoalComplete}
+            goalKills={goalKills}
+            onTocIcon={onTocIcon}
+          />
+        ) : (
+          <div className="controls-bar" style={{ opacity: 0.5 }}>
+            <div className="progress-row"><div className="progress-bar" /><div className="progress-meta">— / —</div></div>
+          </div>
+        )}
+      </div>
       <div className="app-status">
         {state.global.showPerfMeter && <PerfMonitor />}
         <span className="app-status-text">{state.appStatus}</span>

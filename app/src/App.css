@@ -926,6 +926,40 @@
   border-top: 1px solid var(--line-number-fg);
 }
 
+/* Bottom dock: Face & Stats sit to the LEFT of the controls bar (not among the reading panes). */
+.bottom-dock {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+.bottom-dock > .controls-bar { flex: 1 1 auto; min-width: 0; }
+.dock-dash {
+  flex: 0 0 auto;
+  width: 250px;
+  max-width: 38vw;
+  border-top: 1px solid var(--divider);
+  border-right: 1px solid var(--divider);
+  background: var(--rsvp-bg);
+  color: var(--rsvp-fg);
+  overflow: auto;
+}
+/* Compact horizontal layout for the docked dashboard (vs the tall reading-pane version). */
+.dashboard-pane.dock {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px 16px;
+  padding: 6px 10px;
+}
+.dashboard-pane.dock .rsvp-faces { margin-bottom: 0; padding: 4px 8px; gap: 8px; }
+.dashboard-pane.dock .dash-stats { flex-direction: row; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; }
+.dashboard-pane.dock .dash-stat { flex-direction: row; align-items: baseline; gap: 5px; }
+.dashboard-pane.dock .dash-stat-hero .dash-num { font-size: 22px; }
+.dashboard-pane.dock .dash-num { font-size: 16px; }
+.dashboard-pane.dock .dash-label { font-size: 9px; margin-top: 0; }
+.dashboard-pane.dock .dash-stat-row { gap: 8px; }
+
 /* Bottom controls */
 .controls-bar {
   background: var(--controls-bg);
@@ -1577,6 +1611,15 @@
      controls bar stays short and never crowds the reader off a small screen. */
   .playback-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 14px; }
   .controls-bar { padding: 6px 10px; gap: 6px; }
+  /* Stack the docked Face/Stats above the controls (full width) instead of squeezing beside them. */
+  .bottom-dock { flex-direction: column; }
+  .dock-dash {
+    width: 100%;
+    max-width: none;
+    max-height: 26vh;
+    border-right: none;
+    border-bottom: 1px solid var(--divider);
+  }
   .goal-row { flex-wrap: wrap; row-gap: 4px; }
   /* The heard-speech readout sits up top on phones (out of the way of the bottom controls) and,
      with pointer-events:none, never blocks them. */
