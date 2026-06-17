@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { detectProperNames } from '../document/readerDocument.js';
 
-export default function ProperNamesDialog({ tab, onJumpWord, onClose }) {
+export default function ProperNamesDialog({ tab, onJumpWord, onWizard, onClose }) {
   const [sortBy, setSortBy] = useState('count');
   const [filter, setFilter] = useState('');
   const [, force] = useState(0);
@@ -45,6 +45,12 @@ export default function ProperNamesDialog({ tab, onJumpWord, onClose }) {
 
   return (
     <Dialog title="Proper Names Index" onClose={onClose} width={620}>
+      {onWizard && (
+        <p className="settings-note" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={onWizard}>🪄 Build from the cast list</button>
+          <span>Use the book’s Dramatis Personae for precise, false-positive-free names.</span>
+        </p>
+      )}
       {empty && (
         <div style={{ marginBottom: 10, padding: 8, background: 'var(--menu-bg)', border: '1px solid var(--divider)' }}>
           Detection is off (or no names found). Heavy on large documents — enable in Tab Settings to keep it on,

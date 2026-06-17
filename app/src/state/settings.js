@@ -51,7 +51,7 @@ export function defaultFileSettings() {
     surprisalStrength: 1, // 0 = off, 1 = full redistribution
     metronome: { enabled: false, volume: 0.25, subdivision: 1, accentEvery: 0 }, // rhythmic auditory pace cue at the current WPM
     goal: null,
-    typing: { enabled: false, caseSensitive: false, stripPunctuation: true, perWordTimeoutMs: 0, runMode: 'seconds', runLimit: 60, soundVolume: 0.4 },
+    typing: { enabled: false, mode: 'passage', caseSensitive: false, stripPunctuation: true, perWordTimeoutMs: 0, runMode: 'seconds', runLimit: 60, soundVolume: 0.4 },
     speaking: { enabled: false, confidence: 'Medium', perWordTimeoutMs: 0, allowPartial: true },
     centerOnCurrent: true,
     lineLongPressMs: 3000, // hold a line this long to jump to it (0 = instant click)
@@ -59,9 +59,12 @@ export function defaultFileSettings() {
     lineAdvanceSound: false, // soft click when the current line changes
     autoSkipHeadersFooters: false,
     properNames: {}, // name → { aliases:[], notes:'' }
+    properNameSeed: [], // wizard-located cast list [{name, note}] — seeds precise name highlighting
+    indexEntries: [], // wizard-built index from the book's printed index: [{ term, pages:[], level }]
     notes: '',
     rating: 0, // 0–5 stars, set on the Book Finished dialog
     tocEntries: [], // persisted custom TOC: [{ wordIndex, title, level }]
+    skipRanges: [], // word ranges excluded from the completion % (front/back matter): [{ start, end, label }]
     tocReadStats: {}, // per-section reading stats keyed by start wordIndex: { started, completed }
     tocCollapseCompleted: false, // auto-collapse fully-read sections in the TOC tree
     tocColumns: { // which TOC columns are visible (the name column is always shown)
@@ -100,8 +103,9 @@ export function defaultGlobalSettings() {
     vocabDeck: [], // spaced-repetition cards: { word, context, addedAt, reps, interval, ease, due, lastGrade }
     // Comfort & calibration: 20-20-20 eye-rest microbreaks + fatigue-aware speed easing.
     comfort: { enabled: true, breakIntervalMin: 20, microbreakSec: 20, autoBackoff: true },
-    // 40 Hz auditory focus primer (experimental, opt-in) — last-used config.
-    gammaPrimer: { carrierHz: 220, volume: 0.15, durationSec: 60 },
+    // Ambient background soundscape — last-used type + volume. Volume is hard-capped low by the
+    // engine (features/ambient.js) so it can never overpower read-aloud / TTS.
+    ambient: { type: 'Brown', volume: 0.18 },
     // Cloud sync / backup target. provider: 'localFolder' | 'googleDrive'; driveClientId is the user's
     // own Google OAuth client ID (kept local). lastSync is a timestamp for the UI.
     sync: { provider: 'localFolder', driveClientId: '', lastSync: 0, autoBackup: false, autoBackupMinutes: 30 },
@@ -112,5 +116,45 @@ export function defaultGlobalSettings() {
     // Grabs that exist on OTHER devices (markers only — no images/text travel via sync).
     // { checksum, name, createdAt, pageCount, device, seenAt }
     remoteGrabs: [],
+    // Reading list / literary journey scaffolding: per-book shelf overrides keyed by checksum
+    // ('reading' | 'finished' | 'toread' | 'paused'). Absent → shelf is inferred from progress.
+    readingList: { shelves: {} },
+    // Start on the landing page even when tabs are restored: no tab is active on launch, so the
+    // last document's text isn't revealed to bystanders until you pick its tab. Default on.
+    startOnLanding: true,
+    // Defer building a restored tab's document until it's first opened (saves memory, esp. on
+    // phones with several large books open). Applied on compact screens; eager on desktop.
+    lazyTabsMobile: true,
+    // Small bottom-bar readout of how hard the app is working (frame pacing). Useful on phones.
+    showPerfMeter: true,
+    // Read-aloud auto-stop: pause speech after this many minutes of playback (0 = never).
+    ttsAutoStopMin: 0,
+    // Touch gesture navigation (off by default — it can interfere with text selection/scroll):
+    // horizontal swipes over the reading area step lines (long swipes step paragraphs).
+    gestureControls: false,
+    // Auto-minimize the controls dock while playing on compact screens, for more text room.
+    autoMinimizeControls: false,
+    // Pause non-TTS playback when the reading text scrolls off-screen (you can't read what you can't
+    // see). Read-aloud / typing are exempt. Default on.
+    pauseWhenTextHidden: true,
+    // Webcam attention (opt-in, experimental): pause non-TTS reading when the camera can't see you
+    // facing the screen with eyes open. Processed entirely on-device; nothing leaves the machine.
+    webcamAttention: false,
+    // Webcam doze detection (opt-in): stop read-aloud if your eyes stay shut / you're gone a while.
+    webcamDoze: false,
+    // Away alarm (opt-in): sound an alert if you look away from the screen for this many seconds.
+    webcamAwayAlarm: false,
+    webcamAwayAlarmSec: 15,
+    // Escalating alarm (opt-in): the away alarm starts quiet and swells the longer you stay away.
+    webcamEscalatingAlarm: false,
+    // Posture nudge (opt-in): a gentle reminder when your face fills too much of the frame (too close).
+    webcamDistanceNudge: false,
+    // Look-away analytics (opt-in): log focus % / distractions per reading session into the history.
+    webcamFocusStats: false,
+    // Show a small live camera preview (with a status ring) while a webcam guard is on. Default on
+    // so you can confirm framing and that the camera is active.
+    webcamPreview: true,
+    // Calibrated eye-blink threshold from the calibration step ({ open, closed, threshold }).
+    webcamCalib: {},
   };
 }

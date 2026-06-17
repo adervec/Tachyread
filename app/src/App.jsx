@@ -11,6 +11,8 @@ import TocPane from './components/TocPane.jsx';
 import ChapterHeading from './components/ChapterHeading.jsx';
 import PaneLayout from './components/PaneLayout.jsx';
 import FaceStage from './components/FaceStage.jsx';
+import PerfMonitor from './components/PerfMonitor.jsx';
+import { useIsCompact } from './state/device.js';
 import AudioChat from './components/AudioChat.jsx';
 import TypingRun from './components/TypingRun.jsx';
 import FindDialog from './dialogs/FindDialog.jsx';
@@ -27,6 +29,10 @@ import TypingProgressDialog from './dialogs/TypingProgressDialog.jsx';
 import AppSettingsDialog from './dialogs/AppSettingsDialog.jsx';
 import BookFinishedDialog from './dialogs/BookFinishedDialog.jsx';
 import GrabWizard from './dialogs/GrabWizard.jsx';
+import TocWizard from './dialogs/TocWizard.jsx';
+import ResourceWizard from './dialogs/ResourceWizard.jsx';
+import IndexPane from './components/IndexPane.jsx';
+import { buildProperNamesFromList } from './document/resourceWizard.js';
 import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import AdaptiveProbe from './components/AdaptiveProbe.jsx';
@@ -37,33 +43,68 @@ import VocabDialog from './dialogs/VocabDialog.jsx';
 import RegressionDialog from './dialogs/RegressionDialog.jsx';
 import DictationDialog from './dialogs/DictationDialog.jsx';
 import AttentionDialog from './dialogs/AttentionDialog.jsx';
-import GammaPrimerDialog from './dialogs/GammaPrimerDialog.jsx';
+import AmbientDialog from './dialogs/AmbientDialog.jsx';
 import DataDialog from './dialogs/DataDialog.jsx';
 import BookGroupsDialog from './dialogs/BookGroupsDialog.jsx';
 import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
-import { getTocEntries, sectionSpan } from './document/toc.js';
+import { getTocEntries, sectionSpan, mergeSkipRanges } from './document/toc.js';
 import { defaultFileSettings } from './state/settings.js';
 import { cancelSpeech, rateFromIndex } from './features/tts.js';
 import { createReadAloud } from './features/readAloud.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip, clearSession, saveSession, saveTypingRun } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession } from './state/storage.js';
 import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
 import { playLineClick } from './features/clickSound.js';
 import { createMetronome } from './features/metronome.js';
 import { saveTextToFile } from './features/fileSystem.js';
+import { ambient } from './features/ambient.js';
+import { createAttentionMonitor } from './features/webcamAttention.js';
+import WebcamPreview from './components/WebcamPreview.jsx';
+import WebcamCalibrationDialog from './dialogs/WebcamCalibrationDialog.jsx';
+import { createAlarm } from './features/alarm.js';
+
+const WEBCAM_LABEL = {
+  starting: 'starting camera…', watching: 'watching', away: 'looked away — paused', drowsy: 'drowsy',
+  unsupported: 'face detection not supported here', denied: 'camera blocked', error: 'camera error', off: '',
+};
 import { getSyncProvider } from './features/sync/syncProviders.js';
 import { backupToProvider } from './features/sync/syncManager.js';
 import { applyTheme } from './state/themes.js';
 import './App.css';
 
 function AppInner() {
-  const { state, activeTab, openFile, openClipboard, setStatus, patchSettings, patchTab, openDialog, closeDialog, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
+  const { state, activeTab: rawActiveTab, hydrateTab, openFile, openClipboard, setStatus, patchSettings, patchTab, openDialog, closeDialog, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
+  // A lazy (restored, not-yet-loaded) tab has no parsed document — treat it as "no active reader"
+  // until it hydrates, so nothing downstream touches activeTab.doc before it exists.
+  const activeTab = rawActiveTab && !rawActiveTab.lazy ? rawActiveTab : null;
+  const isCompact = useIsCompact();
+  const [mobileView, setMobileView] = useState('rsvp'); // compact-screen single reading view: 'rsvp' | 'lines'
+  const [controlsCollapsed, setControlsCollapsed] = useState(false); // minimize the bottom dock for text room
+  const touchRef = useRef(null); // swipe-gesture start point
   const engineRef = useRef(null);
   if (!engineRef.current) engineRef.current = createEngine();
   const [playing, setPlaying] = useState(false);
+
+  // When the active tab is a lazy placeholder (e.g. selected via a restored tab strip, or auto-
+  // selected after closing another tab), build its document on demand.
+  useEffect(() => {
+    if (rawActiveTab?.lazy) hydrateTab(rawActiveTab.id);
+  }, [rawActiveTab?.id, rawActiveTab?.lazy, hydrateTab]);
+
+  // Incognito: a live ref so the move-recording paths read the current value without re-subscribing.
+  const incognitoRef = useRef(state.incognito);
+  incognitoRef.current = state.incognito;
+  const prevIncog = useRef(state.incognito);
+  useEffect(() => {
+    if (prevIncog.current === state.incognito) return;
+    prevIncog.current = state.incognito;
+    setStatus(state.incognito
+      ? '🕶 Incognito on — nothing is being recorded; your reading history is untouched.'
+      : 'Incognito off — your place was rewound and tracking resumed. Nothing was saved.');
+  }, [state.incognito, setStatus]);
   const [dragOver, setDragOver] = useState(false);
   const [closing, setClosing] = useState(null); // null | 'disconnect' | 'shutdown'
   const [goalKills, setGoalKills] = useState([]); // session-only killfeed of completed goals
@@ -96,6 +137,9 @@ function AppInner() {
   }, [dispatch, state.showToc]);
   const [paneWidths, setPaneWidths] = useState({ toc: 320, dash: 260, rsvp: 420, source: 380 });
   const resizePane = (id, w) => setPaneWidths((prev) => ({ ...prev, [id]: w }));
+  // Filled by the Lines pane: page(dir) → the top/bottom currently-visible line index (excluding
+  // blurred / unrevealed lines). Drives the PgUp/PgDn buttons + keys.
+  const linesVisibleRef = useRef(null);
   const recognizerRef = useRef(null);
   const audioRecRef = useRef({ rec: null, lineIndex: -1 });
   const audioCtrlRef = useRef(null);
@@ -107,16 +151,20 @@ function AppInner() {
   const ttsExpectedRef = useRef(-1); // index TTS last set, to tell self-advance from manual nav
   const metronomeRef = useRef(null); // rhythmic auditory pace cue (Web Audio)
 
-  // Run proper-name detection lazily when enabled on a tab (it's opt-in due to memory cost).
+  // Run proper-name detection lazily when enabled on a tab (it's opt-in due to memory cost). If the
+  // wizard located a cast list (properNameSeed), build precisely from that; otherwise fall back to
+  // the blind capitalisation heuristic.
   useEffect(() => {
     if (!activeTab?.settings.enableProperNames) return;
     const doc = activeTab.doc;
     if (doc.properNames && doc.properNames.size > 0) return;
-    detectProperNames(doc);
+    const seed = activeTab.settings.properNameSeed;
+    if (seed && seed.length) doc.properNames = buildProperNamesFromList(doc, seed);
+    else detectProperNames(doc);
     // Nudge a re-render so the line pane / RSVP engine pick up the new Map.
     patchTab(activeTab.id, { _propNamesGen: (activeTab._propNamesGen || 0) + 1 });
     // eslint-disable-next-line
-  }, [activeTab?.id, activeTab?.settings.enableProperNames]);
+  }, [activeTab?.id, activeTab?.settings.enableProperNames, activeTab?.settings.properNameSeed]);
 
   // Apply the active tab's theme (one of ~30 named palettes) via CSS custom properties.
   // Falls back to the legacy darkMode flag when no themeName is set.
@@ -151,6 +199,7 @@ function AppInner() {
   useEffect(() => {
     if (!activeTab) return;
     const id = setInterval(() => {
+      if (incognitoRef.current) return; // incognito: don't record per-section reading timestamps
       const tab = activeTabRef.current;
       if (!tab?.tracker) return;
       const entries = getTocEntries(tab);
@@ -232,10 +281,11 @@ function AppInner() {
     if (!tab) return;
     const cur = tab.settings.wordIndex;
     if (wi === cur) return;
-    tab.tracker?.recordMove(cur, wi, Date.now());
+    const inc = incognitoRef.current;
+    if (!inc) tab.tracker?.recordMove(cur, wi, Date.now());
     const prevLine = getLineIndex(tab.doc, cur);
     const newLine = getLineIndex(tab.doc, wi);
-    if (wi > cur && newLine !== prevLine) {
+    if (!inc && wi > cur && newLine !== prevLine) {
       tab.sessionLinesRead.add(prevLine);
       tab.readLinesAllTime.add(prevLine);
     }
@@ -322,19 +372,22 @@ function AppInner() {
       }
     }
     if (next === cur) return;
+    const inc = incognitoRef.current;
     // Reading-efficiency tracking (classifies read / skip / re-read / revisit + active time).
-    activeTab.tracker?.recordMove(cur, next, Date.now());
+    if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now());
     // Line status coloring for the right pane.
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
     if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick();
-    if (delta === 1 && next > cur && !opts.nav) {
-      if (newLine !== prevLine) {
-        activeTab.sessionLinesRead.add(prevLine);
-        activeTab.readLinesAllTime.add(prevLine);
+    if (!inc) {
+      if (delta === 1 && next > cur && !opts.nav) {
+        if (newLine !== prevLine) {
+          activeTab.sessionLinesRead.add(prevLine);
+          activeTab.readLinesAllTime.add(prevLine);
+        }
+      } else if (opts.nav) {
+        activeTab.sessionNavLinesRead.add(newLine);
       }
-    } else if (opts.nav) {
-      activeTab.sessionNavLinesRead.add(newLine);
     }
     patchSettings(activeTab.id, { wordIndex: next });
   }
@@ -344,11 +397,12 @@ function AppInner() {
     const cur = activeTab.settings.wordIndex;
     const next = Math.max(0, Math.min(activeTab.doc.words.length - 1, wi));
     if (next === cur) return;
-    activeTab.tracker?.recordMove(cur, next, Date.now());
+    const inc = incognitoRef.current;
+    if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now());
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
     if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick();
-    if (opts.nav) {
+    if (!inc && opts.nav) {
       activeTab.sessionNavLinesRead.add(newLine);
     }
     patchSettings(activeTab.id, { wordIndex: next });
@@ -421,8 +475,180 @@ function AppInner() {
     }
   }
 
+  // Page by a screenful of the Lines pane: move the reading position so the current line becomes
+  // the line that was at the top (PgUp) / bottom (PgDn) of the visible area. Blurred and unrevealed
+  // lines don't count as visible. Falls back to paragraph paging when the Lines pane isn't mounted
+  // (e.g. mobile Fast-Reader view) or can't report a range.
+  function pageLines(dir) {
+    if (!activeTab) return;
+    const target = linesVisibleRef.current?.page?.(dir);
+    if (target == null) { nav(dir > 0 ? 'nextPara' : 'prevPara'); return; }
+    const doc = activeTab.doc;
+    const li = Math.max(0, Math.min(doc.lines.length - 1, target));
+    const wi = doc.lines[li].startWordIndex;
+    if (wi === activeTab.settings.wordIndex) { nav(dir > 0 ? 'nextPara' : 'prevPara'); return; }
+    jumpWord(wi);
+  }
+
+  // ── Pause when the reader isn't engaged ─────────────────────────────────────────────────────
+  // Two guards pause NON-TTS reading (read-aloud / typing are exempt): the text scrolling off-screen,
+  // and — with the webcam feature — the user looking away. An auto-pause is remembered and resumed
+  // when the blocker clears, so a brief glance away doesn't lose your place.
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
+  const blockRef = useRef({ offscreen: false, away: false });
+  const autoPausedRef = useRef(false);
+  const offscreenTimer = useRef(null);
+  const paneVis = useRef({ rsvp: false, lines: false });
+  const pauseTextHiddenRef = useRef(state.global.pauseWhenTextHidden);
+  pauseTextHiddenRef.current = state.global.pauseWhenTextHidden;
+  const [webcamState, setWebcamState] = useState('off');
+  const [webcamStream, setWebcamStream] = useState(null);
+  const webcamRef = useRef(null);
+
+  const evalBlock = useCallback(() => {
+    const tab = activeTabRef.current;
+    if (!tab) return;
+    const nonTts = !tab.settings.readAloud && !tab.settings.typing?.enabled;
+    const blocked = blockRef.current.offscreen || blockRef.current.away;
+    if (blocked) {
+      if (playingRef.current && nonTts) {
+        autoPausedRef.current = true;
+        engineRef.current.pause();
+        setPlaying(false);
+      }
+    } else if (autoPausedRef.current && !playingRef.current && nonTts) {
+      autoPausedRef.current = false;
+      engineRef.current.start();
+      setPlaying(true);
+    }
+  }, []);
+
+  const reportPaneVisible = useCallback((id, v) => {
+    paneVis.current[id] = v;
+    if (offscreenTimer.current) { clearTimeout(offscreenTimer.current); offscreenTimer.current = null; }
+    const anyVisible = paneVis.current.rsvp || paneVis.current.lines;
+    if (!pauseTextHiddenRef.current || anyVisible) {
+      blockRef.current.offscreen = false;
+      evalBlock();
+    } else {
+      // brief delay so a pane unmount / view switch / re-layout isn't mistaken for "hidden"
+      offscreenTimer.current = setTimeout(() => { blockRef.current.offscreen = true; evalBlock(); }, 500);
+    }
+  }, [evalBlock]);
+  const onRsvpVisible = useCallback((v) => reportPaneVisible('rsvp', v), [reportPaneVisible]);
+  const onLinesVisible = useCallback((v) => reportPaneVisible('lines', v), [reportPaneVisible]);
+
+  // Webcam monitor (opt-in). The camera runs if EITHER guard is on; each behaviour is gated live so
+  // toggling one doesn't restart the camera. attention → pause non-TTS reading; doze → stop read-aloud.
+  const webcamAttentionRef = useRef(state.global.webcamAttention);
+  webcamAttentionRef.current = state.global.webcamAttention;
+  const webcamDozeRef = useRef(state.global.webcamDoze);
+  webcamDozeRef.current = state.global.webcamDoze;
+  const awayAlarmRef = useRef(state.global.webcamAwayAlarm);
+  awayAlarmRef.current = state.global.webcamAwayAlarm;
+  const awayAlarmSecRef = useRef(state.global.webcamAwayAlarmSec);
+  awayAlarmSecRef.current = state.global.webcamAwayAlarmSec;
+  const escalatingRef = useRef(state.global.webcamEscalatingAlarm);
+  escalatingRef.current = state.global.webcamEscalatingAlarm;
+  const distanceNudgeRef = useRef(state.global.webcamDistanceNudge);
+  distanceNudgeRef.current = state.global.webcamDistanceNudge;
+  const focusStatsRef = useRef(state.global.webcamFocusStats);
+  focusStatsRef.current = state.global.webcamFocusStats;
+  const focusRef = useRef(null); // current camera-on focus session accumulator
+  const alarmEngineRef = useRef(null);
+  const alarmDismissedRef = useRef(false);
+  const [awayAlarmActive, setAwayAlarmActive] = useState(false);
+  const [tooClose, setTooClose] = useState(false);
+  const dismissAwayAlarm = useCallback(() => {
+    alarmEngineRef.current?.stop();
+    setAwayAlarmActive(false);
+    alarmDismissedRef.current = true; // suppress until attention returns
+  }, []);
+  const camOn = state.global.webcamAttention || state.global.webcamDoze || state.global.webcamAwayAlarm
+    || state.global.webcamDistanceNudge || state.global.webcamFocusStats;
+  useEffect(() => {
+    if (!camOn) {
+      webcamRef.current?.stop();
+      webcamRef.current = null;
+      blockRef.current.away = false;
+      evalBlock();
+      return undefined;
+    }
+    focusRef.current = { startTs: Date.now(), lastTs: Date.now(), attentive: true, watchedMs: 0, awayMs: 0, distractions: 0 };
+    const mon = createAttentionMonitor({
+      blinkThreshold: state.global.webcamCalib?.threshold ?? 0.5,
+      onStream: (s) => setWebcamStream(s),
+      onState: (s) => setWebcamState(s),
+      onAttention: (attentive) => {
+        // visual reading pause — only when the attention guard is on
+        blockRef.current.away = webcamAttentionRef.current ? !attentive : false;
+        evalBlock();
+        // look-away analytics: tally watched vs away time + distraction count
+        const f = focusRef.current;
+        if (f) {
+          const now = Date.now();
+          if (f.attentive) f.watchedMs += now - f.lastTs; else f.awayMs += now - f.lastTs;
+          f.lastTs = now;
+          if (!attentive) f.distractions += 1;
+          f.attentive = attentive;
+        }
+      },
+      onDoze: (dozing) => {
+        // doze → stop read-aloud (it's otherwise exempt from the guards). No auto-resume: if you
+        // nodded off, it just stops, like the wind-down timer.
+        if (dozing && webcamDozeRef.current && playingRef.current && activeTabRef.current?.settings.readAloud) {
+          engineRef.current.pause();
+          setPlaying(false);
+          cancelSpeech();
+          if (activeTabRef.current) flushReadState(activeTabRef.current);
+          setStatus('Read-aloud stopped — you seemed to nod off.');
+        }
+      },
+      onAway: (awayMs) => {
+        // Escalating alarm: sound an alert once you've been away longer than the configured delay.
+        const running = alarmEngineRef.current?.isRunning?.();
+        if (!awayAlarmRef.current || awayMs === 0) {
+          if (awayMs === 0) alarmDismissedRef.current = false; // attention back → re-arm
+          if (running) { alarmEngineRef.current.stop(); setAwayAlarmActive(false); }
+          return;
+        }
+        if (!alarmDismissedRef.current && awayMs >= (awayAlarmSecRef.current || 15) * 1000) {
+          if (!alarmEngineRef.current) alarmEngineRef.current = createAlarm();
+          if (!alarmEngineRef.current.isRunning()) { alarmEngineRef.current.start({ escalate: !!escalatingRef.current }); setAwayAlarmActive(true); }
+        }
+      },
+      onProximity: (close) => {
+        setTooClose(distanceNudgeRef.current ? close : false);
+      },
+    });
+    webcamRef.current = mon;
+    mon.start();
+    return () => {
+      mon.stop();
+      webcamRef.current = null;
+      blockRef.current.away = false;
+      alarmEngineRef.current?.stop();
+      setAwayAlarmActive(false);
+      setTooClose(false);
+      alarmDismissedRef.current = false;
+      // finalize the focus session
+      const f = focusRef.current;
+      focusRef.current = null;
+      if (f && focusStatsRef.current) {
+        const now = Date.now();
+        if (f.attentive) f.watchedMs += now - f.lastTs; else f.awayMs += now - f.lastTs;
+        if (f.watchedMs + f.awayMs > 30000) {
+          saveFocusSession({ ts: f.startTs, watchedMs: f.watchedMs, awayMs: f.awayMs, distractions: f.distractions, docName: activeTabRef.current?.doc?.fileName || '' }).catch(() => {});
+        }
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camOn]);
+
   function playPause() {
     if (!activeTab) return;
+    autoPausedRef.current = false; // manual control overrides any auto-pause memory
     if (playing) {
       engineRef.current.pause();
       setPlaying(false);
@@ -433,6 +659,54 @@ function AppInner() {
       setPlaying(true);
     }
   }
+
+  // Auto-stop timer: after this many minutes of continuous playback, pause and silence speech.
+  // Handy for winding down to read-aloud without it running all night. Restarts on each Play.
+  useEffect(() => {
+    const mins = state.global.ttsAutoStopMin || 0;
+    if (!playing || mins <= 0) return undefined;
+    const id = setTimeout(() => {
+      engineRef.current.pause();
+      setPlaying(false);
+      cancelSpeech();
+      if (activeTabRef.current) flushReadState(activeTabRef.current);
+      setStatus(`Auto-stopped after ${mins} min.`);
+    }, mins * 60000);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, state.global.ttsAutoStopMin]);
+
+  // Duck the ambient bed while read-aloud is actively speaking, so it never competes with the voice.
+  useEffect(() => {
+    ambient.setDucked(playing && !!activeTab?.settings?.readAloud);
+  }, [playing, activeTab?.settings?.readAloud]);
+
+  // Adaptive minimize: on compact screens, collapse the controls dock while playing to give the
+  // text the most room, and restore it on pause. Opt-in.
+  useEffect(() => {
+    if (!state.global.autoMinimizeControls || !isCompact) return;
+    setControlsCollapsed(playing);
+  }, [playing, isCompact, state.global.autoMinimizeControls]);
+
+  // Optional swipe gestures over the reading area: horizontal swipe = prev/next line, a long swipe
+  // = prev/next paragraph. Off by default (vertical scroll/selection are left untouched either way).
+  const gestureHandlers = state.global.gestureControls
+    ? {
+        onTouchStart: (e) => { const t = e.touches[0]; touchRef.current = { x: t.clientX, y: t.clientY }; },
+        onTouchEnd: (e) => {
+          const s = touchRef.current;
+          touchRef.current = null;
+          if (!s) return;
+          const t = e.changedTouches[0];
+          const dx = t.clientX - s.x;
+          const dy = t.clientY - s.y;
+          if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.3) return; // need a clear horizontal swipe
+          const far = Math.abs(dx) > 170;
+          if (dx < 0) nav(far ? 'nextPara' : 'nextLine');
+          else nav(far ? 'prevPara' : 'prevLine');
+        },
+      }
+    : {};
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -463,6 +737,12 @@ function AppInner() {
       } else if (e.key === 'ArrowDown' && ctrl) {
         e.preventDefault();
         nav('nextPara');
+      } else if (e.key === 'PageUp') {
+        e.preventDefault();
+        pageLines(-1);
+      } else if (e.key === 'PageDown') {
+        e.preventDefault();
+        pageLines(1);
       } else if (e.key === 'Home') {
         nav('restart');
       } else if (ctrl && !shift && (e.key === 'o' || e.key === 'O')) {
@@ -722,6 +1002,29 @@ function AppInner() {
     if (!res.canceled) setStatus(`Saved ${res.name}${res.method === 'download' ? ' to your downloads' : ''}.`);
   }
 
+  // Apply a resource-wizard result (proper names / index / footnotes) to the active tab.
+  function applyResource(payload) {
+    if (!activeTab) return;
+    if (payload.kind === 'names') {
+      activeTab.doc.properNames = payload.map;
+      patchSettings(activeTab.id, { enableProperNames: true, properNameSeed: payload.seed || [] });
+      patchTab(activeTab.id, { _propNamesGen: (activeTab._propNamesGen || 0) + 1 });
+      setStatus(`Proper names: ${payload.map.size} name(s) highlighted.`);
+      openDialog({ kind: 'proper-names' });
+    } else if (payload.kind === 'index') {
+      const patch = { indexEntries: payload.entries };
+      if (payload.skip) patch.skipRanges = mergeSkipRanges(activeTab.settings.skipRanges, [payload.skip]);
+      patchSettings(activeTab.id, patch);
+      if (!state.showIndex) dispatch({ type: 'TOGGLE_INDEX' });
+      setStatus(`Index: ${payload.entries.length} term(s).`);
+    } else if (payload.kind === 'notes') {
+      activeTab.doc.footnotes = payload.map;
+      if (payload.skip) patchSettings(activeTab.id, { skipRanges: mergeSkipRanges(activeTab.settings.skipRanges, [payload.skip]) });
+      patchTab(activeTab.id, { _footnotesGen: (activeTab._footnotesGen || 0) + 1 });
+      setStatus(`Footnotes: ${payload.map.size} found.`);
+    }
+  }
+
   function handleMenuAction(action) {
     if (action === 'sync-now') return doSyncNow();
     if (action === 'save-tab' && activeTab) return doSaveTab();
@@ -777,6 +1080,10 @@ function AppInner() {
     if (action === 'stats') return openDialog({ kind: 'stats' });
     if (action === 'history') return openDialog({ kind: 'history' });
     if (action === 'proper-names' && activeTab) return openDialog({ kind: 'proper-names' });
+    if (action === 'toc-wizard' && activeTab) return openDialog({ kind: 'toc-wizard' });
+    if (action === 'names-wizard' && activeTab) return openDialog({ kind: 'resource-wizard', resourceKind: 'names' });
+    if (action === 'index-wizard' && activeTab) return openDialog({ kind: 'resource-wizard', resourceKind: 'index' });
+    if (action === 'notes-wizard' && activeTab) return openDialog({ kind: 'resource-wizard', resourceKind: 'notes' });
     if (action === 'audiobook' && activeTab) return openDialog({ kind: 'audiobook' });
     if (action === 'footnote' && activeTab) return setShowFootnote((s) => !s);
     if (action === 'typing' && activeTab) {
@@ -797,8 +1104,9 @@ function AppInner() {
     if (action === 'regressions' && activeTab) return openDialog({ kind: 'regressions' });
     if (action === 'attention' && activeTab) return openDialog({ kind: 'attention' });
     if (action === 'dictation') return openDialog({ kind: 'dictation' });
-    if (action === 'gamma') return openDialog({ kind: 'gamma' });
+    if (action === 'ambient') return openDialog({ kind: 'ambient' });
     if (action === 'take-break') return setBreakSignal((n) => n + 1);
+    if (action === 'toggle-incognito') { dispatch({ type: 'TOGGLE_INCOGNITO' }); return; }
     if (action === 'toggle-dark' && activeTab) {
       patchSettings(activeTab.id, { darkMode: !activeTab.settings.darkMode });
     }
@@ -822,15 +1130,28 @@ function AppInner() {
             onScrollToLine={scrollLinesToLine}
             onSetSectionGoal={setSectionGoal}
             onPatch={(p) => patchSettings(activeTab.id, p)}
+            onWizard={() => openDialog({ kind: 'toc-wizard' })}
             flashSignal={tocFlash}
           />
         ),
       });
-    if (state.showDash) arr.push({ id: 'dash', label: 'Dashboard', node: <DashboardPane tab={activeTab} /> });
-    if (!hideWord) arr.push({ id: 'rsvp', label: 'Fast Reader', node: <RsvpPane tab={activeTab} /> });
+    // Face & Stats no longer live among the reading panes — they sit to the left of the controls
+    // bar (see the bottom dock below), so the reading area is just the reading views.
+    // On compact screens show exactly one reading view at a time (Fast Reader OR Lines) so the
+    // single column isn't a long scroll past two stacked readers. Desktop keeps both side by side.
+    let showRsvpPane = !hideWord;
+    let showLinesPane = true;
+    if (isCompact) {
+      if (hideWord) { showRsvpPane = false; showLinesPane = true; }
+      else if (mobileView === 'rsvp') { showRsvpPane = true; showLinesPane = false; }
+      else { showRsvpPane = false; showLinesPane = true; }
+    }
+    if (showRsvpPane) arr.push({ id: 'rsvp', label: 'Fast Reader', node: <RsvpPane tab={activeTab} onVisible={onRsvpVisible} /> });
     if (state.showSource && activeTab.doc.source)
       arr.push({ id: 'source', label: 'Source', node: <SourcePane tab={activeTab} /> });
-    arr.push({
+    if (state.showIndex)
+      arr.push({ id: 'index', label: 'Index', node: <IndexPane tab={activeTab} onJumpWord={jumpWord} onWizard={() => openDialog({ kind: 'resource-wizard', resourceKind: 'index' })} /> });
+    if (showLinesPane) arr.push({
       id: 'lines',
       label: 'Lines',
       node: (
@@ -839,23 +1160,53 @@ function AppInner() {
           onJumpWord={jumpWord}
           hideMode={activeTab.settings.hideMode || 'None'}
           scrollSignal={lineScroll}
+          visibleRef={linesVisibleRef}
+          onVisible={onLinesVisible}
         />
       ),
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showDash, state.showSource, hideWord, lineScroll, tocFlash]);
+  }, [activeTab, state.showToc, state.showDash, state.showSource, state.showIndex, hideWord, lineScroll, tocFlash, isCompact, mobileView, onRsvpVisible, onLinesVisible]);
 
   const dialog = state.dialog;
 
   return (
-    <div className="app">
+    <div className={`app${state.incognito ? ' incognito' : ''}`}>
       <MenuBar onFileOpen={openFile} onAction={handleMenuAction} />
       <TabBar />
+      <div className="content-area">
+      {state.incognito && (
+        <div className="incognito-banner" role="status">
+          <span className="incog-eyes">🕶</span>
+          <span className="incog-text"><b>Incognito reading</b> — tracking is off. Nothing is recorded, and your place rewinds when you turn this off.</span>
+          <button className="incog-off" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}>Turn off</button>
+        </div>
+      )}
       {activeTab ? (
         <div className="main-wrap">
           <ChapterHeading tab={activeTab} onJumpWord={jumpWord} />
-          <div className="main-area">
+          {isCompact && !hideWord && (
+            <div className="reading-view-switch" role="tablist" aria-label="Reading view">
+              <button
+                role="tab"
+                aria-selected={mobileView === 'rsvp'}
+                className={mobileView === 'rsvp' ? 'on' : ''}
+                onClick={() => setMobileView('rsvp')}
+              >
+                ⚡ Fast Reader
+              </button>
+              <button
+                role="tab"
+                aria-selected={mobileView === 'lines'}
+                className={mobileView === 'lines' ? 'on' : ''}
+                onClick={() => setMobileView('lines')}
+              >
+                ☰ Lines
+              </button>
+            </div>
+          )}
+          <div className="main-area" {...gestureHandlers}>
             <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
             {activeTab.settings.typing?.enabled && (
               <TypingRun
@@ -870,49 +1221,94 @@ function AppInner() {
             {showFootnote && <FootnoteOverlay tab={activeTab} onClose={() => setShowFootnote(false)} />}
           </div>
         </div>
+      ) : rawActiveTab?.lazy ? (
+        <div className="empty-state">
+          <div className="loading-spin" aria-hidden="true" />
+          <h1>Opening {rawActiveTab.fileName}…</h1>
+          <p>Loading this document for the first time this session.</p>
+        </div>
       ) : (
         <div className="empty-state">
           <img className="empty-logo" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="Tachyread — the astral gavage goose" width="132" height="132" />
           <h1>Tachyread</h1>
           <p>Open a file (File → Open TXT, Ctrl+O), open a document (Ctrl+D), or drop a file here.</p>
           <p>Supports .txt, .md, .docx, .pdf, .epub.</p>
+          {state.tabs.length > 0 && <p>Or pick one of your {state.tabs.length} open tab(s) above.</p>}
           <p className="hint">Shortcuts: Space play, ←→ word, ↑↓ line, Ctrl+↑↓ paragraph, Home restart, Ctrl+F find</p>
         </div>
       )}
-      {activeTab ? (
-        <ControlsBar
-          tab={activeTab}
-          playing={playing}
-          onJumpWord={jumpWord}
-          onConfirmFinished={() => openDialog({ kind: 'finished' })}
-          audioCtrl={!!activeTab.settings.audioCtrl}
-          readAloud={!!activeTab.settings.readAloud}
-          onToggleReadAloud={() =>
-            patchSettings(activeTab.id, {
-              readAloud: !activeTab.settings.readAloud,
-              typing: { ...activeTab.settings.typing, enabled: false },
-              speaking: { ...activeTab.settings.speaking, enabled: false },
-            })
-          }
-          onPlayPause={playPause}
-          onPrevWord={() => nav('prevWord')}
-          onNextWord={() => nav('nextWord')}
-          onPrevLine={() => nav('prevLine')}
-          onNextLine={() => nav('nextLine')}
-          onPrevPara={() => nav('prevPara')}
-          onNextPara={() => nav('nextPara')}
-          onRestart={() => nav('restart')}
-          onToggleAudioCtrl={() => patchSettings(activeTab.id, { audioCtrl: !activeTab.settings.audioCtrl })}
-          onGoalComplete={onGoalComplete}
-          goalKills={goalKills}
-          onTocIcon={onTocIcon}
-        />
-      ) : (
-        <div className="controls-bar" style={{ opacity: 0.5 }}>
-          <div className="progress-row"><div className="progress-bar" /><div className="progress-meta">— / —</div></div>
+      </div>
+      <div className={`controls-dock${controlsCollapsed ? ' collapsed' : ''}`}>
+        <button
+          className="dock-handle"
+          onClick={() => setControlsCollapsed((c) => !c)}
+          title={controlsCollapsed ? 'Show controls' : 'Minimize controls — more room for text'}
+          aria-label={controlsCollapsed ? 'Show controls' : 'Minimize controls'}
+        >
+          <span className="dock-grip" />
+          <span className="dock-handle-label">{controlsCollapsed ? '⌃ controls' : '⌄'}</span>
+        </button>
+        {controlsCollapsed ? (
+          activeTab && (
+            <div className="dock-mini">
+              <button className="play-btn-mini" title="Play / Pause (Space)" onClick={playPause}>{playing ? '❚❚' : '▶'}</button>
+              <span className="dock-mini-meta">{activeTab.settings.wordIndex + 1} / {activeTab.doc.words.length}</span>
+            </div>
+          )
+        ) : (
+        <div className="dock-row">
+        {activeTab && state.showDash && (
+          <div className="dock-dash">
+            <DashboardPane tab={activeTab} dock />
+          </div>
+        )}
+        {activeTab ? (
+          <ControlsBar
+            tab={activeTab}
+            playing={playing}
+            onJumpWord={jumpWord}
+            onConfirmFinished={() => openDialog({ kind: 'finished' })}
+            audioCtrl={!!activeTab.settings.audioCtrl}
+            readAloud={!!activeTab.settings.readAloud}
+            onToggleReadAloud={() =>
+              patchSettings(activeTab.id, {
+                readAloud: !activeTab.settings.readAloud,
+                typing: { ...activeTab.settings.typing, enabled: false },
+                speaking: { ...activeTab.settings.speaking, enabled: false },
+              })
+            }
+            onPlayPause={playPause}
+            onPrevWord={() => nav('prevWord')}
+            onNextWord={() => nav('nextWord')}
+            onPrevLine={() => nav('prevLine')}
+            onNextLine={() => nav('nextLine')}
+            onPrevPara={() => nav('prevPara')}
+            onNextPara={() => nav('nextPara')}
+            onPageUp={() => pageLines(-1)}
+            onPageDown={() => pageLines(1)}
+            onRestart={() => nav('restart')}
+            onToggleAudioCtrl={() => patchSettings(activeTab.id, { audioCtrl: !activeTab.settings.audioCtrl })}
+            onGoalComplete={onGoalComplete}
+            goalKills={goalKills}
+            onTocIcon={onTocIcon}
+          />
+        ) : (
+          <div className="controls-bar" style={{ opacity: 0.5 }}>
+            <div className="progress-row"><div className="progress-bar" /><div className="progress-meta">— / —</div></div>
+          </div>
+        )}
         </div>
-      )}
-      <div className="app-status">{state.appStatus}</div>
+        )}
+      </div>
+      <div className="app-status">
+        {state.global.showPerfMeter && <PerfMonitor />}
+        <span className="app-status-text">{state.appStatus}</span>
+        {camOn && webcamState !== 'off' && (
+          <span className={`webcam-badge wb-${webcamState}`} title="Webcam — frames are analysed on your device and never leave it">
+            📷 {WEBCAM_LABEL[webcamState] || webcamState}
+          </span>
+        )}
+      </div>
 
       {/* Dialogs */}
       {dialog?.kind === 'find' && activeTab && (
@@ -941,6 +1337,7 @@ function AppInner() {
         <AppSettingsDialog
           global={state.global}
           onPatch={(p) => updateGlobal(p)}
+          onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
           onClose={closeDialog}
         />
       )}
@@ -951,7 +1348,12 @@ function AppInner() {
       )}
       {dialog?.kind === 'history' && <HistoryDialog onClose={closeDialog} />}
       {dialog?.kind === 'proper-names' && activeTab && (
-        <ProperNamesDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
+        <ProperNamesDialog
+          tab={activeTab}
+          onJumpWord={jumpWord}
+          onWizard={() => openDialog({ kind: 'resource-wizard', resourceKind: 'names' })}
+          onClose={closeDialog}
+        />
       )}
       {dialog?.kind === 'audiobook' && activeTab && (
         <AudiobookDialog tab={activeTab} onClose={closeDialog} />
@@ -972,7 +1374,7 @@ function AppInner() {
       {dialog?.kind === 'span-drill' && <SpanDrillDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'flow-writer' && <FlowWriterDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'dictation' && <DictationDialog onClose={closeDialog} />}
-      {dialog?.kind === 'gamma' && <GammaPrimerDialog onClose={closeDialog} />}
+      {dialog?.kind === 'ambient' && <AmbientDialog onClose={closeDialog} />}
       {dialog?.kind === 'vocab' && <VocabDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'regressions' && activeTab && (
         <RegressionDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
@@ -981,6 +1383,37 @@ function AppInner() {
         <AttentionDialog tab={activeTab} recentScores={probeScoresRef.current} onClose={closeDialog} />
       )}
       {dialog?.kind === 'grab' && <GrabWizard onClose={closeDialog} />}
+      {dialog?.kind === 'toc-wizard' && activeTab && (
+        <TocWizard
+          tab={activeTab}
+          onApply={(entries, skip) => {
+            patchSettings(activeTab.id, {
+              tocEntries: entries,
+              skipRanges: mergeSkipRanges(activeTab.settings.skipRanges, skip),
+            });
+            if (!state.showToc) dispatch({ type: 'TOGGLE_TOC' });
+          }}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog?.kind === 'resource-wizard' && activeTab && (
+        <ResourceWizard
+          kind={dialog.resourceKind}
+          tab={activeTab}
+          onApply={applyResource}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog?.kind === 'webcam-calib' && (
+        <WebcamCalibrationDialog
+          monitor={webcamRef.current}
+          onSave={(threshold) => {
+            webcamRef.current?.setBlinkThreshold(threshold);
+            updateGlobal({ webcamCalib: { ...(state.global.webcamCalib || {}), threshold } });
+          }}
+          onClose={closeDialog}
+        />
+      )}
       {dialog?.kind === 'finished' && activeTab && (
         <BookFinishedDialog
           tab={activeTab}
@@ -1031,6 +1464,33 @@ function AppInner() {
 
       {/* Live audio-command transcript (sanity check). Ephemeral; only while listening. */}
       {!!activeTab?.settings?.audioCtrl && <AudioChat log={audioLog} />}
+
+      {/* Small webcam self-view while a guard is on — confirm framing; nothing leaves the device. */}
+      {camOn && state.global.webcamPreview && webcamStream && (
+        <WebcamPreview
+          stream={webcamStream}
+          state={webcamState}
+          canCalibrate={!!webcamRef.current?.eyesAvailable?.()}
+          onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
+          onHide={() => updateGlobal({ webcamPreview: false })}
+        />
+      )}
+
+      {/* Posture nudge — gentle reminder when you're sitting too close to the screen. */}
+      {camOn && tooClose && (
+        <div className="distance-nudge" role="status">↔ Ease back a little — you’re close to the screen.</div>
+      )}
+
+      {/* Looking-away alarm — flashing alert + beeper until you return or dismiss. */}
+      {awayAlarmActive && (
+        <div className="away-alarm" role="alertdialog" onClick={dismissAwayAlarm}>
+          <div className="away-alarm-box">
+            <div className="away-alarm-title">👀 Eyes on the page!</div>
+            <p>You’ve been looking away. Look back to silence it, or tap to dismiss.</p>
+            <button onClick={(e) => { e.stopPropagation(); dismissAwayAlarm(); }}>Dismiss</button>
+          </div>
+        </div>
+      )}
 
       {/* Single shared WebGL context for every 3D reader face (drei <View> portals here).
           Mounted only while faces are actually shown so there's no idle render loop. */}

@@ -12,6 +12,9 @@ export default function DictationDialog({ onClose }) {
   const best = state.global.bestDictationWpm || 0;
   const [recording, setRecording] = useState(false);
   const [transcript, setTranscript] = useState('');
+  // Each Start→Stop is one "block"; words land in the current (last) block. The coloured view
+  // cycles a few hues across blocks so you can see what was captured in each pause/resume burst.
+  const [blocks, setBlocks] = useState([]); // string[]
   const [interim, setInterim] = useState('');
   const [elapsed, setElapsed] = useState(0);
   const [err, setErr] = useState('');
@@ -35,10 +38,18 @@ export default function DictationDialog({ onClose }) {
     setErr('');
     startRef.current = Date.now() - elapsed; // resume from accumulated elapsed
     setRecording(true);
+    setBlocks((bs) => [...bs, '']); // begin a fresh colour block for this recording burst
     const r = createRecognizer({
       onResult: ({ transcript: text, isFinal }) => {
         if (isFinal) {
           setTranscript((prev) => (prev ? prev + ' ' : '') + text);
+          setBlocks((bs) => {
+            if (!bs.length) return [text];
+            const copy = [...bs];
+            const last = copy.length - 1;
+            copy[last] = copy[last] ? `${copy[last]} ${text}` : text;
+            return copy;
+          });
           setInterim('');
         } else {
           setInterim(text);
@@ -66,10 +77,13 @@ export default function DictationDialog({ onClose }) {
 
   function clearAll() {
     setTranscript('');
+    setBlocks([]);
     setInterim('');
     setElapsed(0);
     startRef.current = Date.now();
   }
+
+  const hasBlocks = blocks.some((b) => b);
 
   return (
     <Dialog
@@ -114,6 +128,15 @@ export default function DictationDialog({ onClose }) {
       )}
       {err && <p className="settings-note" style={{ color: 'var(--danger, #c0392b)' }}>{err}</p>}
 
+      {(hasBlocks || interim) && (
+        <div className="dict-blocks" aria-label="Dictated text, coloured by recording block">
+          {blocks.map((b, i) =>
+            b ? <span key={i} className={`dict-block c${i % 6}`}>{b} </span> : null
+          )}
+          {interim && <span className="dict-block interim">{interim}</span>}
+        </div>
+      )}
+
       <textarea
         className="dict-transcript"
         value={transcript}
@@ -121,6 +144,12 @@ export default function DictationDialog({ onClose }) {
         onChange={(e) => setTranscript(e.target.value)}
         rows={7}
       />
+      {hasBlocks && (
+        <p className="settings-note" style={{ marginTop: 4 }}>
+          The coloured view above shows each Start→Stop recording block in its own hue — the editable
+          box below is the raw text (used for the word count and Copy).
+        </p>
+      )}
 
       <p className="settings-note" style={{ marginTop: 6 }}>
         Net WPM counts words over active (recording) time, pauses included — the honest output rate.

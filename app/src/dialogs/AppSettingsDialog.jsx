@@ -15,7 +15,7 @@ function Field({ label, children }) {
 
 const AUDIO_MODES = ['Voice', 'Claps', 'Both'];
 
-export default function AppSettingsDialog({ global, onPatch, onClose }) {
+export default function AppSettingsDialog({ global, onPatch, onCalibrate, onClose }) {
   const [g, setG] = useState(global);
   function patch(p) {
     setG({ ...g, ...p });
@@ -53,6 +53,163 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
           placeholder="Segoe UI, Arial, sans-serif"
         />
       </Field>
+
+      <div className="field-section">Startup &amp; mobile</div>
+      <Field label="Start on the landing page">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={g.startOnLanding !== false}
+            onChange={(e) => patch({ startOnLanding: e.target.checked })}
+          />
+          Launch with no tab open, so a document isn’t shown until you pick its tab
+        </label>
+      </Field>
+      <Field label="Load tabs on demand (small screens)">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={g.lazyTabsMobile !== false}
+            onChange={(e) => patch({ lazyTabsMobile: e.target.checked })}
+          />
+          On phones, don’t parse a restored document until its tab is opened (saves memory)
+        </label>
+      </Field>
+      <Field label="Show performance meter">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={g.showPerfMeter !== false}
+            onChange={(e) => patch({ showPerfMeter: e.target.checked })}
+          />
+          A small frame-rate / “working hard” readout in the status bar
+        </label>
+      </Field>
+      <Field label="Swipe gestures">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.gestureControls}
+            onChange={(e) => patch({ gestureControls: e.target.checked })}
+          />
+          Horizontal swipe over the text steps lines (long swipe = paragraph)
+        </label>
+      </Field>
+      <Field label="Auto-minimize controls while reading">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.autoMinimizeControls}
+            onChange={(e) => patch({ autoMinimizeControls: e.target.checked })}
+          />
+          On phones, collapse the bottom controls during playback for more text room
+        </label>
+      </Field>
+
+      <div className="field-section">Reading guard</div>
+      <Field label="Pause when text isn’t visible">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={g.pauseWhenTextHidden !== false}
+            onChange={(e) => patch({ pauseWhenTextHidden: e.target.checked })}
+          />
+          Pause fast reading if the text scrolls off-screen (read-aloud keeps going)
+        </label>
+      </Field>
+      <Field label="Webcam attention (experimental)">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.webcamAttention}
+            onChange={(e) => patch({ webcamAttention: e.target.checked })}
+          />
+          Pause fast reading when the camera can’t see you facing the screen with eyes open
+        </label>
+      </Field>
+      <Field label="Doze detection (experimental)">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.webcamDoze}
+            onChange={(e) => patch({ webcamDoze: e.target.checked })}
+          />
+          Stop read-aloud if your eyes stay shut or you’re away for a while
+        </label>
+      </Field>
+      <Field label="Away alarm (experimental)">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.webcamAwayAlarm}
+            onChange={(e) => patch({ webcamAwayAlarm: e.target.checked })}
+          />
+          Sound an alarm if you look away for too long
+        </label>
+      </Field>
+      <Field label="Alarm after (seconds)">
+        <input
+          type="number"
+          min={3}
+          max={300}
+          value={g.webcamAwayAlarmSec ?? 15}
+          disabled={!g.webcamAwayAlarm}
+          onChange={(e) => patch({ webcamAwayAlarmSec: Math.max(3, Math.min(300, Number(e.target.value) || 15)) })}
+          style={{ width: 70 }}
+        />
+      </Field>
+      <Field label="Escalating alarm">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.webcamEscalatingAlarm}
+            disabled={!g.webcamAwayAlarm}
+            onChange={(e) => patch({ webcamEscalatingAlarm: e.target.checked })}
+          />
+          Start quiet and get louder the longer you stay away
+        </label>
+      </Field>
+      <Field label="Posture nudge (experimental)">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.webcamDistanceNudge}
+            onChange={(e) => patch({ webcamDistanceNudge: e.target.checked })}
+          />
+          Remind me to ease back when I’m sitting too close to the screen
+        </label>
+      </Field>
+      <Field label="Look-away analytics (experimental)">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.webcamFocusStats}
+            onChange={(e) => patch({ webcamFocusStats: e.target.checked })}
+          />
+          Log focus % and distractions per session into Reading History
+        </label>
+      </Field>
+      <Field label="Camera preview">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={g.webcamPreview !== false}
+            onChange={(e) => patch({ webcamPreview: e.target.checked })}
+          />
+          Show a small live self-view while a webcam guard is on
+        </label>
+      </Field>
+      <Field label="Eye calibration">
+        <button onClick={onCalibrate} disabled={!onCalibrate}>⚙ Calibrate eye detection…</button>
+      </Field>
+      <p className="settings-note">
+        Both use on-device face detection — camera frames are analysed locally and are never recorded,
+        saved, or uploaded; the camera only runs while one of these is on. Eye-open detection loads a
+        small face-landmark model on first use (needs network once, like the OCR data) and a WebGL
+        browser; without it, attention falls back to “facing the screen” and doze to “away for a while.”
+        Calibration tunes eyes-open vs eyes-shut to your face/glasses. Typing and (for the attention
+        guard) read-aloud are never paused.
+      </p>
 
       <div className="field-section">Audio control</div>
       <Field label="Hands-free mode">
