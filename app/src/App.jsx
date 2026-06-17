@@ -39,7 +39,7 @@ import VocabDialog from './dialogs/VocabDialog.jsx';
 import RegressionDialog from './dialogs/RegressionDialog.jsx';
 import DictationDialog from './dialogs/DictationDialog.jsx';
 import AttentionDialog from './dialogs/AttentionDialog.jsx';
-import GammaPrimerDialog from './dialogs/GammaPrimerDialog.jsx';
+import AmbientDialog from './dialogs/AmbientDialog.jsx';
 import DataDialog from './dialogs/DataDialog.jsx';
 import BookGroupsDialog from './dialogs/BookGroupsDialog.jsx';
 import ComfortMonitor from './components/ComfortMonitor.jsx';
@@ -56,6 +56,7 @@ import { startVoiceCommands, startClapDetector } from './features/audioControl.j
 import { playLineClick } from './features/clickSound.js';
 import { createMetronome } from './features/metronome.js';
 import { saveTextToFile } from './features/fileSystem.js';
+import { ambient } from './features/ambient.js';
 import { getSyncProvider } from './features/sync/syncProviders.js';
 import { backupToProvider } from './features/sync/syncManager.js';
 import { applyTheme } from './state/themes.js';
@@ -481,6 +482,11 @@ function AppInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, state.global.ttsAutoStopMin]);
 
+  // Duck the ambient bed while read-aloud is actively speaking, so it never competes with the voice.
+  useEffect(() => {
+    ambient.setDucked(playing && !!activeTab?.settings?.readAloud);
+  }, [playing, activeTab?.settings?.readAloud]);
+
   // Keyboard shortcuts
   useEffect(() => {
     function onKey(e) {
@@ -850,7 +856,7 @@ function AppInner() {
     if (action === 'regressions' && activeTab) return openDialog({ kind: 'regressions' });
     if (action === 'attention' && activeTab) return openDialog({ kind: 'attention' });
     if (action === 'dictation') return openDialog({ kind: 'dictation' });
-    if (action === 'gamma') return openDialog({ kind: 'gamma' });
+    if (action === 'ambient') return openDialog({ kind: 'ambient' });
     if (action === 'take-break') return setBreakSignal((n) => n + 1);
     if (action === 'toggle-dark' && activeTab) {
       patchSettings(activeTab.id, { darkMode: !activeTab.settings.darkMode });
@@ -1075,7 +1081,7 @@ function AppInner() {
       {dialog?.kind === 'span-drill' && <SpanDrillDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'flow-writer' && <FlowWriterDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'dictation' && <DictationDialog onClose={closeDialog} />}
-      {dialog?.kind === 'gamma' && <GammaPrimerDialog onClose={closeDialog} />}
+      {dialog?.kind === 'ambient' && <AmbientDialog onClose={closeDialog} />}
       {dialog?.kind === 'vocab' && <VocabDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'regressions' && activeTab && (
         <RegressionDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />

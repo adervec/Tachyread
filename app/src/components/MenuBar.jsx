@@ -45,7 +45,7 @@ const MENUS = {
     { label: 'Text-to-Speech Reader...', shortcut: 'Ctrl+Shift+T', action: 'tts-popup' },
     { label: 'Face Library...', action: 'face-library' },
     { kind: 'separator' },
-    { label: 'Focus Primer (40 Hz, experimental)...', action: 'gamma' },
+    { label: 'Ambient Sound...', action: 'ambient' },
     { label: 'About / Disclaimer...', action: 'disclaimer' },
   ],
 };

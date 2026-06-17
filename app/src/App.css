@@ -534,9 +534,24 @@
 .att-detail { color: var(--status-fg); text-align: right; font-variant-numeric: tabular-nums; }
 
 /* 40 Hz focus primer (experimental) */
-.gamma-warn { background: rgba(192, 57, 43, 0.12); border: 1px solid rgba(192, 57, 43, 0.5); border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.5; margin-bottom: 12px; }
-.gamma-run { display: flex; align-items: center; gap: 16px; padding: 8px 0; }
-.gamma-count { font-size: 40px; font-weight: 800; color: var(--accent, #5b8def); font-variant-numeric: tabular-nums; }
+/* Ambient soundscape picker */
+.ambient-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 6px; }
+.ambient-chip {
+  padding: 8px 14px;
+  font-size: 13px;
+  border: 1px solid var(--input-border);
+  border-radius: 18px;
+  background: var(--btn-bg, transparent);
+  color: var(--menu-fg);
+  cursor: pointer;
+}
+.ambient-chip:hover { background: var(--menu-highlight); }
+.ambient-chip.on {
+  background: var(--toggle-active-bg);
+  color: var(--toggle-active-fg, #fff);
+  border-color: var(--toggle-active-bg);
+  font-weight: 600;
+}
 
 /* Span drill */
 .span-drill { min-width: 440px; }
