@@ -88,6 +88,23 @@ export function defaultFileSettings() {
   };
 }
 
+// Per-document fields (progress, identity, per-book content) that must NOT be copied when setting
+// the global Default Tab Settings to match a specific tab — only the reusable appearance/behaviour
+// preferences carry over.
+const NON_DEFAULT_FIELDS = new Set([
+  'wordIndex', 'totalWords', 'contentChecksum', 'fileName',
+  'persistentWordsRead', 'persistentActiveTimeSecs', 'persistentTotalTimeSecs',
+  'dailyHistory', 'completions', 'rating', 'notes',
+  'tocEntries', 'tocReadStats', 'skipRanges',
+  'properNames', 'properNameSeed', 'indexEntries', 'goal',
+]);
+
+export function tabDefaultsFrom(settings) {
+  const out = {};
+  for (const k of Object.keys(settings || {})) if (!NON_DEFAULT_FIELDS.has(k)) out[k] = settings[k];
+  return out;
+}
+
 export function defaultGlobalSettings() {
   return {
     defaultSerifFamily: 'Cambria, Georgia, "Times New Roman", serif',

@@ -49,7 +49,7 @@ import BookGroupsDialog from './dialogs/BookGroupsDialog.jsx';
 import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan, mergeSkipRanges } from './document/toc.js';
-import { defaultFileSettings } from './state/settings.js';
+import { defaultFileSettings, tabDefaultsFrom } from './state/settings.js';
 import { cancelSpeech, rateFromIndex } from './features/tts.js';
 import { createReadAloud } from './features/readAloud.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
@@ -1117,6 +1117,16 @@ function AppInner() {
   // view's three zones stay fully on screen with the current line centred.
   const linesLocked = isCompact && (mobileView === 'lines' || hideWord)
     && !state.showToc && !state.showSource && !state.showIndex;
+  // On a phone, an open TOC / Source / Index takes over the reader's space (rather than stacking)
+  // and pauses playback — there's no room to do both, and you're not reading the text then.
+  const auxOpen = isCompact && (state.showToc || (state.showSource && !!activeTab?.doc?.source) || state.showIndex);
+  const panesFull = linesLocked || auxOpen;
+
+  // Opening an aux pane on a phone pauses playback (you're navigating, not reading the text).
+  useEffect(() => {
+    if (auxOpen && playing) { engineRef.current.pause(); setPlaying(false); cancelSpeech(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auxOpen]);
 
   // Data-driven resizable pane set. Visibility toggles add/remove entries; the last pane
   // (Lines) flexes, the rest take draggable pixel widths from paneWidths.
@@ -1146,7 +1156,8 @@ function AppInner() {
     let showRsvpPane = !hideWord;
     let showLinesPane = true;
     if (isCompact) {
-      if (hideWord) { showRsvpPane = false; showLinesPane = true; }
+      if (auxOpen) { showRsvpPane = false; showLinesPane = false; } // TOC/Source/Index takes the reader's space
+      else if (hideWord) { showRsvpPane = false; showLinesPane = true; }
       else if (mobileView === 'rsvp') { showRsvpPane = true; showLinesPane = false; }
       else { showRsvpPane = false; showLinesPane = true; }
     }
@@ -1172,7 +1183,7 @@ function AppInner() {
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showDash, state.showSource, state.showIndex, hideWord, lineScroll, tocFlash, isCompact, mobileView, onRsvpVisible, onLinesVisible]);
+  }, [activeTab, state.showToc, state.showDash, state.showSource, state.showIndex, hideWord, lineScroll, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible]);
 
   const dialog = state.dialog;
 
@@ -1191,7 +1202,7 @@ function AppInner() {
       {activeTab ? (
         <div className="main-wrap">
           <ChapterHeading tab={activeTab} onJumpWord={jumpWord} />
-          {isCompact && !hideWord && (
+          {isCompact && !hideWord && !auxOpen && (
             <div className="reading-view-switch" role="tablist" aria-label="Reading view">
               <button
                 role="tab"
@@ -1211,7 +1222,7 @@ function AppInner() {
               </button>
             </div>
           )}
-          <div className={`main-area${linesLocked ? ' lines-locked' : ''}`} {...gestureHandlers}>
+          <div className={`main-area${panesFull ? ' panes-full' : ''}`} {...gestureHandlers}>
             <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
             {activeTab.settings.typing?.enabled && (
               <TypingRun
@@ -1336,6 +1347,7 @@ function AppInner() {
           onPatch={(p) => updateGlobal({ fileDefaults: { ...state.global.fileDefaults, ...p } })}
           onClose={closeDialog}
           title="Default Tab Settings"
+          matchCurrent={activeTab ? () => tabDefaultsFrom(activeTab.settings) : null}
         />
       )}
       {dialog?.kind === 'app-settings' && (

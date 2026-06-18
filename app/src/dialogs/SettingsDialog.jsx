@@ -34,7 +34,7 @@ function Section({ children }) {
   return <div className="field-section">{children}</div>;
 }
 
-export default function SettingsDialog({ settings, onPatch, onClose, title = 'Tab Settings' }) {
+export default function SettingsDialog({ settings, onPatch, onClose, title = 'Tab Settings', matchCurrent }) {
   const [s, setS] = useState(settings);
   const voices = useVoices();
   const metroRef = useRef(null);
@@ -76,6 +76,12 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
         </>
       }
     >
+      {matchCurrent && (
+        <p className="settings-note" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => { const next = matchCurrent(); if (next) patch(next); }}>⤓ Match current tab</button>
+          <span>Copy the open tab’s appearance &amp; behaviour into these defaults (its reading progress isn’t copied).</span>
+        </p>
+      )}
       <Section>Fast Reader</Section>
       <Field label="Context words before">
         <input
