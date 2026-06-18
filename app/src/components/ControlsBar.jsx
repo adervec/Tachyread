@@ -90,11 +90,11 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
 
         <div className="mode-block">
           <div className="mode-pair">
-            <span>READ</span>
+            <span>TTS</span>
             <button
               className={readAloud ? 'toggle-on' : ''}
               onClick={onToggleReadAloud}
-              title="Read aloud: speak from the current position and advance in sync (Play to start)"
+              title="Read aloud (TTS): speak from the current position and advance in sync (Play to start)"
             >
               {readAloud ? 'On' : 'Off'}
             </button>
