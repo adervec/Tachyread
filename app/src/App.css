@@ -543,6 +543,18 @@
 .tw-rev-pos { flex: 0 0 auto; font-family: Consolas, monospace; font-size: 11px; color: var(--meta-fg, var(--status-fg)); width: 52px; text-align: right; }
 .tw-rev-line { flex: 0 0 auto; width: 72px; font-size: 11px; }
 .tw-rev-x { border: none; background: transparent; color: #c0392b; cursor: pointer; padding: 0 4px; }
+.tw-rev-find { border: none; background: transparent; cursor: pointer; padding: 0 4px; font-size: 13px; }
+.tw-rev-find:hover { transform: scale(1.15); }
+
+/* In-wizard Find: locate the body line for an unmatched / mis-matched entry. */
+.tw-find { border: 1px solid var(--toggle-active-bg); border-radius: 8px; background: var(--menu-bg); padding: 8px 10px; margin-bottom: 8px; }
+.tw-find-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; margin-bottom: 6px; }
+.tw-find-input { width: 100%; box-sizing: border-box; font-size: 13px; padding: 5px 8px; margin-bottom: 6px; }
+.tw-find-results { max-height: 30vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.tw-find-hit { display: flex; gap: 8px; align-items: baseline; padding: 4px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.tw-find-hit:hover { background: var(--menu-highlight); }
+.tw-find-ln { flex: 0 0 44px; text-align: right; font-family: Consolas, monospace; color: var(--line-number-fg); }
+.tw-find-tx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--menu-fg); }
 .tw-rev-note { flex: 0 1 auto; min-width: 0; font-size: 11px; color: var(--status-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
 .tw-rev-fnbody { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tw-rev-row.tw-sub { opacity: 0.9; }
