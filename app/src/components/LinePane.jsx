@@ -199,16 +199,16 @@ function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, pr
 // centre band, and upcoming lines (top-aligned). Renders a bounded window around the current
 // line — no scrolling, so the current line stays fixed in place and never jitters.
 const SPLIT_WINDOW = 60;
-function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, onContextMenu, pressHandlers }) {
+function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, onContextMenu, pressHandlers, windowSize = SPLIT_WINDOW }) {
   const cur = ctx.currentLine;
   const total = doc.lines.length;
   const common = { doc, dsettings, ctx, onJumpWord, propNameKeys };
   const beforeRef = useRef(null);
   const afterRef = useRef(null);
   const before = [];
-  for (let i = Math.max(0, cur - SPLIT_WINDOW); i < cur; i++) before.push(i);
+  for (let i = Math.max(0, cur - windowSize); i < cur; i++) before.push(i);
   const after = [];
-  for (let i = cur + 1; i <= Math.min(total - 1, cur + SPLIT_WINDOW); i++) after.push(i);
+  for (let i = cur + 1; i <= Math.min(total - 1, cur + windowSize); i++) after.push(i);
   // Both context zones scroll; by default keep the lines nearest the current line in view
   // (before → bottom edge, after → top edge). The user can scroll back/forward from there.
   useLayoutEffect(() => {
@@ -281,7 +281,7 @@ function revealBoundary(doc, idx, mode) {
   return Infinity;
 }
 
-export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSignal, visibleRef, onVisible }) {
+export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSignal, visibleRef, onVisible, compact = false }) {
   const { doc, settings } = tab;
   const paneVisRef = useReportVisibility(onVisible || (() => {}));
   const idx = settings.wordIndex;
@@ -347,7 +347,9 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
 
   const listRef = useListRef();
   const listWrapRef = useRef(null); // scroll container, queried for the visible-line range
-  const split = !!settings.linePaneSplit;
+  // On compact screens always use the split view: the virtualized list (per-row measurement +
+  // observers) is heavy on phones, and the split view is a fixed, viewport-locked window.
+  const split = !!settings.linePaneSplit || compact;
 
   useEffect(() => {
     if (split || !settings.centerOnCurrent) return;
@@ -484,6 +486,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
           baseFont={baseFont}
           onContextMenu={onContextMenu}
           pressHandlers={pressHandlers}
+          windowSize={compact ? 30 : SPLIT_WINDOW}
         />
       ) : (
         <div className="line-pane-list" ref={listWrapRef} style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu} {...pressHandlers}>

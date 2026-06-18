@@ -1985,6 +1985,17 @@
   .splitter { display: none; }
   .chapter-heading { flex-wrap: wrap; row-gap: 2px; }
   .chapter-heading .ch-title { max-width: 100%; }
+
+  /* Lines-only phone view: lock the split view to the viewport — the three zones always stay fully
+     on screen with the current line centred, and the page can't scroll any of them off. */
+  .main-area.lines-locked { overflow: hidden; }
+  .main-area.lines-locked .main-split { overflow: hidden; }
+  .main-area.lines-locked .main-split > .pane {
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    height: 100%;
+    border-bottom: none;
+  }
 }
 
 /* Coarse pointers (touch): roomier hit targets, without changing the desktop look. */

@@ -1113,6 +1113,10 @@ function AppInner() {
   }
 
   const hideWord = !state.showRsvp || !!activeTab?.settings?.hideRsvpPane;
+  // On a phone showing only the Lines view, lock it to the viewport (no page scroll) so the split
+  // view's three zones stay fully on screen with the current line centred.
+  const linesLocked = isCompact && (mobileView === 'lines' || hideWord)
+    && !state.showToc && !state.showSource && !state.showIndex;
 
   // Data-driven resizable pane set. Visibility toggles add/remove entries; the last pane
   // (Lines) flexes, the rest take draggable pixel widths from paneWidths.
@@ -1162,6 +1166,7 @@ function AppInner() {
           scrollSignal={lineScroll}
           visibleRef={linesVisibleRef}
           onVisible={onLinesVisible}
+          compact={isCompact}
         />
       ),
     });
@@ -1206,7 +1211,7 @@ function AppInner() {
               </button>
             </div>
           )}
-          <div className="main-area" {...gestureHandlers}>
+          <div className={`main-area${linesLocked ? ' lines-locked' : ''}`} {...gestureHandlers}>
             <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
             {activeTab.settings.typing?.enabled && (
               <TypingRun
