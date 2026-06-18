@@ -100,7 +100,7 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
             </button>
           </div>
           <div className="mode-pair">
-            <span>AUDIO</span>
+            <span>VOICE COMMAND</span>
             <button className={audioCtrl ? 'toggle-on' : ''} onClick={onToggleAudioCtrl} title="Voice / clap commands">{audioCtrl ? 'On' : 'Off'}</button>
           </div>
           <div className="mode-pair">
