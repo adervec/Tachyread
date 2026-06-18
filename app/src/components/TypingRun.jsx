@@ -159,6 +159,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     wordErrors.current = 0;
     if (linesRef.current) linesRef.current.style.transform = 'translateY(0)';
     setPhase('idle');
+    // Refocus the hidden input *within* this tap so the next run accepts keys (and the mobile
+    // keyboard reopens) — a programmatic re-focus outside the gesture wouldn't.
+    focus();
   }
 
   function commitWord() {
@@ -221,7 +224,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         : `${live.secs.toFixed(0)} / ${limit}s`;
 
   return (
-    <div className="type-run" onMouseDown={focus}>
+    <div className="type-run" onPointerDown={focus}>
       <input
         ref={inputRef}
         className="type-sink"
