@@ -1235,6 +1235,7 @@ function AppInner() {
                 onExitContinue={(wi) => { jumpWord(wi); patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } }); }}
                 onSaveRun={onSaveTypingRun}
                 sessionRuns={typingRuns}
+                endFanfare={state.global.typingEndFanfare !== false}
               />
             )}
             {showFootnote && <FootnoteOverlay tab={activeTab} onClose={() => setShowFootnote(false)} />}

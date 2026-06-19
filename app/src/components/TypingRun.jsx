@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { playPerfectClick, playErrorHiss } from '../features/clickSound.js';
 import { deviceKind } from '../state/device.js';
 import { buildPassage, TYPING_MODES, TYPING_MODE_BY_ID } from '../engine/typingModes.js';
+import { letterGrade, playGradeSound, GRADE_STATEMENTS } from '../features/gradeChime.js';
 
 // Typing practice as self-contained "runs". A run types the document text forward from the
 // reading position WITHOUT moving the reading index mid-run — so the reading panes don't jump
@@ -29,7 +30,7 @@ const ENDLESS_SECS = 99999;
 
 const freshStats = () => ({ start: 0, chars: 0, correct: 0, errors: 0, words: 0, perfect: 0, errorKeys: {} });
 
-export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns }) {
+export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns, endFanfare = true }) {
   const { doc, settings } = tab;
   const cfg = settings.typing || {};
   const caseSensitive = !!cfg.caseSensitive;
@@ -87,9 +88,10 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     if (idleTimer.current) { clearTimeout(idleTimer.current); idleTimer.current = null; }
     const s = stats.current;
     const m = metrics();
+    const net = Math.round(m.net);
     const run = {
       ts: Date.now(),
-      netWpm: Math.round(m.net),
+      netWpm: net,
       grossWpm: Math.round(m.gross),
       accuracy: Math.round(m.acc * 10) / 10,
       chars: s.chars,
@@ -99,14 +101,16 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       durationMs: Math.round(m.secs * 1000),
       docName: doc.fileName || 'text',
       errorKeys: { ...s.errorKeys },
-      tier: netTier(Math.round(m.net)),
+      tier: netTier(net),
+      grade: letterGrade(net),
       device: deviceKind(), // 'Mobile' | 'Desktop' — which device this run was typed on
       mode: gameMode,       // which typing mode/drill this run used
     };
     setSummary(run);
     setPhase('done');
     onSaveRun?.(run);
-  }, [metrics, doc, onSaveRun, gameMode]);
+    if (endFanfare) playGradeSound(run.grade);
+  }, [metrics, doc, onSaveRun, gameMode, endFanfare]);
 
   const armIdle = useCallback(() => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -305,6 +309,12 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
       {phase === 'done' && summary && (
         <div className="tr-results">
+          {endFanfare && summary.grade && (
+            <div className={`tr-grade tr-grade-${summary.grade}`}>
+              <span className="tr-grade-letter">{summary.grade}</span>
+              <span className="tr-grade-statement">{GRADE_STATEMENTS[summary.grade]}</span>
+            </div>
+          )}
           <div className="tr-results-head">
             <strong>{summary.netWpm} net WPM</strong> · {summary.grossWpm} gross · {summary.accuracy}% acc · {summary.tier}
           </div>

@@ -1713,6 +1713,15 @@
 .trc.caret { display: inline-block; width: 2px; height: 1.05em; background: var(--toggle-active-bg); vertical-align: text-bottom; margin: 0 -1px; animation: caretBlink 1s steps(1) infinite; }
 .tr-hint { font-size: 12px; color: var(--status-fg); text-align: center; }
 .tr-results { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 10px; border-top: 1px solid var(--divider); }
+/* End-of-run grade + final statement */
+.tr-grade { display: flex; align-items: center; gap: 14px; }
+.tr-grade-letter { font-size: 46px; font-weight: 900; line-height: 1; }
+.tr-grade-statement { font-size: 15px; font-style: italic; color: var(--status-fg); }
+.tr-grade-A .tr-grade-letter { color: #2e9d4f; }
+.tr-grade-B .tr-grade-letter { color: #4a90d9; }
+.tr-grade-C .tr-grade-letter { color: var(--menu-fg); }
+.tr-grade-D .tr-grade-letter { color: #d98324; }
+.tr-grade-F .tr-grade-letter { color: #c0392b; }
 .tr-results-head { font-size: 15px; }
 .tr-results-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .tr-killfeed { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 11px; color: var(--status-fg); justify-content: center; }
