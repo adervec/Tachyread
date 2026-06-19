@@ -273,6 +273,37 @@ export async function getAudiobookManifest(checksum) {
   return (await db.get('audiobookManifest', checksum)) || { lines: {} };
 }
 
+// Record count per object store — for the data-suite overview (cheap; no data read).
+export async function storeCounts() {
+  const db = await getDB();
+  const out = {};
+  for (const name of db.objectStoreNames) {
+    try { out[name] = await db.count(name); } catch { out[name] = 0; }
+  }
+  return out;
+}
+
+// Clear one object store (e.g. typing runs, focus sessions, the OCR/grab cache).
+export async function clearStore(name) {
+  const db = await getDB();
+  if (db.objectStoreNames.contains(name)) await db.clear(name);
+}
+
+// Wipe every store + the tachyread-* localStorage keys (keeps the instance lock). Used by the
+// data suite's "delete everything" — the caller reloads afterward.
+export async function wipeAllData() {
+  const db = await getDB();
+  for (const name of db.objectStoreNames) { try { await db.clear(name); } catch { /* skip */ } }
+  try {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('tachyread-') && k !== 'tachyread-instance-lock') keys.push(k);
+    }
+    keys.forEach((k) => localStorage.removeItem(k));
+  } catch { /* storage unavailable */ }
+}
+
 export async function exportDatabase() {
   const db = await getDB();
   const out = { files: await db.getAll('files'), global: await db.get('global', 'settings') };
