@@ -614,6 +614,12 @@
 .bg-group-head input { flex: 1; font-weight: 600; }
 .bg-member, .bg-pick-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
 .bg-member-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-master-pick { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; flex: 0 0 auto; }
+.bg-master-pick input { margin: 0; }
+.bg-master .bg-star { color: #f5b301; }
+.bg-master-pick .bg-star { font-size: 13px; color: var(--line-number-fg); }
+.bg-master .bg-member-name { font-weight: 600; }
+.bg-master-tag { font-weight: 400; color: #f5b301; font-size: 11px; }
 .bg-pick { max-height: 220px; overflow: auto; border: 1px solid var(--divider); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
 .bg-pick-row { cursor: pointer; }
 .remote-grab { display: flex; align-items: center; gap: 8px; padding: 4px 6px; opacity: 0.85; }

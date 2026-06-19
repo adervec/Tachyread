@@ -457,6 +457,8 @@ export function mergeBookGroups(a = [], b = []) {
     if (!cur) { m.set(g.id, { ...g, members: [...new Set(g.members || [])] }); continue; }
     cur.members = [...new Set([...(cur.members || []), ...(g.members || [])])];
     if (g.name && (g.createdAt || 0) >= (cur.createdAt || 0)) cur.name = g.name;
+    if (g.master && (g.createdAt || 0) >= (cur.createdAt || 0)) cur.master = g.master;
+    if (!cur.master) cur.master = (cur.members || [])[0];
   }
   return [...m.values()];
 }
