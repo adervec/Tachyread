@@ -986,6 +986,22 @@
   border-bottom: 1px solid var(--divider);
   background: rgba(127, 127, 127, 0.1);
 }
+/* Peek: the bottom zone is showing a previewed area, not the lines after the current one. */
+.lps-zone.lps-peeking {
+  border: 2px dashed var(--toggle-active-bg);
+  border-radius: 4px;
+  position: relative;
+}
+.lps-peek-label {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--toggle-active-bg);
+  color: var(--toggle-active-fg, #fff);
+  font-size: 10px;
+  padding: 2px 8px;
+  text-align: center;
+}
 .line-row {
   display: grid;
   grid-template-columns: 48px 3px 1fr;
@@ -1223,6 +1239,8 @@
 .trendline .tl-history { fill: var(--session-read-fg); opacity: 0.55; }
 .trendline .tl-session { fill: var(--nav-session-read-fg); opacity: 0.85; }
 .trendline .tl-marker { stroke: var(--orp-fg); stroke-width: 2; }
+.trendline .tl-skip { fill: rgba(217, 131, 36, 0.20); }
+.trendline .tl-peek { stroke: var(--toggle-active-bg); stroke-width: 1.5; stroke-dasharray: 3 2; }
 
 .finish-btn {
   background: var(--nav-session-read-fg);

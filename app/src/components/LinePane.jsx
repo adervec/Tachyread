@@ -199,24 +199,28 @@ function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, pr
 // centre band, and upcoming lines (top-aligned). Renders a bounded window around the current
 // line — no scrolling, so the current line stays fixed in place and never jitters.
 const SPLIT_WINDOW = 60;
-function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, onContextMenu, pressHandlers, windowSize = SPLIT_WINDOW }) {
+function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, onContextMenu, pressHandlers, windowSize = SPLIT_WINDOW, peekLine = -1 }) {
   const cur = ctx.currentLine;
   const total = doc.lines.length;
   const common = { doc, dsettings, ctx, onJumpWord, propNameKeys };
   const beforeRef = useRef(null);
   const afterRef = useRef(null);
+  // While peeking, the bottom zone shows the previewed area instead of the lines after the current
+  // one — reverting to normal once reading resumes (peek clears).
+  const peeking = peekLine >= 0 && peekLine !== cur;
+  const afterStart = peeking ? peekLine : cur + 1;
   const before = [];
   for (let i = Math.max(0, cur - windowSize); i < cur; i++) before.push(i);
   const after = [];
-  for (let i = cur + 1; i <= Math.min(total - 1, cur + windowSize); i++) after.push(i);
+  for (let i = afterStart; i <= Math.min(total - 1, afterStart + windowSize); i++) after.push(i);
   // Both context zones scroll; by default keep the lines nearest the current line in view
   // (before → bottom edge, after → top edge). The user can scroll back/forward from there.
   useLayoutEffect(() => {
     if (beforeRef.current) beforeRef.current.scrollTop = beforeRef.current.scrollHeight;
     if (afterRef.current) afterRef.current.scrollTop = 0;
-  }, [cur, baseFont]);
+  }, [cur, baseFont, afterStart]);
   return (
-    <div className="line-pane-split" style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu} {...pressHandlers}>
+    <div className={`line-pane-split${peeking ? ' peeking' : ''}`} style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu} {...pressHandlers}>
       <div className="lps-zone lps-before" ref={beforeRef}>
         {before.map((i) => (
           <LineRow key={i} index={i} {...common} />
@@ -225,7 +229,8 @@ function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, on
       <div className="lps-zone lps-current">
         {cur < total && <LineRow index={cur} {...common} />}
       </div>
-      <div className="lps-zone lps-after" ref={afterRef}>
+      <div className={`lps-zone lps-after${peeking ? ' lps-peeking' : ''}`} ref={afterRef}>
+        {peeking && <div className="lps-peek-label">👁 Peeking line {peekLine + 1} — resume reading to return</div>}
         {after.map((i) => (
           <LineRow key={i} index={i} {...common} />
         ))}
@@ -281,7 +286,7 @@ function revealBoundary(doc, idx, mode) {
   return Infinity;
 }
 
-export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSignal, visibleRef, onVisible, compact = false }) {
+export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { line: -1, token: 0 }, visibleRef, onVisible, compact = false }) {
   const { doc, settings } = tab;
   const paneVisRef = useReportVisibility(onVisible || (() => {}));
   const idx = settings.wordIndex;
@@ -358,13 +363,16 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
     api.scrollToRow({ index: currentLine, align: 'center' });
   }, [currentLine, settings.centerOnCurrent, split, listRef]);
 
-  // Scroll-to-line requests from the TOC "Scroll" button — moves the view only, never the
-  // reading position. (Not applicable to the split view, which shows a fixed window.)
+  // Peek: scroll the (list-view) viewport to a previewed line without moving the reading position,
+  // and scroll back to the current line when the peek clears. (Split view handles peek in its bottom
+  // zone — see SplitView.)
   useEffect(() => {
-    if (split || !scrollSignal || scrollSignal.line < 0) return;
-    listRef.current?.scrollToRow?.({ index: scrollSignal.line, align: 'center' });
+    if (split) return;
+    const api = listRef.current;
+    if (!api?.scrollToRow) return;
+    api.scrollToRow({ index: peek.line >= 0 ? peek.line : currentLine, align: 'center' });
     // eslint-disable-next-line
-  }, [scrollSignal?.token]);
+  }, [peek?.token]);
 
   const totalLines = doc.lines.length;
   const sepEvery = settings.showPercentSeparators ? Math.max(1, Math.floor(totalLines / 100)) : 0;
@@ -487,6 +495,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', scrollSig
           onContextMenu={onContextMenu}
           pressHandlers={pressHandlers}
           windowSize={compact ? 30 : SPLIT_WINDOW}
+          peekLine={peek.line}
         />
       ) : (
         <div className="line-pane-list" ref={listWrapRef} style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu} {...pressHandlers}>

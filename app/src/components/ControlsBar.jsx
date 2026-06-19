@@ -13,7 +13,7 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon }) {
+export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon }) {
   const { patchSettings, state, updateGlobal } = useApp();
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
@@ -34,7 +34,7 @@ export default function ControlsBar({ tab, onJumpWord, onPlayPause, onPrevWord, 
   return (
     <div className="controls-bar">
       <div className="progress-row">
-        <Trendline tab={tab} onJumpWord={onJumpWord} />
+        <Trendline tab={tab} onPeek={onPeek} peekIdx={peekIdx} />
         <div className="progress-meta">
           {idx + 1} / {totalWords}
         </div>

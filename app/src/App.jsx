@@ -126,11 +126,14 @@ function AppInner() {
   // outcomes (1 = passed an adaptive probe, 0 = missed) that feeds the fatigue estimate.
   const [breakSignal, setBreakSignal] = useState(0);
   const probeScoresRef = useRef([]);
-  // Bump a token to ask the Lines pane to scroll to a line (without moving the reading position)
-  // or to ask the TOC pane to reveal + flash an entry. The payload travels with the token.
-  const [lineScroll, setLineScroll] = useState({ line: -1, token: 0 });
+  // Peek: preview a line without moving the reading position. The Lines pane scrolls to it (list
+  // view) or shows it in the bottom zone (split view), reverting once normal reading resumes.
+  const [peek, setPeek] = useState({ line: -1, token: 0 });
   const [tocFlash, setTocFlash] = useState({ index: -1, token: 0 });
-  const scrollLinesToLine = useCallback((line) => setLineScroll((s) => ({ line, token: s.token + 1 })), []);
+  const peekToLine = useCallback((line) => setPeek((s) => ({ line, token: s.token + 1 })), []);
+  const clearPeek = useCallback(() => setPeek((s) => (s.line < 0 ? s : { line: -1, token: s.token + 1 })), []);
+  // Revert any active peek once the reader actually moves or starts playing.
+  useEffect(() => { clearPeek(); }, [activeTab?.settings.wordIndex, playing, clearPeek]);
   const onTocIcon = useCallback((index) => {
     if (!state.showToc) dispatch({ type: 'TOGGLE_TOC' });
     setTocFlash((s) => ({ index, token: s.token + 1 }));
@@ -1141,7 +1144,7 @@ function AppInner() {
           <TocPane
             tab={activeTab}
             onJumpWord={jumpWord}
-            onScrollToLine={scrollLinesToLine}
+            onScrollToLine={peekToLine}
             onSetSectionGoal={setSectionGoal}
             onPatch={(p) => patchSettings(activeTab.id, p)}
             onWizard={() => openDialog({ kind: 'toc-wizard' })}
@@ -1174,7 +1177,7 @@ function AppInner() {
           tab={{ ...activeTab, patchSettings: (p) => patchSettings(activeTab.id, p) }}
           onJumpWord={jumpWord}
           hideMode={activeTab.settings.hideMode || 'None'}
-          scrollSignal={lineScroll}
+          peek={peek}
           visibleRef={linesVisibleRef}
           onVisible={onLinesVisible}
           compact={isCompact}
@@ -1183,7 +1186,7 @@ function AppInner() {
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showDash, state.showSource, state.showIndex, hideWord, lineScroll, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible]);
+  }, [activeTab, state.showToc, state.showDash, state.showSource, state.showIndex, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible]);
 
   const dialog = state.dialog;
 
@@ -1283,6 +1286,8 @@ function AppInner() {
             tab={activeTab}
             playing={playing}
             onJumpWord={jumpWord}
+            onPeek={(wi) => peekToLine(getLineIndex(activeTab.doc, wi))}
+            peekIdx={peek.line >= 0 ? (activeTab.doc.lines[peek.line]?.startWordIndex ?? -1) : -1}
             onConfirmFinished={() => openDialog({ kind: 'finished' })}
             audioCtrl={!!activeTab.settings.audioCtrl}
             readAloud={!!activeTab.settings.readAloud}

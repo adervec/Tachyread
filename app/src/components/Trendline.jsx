@@ -7,10 +7,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 const COLS = 240;
 const H = 46;
 
-export default function Trendline({ tab, onJumpWord }) {
+export default function Trendline({ tab, onPeek, peekIdx = -1 }) {
   const tracker = tab.tracker;
   const total = tab.doc.words.length;
   const idx = tab.settings.wordIndex;
+  const skipRanges = tab.settings.skipRanges || [];
   const svgRef = useRef(null);
 
   // Recompute the (downsampled) trace on a throttle rather than every word advance.
@@ -51,11 +52,16 @@ export default function Trendline({ tab, onJumpWord }) {
   }, [cols, maxWpm]);
 
   const posX = total ? (idx / total) * 1000 : 0;
+  const peekX = peekIdx >= 0 && total ? (peekIdx / total) * 1000 : -1;
+  // Excluded (skip) sections as fractions of the book — shaded so you can see what won't count.
+  const skipRects = total
+    ? skipRanges.map((r) => ({ x: (r.start / total) * 1000, w: (Math.max(r.start, r.end) - r.start) / total * 1000 }))
+    : [];
 
-  function jumpFromEvent(e) {
+  function peekFromEvent(e) {
     const rect = svgRef.current.getBoundingClientRect();
     const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    onJumpWord(Math.round(frac * (total - 1)));
+    onPeek?.(Math.round(frac * (total - 1)));
   }
   const dragging = useRef(false);
 
@@ -65,23 +71,29 @@ export default function Trendline({ tab, onJumpWord }) {
       className="trendline"
       viewBox={`0 0 1000 ${H}`}
       preserveAspectRatio="none"
-      title="Reading-pace trendline — click to jump"
+      title="Reading-pace trendline — click/drag to peek (resume reading to return)"
       onPointerDown={(e) => {
         dragging.current = true;
-        jumpFromEvent(e);
+        peekFromEvent(e);
       }}
-      onPointerMove={(e) => dragging.current && jumpFromEvent(e)}
+      onPointerMove={(e) => dragging.current && peekFromEvent(e)}
       onPointerUp={() => (dragging.current = false)}
       onPointerLeave={() => (dragging.current = false)}
     >
       {/* baseline */}
       <line x1="0" y1={H - 1} x2="1000" y2={H - 1} className="tl-base" />
+      {/* excluded (skip) sections: shaded full-height bands */}
+      {skipRects.map((r, i) => (
+        <rect key={`s${i}`} x={r.x} y="0" width={r.w} height={H} className="tl-skip" />
+      ))}
       {/* unread columns: faint */}
       {unreadRects.map((r, i) => (
         <rect key={i} x={r.x} y={H - 4} width={r.w} height={3} className="tl-unread" />
       ))}
       <path d={historyPath} className="tl-history" />
       <path d={sessionPath} className="tl-session" />
+      {/* peek marker (where you're previewing) */}
+      {peekX >= 0 && <line x1={peekX} y1="0" x2={peekX} y2={H} className="tl-peek" />}
       {/* current position marker */}
       <line x1={posX} y1="0" x2={posX} y2={H} className="tl-marker" />
     </svg>
