@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
+import { useIsCompact } from '../state/device.js';
 import Trendline from './Trendline.jsx';
 import TocBar from './TocBar.jsx';
 import { goalFraction, computeGoalStatus } from '../engine/goals.js';
@@ -15,6 +16,11 @@ function formatTime(secs) {
 
 export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon }) {
   const { patchSettings, state, updateGlobal } = useApp();
+  const isCompact = useIsCompact();
+  // On phones the full playback row (10 nav buttons + speed unit + 4 mode toggles + goal) wraps into
+  // a tall stack that eats the reader. Collapse the secondary controls behind a "More" disclosure so
+  // the default bar is just the essentials (WPM, page/line stepping, play). Desktop is unchanged.
+  const [moreOpen, setMoreOpen] = useState(false);
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
   const totalWords = doc.words.length;
@@ -32,7 +38,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
   const atEnd = totalWords > 0 && (idx >= lastContent || coverage >= 99.5);
 
   return (
-    <div className="controls-bar">
+    <div className={`controls-bar${isCompact ? ' compact' : ''}${moreOpen ? ' more-open' : ''}`}>
       <div className="progress-row">
         <Trendline tab={tab} onPeek={onPeek} peekIdx={peekIdx} />
         <div className="progress-meta">
@@ -90,19 +96,30 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
         </div>
 
         <div className="playback-buttons">
-          <button className="ctrl-btn" title="Restart (Home)" onClick={onRestart}>|&lt;</button>
+          <button className="ctrl-btn pb-2nd" title="Restart (Home)" onClick={onRestart}>|&lt;</button>
           <button className="ctrl-btn" title="Page up — current line jumps to the top visible line (PgUp)" onClick={onPageUp}>⇞</button>
-          <button className="ctrl-btn" title="Previous paragraph (Ctrl+Up)" onClick={onPrevPara}>⇈</button>
+          <button className="ctrl-btn pb-2nd" title="Previous paragraph (Ctrl+Up)" onClick={onPrevPara}>⇈</button>
           <button className="ctrl-btn" title="Previous line (Up)" onClick={onPrevLine}>↑</button>
-          <button className="ctrl-btn" title="Previous word (Left)" onClick={onPrevWord}>&lt;</button>
+          <button className="ctrl-btn pb-2nd" title="Previous word (Left)" onClick={onPrevWord}>&lt;</button>
           <button className="play-btn" title="Play / Pause (Space)" onClick={onPlayPause}>
             {playing ? '❚❚' : '▶'}
           </button>
-          <button className="ctrl-btn" title="Next word (Right)" onClick={onNextWord}>&gt;</button>
+          <button className="ctrl-btn pb-2nd" title="Next word (Right)" onClick={onNextWord}>&gt;</button>
           <button className="ctrl-btn" title="Next line (Down)" onClick={onNextLine}>↓</button>
-          <button className="ctrl-btn" title="Next paragraph (Ctrl+Down)" onClick={onNextPara}>⇊</button>
+          <button className="ctrl-btn pb-2nd" title="Next paragraph (Ctrl+Down)" onClick={onNextPara}>⇊</button>
           <button className="ctrl-btn" title="Page down — current line jumps to the bottom visible line (PgDn)" onClick={onPageDown}>⇟</button>
         </div>
+
+        {isCompact && (
+          <button
+            className="ctrl-more"
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen((o) => !o)}
+            title="Show / hide word & paragraph steps, mode toggles, and goal"
+          >
+            {moreOpen ? '⋯ Less' : '⋯ More'}
+          </button>
+        )}
 
         <div className="mode-block">
           <div className="mode-pair">

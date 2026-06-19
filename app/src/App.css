@@ -1323,6 +1323,17 @@
 .mode-block .mode-pair { display: flex; align-items: center; gap: 4px; }
 .mode-block button { font-size: 11px; padding: 3px 8px; }
 
+/* Compact playback row: the "⋯ More" disclosure hides the secondary controls (word/paragraph steps,
+   speed unit, mode toggles, goal) so the default mobile bar is just WPM + page/line stepping + play.
+   Desktop never receives .compact, so it is unaffected. */
+.ctrl-more { display: none; font-size: 12px; padding: 4px 12px; white-space: nowrap; }
+.controls-bar.compact .ctrl-more { display: inline-flex; align-items: center; }
+.controls-bar.compact:not(.more-open) .pb-2nd,
+.controls-bar.compact:not(.more-open) .wpm-block select,
+.controls-bar.compact:not(.more-open) .mode-block,
+.controls-bar.compact:not(.more-open) .goal-row,
+.controls-bar.compact:not(.more-open) .goal-killfeed { display: none; }
+
 .goal-row {
   display: flex;
   align-items: center;
