@@ -12,7 +12,7 @@ import ChapterHeading from './components/ChapterHeading.jsx';
 import PaneLayout from './components/PaneLayout.jsx';
 import FaceStage from './components/FaceStage.jsx';
 import PerfMonitor from './components/PerfMonitor.jsx';
-import { useIsCompact } from './state/device.js';
+import { useIsCompact, deviceKind } from './state/device.js';
 import AudioChat from './components/AudioChat.jsx';
 import TypingRun from './components/TypingRun.jsx';
 import FindDialog from './dialogs/FindDialog.jsx';
@@ -585,6 +585,9 @@ function AppInner() {
     focusRef.current = { startTs: Date.now(), lastTs: Date.now(), attentive: true, watchedMs: 0, awayMs: 0, distractions: 0 };
     const mon = createAttentionMonitor({
       blinkThreshold: state.global.webcamCalib?.threshold ?? 0.5,
+      // MediaPipe FaceLandmarker is battery/CPU-heavy on phones — sample at half the rate there
+      // (still well inside the doze/away grace windows) to keep the reader responsive.
+      intervalMs: deviceKind() === 'Mobile' ? 500 : 250,
       onStream: (s) => setWebcamStream(s),
       onState: (s) => setWebcamState(s),
       onAttention: (attentive) => {

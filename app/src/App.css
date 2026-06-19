@@ -1423,7 +1423,13 @@
 .webcam-preview.wb-drowsy .wpv-dot { color: #9b59b6; }
 .webcam-preview-bar button { border: none; background: transparent; color: var(--status-fg); cursor: pointer; padding: 0 4px; font-size: 13px; }
 .webcam-preview-bar button:hover { color: var(--menu-fg); }
-@media (max-width: 860px) { .webcam-preview { width: 128px; bottom: calc(56px + env(safe-area-inset-bottom, 0px)); } .webcam-preview-vid { height: 96px; } }
+/* On phones, dock the self-view in the top-right reading corner instead of bottom-right, so it never
+   overlaps the controls dock (the interactive area). The heard-speech readout is kept clear of it
+   (its own mobile rule reserves the right gutter). */
+@media (max-width: 860px) {
+  .webcam-preview { width: 110px; right: 8px; bottom: auto; top: calc(92px + env(safe-area-inset-top, 0px)); }
+  .webcam-preview-vid { height: 82px; }
+}
 
 /* Looking-away alarm overlay */
 .away-alarm {
@@ -2048,7 +2054,9 @@
   .goal-row { flex-wrap: wrap; row-gap: 4px; }
   /* The heard-speech readout sits up top on phones (out of the way of the bottom controls) and,
      with pointer-events:none, never blocks them. */
-  .audio-chat { right: 8px; left: 8px; bottom: auto; top: 58px; width: auto; max-height: 26vh; }
+  /* Right gutter (126px) left clear so the heard-speech readout never sits under the top-right
+     webcam self-view when both are active. */
+  .audio-chat { right: 126px; left: 8px; bottom: auto; top: 58px; width: auto; max-height: 26vh; }
   .grab-screen-2col { flex-direction: column; }
   .grab-shots-col { flex: 1 1 auto; width: 100%; }
   .grab-shots { max-height: 36vh; }
@@ -2103,6 +2111,14 @@
   .mode-block button { padding: 6px 12px; }
   /* Slightly larger long-press-to-jump line text isn't needed, but checkboxes/radios get a bump. */
   input[type='checkbox'], input[type='radio'] { width: 20px; height: 20px; }
+  /* Holding a line IS the jump gesture (lineLongPressMs); holding the reader is a swipe target.
+     Make the reading panes non-selectable on touch so iOS/Android don't pop the text-selection
+     callout / magnifier mid-hold and abort the gesture. */
+  .line-pane-list, .line-pane-split, .rsvp-pane {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
 }
 
 /* Phones: the dense one-line wizard/plan rows overflow a narrow screen — let them wrap and give the

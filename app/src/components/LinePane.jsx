@@ -343,7 +343,11 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   );
 
   // Dynamic row heights — initial guess, then react-window measures via observeRowElements.
-  const baseFont = settings.rightPaneFontSize || 12;
+  // On phones, floor the line font at a comfortably readable size (the 12px default is too small on
+  // a small high-DPI screen) while still honouring a larger user setting.
+  const baseFont = compact
+    ? Math.max(15, settings.rightPaneFontSize || 12)
+    : settings.rightPaneFontSize || 12;
   const defaultRowHeight = Math.round(baseFont * 1.55) + 4;
   const rowHeightCtl = useDynamicRowHeight({
     defaultRowHeight,
