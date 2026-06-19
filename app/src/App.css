@@ -1280,6 +1280,15 @@
   text-align: right;
   color: var(--wpm-fg, inherit);
 }
+/* −/＋ steppers flanking the WPM slider — precise speed nudges (the slider is hard to drag exactly,
+   especially by thumb on a phone). */
+.wpm-step {
+  width: 26px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 700;
+}
 .playback-buttons {
   display: flex;
   gap: 4px;
@@ -1337,7 +1346,11 @@
 .app-status {
   background: var(--status-bg);
   border-top: 1px solid var(--divider);
+  /* Pad past the home-indicator / gesture bar on notched phones so the status row isn't clipped. */
   padding: 4px 12px;
+  padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+  padding-left: calc(12px + env(safe-area-inset-left, 0px));
+  padding-right: calc(12px + env(safe-area-inset-right, 0px));
   font-family: Consolas, monospace;
   font-size: 11px;
   color: var(--status-fg);
@@ -1399,7 +1412,7 @@
 .webcam-preview.wb-drowsy .wpv-dot { color: #9b59b6; }
 .webcam-preview-bar button { border: none; background: transparent; color: var(--status-fg); cursor: pointer; padding: 0 4px; font-size: 13px; }
 .webcam-preview-bar button:hover { color: var(--menu-fg); }
-@media (max-width: 860px) { .webcam-preview { width: 128px; bottom: 56px; } .webcam-preview-vid { height: 96px; } }
+@media (max-width: 860px) { .webcam-preview { width: 128px; bottom: calc(56px + env(safe-area-inset-bottom, 0px)); } .webcam-preview-vid { height: 96px; } }
 
 /* Looking-away alarm overlay */
 .away-alarm {
@@ -2064,6 +2077,29 @@
   .menu-bar > .menu-item { padding: 9px 13px; }
   .menu-dropdown { min-width: 260px; }
   .menu-dropdown .item { padding: 11px 16px; }
-  .tab-bar .tab { padding: 10px 12px; }
-  button, select, input[type='text'], input[type='number'] { min-height: 32px; }
+  .tab-bar .tab { padding: 10px 14px; }
+  /* ~44px minimum hit target on touch (Apple/Google guidance) without changing the desktop look. */
+  button, select, input[type='text'], input[type='number'] { min-height: 44px; }
+  .ctrl-btn { width: 44px; height: 44px; }
+  .wpm-step { width: 40px; }
+  /* The tab close ✕ is a frequent mis-tap — give it real padding. */
+  .tab-bar .tab .close { padding: 6px 8px; margin-left: 2px; font-size: 16px; }
+  /* Dense icon-button clusters in tables/wizards/plans: keep them tappable but compact, and let
+     their rows breathe (height comes from min-height above; these set width/padding). */
+  .toc-act button { font-size: 16px; padding: 4px 6px; min-width: 34px; }
+  .tw-rev-lvl, .tw-rev-x, .tw-rev-find { min-width: 34px; padding: 4px 6px; font-size: 14px; }
+  .tp-mini { min-width: 38px; padding: 4px 8px; }
+  .mode-block button { padding: 6px 12px; }
+  /* Slightly larger long-press-to-jump line text isn't needed, but checkboxes/radios get a bump. */
+  input[type='checkbox'], input[type='radio'] { width: 20px; height: 20px; }
+}
+
+/* Phones: the dense one-line wizard/plan rows overflow a narrow screen — let them wrap and give the
+   primary text field its own full-width line so every control stays reachable. */
+@media (max-width: 860px) {
+  .tw-rev-row { flex-wrap: wrap; row-gap: 4px; }
+  .tw-rev-title { flex: 1 1 100%; order: 5; }
+  .tp-step-head .tp-step-n { flex: 0 0 auto; }
+  .tp-step-head select { flex: 1 1 42%; }
+  .tp-sets input { width: 56px; }
 }

@@ -168,14 +168,14 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     focus();
   }
 
-  function commitWord() {
+  function commitWord(typed = buf) {
     const target = passage[pos] || '';
-    const perfect = wordErrors.current === 0 && buf.length === target.length;
+    const perfect = wordErrors.current === 0 && typed.length === target.length;
     const s = stats.current;
     s.words += 1;
     if (perfect) { s.perfect += 1; playPerfectClick(volume); } else { playErrorHiss(volume); }
     wordErrors.current = 0;
-    setResults((r) => [...r, { typed: buf, perfect }]);
+    setResults((r) => [...r, { typed, perfect }]);
     setBuf('');
     const nextPos = pos + 1;
     setPos(nextPos);
@@ -183,35 +183,55 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     if (nextPos >= passage.length) { endRun(); }
   }
 
-  function onKeyDown(e) {
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === 'Escape') { e.preventDefault(); phase === 'running' ? endRun() : onExitDiscard?.(); return; }
-    if (phase === 'done') return;
-    if (e.key === 'Backspace') { e.preventDefault(); setBuf((b) => b.slice(0, -1)); return; }
-    if (e.key === ' ' || e.key === 'Enter') {
-      e.preventDefault();
-      if (phase !== 'running') start();
-      if (buf.length === 0) return;
-      armIdle();
-      commitWord();
-      return;
-    }
-    if (e.key.length === 1) {
-      e.preventDefault();
-      if (phase !== 'running') start();
-      armIdle();
-      const s = stats.current;
-      const target = passage[pos] || '';
-      const ch = target[buf.length];
+  // Score the characters of `str` from index `fromLen` onward against the current target word.
+  function scoreChars(fromLen, str) {
+    const s = stats.current;
+    const target = passage[pos] || '';
+    for (let p = fromLen; p < str.length; p++) {
+      const ch = target[p];
       s.chars += 1;
-      if (ch !== undefined && sameChar(e.key, ch, caseSensitive)) {
+      if (ch !== undefined && sameChar(str[p], ch, caseSensitive)) {
         s.correct += 1;
       } else {
         s.errors += 1;
         wordErrors.current += 1;
         if (ch) { const k = caseSensitive ? ch : ch.toLowerCase(); s.errorKeys[k] = (s.errorKeys[k] || 0) + 1; }
       }
-      setBuf((b) => b + e.key);
+    }
+  }
+
+  // Letters, space (commit) and backspace flow through the input's value here instead of keydown so
+  // that mobile soft keyboards work — many of them don't emit usable keydown events (key:"Unidentified",
+  // keyCode 229). The input holds the in-progress word (value={buf}); we diff each change. Enter and
+  // Escape stay on keydown since a single-line input doesn't surface them as value changes.
+  function onChange(e) {
+    if (phase === 'done') return;
+    const val = e.target.value;
+    const sp = val.search(/\s/);
+    if (sp >= 0) {
+      const typed = val.slice(0, sp);
+      if (phase !== 'running') start();
+      scoreChars(buf.length, typed);
+      armIdle();
+      if (typed.length > 0) commitWord(typed); else setBuf('');
+      return;
+    }
+    if (phase !== 'running') start();
+    armIdle();
+    if (val.length > buf.length) scoreChars(buf.length, val);
+    setBuf(val);
+  }
+
+  function onKeyDown(e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Escape') { e.preventDefault(); phase === 'running' ? endRun() : onExitDiscard?.(); return; }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (phase === 'done') return;
+      if (phase !== 'running') start();
+      if (buf.length === 0) return;
+      armIdle();
+      commitWord(buf);
     }
   }
 
@@ -233,9 +253,14 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         ref={inputRef}
         className="type-sink"
         autoFocus
-        value=""
-        onChange={() => {}}
+        value={buf}
+        onChange={onChange}
         onKeyDown={onKeyDown}
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        inputMode="text"
         aria-label="Typing run input"
       />
 

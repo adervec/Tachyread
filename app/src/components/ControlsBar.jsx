@@ -52,6 +52,14 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
       <div className="playback-row">
         <div className="wpm-block">
           <label>WPM</label>
+          <button
+            className="wpm-step"
+            title="Slower (−25)"
+            aria-label="Slower"
+            onClick={() => patchSettings(tab.id, { wpm: Math.max(60, settings.wpm - 25) })}
+          >
+            −
+          </button>
           <input
             type="range"
             min={60}
@@ -61,6 +69,14 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             onChange={(e) => patchSettings(tab.id, { wpm: Number(e.target.value) })}
             style={{ width: 130 }}
           />
+          <button
+            className="wpm-step"
+            title="Faster (+25)"
+            aria-label="Faster"
+            onClick={() => patchSettings(tab.id, { wpm: Math.min(1500, settings.wpm + 25) })}
+          >
+            +
+          </button>
           <span className="wpm-value">{settings.wpm}</span>
           <select
             value={settings.speedUnit || 'Words'}
