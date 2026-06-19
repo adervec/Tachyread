@@ -50,7 +50,8 @@ import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan, mergeSkipRanges } from './document/toc.js';
 import { defaultFileSettings, tabDefaultsFrom } from './state/settings.js';
-import { cancelSpeech, rateFromIndex } from './features/tts.js';
+import { cancelSpeech, rateFromIndex, speak } from './features/tts.js';
+import TypingPlanDialog from './dialogs/TypingPlanDialog.jsx';
 import { createReadAloud } from './features/readAloud.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
@@ -121,6 +122,9 @@ function AppInner() {
     setTypingRuns((r) => [...r, run]);
     saveTypingRun(run).catch(() => {});
   }, []);
+  const [planState, setPlanState] = useState(null); // running typing plan: { plan, step, set } | null
+  const planStateRef = useRef(null);
+  const setPlan = useCallback((ps) => { planStateRef.current = ps; setPlanState(ps); }, []);
   const [showFootnote, setShowFootnote] = useState(false);
   // Comfort/calibration: voluntary-break trigger token, and a rolling log of recent comprehension
   // outcomes (1 = passed an adaptive probe, 0 = missed) that feeds the fatigue estimate.
@@ -711,6 +715,58 @@ function AppInner() {
       }
     : {};
 
+  // ── Typing plan runner ──────────────────────────────────────────────────────────────────────
+  // A plan runs step by step, set by set; each step's drill config is pushed into the typing
+  // settings, and the step's description is spoken (TTS) at the start of its first set. TypingRun is
+  // keyed by step+set so each set is a fresh run.
+  function configureTypingForStep(step) {
+    const tab = activeTabRef.current;
+    if (!tab) return;
+    patchSettings(tab.id, {
+      typing: { ...tab.settings.typing, enabled: true, mode: step.mode, runMode: step.runMode, runLimit: step.runLimit },
+      readAloud: false,
+      speaking: { ...tab.settings.speaking, enabled: false },
+    });
+  }
+  function startPlan(plan) {
+    if (!activeTab || !plan?.steps?.length) return;
+    const step0 = plan.steps[0];
+    configureTypingForStep(step0);
+    setPlan({ plan, step: 0, set: 0 });
+    closeDialog();
+    setStatus(`▶ Plan “${plan.name}” — step 1/${plan.steps.length}.`);
+    if (step0.description) setTimeout(() => speak(step0.description, {}), 250); // first set of step 0
+  }
+  function advancePlan() {
+    const ps = planStateRef.current;
+    const tab = activeTabRef.current;
+    if (!ps || !tab) return;
+    const { plan, step, set } = ps;
+    const cur = plan.steps[step];
+    if (set + 1 < Math.max(1, cur.sets || 1)) {
+      setPlan({ plan, step, set: set + 1 }); // same step, next set — no spoken description
+      return;
+    }
+    if (step + 1 < plan.steps.length) {
+      const next = plan.steps[step + 1];
+      configureTypingForStep(next);
+      setPlan({ plan, step: step + 1, set: 0 });
+      setStatus(`Plan “${plan.name}” — step ${step + 2}/${plan.steps.length}.`);
+      if (next.description) setTimeout(() => speak(next.description, {}), 200); // first set of the new step
+      return;
+    }
+    // plan complete
+    patchSettings(tab.id, { typing: { ...tab.settings.typing, enabled: false } });
+    setPlan(null);
+    setStatus(`🏁 Plan “${plan.name}” complete.`);
+  }
+  function exitPlan() {
+    const tab = activeTabRef.current;
+    if (tab) patchSettings(tab.id, { typing: { ...tab.settings.typing, enabled: false } });
+    setPlan(null);
+    cancelSpeech();
+  }
+
   // Keyboard shortcuts
   useEffect(() => {
     function onKey(e) {
@@ -1101,6 +1157,7 @@ function AppInner() {
     if (action === 'face-library') return openDialog({ kind: 'face-library' });
     if (action === 'disclaimer') return openDialog({ kind: 'disclaimer' });
     if (action === 'typing-progress') return openDialog({ kind: 'typing-progress' });
+    if (action === 'typing-plans') return openDialog({ kind: 'typing-plan' });
     if (action === 'span-drill') return openDialog({ kind: 'span-drill' });
     if (action === 'flow-writer') return openDialog({ kind: 'flow-writer' });
     if (action === 'vocab') return openDialog({ kind: 'vocab' });
@@ -1229,13 +1286,23 @@ function AppInner() {
             <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
             {activeTab.settings.typing?.enabled && (
               <TypingRun
+                key={planState ? `plan-${planState.step}-${planState.set}` : 'single'}
                 tab={activeTab}
                 onPatch={(p) => patchSettings(activeTab.id, p)}
-                onExitDiscard={() => patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } })}
-                onExitContinue={(wi) => { jumpWord(wi); patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } }); }}
+                onExitDiscard={planState ? exitPlan : () => patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } })}
+                onExitContinue={planState ? undefined : (wi) => { jumpWord(wi); patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } }); }}
                 onSaveRun={onSaveTypingRun}
                 sessionRuns={typingRuns}
                 endFanfare={state.global.typingEndFanfare !== false}
+                plan={planState ? {
+                  name: planState.plan.name,
+                  step: planState.step + 1,
+                  steps: planState.plan.steps.length,
+                  set: planState.set + 1,
+                  sets: Math.max(1, planState.plan.steps[planState.step].sets || 1),
+                } : null}
+                onPlanNext={advancePlan}
+                onPlanExit={exitPlan}
               />
             )}
             {showFootnote && <FootnoteOverlay tab={activeTab} onClose={() => setShowFootnote(false)} />}
@@ -1436,6 +1503,9 @@ function AppInner() {
           }}
           onClose={closeDialog}
         />
+      )}
+      {dialog?.kind === 'typing-plan' && (
+        <TypingPlanDialog onStart={activeTab ? startPlan : null} onClose={closeDialog} />
       )}
       {dialog?.kind === 'finished' && activeTab && (
         <BookFinishedDialog

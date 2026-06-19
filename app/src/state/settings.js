@@ -133,6 +133,8 @@ export function defaultGlobalSettings() {
     // Grabs that exist on OTHER devices (markers only — no images/text travel via sync).
     // { checksum, name, createdAt, pageCount, device, seenAt }
     remoteGrabs: [],
+    // Saved typing plans (ordered workouts). { id, name, steps:[{ id, mode, runMode, runLimit, sets, description }] }
+    typingPlans: [],
     // Reading list / literary journey scaffolding: per-book shelf overrides keyed by checksum
     // ('reading' | 'finished' | 'toread' | 'paused'). Absent → shelf is inferred from progress.
     readingList: { shelves: {} },

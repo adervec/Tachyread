@@ -38,6 +38,7 @@ const MENUS = {
     { label: 'Locate Footnotes (Wizard)...', action: 'notes-wizard' },
     { label: 'Proper Names Index...', shortcut: 'Ctrl+I', action: 'proper-names' },
     { label: 'Typing Practice', action: 'typing' },
+    { label: 'Typing Plans...', action: 'typing-plans' },
     { label: 'Typing Progress...', action: 'typing-progress' },
     { label: 'Span Drill...', action: 'span-drill' },
     { label: 'Flow Writer...', action: 'flow-writer' },

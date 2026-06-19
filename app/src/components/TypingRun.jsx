@@ -30,7 +30,7 @@ const ENDLESS_SECS = 99999;
 
 const freshStats = () => ({ start: 0, chars: 0, correct: 0, errors: 0, words: 0, perfect: 0, errorKeys: {} });
 
-export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns, endFanfare = true }) {
+export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns, endFanfare = true, plan = null, onPlanNext, onPlanExit }) {
   const { doc, settings } = tab;
   const cfg = settings.typing || {};
   const caseSensitive = !!cfg.caseSensitive;
@@ -239,6 +239,12 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         aria-label="Typing run input"
       />
 
+      {plan && (
+        <div className="tr-plan-bar">
+          📋 {plan.name} · Step {plan.step}/{plan.steps} · Set {plan.set}/{plan.sets}
+        </div>
+      )}
+
       <div className="tr-bar">
         <div className="tr-stats">
           <Stat v={live.net} l="net wpm" hero />
@@ -247,7 +253,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           <Stat v={progressLabel} l="run" />
         </div>
         <div className="tr-controls">
-          {phase !== 'running' && (
+          {phase !== 'running' && !plan && (
             <>
               <select
                 value={gameMode}
@@ -274,7 +280,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           </label>
           {phase === 'running'
             ? <button className="toggle-on" onClick={endRun}>■ End run</button>
-            : <button onClick={onExitDiscard}>Discard</button>}
+            : <button onClick={onExitDiscard}>{plan ? 'Exit plan' : 'Discard'}</button>}
         </div>
       </div>
 
@@ -319,11 +325,21 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             <strong>{summary.netWpm} net WPM</strong> · {summary.grossWpm} gross · {summary.accuracy}% acc · {summary.tier}
           </div>
           <div className="tr-results-actions">
-            <button className="toggle-on" onClick={reattempt}>↻ Reattempt</button>
-            {isDocMode && (
-              <button onClick={() => onExitContinue?.(startIndex.current + stats.current.words)}>Continue (count as read)</button>
+            {plan ? (
+              <>
+                <button onClick={reattempt}>↻ Redo set</button>
+                <button className="toggle-on" onClick={onPlanNext}>{plan.step >= plan.steps && plan.set >= plan.sets ? '🏁 Finish plan' : 'Next set →'}</button>
+                <button onClick={onPlanExit}>Exit plan</button>
+              </>
+            ) : (
+              <>
+                <button className="toggle-on" onClick={reattempt}>↻ Reattempt</button>
+                {isDocMode && (
+                  <button onClick={() => onExitContinue?.(startIndex.current + stats.current.words)}>Continue (count as read)</button>
+                )}
+                <button onClick={onExitDiscard}>{isDocMode ? 'Discard' : 'Exit'}</button>
+              </>
             )}
-            <button onClick={onExitDiscard}>{isDocMode ? 'Discard' : 'Exit'}</button>
           </div>
         </div>
       )}
