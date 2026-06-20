@@ -4,6 +4,10 @@ import { ReadStatus, orpIndex, getLineIndex, getParagraphRange } from '../docume
 import Pointer from './Pointer.jsx';
 import { useReportVisibility } from '../state/useReportVisibility.js';
 
+// Reading-pointer feature archived for now (not useful). Flip to true to restore it, and uncomment
+// its Settings section in dialogs/SettingsDialog.jsx.
+const POINTER_ENABLED = false;
+
 function stripPunct(w) {
   return w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 }
@@ -104,7 +108,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys }) {
     fontSize: isCurrent && boost ? `calc(1em + ${boost}px)` : undefined,
   };
 
-  const showPointer = dsettings.showPointer && isCurrent && !line.isEmpty;
+  const showPointer = POINTER_ENABLED && dsettings.showPointer && isCurrent && !line.isEmpty;
   const pointer = showPointer ? (
     <Pointer
       style={dsettings.pointerStyle || 'Arrow'}
