@@ -25,9 +25,24 @@ export function bestGroupPercent(thisPercent, siblingRecs) {
 
 const uid = () => Math.random().toString(36).slice(2);
 
+// The group's master (canonical) copy — the edition that represents the book. Falls back to the
+// first member for older groups saved before a master was tracked.
+export function masterOf(group) {
+  if (!group) return null;
+  const members = group.members || [];
+  return group.master && members.includes(group.master) ? group.master : members[0] || null;
+}
+
 // Create a group from a set of checksums (dedup, drop falsy). Returns null if fewer than 2 members.
-export function makeGroup(name, members, createdAt) {
+// `master` (optional) designates the canonical copy; defaults to the first member.
+export function makeGroup(name, members, createdAt, master) {
   const uniq = [...new Set((members || []).filter(Boolean))];
   if (uniq.length < 2) return null;
-  return { id: uid(), name: (name || '').trim() || 'Untitled book', members: uniq, createdAt: createdAt || 0 };
+  return {
+    id: uid(),
+    name: (name || '').trim() || 'Untitled book',
+    members: uniq,
+    master: master && uniq.includes(master) ? master : uniq[0],
+    createdAt: createdAt || 0,
+  };
 }

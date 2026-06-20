@@ -12,7 +12,7 @@ import ChapterHeading from './components/ChapterHeading.jsx';
 import PaneLayout from './components/PaneLayout.jsx';
 import FaceStage from './components/FaceStage.jsx';
 import PerfMonitor from './components/PerfMonitor.jsx';
-import { useIsCompact } from './state/device.js';
+import { useIsCompact, deviceKind } from './state/device.js';
 import AudioChat from './components/AudioChat.jsx';
 import TypingRun from './components/TypingRun.jsx';
 import FindDialog from './dialogs/FindDialog.jsx';
@@ -49,8 +49,9 @@ import BookGroupsDialog from './dialogs/BookGroupsDialog.jsx';
 import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan, mergeSkipRanges } from './document/toc.js';
-import { defaultFileSettings } from './state/settings.js';
-import { cancelSpeech, rateFromIndex } from './features/tts.js';
+import { defaultFileSettings, tabDefaultsFrom } from './state/settings.js';
+import { cancelSpeech, rateFromIndex, speak } from './features/tts.js';
+import TypingPlanDialog from './dialogs/TypingPlanDialog.jsx';
 import { createReadAloud } from './features/readAloud.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
@@ -121,16 +122,22 @@ function AppInner() {
     setTypingRuns((r) => [...r, run]);
     saveTypingRun(run).catch(() => {});
   }, []);
+  const [planState, setPlanState] = useState(null); // running typing plan: { plan, step, set } | null
+  const planStateRef = useRef(null);
+  const setPlan = useCallback((ps) => { planStateRef.current = ps; setPlanState(ps); }, []);
   const [showFootnote, setShowFootnote] = useState(false);
   // Comfort/calibration: voluntary-break trigger token, and a rolling log of recent comprehension
   // outcomes (1 = passed an adaptive probe, 0 = missed) that feeds the fatigue estimate.
   const [breakSignal, setBreakSignal] = useState(0);
   const probeScoresRef = useRef([]);
-  // Bump a token to ask the Lines pane to scroll to a line (without moving the reading position)
-  // or to ask the TOC pane to reveal + flash an entry. The payload travels with the token.
-  const [lineScroll, setLineScroll] = useState({ line: -1, token: 0 });
+  // Peek: preview a line without moving the reading position. The Lines pane scrolls to it (list
+  // view) or shows it in the bottom zone (split view), reverting once normal reading resumes.
+  const [peek, setPeek] = useState({ line: -1, token: 0 });
   const [tocFlash, setTocFlash] = useState({ index: -1, token: 0 });
-  const scrollLinesToLine = useCallback((line) => setLineScroll((s) => ({ line, token: s.token + 1 })), []);
+  const peekToLine = useCallback((line) => setPeek((s) => ({ line, token: s.token + 1 })), []);
+  const clearPeek = useCallback(() => setPeek((s) => (s.line < 0 ? s : { line: -1, token: s.token + 1 })), []);
+  // Revert any active peek once the reader actually moves or starts playing.
+  useEffect(() => { clearPeek(); }, [activeTab?.settings.wordIndex, playing, clearPeek]);
   const onTocIcon = useCallback((index) => {
     if (!state.showToc) dispatch({ type: 'TOGGLE_TOC' });
     setTocFlash((s) => ({ index, token: s.token + 1 }));
@@ -578,6 +585,9 @@ function AppInner() {
     focusRef.current = { startTs: Date.now(), lastTs: Date.now(), attentive: true, watchedMs: 0, awayMs: 0, distractions: 0 };
     const mon = createAttentionMonitor({
       blinkThreshold: state.global.webcamCalib?.threshold ?? 0.5,
+      // MediaPipe FaceLandmarker is battery/CPU-heavy on phones — sample at half the rate there
+      // (still well inside the doze/away grace windows) to keep the reader responsive.
+      intervalMs: deviceKind() === 'Mobile' ? 500 : 250,
       onStream: (s) => setWebcamStream(s),
       onState: (s) => setWebcamState(s),
       onAttention: (attentive) => {
@@ -707,6 +717,58 @@ function AppInner() {
         },
       }
     : {};
+
+  // ── Typing plan runner ──────────────────────────────────────────────────────────────────────
+  // A plan runs step by step, set by set; each step's drill config is pushed into the typing
+  // settings, and the step's description is spoken (TTS) at the start of its first set. TypingRun is
+  // keyed by step+set so each set is a fresh run.
+  function configureTypingForStep(step) {
+    const tab = activeTabRef.current;
+    if (!tab) return;
+    patchSettings(tab.id, {
+      typing: { ...tab.settings.typing, enabled: true, mode: step.mode, runMode: step.runMode, runLimit: step.runLimit },
+      readAloud: false,
+      speaking: { ...tab.settings.speaking, enabled: false },
+    });
+  }
+  function startPlan(plan) {
+    if (!activeTab || !plan?.steps?.length) return;
+    const step0 = plan.steps[0];
+    configureTypingForStep(step0);
+    setPlan({ plan, step: 0, set: 0 });
+    closeDialog();
+    setStatus(`▶ Plan “${plan.name}” — step 1/${plan.steps.length}.`);
+    if (step0.description) setTimeout(() => speak(step0.description, {}), 250); // first set of step 0
+  }
+  function advancePlan() {
+    const ps = planStateRef.current;
+    const tab = activeTabRef.current;
+    if (!ps || !tab) return;
+    const { plan, step, set } = ps;
+    const cur = plan.steps[step];
+    if (set + 1 < Math.max(1, cur.sets || 1)) {
+      setPlan({ plan, step, set: set + 1 }); // same step, next set — no spoken description
+      return;
+    }
+    if (step + 1 < plan.steps.length) {
+      const next = plan.steps[step + 1];
+      configureTypingForStep(next);
+      setPlan({ plan, step: step + 1, set: 0 });
+      setStatus(`Plan “${plan.name}” — step ${step + 2}/${plan.steps.length}.`);
+      if (next.description) setTimeout(() => speak(next.description, {}), 200); // first set of the new step
+      return;
+    }
+    // plan complete
+    patchSettings(tab.id, { typing: { ...tab.settings.typing, enabled: false } });
+    setPlan(null);
+    setStatus(`🏁 Plan “${plan.name}” complete.`);
+  }
+  function exitPlan() {
+    const tab = activeTabRef.current;
+    if (tab) patchSettings(tab.id, { typing: { ...tab.settings.typing, enabled: false } });
+    setPlan(null);
+    cancelSpeech();
+  }
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1098,6 +1160,7 @@ function AppInner() {
     if (action === 'face-library') return openDialog({ kind: 'face-library' });
     if (action === 'disclaimer') return openDialog({ kind: 'disclaimer' });
     if (action === 'typing-progress') return openDialog({ kind: 'typing-progress' });
+    if (action === 'typing-plans') return openDialog({ kind: 'typing-plan' });
     if (action === 'span-drill') return openDialog({ kind: 'span-drill' });
     if (action === 'flow-writer') return openDialog({ kind: 'flow-writer' });
     if (action === 'vocab') return openDialog({ kind: 'vocab' });
@@ -1113,6 +1176,20 @@ function AppInner() {
   }
 
   const hideWord = !state.showRsvp || !!activeTab?.settings?.hideRsvpPane;
+  // On a phone showing only the Lines view, lock it to the viewport (no page scroll) so the split
+  // view's three zones stay fully on screen with the current line centred.
+  const linesLocked = isCompact && (mobileView === 'lines' || hideWord)
+    && !state.showToc && !state.showSource && !state.showIndex;
+  // On a phone, an open TOC / Source / Index takes over the reader's space (rather than stacking)
+  // and pauses playback — there's no room to do both, and you're not reading the text then.
+  const auxOpen = isCompact && (state.showToc || (state.showSource && !!activeTab?.doc?.source) || state.showIndex);
+  const panesFull = linesLocked || auxOpen;
+
+  // Opening an aux pane on a phone pauses playback (you're navigating, not reading the text).
+  useEffect(() => {
+    if (auxOpen && playing) { engineRef.current.pause(); setPlaying(false); cancelSpeech(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auxOpen]);
 
   // Data-driven resizable pane set. Visibility toggles add/remove entries; the last pane
   // (Lines) flexes, the rest take draggable pixel widths from paneWidths.
@@ -1127,7 +1204,7 @@ function AppInner() {
           <TocPane
             tab={activeTab}
             onJumpWord={jumpWord}
-            onScrollToLine={scrollLinesToLine}
+            onScrollToLine={peekToLine}
             onSetSectionGoal={setSectionGoal}
             onPatch={(p) => patchSettings(activeTab.id, p)}
             onWizard={() => openDialog({ kind: 'toc-wizard' })}
@@ -1142,7 +1219,8 @@ function AppInner() {
     let showRsvpPane = !hideWord;
     let showLinesPane = true;
     if (isCompact) {
-      if (hideWord) { showRsvpPane = false; showLinesPane = true; }
+      if (auxOpen) { showRsvpPane = false; showLinesPane = false; } // TOC/Source/Index takes the reader's space
+      else if (hideWord) { showRsvpPane = false; showLinesPane = true; }
       else if (mobileView === 'rsvp') { showRsvpPane = true; showLinesPane = false; }
       else { showRsvpPane = false; showLinesPane = true; }
     }
@@ -1159,15 +1237,16 @@ function AppInner() {
           tab={{ ...activeTab, patchSettings: (p) => patchSettings(activeTab.id, p) }}
           onJumpWord={jumpWord}
           hideMode={activeTab.settings.hideMode || 'None'}
-          scrollSignal={lineScroll}
+          peek={peek}
           visibleRef={linesVisibleRef}
           onVisible={onLinesVisible}
+          compact={isCompact}
         />
       ),
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showDash, state.showSource, state.showIndex, hideWord, lineScroll, tocFlash, isCompact, mobileView, onRsvpVisible, onLinesVisible]);
+  }, [activeTab, state.showToc, state.showDash, state.showSource, state.showIndex, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible]);
 
   const dialog = state.dialog;
 
@@ -1186,7 +1265,7 @@ function AppInner() {
       {activeTab ? (
         <div className="main-wrap">
           <ChapterHeading tab={activeTab} onJumpWord={jumpWord} />
-          {isCompact && !hideWord && (
+          {isCompact && !hideWord && !auxOpen && (
             <div className="reading-view-switch" role="tablist" aria-label="Reading view">
               <button
                 role="tab"
@@ -1206,16 +1285,27 @@ function AppInner() {
               </button>
             </div>
           )}
-          <div className="main-area" {...gestureHandlers}>
+          <div className={`main-area${panesFull ? ' panes-full' : ''}`} {...gestureHandlers}>
             <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
             {activeTab.settings.typing?.enabled && (
               <TypingRun
+                key={planState ? `plan-${planState.step}-${planState.set}` : 'single'}
                 tab={activeTab}
                 onPatch={(p) => patchSettings(activeTab.id, p)}
-                onExitDiscard={() => patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } })}
-                onExitContinue={(wi) => { jumpWord(wi); patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } }); }}
+                onExitDiscard={planState ? exitPlan : () => patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } })}
+                onExitContinue={planState ? undefined : (wi) => { jumpWord(wi); patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } }); }}
                 onSaveRun={onSaveTypingRun}
                 sessionRuns={typingRuns}
+                endFanfare={state.global.typingEndFanfare !== false}
+                plan={planState ? {
+                  name: planState.plan.name,
+                  step: planState.step + 1,
+                  steps: planState.plan.steps.length,
+                  set: planState.set + 1,
+                  sets: Math.max(1, planState.plan.steps[planState.step].sets || 1),
+                } : null}
+                onPlanNext={advancePlan}
+                onPlanExit={exitPlan}
               />
             )}
             {showFootnote && <FootnoteOverlay tab={activeTab} onClose={() => setShowFootnote(false)} />}
@@ -1267,6 +1357,8 @@ function AppInner() {
             tab={activeTab}
             playing={playing}
             onJumpWord={jumpWord}
+            onPeek={(wi) => peekToLine(getLineIndex(activeTab.doc, wi))}
+            peekIdx={peek.line >= 0 ? (activeTab.doc.lines[peek.line]?.startWordIndex ?? -1) : -1}
             onConfirmFinished={() => openDialog({ kind: 'finished' })}
             audioCtrl={!!activeTab.settings.audioCtrl}
             readAloud={!!activeTab.settings.readAloud}
@@ -1331,6 +1423,7 @@ function AppInner() {
           onPatch={(p) => updateGlobal({ fileDefaults: { ...state.global.fileDefaults, ...p } })}
           onClose={closeDialog}
           title="Default Tab Settings"
+          matchCurrent={activeTab ? () => tabDefaultsFrom(activeTab.settings) : null}
         />
       )}
       {dialog?.kind === 'app-settings' && (
@@ -1413,6 +1506,9 @@ function AppInner() {
           }}
           onClose={closeDialog}
         />
+      )}
+      {dialog?.kind === 'typing-plan' && (
+        <TypingPlanDialog onStart={activeTab ? startPlan : null} onClose={closeDialog} />
       )}
       {dialog?.kind === 'finished' && activeTab && (
         <BookFinishedDialog

@@ -88,6 +88,23 @@ export function defaultFileSettings() {
   };
 }
 
+// Per-document fields (progress, identity, per-book content) that must NOT be copied when setting
+// the global Default Tab Settings to match a specific tab — only the reusable appearance/behaviour
+// preferences carry over.
+const NON_DEFAULT_FIELDS = new Set([
+  'wordIndex', 'totalWords', 'contentChecksum', 'fileName',
+  'persistentWordsRead', 'persistentActiveTimeSecs', 'persistentTotalTimeSecs',
+  'dailyHistory', 'completions', 'rating', 'notes',
+  'tocEntries', 'tocReadStats', 'skipRanges',
+  'properNames', 'properNameSeed', 'indexEntries', 'goal',
+]);
+
+export function tabDefaultsFrom(settings) {
+  const out = {};
+  for (const k of Object.keys(settings || {})) if (!NON_DEFAULT_FIELDS.has(k)) out[k] = settings[k];
+  return out;
+}
+
 export function defaultGlobalSettings() {
   return {
     defaultSerifFamily: 'Cambria, Georgia, "Times New Roman", serif',
@@ -116,6 +133,8 @@ export function defaultGlobalSettings() {
     // Grabs that exist on OTHER devices (markers only — no images/text travel via sync).
     // { checksum, name, createdAt, pageCount, device, seenAt }
     remoteGrabs: [],
+    // Saved typing plans (ordered workouts). { id, name, steps:[{ id, mode, runMode, runLimit, sets, description }] }
+    typingPlans: [],
     // Reading list / literary journey scaffolding: per-book shelf overrides keyed by checksum
     // ('reading' | 'finished' | 'toread' | 'paused'). Absent → shelf is inferred from progress.
     readingList: { shelves: {} },
@@ -129,6 +148,8 @@ export function defaultGlobalSettings() {
     showPerfMeter: true,
     // Read-aloud auto-stop: pause speech after this many minutes of playback (0 = never).
     ttsAutoStopMin: 0,
+    // On a typing run's end, show a grade + final statement and play a grade-matched sound.
+    typingEndFanfare: true,
     // Touch gesture navigation (off by default — it can interfere with text selection/scroll):
     // horizontal swipes over the reading area step lines (long swipes step paragraphs).
     gestureControls: false,

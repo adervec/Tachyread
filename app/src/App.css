@@ -543,6 +543,18 @@
 .tw-rev-pos { flex: 0 0 auto; font-family: Consolas, monospace; font-size: 11px; color: var(--meta-fg, var(--status-fg)); width: 52px; text-align: right; }
 .tw-rev-line { flex: 0 0 auto; width: 72px; font-size: 11px; }
 .tw-rev-x { border: none; background: transparent; color: #c0392b; cursor: pointer; padding: 0 4px; }
+.tw-rev-find { border: none; background: transparent; cursor: pointer; padding: 0 4px; font-size: 13px; }
+.tw-rev-find:hover { transform: scale(1.15); }
+
+/* In-wizard Find: locate the body line for an unmatched / mis-matched entry. */
+.tw-find { border: 1px solid var(--toggle-active-bg); border-radius: 8px; background: var(--menu-bg); padding: 8px 10px; margin-bottom: 8px; }
+.tw-find-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; margin-bottom: 6px; }
+.tw-find-input { width: 100%; box-sizing: border-box; font-size: 13px; padding: 5px 8px; margin-bottom: 6px; }
+.tw-find-results { max-height: 30vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.tw-find-hit { display: flex; gap: 8px; align-items: baseline; padding: 4px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.tw-find-hit:hover { background: var(--menu-highlight); }
+.tw-find-ln { flex: 0 0 44px; text-align: right; font-family: Consolas, monospace; color: var(--line-number-fg); }
+.tw-find-tx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--menu-fg); }
 .tw-rev-note { flex: 0 1 auto; min-width: 0; font-size: 11px; color: var(--status-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
 .tw-rev-fnbody { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tw-rev-row.tw-sub { opacity: 0.9; }
@@ -602,6 +614,12 @@
 .bg-group-head input { flex: 1; font-weight: 600; }
 .bg-member, .bg-pick-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
 .bg-member-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-master-pick { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; flex: 0 0 auto; }
+.bg-master-pick input { margin: 0; }
+.bg-master .bg-star { color: #f5b301; }
+.bg-master-pick .bg-star { font-size: 13px; color: var(--line-number-fg); }
+.bg-master .bg-member-name { font-weight: 600; }
+.bg-master-tag { font-weight: 400; color: #f5b301; font-size: 11px; }
 .bg-pick { max-height: 220px; overflow: auto; border: 1px solid var(--divider); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
 .bg-pick-row { cursor: pointer; }
 .remote-grab { display: flex; align-items: center; gap: 8px; padding: 4px 6px; opacity: 0.85; }
@@ -974,6 +992,22 @@
   border-bottom: 1px solid var(--divider);
   background: rgba(127, 127, 127, 0.1);
 }
+/* Peek: the bottom zone is showing a previewed area, not the lines after the current one. */
+.lps-zone.lps-peeking {
+  border: 2px dashed var(--toggle-active-bg);
+  border-radius: 4px;
+  position: relative;
+}
+.lps-peek-label {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--toggle-active-bg);
+  color: var(--toggle-active-fg, #fff);
+  font-size: 10px;
+  padding: 2px 8px;
+  text-align: center;
+}
 .line-row {
   display: grid;
   grid-template-columns: 48px 3px 1fr;
@@ -1211,6 +1245,8 @@
 .trendline .tl-history { fill: var(--session-read-fg); opacity: 0.55; }
 .trendline .tl-session { fill: var(--nav-session-read-fg); opacity: 0.85; }
 .trendline .tl-marker { stroke: var(--orp-fg); stroke-width: 2; }
+.trendline .tl-skip { fill: rgba(217, 131, 36, 0.20); }
+.trendline .tl-peek { stroke: var(--toggle-active-bg); stroke-width: 1.5; stroke-dasharray: 3 2; }
 
 .finish-btn {
   background: var(--nav-session-read-fg);
@@ -1243,6 +1279,15 @@
   width: 44px;
   text-align: right;
   color: var(--wpm-fg, inherit);
+}
+/* −/＋ steppers flanking the WPM slider — precise speed nudges (the slider is hard to drag exactly,
+   especially by thumb on a phone). */
+.wpm-step {
+  width: 26px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 700;
 }
 .playback-buttons {
   display: flex;
@@ -1278,6 +1323,17 @@
 .mode-block .mode-pair { display: flex; align-items: center; gap: 4px; }
 .mode-block button { font-size: 11px; padding: 3px 8px; }
 
+/* Compact playback row: the "⋯ More" disclosure hides the secondary controls (word/paragraph steps,
+   speed unit, mode toggles, goal) so the default mobile bar is just WPM + page/line stepping + play.
+   Desktop never receives .compact, so it is unaffected. */
+.ctrl-more { display: none; font-size: 12px; padding: 4px 12px; white-space: nowrap; }
+.controls-bar.compact .ctrl-more { display: inline-flex; align-items: center; }
+.controls-bar.compact:not(.more-open) .pb-2nd,
+.controls-bar.compact:not(.more-open) .wpm-block select,
+.controls-bar.compact:not(.more-open) .mode-block,
+.controls-bar.compact:not(.more-open) .goal-row,
+.controls-bar.compact:not(.more-open) .goal-killfeed { display: none; }
+
 .goal-row {
   display: flex;
   align-items: center;
@@ -1301,7 +1357,11 @@
 .app-status {
   background: var(--status-bg);
   border-top: 1px solid var(--divider);
+  /* Pad past the home-indicator / gesture bar on notched phones so the status row isn't clipped. */
   padding: 4px 12px;
+  padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+  padding-left: calc(12px + env(safe-area-inset-left, 0px));
+  padding-right: calc(12px + env(safe-area-inset-right, 0px));
   font-family: Consolas, monospace;
   font-size: 11px;
   color: var(--status-fg);
@@ -1363,7 +1423,13 @@
 .webcam-preview.wb-drowsy .wpv-dot { color: #9b59b6; }
 .webcam-preview-bar button { border: none; background: transparent; color: var(--status-fg); cursor: pointer; padding: 0 4px; font-size: 13px; }
 .webcam-preview-bar button:hover { color: var(--menu-fg); }
-@media (max-width: 860px) { .webcam-preview { width: 128px; bottom: 56px; } .webcam-preview-vid { height: 96px; } }
+/* On phones, dock the self-view in the top-right reading corner instead of bottom-right, so it never
+   overlaps the controls dock (the interactive area). The heard-speech readout is kept clear of it
+   (its own mobile rule reserves the right gutter). */
+@media (max-width: 860px) {
+  .webcam-preview { width: 110px; right: 8px; bottom: auto; top: calc(92px + env(safe-area-inset-top, 0px)); }
+  .webcam-preview-vid { height: 82px; }
+}
 
 /* Looking-away alarm overlay */
 .away-alarm {
@@ -1677,12 +1743,36 @@
 .trc.caret { display: inline-block; width: 2px; height: 1.05em; background: var(--toggle-active-bg); vertical-align: text-bottom; margin: 0 -1px; animation: caretBlink 1s steps(1) infinite; }
 .tr-hint { font-size: 12px; color: var(--status-fg); text-align: center; }
 .tr-results { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 10px; border-top: 1px solid var(--divider); }
+/* End-of-run grade + final statement */
+.tr-grade { display: flex; align-items: center; gap: 14px; }
+.tr-grade-letter { font-size: 46px; font-weight: 900; line-height: 1; }
+.tr-grade-statement { font-size: 15px; font-style: italic; color: var(--status-fg); }
+.tr-grade-A .tr-grade-letter { color: #2e9d4f; }
+.tr-grade-B .tr-grade-letter { color: #4a90d9; }
+.tr-grade-C .tr-grade-letter { color: var(--menu-fg); }
+.tr-grade-D .tr-grade-letter { color: #d98324; }
+.tr-grade-F .tr-grade-letter { color: #c0392b; }
 .tr-results-head { font-size: 15px; }
 .tr-results-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .tr-killfeed { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 11px; color: var(--status-fg); justify-content: center; }
 .tr-kf-label { font-weight: 600; }
 .tr-kf-item { color: var(--menu-fg); font-family: Consolas, monospace; }
 .tr-kf-ts { color: var(--status-fg); }
+
+/* Typing plans editor */
+.tp-steps { display: flex; flex-direction: column; gap: 8px; max-height: 44vh; overflow-y: auto; margin-bottom: 8px; }
+.tp-step { border: 1px solid var(--divider); border-radius: 8px; padding: 8px; background: var(--panel-bg, rgba(127,127,127,0.05)); }
+.tp-step-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tp-step-n { flex: 0 0 22px; height: 22px; border-radius: 50%; background: var(--toggle-active-bg); color: var(--toggle-active-fg, #fff); font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.tp-step-head select, .tp-step-head input { font-size: 12px; }
+.tp-sets { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--status-fg); }
+.tp-sets input { width: 44px; }
+.tp-mini { border: 1px solid var(--divider); background: transparent; cursor: pointer; font-size: 12px; padding: 0 6px; border-radius: 3px; }
+.tp-mini:disabled { opacity: 0.35; cursor: default; }
+.tp-step-desc { width: 100%; box-sizing: border-box; margin-top: 6px; font-size: 12px; padding: 4px 6px; }
+
+/* Plan progress bar inside a typing run */
+.tr-plan-bar { width: 100%; max-width: 820px; align-self: center; text-align: center; font-size: 12px; font-weight: 600; color: var(--toggle-active-bg); padding: 2px 0; }
 
 /* Typing Progress dialog */
 .tp-summary { display: flex; gap: 22px; margin-bottom: 14px; }
@@ -1964,7 +2054,9 @@
   .goal-row { flex-wrap: wrap; row-gap: 4px; }
   /* The heard-speech readout sits up top on phones (out of the way of the bottom controls) and,
      with pointer-events:none, never blocks them. */
-  .audio-chat { right: 8px; left: 8px; bottom: auto; top: 58px; width: auto; max-height: 26vh; }
+  /* Right gutter (126px) left clear so the heard-speech readout never sits under the top-right
+     webcam self-view when both are active. */
+  .audio-chat { right: 126px; left: 8px; bottom: auto; top: 58px; width: auto; max-height: 26vh; }
   .grab-screen-2col { flex-direction: column; }
   .grab-shots-col { flex: 1 1 auto; width: 100%; }
   .grab-shots { max-height: 36vh; }
@@ -1985,6 +2077,18 @@
   .splitter { display: none; }
   .chapter-heading { flex-wrap: wrap; row-gap: 2px; }
   .chapter-heading .ch-title { max-width: 100%; }
+
+  /* Phone full-area view: the reader/lines split locks to the viewport (three zones always on
+     screen, current line centred), and an open TOC/Source/Index fills that same space — no page
+     scroll moves any pane off screen. */
+  .main-area.panes-full { overflow: hidden; }
+  .main-area.panes-full .main-split { overflow: hidden; }
+  .main-area.panes-full .main-split > .pane {
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    height: 100%;
+    border-bottom: none;
+  }
 }
 
 /* Coarse pointers (touch): roomier hit targets, without changing the desktop look. */
@@ -1992,6 +2096,37 @@
   .menu-bar > .menu-item { padding: 9px 13px; }
   .menu-dropdown { min-width: 260px; }
   .menu-dropdown .item { padding: 11px 16px; }
-  .tab-bar .tab { padding: 10px 12px; }
-  button, select, input[type='text'], input[type='number'] { min-height: 32px; }
+  .tab-bar .tab { padding: 10px 14px; }
+  /* ~44px minimum hit target on touch (Apple/Google guidance) without changing the desktop look. */
+  button, select, input[type='text'], input[type='number'] { min-height: 44px; }
+  .ctrl-btn { width: 44px; height: 44px; }
+  .wpm-step { width: 40px; }
+  /* The tab close ✕ is a frequent mis-tap — give it real padding. */
+  .tab-bar .tab .close { padding: 6px 8px; margin-left: 2px; font-size: 16px; }
+  /* Dense icon-button clusters in tables/wizards/plans: keep them tappable but compact, and let
+     their rows breathe (height comes from min-height above; these set width/padding). */
+  .toc-act button { font-size: 16px; padding: 4px 6px; min-width: 34px; }
+  .tw-rev-lvl, .tw-rev-x, .tw-rev-find { min-width: 34px; padding: 4px 6px; font-size: 14px; }
+  .tp-mini { min-width: 38px; padding: 4px 8px; }
+  .mode-block button { padding: 6px 12px; }
+  /* Slightly larger long-press-to-jump line text isn't needed, but checkboxes/radios get a bump. */
+  input[type='checkbox'], input[type='radio'] { width: 20px; height: 20px; }
+  /* Holding a line IS the jump gesture (lineLongPressMs); holding the reader is a swipe target.
+     Make the reading panes non-selectable on touch so iOS/Android don't pop the text-selection
+     callout / magnifier mid-hold and abort the gesture. */
+  .line-pane-list, .line-pane-split, .rsvp-pane {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
+
+/* Phones: the dense one-line wizard/plan rows overflow a narrow screen — let them wrap and give the
+   primary text field its own full-width line so every control stays reachable. */
+@media (max-width: 860px) {
+  .tw-rev-row { flex-wrap: wrap; row-gap: 4px; }
+  .tw-rev-title { flex: 1 1 100%; order: 5; }
+  .tp-step-head .tp-step-n { flex: 0 0 auto; }
+  .tp-step-head select { flex: 1 1 42%; }
+  .tp-sets input { width: 56px; }
 }

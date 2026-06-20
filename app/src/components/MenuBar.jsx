@@ -17,7 +17,7 @@ const MENUS = {
     { label: 'Close All Tabs', action: 'close-all' },
     { kind: 'separator' },
     { label: 'Application Settings...', action: 'app-settings' },
-    { label: 'Backup & Data...', action: 'data' },
+    { label: 'Data Management...', action: 'data' },
     { label: 'Book Groups...', action: 'book-groups' },
     { label: 'Default Tab Settings...', action: 'def-settings' },
     { label: 'Reset Tab to Default Settings', action: 'reset-tab' },
@@ -38,6 +38,7 @@ const MENUS = {
     { label: 'Locate Footnotes (Wizard)...', action: 'notes-wizard' },
     { label: 'Proper Names Index...', shortcut: 'Ctrl+I', action: 'proper-names' },
     { label: 'Typing Practice', action: 'typing' },
+    { label: 'Typing Plans...', action: 'typing-plans' },
     { label: 'Typing Progress...', action: 'typing-progress' },
     { label: 'Span Drill...', action: 'span-drill' },
     { label: 'Flow Writer...', action: 'flow-writer' },
@@ -158,9 +159,9 @@ export default function MenuBar({ onFileOpen, onAction }) {
             <div className="menu-drawer-section">View &amp; tools</div>
             {MENUS.view.map((it, i) => <MenuItem key={`v${i}`} it={it} onPick={handle} />)}
 
-            <div className="menu-drawer-section">Backup</div>
-            <div className="item" onClick={() => { setOpenMenu(null); onAction('sync-now'); }}>
-              <span>☁ Sync / Back up now</span>
+            <div className="menu-drawer-section">Data</div>
+            <div className="item" onClick={() => { setOpenMenu(null); onAction('data'); }}>
+              <span>☁ Data management…</span>
             </div>
           </div>
         )}
@@ -257,10 +258,10 @@ export default function MenuBar({ onFileOpen, onAction }) {
       <div className="grow" />
       <div
         className="menu-item"
-        onClick={() => onAction('sync-now')}
-        title="Back up your data to the configured sync target (File → Backup & Data)"
+        onClick={() => onAction('data')}
+        title="Open the data management suite — overview, backup &amp; restore, cloud sync, maintenance"
       >
-        ☁ Sync
+        ☁ Data
       </div>
       <div className="right-toggles">
         <label htmlFor="theme-select">Theme</label>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { allFiles, allGrabbed } from '../state/storage.js';
-import { makeGroup, percentOf } from '../features/bookGroups.js';
+import { makeGroup, percentOf, masterOf } from '../features/bookGroups.js';
 
 // Group/ungroup files as the SAME book so reading progress syncs across them as a percentage.
 // See features/bookGroups.js for the rationale (editions differ → share position, not the mask).
@@ -54,9 +54,17 @@ export default function BookGroupsDialog({ onClose }) {
   function rename(id, name) {
     updateGlobal({ bookGroups: groups.map((g) => (g.id === id ? { ...g, name } : g)) });
   }
+  function setMaster(id, cs) {
+    updateGlobal({ bookGroups: groups.map((g) => (g.id === id ? { ...g, master: cs } : g)) });
+  }
   function removeMember(id, cs) {
     const next = groups
-      .map((g) => (g.id === id ? { ...g, members: (g.members || []).filter((m) => m !== cs) } : g))
+      .map((g) => {
+        if (g.id !== id) return g;
+        const members = (g.members || []).filter((m) => m !== cs);
+        const master = g.master === cs ? members[0] : g.master; // reassign master if it was removed
+        return { ...g, members, master };
+      })
       .filter((g) => (g.members || []).length >= 2);
     updateGlobal({ bookGroups: next });
   }
@@ -71,24 +79,38 @@ export default function BookGroupsDialog({ onClose }) {
         the group, and that percentage syncs between your devices. If the files are genuinely different this
         will mis-track; it trades exactness for never losing your place over a trivial difference.
       </p>
+      <p className="settings-note" style={{ marginTop: 0 }}>
+        Pick a <strong>★ master</strong> copy in each group — the canonical edition that represents the book
+        (it names the group and is the one to prefer when they differ).
+      </p>
       {msg && <p className="settings-note">{msg}</p>}
 
       {groups.length > 0 && <div className="field-section">Your book groups</div>}
-      {groups.map((g) => (
-        <div key={g.id} className="bg-group">
-          <div className="bg-group-head">
-            <input value={g.name} onChange={(e) => rename(g.id, e.target.value)} aria-label="Group name" />
-            <button className="grab-trash" onClick={() => ungroup(g.id)}>Ungroup</button>
-          </div>
-          {(g.members || []).map((cs) => (
-            <div key={cs} className="bg-member">
-              <span className="bg-member-name" title={cs}>{nameOf(cs)}</span>
-              <span className="settings-note" style={{ margin: 0 }}>{pctLabel(cs)}</span>
-              <button onClick={() => removeMember(g.id, cs)} title="Remove from this book">×</button>
+      {groups.map((g) => {
+        const master = masterOf(g);
+        return (
+          <div key={g.id} className="bg-group">
+            <div className="bg-group-head">
+              <input value={g.name} onChange={(e) => rename(g.id, e.target.value)} aria-label="Group name" />
+              <button className="grab-trash" onClick={() => ungroup(g.id)}>Ungroup</button>
             </div>
-          ))}
-        </div>
-      ))}
+            {(g.members || []).map((cs) => {
+              const isMaster = cs === master;
+              return (
+                <div key={cs} className={`bg-member${isMaster ? ' bg-master' : ''}`}>
+                  <label className="bg-master-pick" title={isMaster ? 'Master (canonical) copy' : 'Make this the master copy'}>
+                    <input type="radio" name={`master-${g.id}`} checked={isMaster} onChange={() => setMaster(g.id, cs)} />
+                    <span className="bg-star">{isMaster ? '★' : '☆'}</span>
+                  </label>
+                  <span className="bg-member-name" title={cs}>{nameOf(cs)}{isMaster && <span className="bg-master-tag"> · master</span>}</span>
+                  <span className="settings-note" style={{ margin: 0 }}>{pctLabel(cs)}</span>
+                  <button onClick={() => removeMember(g.id, cs)} title="Remove from this book">×</button>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
 
       <div className="field-section">New group</div>
       {ungrouped.length < 2 ? (

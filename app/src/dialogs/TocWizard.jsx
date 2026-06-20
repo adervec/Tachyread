@@ -18,6 +18,21 @@ export default function TocWizard({ tab, onApply, onClose }) {
   const [candidates, setCandidates] = useState([]);
   const [showUnmatched, setShowUnmatched] = useState(true);
   const [skipContents, setSkipContents] = useState(true); // exclude the printed contents pages from completion %
+  const [findFor, setFindFor] = useState(null); // entry index whose line we're searching for
+  const [findQuery, setFindQuery] = useState('');
+
+  // In-wizard Find: lines whose text contains the query — to locate the real start of an entry.
+  const searchResults = useMemo(() => {
+    const q = (findQuery || '').trim().toLowerCase();
+    if (findFor == null || q.length < 2) return [];
+    const out = [];
+    for (let li = 0; li < doc.lines.length && out.length < 80; li++) {
+      const ln = doc.lines[li];
+      if (!ln || ln.isEmpty || ln.startWordIndex < 0) continue;
+      if (ln.text.toLowerCase().includes(q)) out.push({ li, text: ln.text.trim() });
+    }
+    return out;
+  }, [doc, findQuery, findFor]);
 
   // Parse preview of the chosen region (which lines become entries).
   const parsed = useMemo(() => parsePrintedToc(doc, start, end), [doc, start, end]);
@@ -182,6 +197,30 @@ export default function TocWizard({ tab, onApply, onClose }) {
             Copyright, contents, index, notes, acknowledgements and about-the-author are pre-checked.
           </p>
           {candidates.length === 0 && <p className="settings-note">No entries — go back and widen the region, or use detected headings.</p>}
+          {findFor != null && (
+            <div className="tw-find">
+              <div className="tw-find-head">
+                <span>🔍 Find the line for <b>{candidates[findFor]?.title}</b></span>
+                <button className="tw-rev-x" title="Close find" onClick={() => setFindFor(null)}>✕</button>
+              </div>
+              <input
+                className="tw-find-input"
+                autoFocus
+                value={findQuery}
+                onChange={(e) => setFindQuery(e.target.value)}
+                placeholder="Search the document text…"
+              />
+              <div className="tw-find-results">
+                {searchResults.map((r) => (
+                  <div key={r.li} className="tw-find-hit" onClick={() => { assignLine(findFor, r.li + 1); setFindFor(null); }} title={`Use line ${r.li + 1}`}>
+                    <span className="tw-find-ln">{r.li + 1}</span>
+                    <span className="tw-find-tx">{r.text}</span>
+                  </div>
+                ))}
+                {findQuery.trim().length >= 2 && searchResults.length === 0 && <div className="settings-note" style={{ padding: '4px 8px' }}>No lines match “{findQuery.trim()}”.</div>}
+              </div>
+            </div>
+          )}
           <div className="tw-rev-list">
             {candidates.map((c, i) => {
               if (!c.matched && !showUnmatched) return null;
@@ -197,6 +236,7 @@ export default function TocWizard({ tab, onApply, onClose }) {
                   {c.matched
                     ? <span className="tw-rev-pos" title={`Line ${line}`}>{pct.toFixed(1)}%</span>
                     : <input className="tw-rev-line" type="number" min={1} placeholder="line #" onChange={(e) => assignLine(i, e.target.value)} title="Type the line where this section starts" />}
+                  <button className="tw-rev-find" title="Find this section in the text" onClick={() => { setFindFor(i); setFindQuery(c.title || ''); }}>🔍</button>
                   <label className="tw-rev-skip" title="Exclude this section from the completion %">
                     <input type="checkbox" checked={!!c.skip} onChange={(e) => setSkip(i, e.target.checked)} />skip
                   </label>

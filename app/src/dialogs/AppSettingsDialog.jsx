@@ -211,6 +211,18 @@ export default function AppSettingsDialog({ global, onPatch, onCalibrate, onClos
         guard) read-aloud are never paused.
       </p>
 
+      <div className="field-section">Typing practice</div>
+      <Field label="End-of-run grade fanfare">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={g.typingEndFanfare !== false}
+            onChange={(e) => patch({ typingEndFanfare: e.target.checked })}
+          />
+          Show a grade + final remark and play a grade-matched sound when a typing run ends
+        </label>
+      </Field>
+
       <div className="field-section">Audio control</div>
       <Field label="Hands-free mode">
         <select value={g.audioCtrlMode || 'Both'} onChange={(e) => patch({ audioCtrlMode: e.target.value })}>

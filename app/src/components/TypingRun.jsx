@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { playPerfectClick, playErrorHiss } from '../features/clickSound.js';
 import { deviceKind } from '../state/device.js';
 import { buildPassage, TYPING_MODES, TYPING_MODE_BY_ID } from '../engine/typingModes.js';
+import { letterGrade, playGradeSound, GRADE_STATEMENTS } from '../features/gradeChime.js';
 
 // Typing practice as self-contained "runs". A run types the document text forward from the
 // reading position WITHOUT moving the reading index mid-run — so the reading panes don't jump
@@ -29,7 +30,7 @@ const ENDLESS_SECS = 99999;
 
 const freshStats = () => ({ start: 0, chars: 0, correct: 0, errors: 0, words: 0, perfect: 0, errorKeys: {} });
 
-export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns }) {
+export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns, endFanfare = true, plan = null, onPlanNext, onPlanExit }) {
   const { doc, settings } = tab;
   const cfg = settings.typing || {};
   const caseSensitive = !!cfg.caseSensitive;
@@ -87,9 +88,10 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     if (idleTimer.current) { clearTimeout(idleTimer.current); idleTimer.current = null; }
     const s = stats.current;
     const m = metrics();
+    const net = Math.round(m.net);
     const run = {
       ts: Date.now(),
-      netWpm: Math.round(m.net),
+      netWpm: net,
       grossWpm: Math.round(m.gross),
       accuracy: Math.round(m.acc * 10) / 10,
       chars: s.chars,
@@ -99,14 +101,16 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       durationMs: Math.round(m.secs * 1000),
       docName: doc.fileName || 'text',
       errorKeys: { ...s.errorKeys },
-      tier: netTier(Math.round(m.net)),
+      tier: netTier(net),
+      grade: letterGrade(net),
       device: deviceKind(), // 'Mobile' | 'Desktop' — which device this run was typed on
       mode: gameMode,       // which typing mode/drill this run used
     };
     setSummary(run);
     setPhase('done');
     onSaveRun?.(run);
-  }, [metrics, doc, onSaveRun, gameMode]);
+    if (endFanfare) playGradeSound(run.grade);
+  }, [metrics, doc, onSaveRun, gameMode, endFanfare]);
 
   const armIdle = useCallback(() => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -159,16 +163,19 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     wordErrors.current = 0;
     if (linesRef.current) linesRef.current.style.transform = 'translateY(0)';
     setPhase('idle');
+    // Refocus the hidden input *within* this tap so the next run accepts keys (and the mobile
+    // keyboard reopens) — a programmatic re-focus outside the gesture wouldn't.
+    focus();
   }
 
-  function commitWord() {
+  function commitWord(typed = buf) {
     const target = passage[pos] || '';
-    const perfect = wordErrors.current === 0 && buf.length === target.length;
+    const perfect = wordErrors.current === 0 && typed.length === target.length;
     const s = stats.current;
     s.words += 1;
     if (perfect) { s.perfect += 1; playPerfectClick(volume); } else { playErrorHiss(volume); }
     wordErrors.current = 0;
-    setResults((r) => [...r, { typed: buf, perfect }]);
+    setResults((r) => [...r, { typed, perfect }]);
     setBuf('');
     const nextPos = pos + 1;
     setPos(nextPos);
@@ -176,35 +183,55 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     if (nextPos >= passage.length) { endRun(); }
   }
 
-  function onKeyDown(e) {
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === 'Escape') { e.preventDefault(); phase === 'running' ? endRun() : onExitDiscard?.(); return; }
-    if (phase === 'done') return;
-    if (e.key === 'Backspace') { e.preventDefault(); setBuf((b) => b.slice(0, -1)); return; }
-    if (e.key === ' ' || e.key === 'Enter') {
-      e.preventDefault();
-      if (phase !== 'running') start();
-      if (buf.length === 0) return;
-      armIdle();
-      commitWord();
-      return;
-    }
-    if (e.key.length === 1) {
-      e.preventDefault();
-      if (phase !== 'running') start();
-      armIdle();
-      const s = stats.current;
-      const target = passage[pos] || '';
-      const ch = target[buf.length];
+  // Score the characters of `str` from index `fromLen` onward against the current target word.
+  function scoreChars(fromLen, str) {
+    const s = stats.current;
+    const target = passage[pos] || '';
+    for (let p = fromLen; p < str.length; p++) {
+      const ch = target[p];
       s.chars += 1;
-      if (ch !== undefined && sameChar(e.key, ch, caseSensitive)) {
+      if (ch !== undefined && sameChar(str[p], ch, caseSensitive)) {
         s.correct += 1;
       } else {
         s.errors += 1;
         wordErrors.current += 1;
         if (ch) { const k = caseSensitive ? ch : ch.toLowerCase(); s.errorKeys[k] = (s.errorKeys[k] || 0) + 1; }
       }
-      setBuf((b) => b + e.key);
+    }
+  }
+
+  // Letters, space (commit) and backspace flow through the input's value here instead of keydown so
+  // that mobile soft keyboards work — many of them don't emit usable keydown events (key:"Unidentified",
+  // keyCode 229). The input holds the in-progress word (value={buf}); we diff each change. Enter and
+  // Escape stay on keydown since a single-line input doesn't surface them as value changes.
+  function onChange(e) {
+    if (phase === 'done') return;
+    const val = e.target.value;
+    const sp = val.search(/\s/);
+    if (sp >= 0) {
+      const typed = val.slice(0, sp);
+      if (phase !== 'running') start();
+      scoreChars(buf.length, typed);
+      armIdle();
+      if (typed.length > 0) commitWord(typed); else setBuf('');
+      return;
+    }
+    if (phase !== 'running') start();
+    armIdle();
+    if (val.length > buf.length) scoreChars(buf.length, val);
+    setBuf(val);
+  }
+
+  function onKeyDown(e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Escape') { e.preventDefault(); phase === 'running' ? endRun() : onExitDiscard?.(); return; }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (phase === 'done') return;
+      if (phase !== 'running') start();
+      if (buf.length === 0) return;
+      armIdle();
+      commitWord(buf);
     }
   }
 
@@ -221,16 +248,27 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         : `${live.secs.toFixed(0)} / ${limit}s`;
 
   return (
-    <div className="type-run" onMouseDown={focus}>
+    <div className="type-run" onPointerDown={focus}>
       <input
         ref={inputRef}
         className="type-sink"
         autoFocus
-        value=""
-        onChange={() => {}}
+        value={buf}
+        onChange={onChange}
         onKeyDown={onKeyDown}
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        inputMode="text"
         aria-label="Typing run input"
       />
+
+      {plan && (
+        <div className="tr-plan-bar">
+          📋 {plan.name} · Step {plan.step}/{plan.steps} · Set {plan.set}/{plan.sets}
+        </div>
+      )}
 
       <div className="tr-bar">
         <div className="tr-stats">
@@ -240,7 +278,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           <Stat v={progressLabel} l="run" />
         </div>
         <div className="tr-controls">
-          {phase !== 'running' && (
+          {phase !== 'running' && !plan && (
             <>
               <select
                 value={gameMode}
@@ -267,7 +305,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           </label>
           {phase === 'running'
             ? <button className="toggle-on" onClick={endRun}>■ End run</button>
-            : <button onClick={onExitDiscard}>Discard</button>}
+            : <button onClick={onExitDiscard}>{plan ? 'Exit plan' : 'Discard'}</button>}
         </div>
       </div>
 
@@ -302,15 +340,31 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
       {phase === 'done' && summary && (
         <div className="tr-results">
+          {endFanfare && summary.grade && (
+            <div className={`tr-grade tr-grade-${summary.grade}`}>
+              <span className="tr-grade-letter">{summary.grade}</span>
+              <span className="tr-grade-statement">{GRADE_STATEMENTS[summary.grade]}</span>
+            </div>
+          )}
           <div className="tr-results-head">
             <strong>{summary.netWpm} net WPM</strong> · {summary.grossWpm} gross · {summary.accuracy}% acc · {summary.tier}
           </div>
           <div className="tr-results-actions">
-            <button className="toggle-on" onClick={reattempt}>↻ Reattempt</button>
-            {isDocMode && (
-              <button onClick={() => onExitContinue?.(startIndex.current + stats.current.words)}>Continue (count as read)</button>
+            {plan ? (
+              <>
+                <button onClick={reattempt}>↻ Redo set</button>
+                <button className="toggle-on" onClick={onPlanNext}>{plan.step >= plan.steps && plan.set >= plan.sets ? '🏁 Finish plan' : 'Next set →'}</button>
+                <button onClick={onPlanExit}>Exit plan</button>
+              </>
+            ) : (
+              <>
+                <button className="toggle-on" onClick={reattempt}>↻ Reattempt</button>
+                {isDocMode && (
+                  <button onClick={() => onExitContinue?.(startIndex.current + stats.current.words)}>Continue (count as read)</button>
+                )}
+                <button onClick={onExitDiscard}>{isDocMode ? 'Discard' : 'Exit'}</button>
+              </>
             )}
-            <button onClick={onExitDiscard}>{isDocMode ? 'Discard' : 'Exit'}</button>
           </div>
         </div>
       )}
