@@ -1771,6 +1771,10 @@
 .trend-acc { stroke: var(--orp-fg); opacity: .8; stroke-dasharray: 4 3; }
 .tr-viewport { width: 100%; max-width: 820px; align-self: center; height: 132px; overflow: hidden; }
 .tr-lines {
+  /* The scroll logic reads the active word's offsetTop, which must be measured relative to THIS box
+     (line 0 = 0). Without position:relative the offsetParent is .type-run, so offsetTop includes the
+     toolbar + trend height and the passage scrolls several lines too far on open. */
+  position: relative;
   font-family: var(--serif-family, Georgia, serif);
   font-size: 26px; line-height: 44px; letter-spacing: .01em;
   transition: transform 140ms ease;
