@@ -43,9 +43,10 @@ export function defaultFileSettings() {
     autoSkipHeaders: false,
     enableProperNames: false,
     readAloud: false, // integrated TTS: speak from the current position and advance in sync
-    // "First word" progress marker: speak just the first word of each sentence as normal reading
-    // reaches it. Unlike readAloud, TTS does NOT drive the pace — it only marks where you are.
-    firstWordTts: false,
+    // Non-driving "follow" TTS while reading (does NOT set the pace, unlike readAloud):
+    //   'off' | 'firstWord' (speak each sentence's first word — a progress marker)
+    //   | 'line' (speak the current line; usually cut off by the next line, since TTS lags fast reading)
+    ttsFollowMode: 'off',
     annunciateVoice: '', // voice used by read-aloud + TTS reader
     annunciateRate: 0, // -5..+8 → 0.5..2.0×
     hideMode: 'None',

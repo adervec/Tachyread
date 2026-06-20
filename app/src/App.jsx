@@ -408,12 +408,20 @@ function AppInner() {
         activeTab.sessionNavLinesRead.add(newLine);
       }
     }
-    // "First word" TTS progress marker: when normal forward reading reaches the start of a sentence,
-    // speak just that word (skipped while read-aloud is driving, or if speech is still busy).
-    if (next > cur && !opts.nav && activeTab.settings.firstWordTts && !activeTab.settings.readAloud
-        && isSentenceStart(activeTab.doc, next) && !window.speechSynthesis?.speaking) {
-      const w = (activeTab.doc.words[next] || '').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
-      if (w) speak(w, { voiceName: activeTab.settings.annunciateVoice, rate: rateFromIndex(activeTab.settings.annunciateRate || 0) });
+    // Non-driving "follow" TTS: speak as normal forward reading moves, without setting the pace.
+    //   firstWord — the first word of each sentence reached (a spoken progress marker)
+    //   line      — the whole current line; cut off by the next line, since TTS lags fast reading
+    const followMode = activeTab.settings.ttsFollowMode || (activeTab.settings.firstWordTts ? 'firstWord' : 'off');
+    if (followMode !== 'off' && next > cur && !opts.nav && !activeTab.settings.readAloud) {
+      const voice = { voiceName: activeTab.settings.annunciateVoice, rate: rateFromIndex(activeTab.settings.annunciateRate || 0) };
+      if (followMode === 'firstWord' && isSentenceStart(activeTab.doc, next) && !window.speechSynthesis?.speaking) {
+        const w = (activeTab.doc.words[next] || '').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+        if (w) speak(w, voice);
+      } else if (followMode === 'line' && newLine !== prevLine) {
+        cancelSpeech(); // cut off the previous line so each new line starts speaking immediately
+        const lt = (activeTab.doc.lines[newLine]?.text || '').trim();
+        if (lt) speak(lt, voice);
+      }
     }
     patchSettings(activeTab.id, { wordIndex: next });
   }
