@@ -2039,6 +2039,10 @@
   /* Lay the playback controls out in a compact wrapping row instead of three stacked rows, so the
      controls bar stays short and never crowds the reader off a small screen. */
   .playback-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 14px; }
+  /* The nested button/WPM clusters must wrap too, or the expanded "More" row (10 nav buttons, and the
+     WPM row once the speed-unit select appears) runs wider than the screen and clips at both edges. */
+  .playback-buttons { flex-wrap: wrap; }
+  .wpm-block { flex-wrap: wrap; justify-content: center; }
   .controls-bar { padding: 6px 10px; gap: 6px; }
   /* Stack the docked Face/Stats above the controls (full width) instead of squeezing beside them. */
   .dock-row { flex-direction: column; }
