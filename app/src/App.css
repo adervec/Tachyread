@@ -240,6 +240,31 @@
   border-color: var(--toggle-active-bg);
   font-weight: 600;
 }
+/* Rotate-the-reader button: compact, not full-width like the view tabs, pinned to the right. */
+.reading-view-switch .rv-rotate {
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-width: 52px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reader-only rotation: the wrapper fills the reader region and clips; the inner box is sized to the
+   rotated footprint by ReaderRotator (inline styles) and spun in place. */
+.reader-rotate-wrap {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.reader-rotate-inner {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+.reader-rotate-inner > * { flex: 1 1 auto; min-width: 0; min-height: 0; }
 .main-area {
   position: relative;
   display: flex;

@@ -133,6 +133,16 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             </button>
           </div>
           <div className="mode-pair">
+            <span title="Speak just the first word of each sentence as you reach it — marks your progress without TTS driving the pace">1ST WORD</span>
+            <button
+              className={settings.firstWordTts ? 'toggle-on' : ''}
+              onClick={() => patchSettings(tab.id, { firstWordTts: !settings.firstWordTts })}
+              title="First-word TTS progress marker"
+            >
+              {settings.firstWordTts ? 'On' : 'Off'}
+            </button>
+          </div>
+          <div className="mode-pair">
             <span>VOICE COMMAND</span>
             <button className={audioCtrl ? 'toggle-on' : ''} onClick={onToggleAudioCtrl} title="Voice / clap commands">{audioCtrl ? 'On' : 'Off'}</button>
           </div>

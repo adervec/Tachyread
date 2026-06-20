@@ -10,6 +10,7 @@ import ControlsBar from './components/ControlsBar.jsx';
 import TocPane from './components/TocPane.jsx';
 import ChapterHeading from './components/ChapterHeading.jsx';
 import PaneLayout from './components/PaneLayout.jsx';
+import ReaderRotator from './components/ReaderRotator.jsx';
 import FaceStage from './components/FaceStage.jsx';
 import PerfMonitor from './components/PerfMonitor.jsx';
 import { useIsCompact, deviceKind } from './state/device.js';
@@ -75,6 +76,15 @@ import { getSyncProvider } from './features/sync/syncProviders.js';
 import { backupToProvider } from './features/sync/syncManager.js';
 import { applyTheme } from './state/themes.js';
 import './App.css';
+
+// A word at index i starts a new sentence if it's the first word or the previous word ends with
+// sentence-terminating punctuation (allowing trailing quotes / brackets). Used by the "first word"
+// TTS progress marker.
+function isSentenceStart(doc, i) {
+  if (i <= 0) return true;
+  const prev = doc.words[i - 1] || '';
+  return /[.!?…][)"'”’\]]*$/.test(prev);
+}
 
 function AppInner() {
   const { state, activeTab: rawActiveTab, hydrateTab, openFile, openClipboard, setStatus, patchSettings, patchTab, openDialog, closeDialog, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
@@ -385,7 +395,7 @@ function AppInner() {
     // Line status coloring for the right pane.
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
-    if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick();
+    if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick(0.16, activeTab.settings.lineSoundKind);
     if (!inc) {
       if (delta === 1 && next > cur && !opts.nav) {
         if (newLine !== prevLine) {
@@ -395,6 +405,13 @@ function AppInner() {
       } else if (opts.nav) {
         activeTab.sessionNavLinesRead.add(newLine);
       }
+    }
+    // "First word" TTS progress marker: when normal forward reading reaches the start of a sentence,
+    // speak just that word (skipped while read-aloud is driving, or if speech is still busy).
+    if (next > cur && !opts.nav && activeTab.settings.firstWordTts && !activeTab.settings.readAloud
+        && isSentenceStart(activeTab.doc, next) && !window.speechSynthesis?.speaking) {
+      const w = (activeTab.doc.words[next] || '').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+      if (w) speak(w, { voiceName: activeTab.settings.annunciateVoice, rate: rateFromIndex(activeTab.settings.annunciateRate || 0) });
     }
     patchSettings(activeTab.id, { wordIndex: next });
   }
@@ -408,7 +425,7 @@ function AppInner() {
     if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now());
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
-    if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick();
+    if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick(0.16, activeTab.settings.lineSoundKind);
     if (!inc && opts.nav) {
       activeTab.sessionNavLinesRead.add(newLine);
     }
@@ -1184,6 +1201,8 @@ function AppInner() {
   // and pauses playback — there's no room to do both, and you're not reading the text then.
   const auxOpen = isCompact && (state.showToc || (state.showSource && !!activeTab?.doc?.source) || state.showIndex);
   const panesFull = linesLocked || auxOpen;
+  // Mobile-only quarter-turn applied to just the reader box (not the menus/controls).
+  const readerRotation = state.global.readerRotation || 0;
 
   // Opening an aux pane on a phone pauses playback (you're navigating, not reading the text).
   useEffect(() => {
@@ -1265,28 +1284,47 @@ function AppInner() {
       {activeTab ? (
         <div className="main-wrap">
           <ChapterHeading tab={activeTab} onJumpWord={jumpWord} />
-          {isCompact && !hideWord && !auxOpen && (
+          {isCompact && !auxOpen && (
             <div className="reading-view-switch" role="tablist" aria-label="Reading view">
+              {!hideWord && (
+                <>
+                  <button
+                    role="tab"
+                    aria-selected={mobileView === 'rsvp'}
+                    className={mobileView === 'rsvp' ? 'on' : ''}
+                    onClick={() => setMobileView('rsvp')}
+                  >
+                    ⚡ Fast Reader
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={mobileView === 'lines'}
+                    className={mobileView === 'lines' ? 'on' : ''}
+                    onClick={() => setMobileView('lines')}
+                  >
+                    ☰ Lines
+                  </button>
+                </>
+              )}
+              {/* Rotate JUST the reader box (not the menus/controls) by a quarter-turn. */}
               <button
-                role="tab"
-                aria-selected={mobileView === 'rsvp'}
-                className={mobileView === 'rsvp' ? 'on' : ''}
-                onClick={() => setMobileView('rsvp')}
+                className={`rv-rotate${readerRotation ? ' on' : ''}`}
+                title="Rotate the reader 90° (mobile only)"
+                aria-label={`Rotate reader (currently ${readerRotation}°)`}
+                onClick={() => updateGlobal({ readerRotation: ((state.global.readerRotation || 0) + 90) % 360 })}
               >
-                ⚡ Fast Reader
-              </button>
-              <button
-                role="tab"
-                aria-selected={mobileView === 'lines'}
-                className={mobileView === 'lines' ? 'on' : ''}
-                onClick={() => setMobileView('lines')}
-              >
-                ☰ Lines
+                ⟳{readerRotation ? ` ${readerRotation}°` : ''}
               </button>
             </div>
           )}
           <div className={`main-area${panesFull ? ' panes-full' : ''}`} {...gestureHandlers}>
-            <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
+            {isCompact && readerRotation && !auxOpen ? (
+              <ReaderRotator rotation={readerRotation}>
+                <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
+              </ReaderRotator>
+            ) : (
+              <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
+            )}
             {activeTab.settings.typing?.enabled && (
               <TypingRun
                 key={planState ? `plan-${planState.step}-${planState.set}` : 'single'}

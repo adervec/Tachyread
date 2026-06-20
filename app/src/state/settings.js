@@ -43,6 +43,9 @@ export function defaultFileSettings() {
     autoSkipHeaders: false,
     enableProperNames: false,
     readAloud: false, // integrated TTS: speak from the current position and advance in sync
+    // "First word" progress marker: speak just the first word of each sentence as normal reading
+    // reaches it. Unlike readAloud, TTS does NOT drive the pace — it only marks where you are.
+    firstWordTts: false,
     annunciateVoice: '', // voice used by read-aloud + TTS reader
     annunciateRate: 0, // -5..+8 → 0.5..2.0×
     hideMode: 'None',
@@ -57,6 +60,7 @@ export function defaultFileSettings() {
     lineLongPressMs: 3000, // hold a line this long to jump to it (0 = instant click)
     linePaneSplit: false, // split the Lines pane into before / current line / after zones
     lineAdvanceSound: false, // soft click when the current line changes
+    lineSoundKind: 'soft', // which newline sound to play (see features/clickSound.js LINE_SOUNDS)
     autoSkipHeadersFooters: false,
     properNames: {}, // name → { aliases:[], notes:'' }
     properNameSeed: [], // wizard-located cast list [{name, note}] — seeds precise name highlighting
@@ -177,5 +181,8 @@ export function defaultGlobalSettings() {
     webcamPreview: true,
     // Calibrated eye-blink threshold from the calibration step ({ open, closed, threshold }).
     webcamCalib: {},
+    // Mobile-only quarter-turn (0 | 90 | 180 | 270) applied to JUST the reader box (Fast Reader /
+    // Lines), leaving the menus, tabs and controls upright. Not a full device landscape mode.
+    readerRotation: 0,
   };
 }

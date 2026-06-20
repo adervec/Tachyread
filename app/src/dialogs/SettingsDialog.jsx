@@ -4,6 +4,7 @@ import { useVoices } from '../features/tts.js';
 import { THEME_NAMES } from '../state/themes.js';
 import { createMetronome } from '../features/metronome.js';
 import { DEFAULT_METRONOME } from '../engine/metronome.js';
+import { LINE_SOUNDS, playLineSound } from '../features/clickSound.js';
 
 const FACE_STYLES = ['Man', 'Owl', 'Robot', 'Alien', 'Wizard', 'Cat', 'Baby', 'Skull', 'Panda', 'Frankenstein', 'Vampire', 'Viking', 'Clown', 'Bunny', 'Dragon', 'Ninja'];
 const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel'];
@@ -196,6 +197,18 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           checked={!!s.lineAdvanceSound}
           onChange={(e) => patch({ lineAdvanceSound: e.target.checked })}
         />
+      </Field>
+      <Field label="Line sound">
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <select
+            value={s.lineSoundKind || 'soft'}
+            disabled={!s.lineAdvanceSound}
+            onChange={(e) => { patch({ lineSoundKind: e.target.value }); if (e.target.value !== 'random') playLineSound(e.target.value); }}
+          >
+            {LINE_SOUNDS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+          <button type="button" disabled={!s.lineAdvanceSound} title="Preview" onClick={() => playLineSound(s.lineSoundKind || 'soft')}>▶ Test</button>
+        </div>
       </Field>
       <Field label="Bionic font">
         <input type="checkbox" checked={s.bionicFont} onChange={(e) => patch({ bionicFont: e.target.checked })} />
