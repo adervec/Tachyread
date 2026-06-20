@@ -629,6 +629,24 @@
 .inline-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--menu-fg); cursor: pointer; }
 .inline-check input { margin: 0; }
 
+/* Save-tab format chooser */
+.save-format-list { display: flex; flex-direction: column; gap: 8px; }
+.save-format {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  background: var(--btn-bg, transparent);
+  cursor: pointer;
+}
+.save-format:hover:not(:disabled) { border-color: var(--toggle-active-bg); background: var(--menu-highlight); }
+.save-format .sf-title { font-size: 14px; font-weight: 600; color: var(--menu-fg); }
+.save-format .sf-desc { font-size: 12px; color: var(--status-fg); }
+
 /* Backup & data dialog */
 .data-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
 .data-json { width: 100%; box-sizing: border-box; font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace); font-size: 11px; line-height: 1.4; resize: vertical; margin-top: 6px; white-space: pre; }

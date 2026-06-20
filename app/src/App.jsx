@@ -53,6 +53,7 @@ import { getTocEntries, sectionSpan, mergeSkipRanges } from './document/toc.js';
 import { defaultFileSettings, tabDefaultsFrom } from './state/settings.js';
 import { cancelSpeech, rateFromIndex, speak } from './features/tts.js';
 import TypingPlanDialog from './dialogs/TypingPlanDialog.jsx';
+import SaveTabDialog from './dialogs/SaveTabDialog.jsx';
 import { createReadAloud } from './features/readAloud.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
@@ -61,7 +62,8 @@ import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
 import { playLineClick } from './features/clickSound.js';
 import { createMetronome } from './features/metronome.js';
-import { saveTextToFile } from './features/fileSystem.js';
+import { saveTextToFile, saveBlobToFile } from './features/fileSystem.js';
+import { buildTabPdf } from './features/exportPdf.js';
 import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
 import WebcamPreview from './components/WebcamPreview.jsx';
@@ -1073,12 +1075,29 @@ function AppInner() {
   }, [state.global.sync?.autoBackup, state.global.sync?.autoBackupMinutes, state.global.sync?.provider]);
 
   // Save a copy of the active tab's text to an external file (native Save dialog where supported).
-  async function doSaveTab() {
+  function doSaveTab() {
+    if (!activeTab) return;
+    openDialog({ kind: 'save-tab' });
+  }
+
+  // Save the active tab as TXT (text only) or PDF (for grabbed books: the captured page images +
+  // a searchable text layer, so the source isn't lost).
+  async function saveTabAs(format) {
     if (!activeTab) return;
     const doc = activeTab.doc;
     const base = (doc.fileName || 'document').replace(/\.[^.]+$/, '') || 'document';
-    const res = await saveTextToFile(doc.fullText || '', `${base}.txt`);
-    if (!res.canceled) setStatus(`Saved ${res.name}${res.method === 'download' ? ' to your downloads' : ''}.`);
+    try {
+      let res;
+      if (format === 'pdf') {
+        const blob = await buildTabPdf(doc);
+        res = await saveBlobToFile(blob, `${base}.pdf`, [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]);
+      } else {
+        res = await saveTextToFile(doc.fullText || '', `${base}.txt`);
+      }
+      if (!res.canceled) setStatus(`Saved ${res.name}${res.method === 'download' ? ' to your downloads' : ''}.`);
+    } catch (e) {
+      setStatus(`Save failed: ${e?.message || e}`);
+    }
   }
 
   // Apply a resource-wizard result (proper names / index / footnotes) to the active tab.
@@ -1547,6 +1566,13 @@ function AppInner() {
       )}
       {dialog?.kind === 'typing-plan' && (
         <TypingPlanDialog onStart={activeTab ? startPlan : null} onClose={closeDialog} />
+      )}
+      {dialog?.kind === 'save-tab' && activeTab && (
+        <SaveTabDialog
+          doc={activeTab.doc}
+          onSave={saveTabAs}
+          onClose={closeDialog}
+        />
       )}
       {dialog?.kind === 'finished' && activeTab && (
         <BookFinishedDialog
