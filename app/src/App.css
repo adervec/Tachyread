@@ -240,6 +240,31 @@
   border-color: var(--toggle-active-bg);
   font-weight: 600;
 }
+/* Rotate-the-reader button: compact, not full-width like the view tabs, pinned to the right. */
+.reading-view-switch .rv-rotate {
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-width: 52px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reader-only rotation: the wrapper fills the reader region and clips; the inner box is sized to the
+   rotated footprint by ReaderRotator (inline styles) and spun in place. */
+.reader-rotate-wrap {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.reader-rotate-inner {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+.reader-rotate-inner > * { flex: 1 1 auto; min-width: 0; min-height: 0; }
 .main-area {
   position: relative;
   display: flex;
@@ -603,6 +628,24 @@
 .comfort-resume { padding: 8px 20px; font-size: 15px; font-weight: 600; }
 .inline-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--menu-fg); cursor: pointer; }
 .inline-check input { margin: 0; }
+
+/* Save-tab format chooser */
+.save-format-list { display: flex; flex-direction: column; gap: 8px; }
+.save-format {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  background: var(--btn-bg, transparent);
+  cursor: pointer;
+}
+.save-format:hover:not(:disabled) { border-color: var(--toggle-active-bg); background: var(--menu-highlight); }
+.save-format .sf-title { font-size: 14px; font-weight: 600; color: var(--menu-fg); }
+.save-format .sf-desc { font-size: 12px; color: var(--status-fg); }
 
 /* Backup & data dialog */
 .data-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
@@ -1728,6 +1771,10 @@
 .trend-acc { stroke: var(--orp-fg); opacity: .8; stroke-dasharray: 4 3; }
 .tr-viewport { width: 100%; max-width: 820px; align-self: center; height: 132px; overflow: hidden; }
 .tr-lines {
+  /* The scroll logic reads the active word's offsetTop, which must be measured relative to THIS box
+     (line 0 = 0). Without position:relative the offsetParent is .type-run, so offsetTop includes the
+     toolbar + trend height and the passage scrolls several lines too far on open. */
+  position: relative;
   font-family: var(--serif-family, Georgia, serif);
   font-size: 26px; line-height: 44px; letter-spacing: .01em;
   transition: transform 140ms ease;
@@ -2039,6 +2086,10 @@
   /* Lay the playback controls out in a compact wrapping row instead of three stacked rows, so the
      controls bar stays short and never crowds the reader off a small screen. */
   .playback-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 14px; }
+  /* The nested button/WPM clusters must wrap too, or the expanded "More" row (10 nav buttons, and the
+     WPM row once the speed-unit select appears) runs wider than the screen and clips at both edges. */
+  .playback-buttons { flex-wrap: wrap; }
+  .wpm-block { flex-wrap: wrap; justify-content: center; }
   .controls-bar { padding: 6px 10px; gap: 6px; }
   /* Stack the docked Face/Stats above the controls (full width) instead of squeezing beside them. */
   .dock-row { flex-direction: column; }

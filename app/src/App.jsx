@@ -10,6 +10,7 @@ import ControlsBar from './components/ControlsBar.jsx';
 import TocPane from './components/TocPane.jsx';
 import ChapterHeading from './components/ChapterHeading.jsx';
 import PaneLayout from './components/PaneLayout.jsx';
+import ReaderRotator from './components/ReaderRotator.jsx';
 import FaceStage from './components/FaceStage.jsx';
 import PerfMonitor from './components/PerfMonitor.jsx';
 import { useIsCompact, deviceKind } from './state/device.js';
@@ -52,6 +53,7 @@ import { getTocEntries, sectionSpan, mergeSkipRanges } from './document/toc.js';
 import { defaultFileSettings, tabDefaultsFrom } from './state/settings.js';
 import { cancelSpeech, rateFromIndex, speak } from './features/tts.js';
 import TypingPlanDialog from './dialogs/TypingPlanDialog.jsx';
+import SaveTabDialog from './dialogs/SaveTabDialog.jsx';
 import { createReadAloud } from './features/readAloud.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
@@ -60,7 +62,8 @@ import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
 import { playLineClick } from './features/clickSound.js';
 import { createMetronome } from './features/metronome.js';
-import { saveTextToFile } from './features/fileSystem.js';
+import { saveTextToFile, saveBlobToFile } from './features/fileSystem.js';
+import { buildTabPdf } from './features/exportPdf.js';
 import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
 import WebcamPreview from './components/WebcamPreview.jsx';
@@ -75,6 +78,15 @@ import { getSyncProvider } from './features/sync/syncProviders.js';
 import { backupToProvider } from './features/sync/syncManager.js';
 import { applyTheme } from './state/themes.js';
 import './App.css';
+
+// A word at index i starts a new sentence if it's the first word or the previous word ends with
+// sentence-terminating punctuation (allowing trailing quotes / brackets). Used by the "first word"
+// TTS progress marker.
+function isSentenceStart(doc, i) {
+  if (i <= 0) return true;
+  const prev = doc.words[i - 1] || '';
+  return /[.!?…][)"'”’\]]*$/.test(prev);
+}
 
 function AppInner() {
   const { state, activeTab: rawActiveTab, hydrateTab, openFile, openClipboard, setStatus, patchSettings, patchTab, openDialog, closeDialog, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
@@ -385,7 +397,7 @@ function AppInner() {
     // Line status coloring for the right pane.
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
-    if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick();
+    if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick(0.16, activeTab.settings.lineSoundKind);
     if (!inc) {
       if (delta === 1 && next > cur && !opts.nav) {
         if (newLine !== prevLine) {
@@ -394,6 +406,21 @@ function AppInner() {
         }
       } else if (opts.nav) {
         activeTab.sessionNavLinesRead.add(newLine);
+      }
+    }
+    // Non-driving "follow" TTS: speak as normal forward reading moves, without setting the pace.
+    //   firstWord — the first word of each sentence reached (a spoken progress marker)
+    //   line      — the whole current line; cut off by the next line, since TTS lags fast reading
+    const followMode = activeTab.settings.ttsFollowMode || (activeTab.settings.firstWordTts ? 'firstWord' : 'off');
+    if (followMode !== 'off' && next > cur && !opts.nav && !activeTab.settings.readAloud) {
+      const voice = { voiceName: activeTab.settings.annunciateVoice, rate: rateFromIndex(activeTab.settings.annunciateRate || 0) };
+      if (followMode === 'firstWord' && isSentenceStart(activeTab.doc, next) && !window.speechSynthesis?.speaking) {
+        const w = (activeTab.doc.words[next] || '').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+        if (w) speak(w, voice);
+      } else if (followMode === 'line' && newLine !== prevLine) {
+        cancelSpeech(); // cut off the previous line so each new line starts speaking immediately
+        const lt = (activeTab.doc.lines[newLine]?.text || '').trim();
+        if (lt) speak(lt, voice);
       }
     }
     patchSettings(activeTab.id, { wordIndex: next });
@@ -408,7 +435,7 @@ function AppInner() {
     if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now());
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
-    if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick();
+    if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick(0.16, activeTab.settings.lineSoundKind);
     if (!inc && opts.nav) {
       activeTab.sessionNavLinesRead.add(newLine);
     }
@@ -1056,12 +1083,29 @@ function AppInner() {
   }, [state.global.sync?.autoBackup, state.global.sync?.autoBackupMinutes, state.global.sync?.provider]);
 
   // Save a copy of the active tab's text to an external file (native Save dialog where supported).
-  async function doSaveTab() {
+  function doSaveTab() {
+    if (!activeTab) return;
+    openDialog({ kind: 'save-tab' });
+  }
+
+  // Save the active tab as TXT (text only) or PDF (for grabbed books: the captured page images +
+  // a searchable text layer, so the source isn't lost).
+  async function saveTabAs(format) {
     if (!activeTab) return;
     const doc = activeTab.doc;
     const base = (doc.fileName || 'document').replace(/\.[^.]+$/, '') || 'document';
-    const res = await saveTextToFile(doc.fullText || '', `${base}.txt`);
-    if (!res.canceled) setStatus(`Saved ${res.name}${res.method === 'download' ? ' to your downloads' : ''}.`);
+    try {
+      let res;
+      if (format === 'pdf') {
+        const blob = await buildTabPdf(doc);
+        res = await saveBlobToFile(blob, `${base}.pdf`, [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]);
+      } else {
+        res = await saveTextToFile(doc.fullText || '', `${base}.txt`);
+      }
+      if (!res.canceled) setStatus(`Saved ${res.name}${res.method === 'download' ? ' to your downloads' : ''}.`);
+    } catch (e) {
+      setStatus(`Save failed: ${e?.message || e}`);
+    }
   }
 
   // Apply a resource-wizard result (proper names / index / footnotes) to the active tab.
@@ -1184,6 +1228,8 @@ function AppInner() {
   // and pauses playback — there's no room to do both, and you're not reading the text then.
   const auxOpen = isCompact && (state.showToc || (state.showSource && !!activeTab?.doc?.source) || state.showIndex);
   const panesFull = linesLocked || auxOpen;
+  // Mobile-only quarter-turn applied to just the reader box (not the menus/controls).
+  const readerRotation = state.global.readerRotation || 0;
 
   // Opening an aux pane on a phone pauses playback (you're navigating, not reading the text).
   useEffect(() => {
@@ -1265,28 +1311,47 @@ function AppInner() {
       {activeTab ? (
         <div className="main-wrap">
           <ChapterHeading tab={activeTab} onJumpWord={jumpWord} />
-          {isCompact && !hideWord && !auxOpen && (
+          {isCompact && !auxOpen && (
             <div className="reading-view-switch" role="tablist" aria-label="Reading view">
+              {!hideWord && (
+                <>
+                  <button
+                    role="tab"
+                    aria-selected={mobileView === 'rsvp'}
+                    className={mobileView === 'rsvp' ? 'on' : ''}
+                    onClick={() => setMobileView('rsvp')}
+                  >
+                    ⚡ Fast Reader
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={mobileView === 'lines'}
+                    className={mobileView === 'lines' ? 'on' : ''}
+                    onClick={() => setMobileView('lines')}
+                  >
+                    ☰ Lines
+                  </button>
+                </>
+              )}
+              {/* Rotate JUST the reader box (not the menus/controls) by a quarter-turn. */}
               <button
-                role="tab"
-                aria-selected={mobileView === 'rsvp'}
-                className={mobileView === 'rsvp' ? 'on' : ''}
-                onClick={() => setMobileView('rsvp')}
+                className={`rv-rotate${readerRotation ? ' on' : ''}`}
+                title="Rotate the reader 90° (mobile only)"
+                aria-label={`Rotate reader (currently ${readerRotation}°)`}
+                onClick={() => updateGlobal({ readerRotation: ((state.global.readerRotation || 0) + 90) % 360 })}
               >
-                ⚡ Fast Reader
-              </button>
-              <button
-                role="tab"
-                aria-selected={mobileView === 'lines'}
-                className={mobileView === 'lines' ? 'on' : ''}
-                onClick={() => setMobileView('lines')}
-              >
-                ☰ Lines
+                ⟳{readerRotation ? ` ${readerRotation}°` : ''}
               </button>
             </div>
           )}
           <div className={`main-area${panesFull ? ' panes-full' : ''}`} {...gestureHandlers}>
-            <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
+            {isCompact && readerRotation && !auxOpen ? (
+              <ReaderRotator rotation={readerRotation}>
+                <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
+              </ReaderRotator>
+            ) : (
+              <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
+            )}
             {activeTab.settings.typing?.enabled && (
               <TypingRun
                 key={planState ? `plan-${planState.step}-${planState.set}` : 'single'}
@@ -1509,6 +1574,13 @@ function AppInner() {
       )}
       {dialog?.kind === 'typing-plan' && (
         <TypingPlanDialog onStart={activeTab ? startPlan : null} onClose={closeDialog} />
+      )}
+      {dialog?.kind === 'save-tab' && activeTab && (
+        <SaveTabDialog
+          doc={activeTab.doc}
+          onSave={saveTabAs}
+          onClose={closeDialog}
+        />
       )}
       {dialog?.kind === 'finished' && activeTab && (
         <BookFinishedDialog

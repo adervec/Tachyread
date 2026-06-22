@@ -133,6 +133,18 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             </button>
           </div>
           <div className="mode-pair">
+            <span title="Non-driving TTS that speaks as you read: the first word of each sentence (a progress marker), or the whole current line (usually cut off by the next line, since TTS lags fast reading)">FOLLOW</span>
+            <select
+              value={settings.ttsFollowMode || (settings.firstWordTts ? 'firstWord' : 'off')}
+              onChange={(e) => patchSettings(tab.id, { ttsFollowMode: e.target.value })}
+              title="Speak-along TTS while reading (does not drive the pace)"
+            >
+              <option value="off">Off</option>
+              <option value="firstWord">First word</option>
+              <option value="line">Line</option>
+            </select>
+          </div>
+          <div className="mode-pair">
             <span>VOICE COMMAND</span>
             <button className={audioCtrl ? 'toggle-on' : ''} onClick={onToggleAudioCtrl} title="Voice / clap commands">{audioCtrl ? 'On' : 'Off'}</button>
           </div>

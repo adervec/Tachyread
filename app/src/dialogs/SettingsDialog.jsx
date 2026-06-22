@@ -4,11 +4,13 @@ import { useVoices } from '../features/tts.js';
 import { THEME_NAMES } from '../state/themes.js';
 import { createMetronome } from '../features/metronome.js';
 import { DEFAULT_METRONOME } from '../engine/metronome.js';
+import { LINE_SOUNDS, playLineSound } from '../features/clickSound.js';
 
 const FACE_STYLES = ['Man', 'Owl', 'Robot', 'Alien', 'Wizard', 'Cat', 'Baby', 'Skull', 'Panda', 'Frankenstein', 'Vampire', 'Viking', 'Clown', 'Bunny', 'Dragon', 'Ninja'];
 const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel'];
-const POINTER_STYLES = ['Arrow', 'Diamond', 'Star', 'Circle', 'Hand'];
-const POINTER_PLACEMENTS = ['Above', 'Below', 'Left', 'Right'];
+// Reading-pointer options archived with its Settings section (see below). Restore alongside it.
+// const POINTER_STYLES = ['Arrow', 'Diamond', 'Star', 'Circle', 'Hand'];
+// const POINTER_PLACEMENTS = ['Above', 'Below', 'Left', 'Right'];
 const CURRENT_WORD_STYLES = ['Underline', 'Bold', 'Background', 'Color', 'Box'];
 
 // Back-compat: older saved tabs used a single `currentWordStyle` string.
@@ -197,6 +199,18 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ lineAdvanceSound: e.target.checked })}
         />
       </Field>
+      <Field label="Line sound">
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <select
+            value={s.lineSoundKind || 'soft'}
+            disabled={!s.lineAdvanceSound}
+            onChange={(e) => { patch({ lineSoundKind: e.target.value }); if (e.target.value !== 'random') playLineSound(e.target.value); }}
+          >
+            {LINE_SOUNDS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+          <button type="button" disabled={!s.lineAdvanceSound} title="Preview" onClick={() => playLineSound(s.lineSoundKind || 'soft')}>▶ Test</button>
+        </div>
+      </Field>
       <Field label="Bionic font">
         <input type="checkbox" checked={s.bionicFont} onChange={(e) => patch({ bionicFont: e.target.checked })} />
       </Field>
@@ -288,34 +302,27 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
         </select>
       </Field>
 
+      {/* Reading-pointer settings archived — the feature isn't useful right now. Re-enable by
+          restoring this block and flipping POINTER_ENABLED in LinePane.jsx.
       <Section>Reading pointer</Section>
       <Field label="Show pointer">
         <input type="checkbox" checked={!!s.showPointer} onChange={(e) => patch({ showPointer: e.target.checked })} />
       </Field>
       <Field label="Pointer style">
         <select value={s.pointerStyle || 'Arrow'} onChange={(e) => patch({ pointerStyle: e.target.value })}>
-          {POINTER_STYLES.map((p) => (
-            <option key={p}>{p}</option>
-          ))}
+          {POINTER_STYLES.map((p) => (<option key={p}>{p}</option>))}
         </select>
       </Field>
       <Field label="Pointer placement">
         <select value={s.pointerPlacement || 'Left'} onChange={(e) => patch({ pointerPlacement: e.target.value })}>
-          {POINTER_PLACEMENTS.map((p) => (
-            <option key={p}>{p}</option>
-          ))}
+          {POINTER_PLACEMENTS.map((p) => (<option key={p}>{p}</option>))}
         </select>
       </Field>
       <Field label="Pointer blink interval (ms, 0 = steady)">
-        <input
-          type="number"
-          min={0}
-          max={3000}
-          step={100}
-          value={s.pointerBlinkMs || 0}
-          onChange={(e) => patch({ pointerBlinkMs: Number(e.target.value) })}
-        />
+        <input type="number" min={0} max={3000} step={100} value={s.pointerBlinkMs || 0}
+          onChange={(e) => patch({ pointerBlinkMs: Number(e.target.value) })} />
       </Field>
+      */}
 
       <Section>Right pane</Section>
       <Field label="Blur lines before">

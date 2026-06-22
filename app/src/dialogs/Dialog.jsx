@@ -8,12 +8,14 @@ export default function Dialog({ title, onClose, children, buttons, width = 520,
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose, dismissable]);
+  // Clicking the backdrop intentionally does NOT close the dialog — every dialog has an explicit
+  // ×/Cancel button, and accidental click-away dismissals were losing in-progress work. Escape
+  // (when dismissable) and the buttons are the ways out.
   return (
-    <div className="dialog-backdrop" onClick={dismissable ? onClose : undefined}>
+    <div className="dialog-backdrop">
       <div
         className="dialog"
         style={{ width: typeof width === 'number' ? `min(${width}px, 96vw)` : width }}
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="dialog-title">
           <span>{title}</span>
