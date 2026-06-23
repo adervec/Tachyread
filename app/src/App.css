@@ -2,7 +2,8 @@
 
 .app {
   display: grid;
-  grid-template-rows: auto auto 1fr auto auto;
+  /* rows: top chrome (menu+tabs) · content · controls dock · status bar */
+  grid-template-rows: auto 1fr auto auto;
   /* minmax(0, 1fr): keep the single column from growing to its widest content's
      min-content (which would let panes overflow the viewport on narrow screens). */
   grid-template-columns: minmax(0, 1fr);
@@ -13,6 +14,17 @@
   background: var(--pane-bg);
   color: var(--menu-fg);
 }
+
+/* Top chrome (menu bar + tab bar) — collapsible on mobile via its handle, mirroring the bottom dock. */
+.app-chrome { display: flex; flex-direction: column; min-width: 0; }
+.app-chrome > .chrome-body { display: flex; flex-direction: column; min-width: 0; }
+.app-chrome.collapsed > .chrome-body { display: none; }
+.chrome-handle {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+  border: none; border-bottom: 1px solid var(--divider); background: var(--menu-bg);
+  color: var(--status-fg); cursor: pointer; padding: 2px 0; line-height: 1;
+}
+.chrome-handle:hover { background: var(--menu-highlight); }
 
 /* Menu bar */
 .menu-bar {
@@ -1846,14 +1858,27 @@
   transition: transform 140ms ease;
 }
 .trw { color: var(--line-number-fg); }
-.trw.done { color: var(--line-read-fg); }
+.trw.done { color: var(--nav-session-read-fg); font-weight: 600; }
 .trw.imperfect { color: var(--orp-fg); }
 .trw.pending { color: var(--line-number-fg); }
 .trw.active { color: var(--menu-fg); }
-.trc.correct { color: var(--menu-fg); }
+.trc.correct { color: var(--nav-session-read-fg); font-weight: 600; }
 .trc.pending { color: var(--line-number-fg); }
 .trc.wrong { color: #fff; background: var(--orp-fg); border-radius: 2px; }
 .trc.caret { display: inline-block; width: 2px; height: 1.05em; background: var(--toggle-active-bg); vertical-align: text-bottom; margin: 0 -1px; animation: caretBlink 1s steps(1) infinite; }
+
+/* On-screen typing sound tuner (toggled by the 🎚 Sounds button) */
+.tr-sounds {
+  width: 100%; max-width: 820px; align-self: center; box-sizing: border-box;
+  display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+  margin: -2px 0 6px; padding: 8px 10px;
+  background: var(--menu-bg); border: 1px solid var(--divider); border-radius: 8px;
+  font-size: 11px; color: var(--status-fg);
+}
+.tr-snd { display: inline-flex; align-items: center; gap: 4px; }
+.tr-snd > span { white-space: nowrap; }
+.tr-snd select { font-size: 11px; padding: 1px 4px; }
+.tr-snd-tick { gap: 5px; font-weight: 600; color: var(--menu-fg); }
 .tr-hint { font-size: 12px; color: var(--status-fg); text-align: center; }
 .tr-results { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 10px; border-top: 1px solid var(--divider); }
 /* End-of-run grade + final statement */

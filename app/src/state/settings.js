@@ -55,7 +55,18 @@ export function defaultFileSettings() {
     surprisalStrength: 1, // 0 = off, 1 = full redistribution
     metronome: { enabled: false, volume: 0.25, subdivision: 1, accentEvery: 0 }, // rhythmic auditory pace cue at the current WPM
     goal: null,
-    typing: { enabled: false, mode: 'passage', caseSensitive: false, stripPunctuation: true, perWordTimeoutMs: 0, runMode: 'seconds', runLimit: 60, soundVolume: 0.4 },
+    typing: {
+      enabled: false, mode: 'passage', caseSensitive: false, stripPunctuation: true,
+      perWordTimeoutMs: 0, runMode: 'seconds', runLimit: 60, soundVolume: 0.4,
+      // Countdown tick in timed runs (accelerates in the final seconds).
+      tickClock: false,
+      // Per-event sound cues, each a clickSound id or 'off'. Word cues default to the original
+      // click/hiss; char and line/sentence/paragraph cues are off until you turn them on.
+      sounds: {
+        charCorrect: 'off', charWrong: 'off', wordPerfect: 'click', wordError: 'hiss',
+        linePerfect: 'off', sentencePerfect: 'off', paragraphPerfect: 'off',
+      },
+    },
     speaking: { enabled: false, confidence: 'Medium', perWordTimeoutMs: 0, allowPartial: true },
     centerOnCurrent: true,
     lineLongPressMs: 3000, // hold a line this long to jump to it (0 = instant click)
