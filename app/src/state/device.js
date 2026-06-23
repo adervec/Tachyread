@@ -5,12 +5,21 @@ import { useEffect, useState } from 'react';
 // The breakpoint the responsive CSS uses to stack panes (see App.css @media max-width: 860px).
 export const COMPACT_MAX = 860;
 
-export function isCompactScreen() {
-  return typeof window !== 'undefined' && window.innerWidth <= COMPACT_MAX;
-}
-
 export function isCoarsePointer() {
   return typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
+}
+
+// "Compact" = use the phone/stacked layout. A narrow window is always compact (responsive desktop);
+// additionally a TOUCH device is compact whenever its *shorter* side is small — so a phone/tablet
+// stays in the mobile layout in landscape instead of flipping to the cramped multi-pane desktop one.
+// The coarse-pointer gate keeps real laptops (e.g. 1366×768, fine pointer) on the desktop layout.
+export function compactFor(w, h, coarse) {
+  return w <= COMPACT_MAX || (coarse && Math.min(w, h) <= COMPACT_MAX);
+}
+
+export function isCompactScreen() {
+  if (typeof window === 'undefined') return false;
+  return compactFor(window.innerWidth, window.innerHeight, isCoarsePointer());
 }
 
 // Coarse label for "what kind of device am I" — recorded against typing/reading sessions so the
@@ -25,11 +34,14 @@ export function deviceKind() {
 export function useIsCompact() {
   const [compact, setCompact] = useState(isCompactScreen);
   useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${COMPACT_MAX}px)`);
-    const on = () => setCompact(mq.matches);
+    const on = () => setCompact(isCompactScreen());
     on();
-    mq.addEventListener?.('change', on);
-    return () => mq.removeEventListener?.('change', on);
+    window.addEventListener('resize', on);
+    window.addEventListener('orientationchange', on);
+    return () => {
+      window.removeEventListener('resize', on);
+      window.removeEventListener('orientationchange', on);
+    };
   }, []);
   return compact;
 }

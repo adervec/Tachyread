@@ -1325,11 +1325,38 @@ export function applyTheme(name, serifFamily, sansFamily, el) {
     if (v == null) continue;
     for (const cssVar of cssVars) root.style.setProperty(cssVar, v);
   }
-  const serif = p.defaultSerifFont || serifFamily || 'Cambria, Georgia, "Times New Roman", serif';
-  const sans = p.defaultSansFont || sansFamily || 'Segoe UI, Arial, sans-serif';
+  // The user's chosen font (from the picker) wins; a theme's own font is only a fallback when the
+  // user hasn't set one. This makes the font picker authoritative across every theme.
+  const serif = serifFamily || p.defaultSerifFont || 'Cambria, Georgia, "Times New Roman", serif';
+  const sans = sansFamily || p.defaultSansFont || 'Segoe UI, Arial, sans-serif';
   root.style.setProperty('--serif-family', serif);
   root.style.setProperty('--sans-family', sans);
   root.classList.toggle('theme-dark', !!p.isDark);
   root.classList.toggle('theme-light', !p.isDark);
   return p;
+}
+
+// ── TOC heading styling ──────────────────────────────────────────────────────
+// Each reading theme gets an "elaborate heading" style pack that fits its mood; the line-view
+// styles the lines that are TOC headings with it (a distinct look per tier). Packs are defined in
+// CSS (App.css, .hsp-<pack> .toc-head-l{0,1,2}); colours come from the theme's own variables, so a
+// pack automatically matches whichever theme is active. The per-tab `tocHeadingStyle` setting can
+// force a specific pack ('auto' uses the mapping below, 'off' disables heading styling entirely).
+export const HEADING_PACKS = ['classic', 'rule', 'terminal', 'deco', 'ornate', 'engraved', 'neon', 'retro'];
+export const DEFAULT_HEADING_PACK = 'classic';
+
+const THEME_HEADING_PACK = {
+  'Light': 'classic', 'Dark': 'rule', 'Blue': 'rule', 'Warm Paper': 'ornate',
+  'Solarized Light': 'rule', 'Solarized Dark': 'terminal', 'Nord': 'rule', 'Monokai': 'terminal',
+  'Zenburn': 'terminal', 'Terminal Green': 'terminal', 'Terminal Amber': 'terminal',
+  'Midnight': 'neon', 'Forest': 'ornate', 'Oceanic': 'rule', 'Coffee': 'ornate',
+  'Sakura': 'ornate', 'Japan': 'engraved', 'Norse': 'engraved', 'Steampunk': 'ornate',
+  '70s': 'retro', '80s': 'neon', '90s': 'retro', '2000s': 'rule', 'Art Deco': 'deco',
+  'Victorian': 'ornate', 'Medieval': 'ornate', '60s': 'retro', 'Rome': 'engraved',
+  'Greece': 'engraved', 'Egypt': 'engraved',
+};
+
+// The heading-style pack a theme uses by default.
+export function resolveHeadingPack(themeName) {
+  return THEME_HEADING_PACK[themeName] || DEFAULT_HEADING_PACK;
 }

@@ -43,11 +43,39 @@ https://github.com/tesseract-ocr/tessdata).
 
 ## Fonts
 
-The app uses the reader's system fonts and the open-source font families named
-in its themes; it does not bundle or hot-link proprietary fonts. The companion
-`Associated Guides/typing-speed-field-guide.html` loads Fraunces, IBM Plex Sans,
-and JetBrains Mono from Google Fonts — all released under the SIL Open Font
-License.
+The app uses the reader's system fonts plus a set of **bundled open fonts**, and
+can optionally load the full **Google Fonts** library on request. It bundles or
+hot-links **no proprietary fonts**.
+
+### Bundled open fonts (shipped in the build, via `@fontsource`)
+
+All are libre — **SIL Open Font License 1.1** unless noted **(Apache-2.0)** — and
+each `@fontsource` package carries its upstream `LICENSE`/`OFL.txt`. If you
+distribute a built bundle, keep those notices with it.
+
+| Family | License | Family | License |
+|---|---|---|---|
+| Inter | OFL | Lora | OFL |
+| Source Sans 3 | OFL | Source Serif 4 | OFL |
+| Work Sans | OFL | EB Garamond | OFL |
+| Nunito | OFL | Merriweather | OFL |
+| Open Sans | OFL | Literata | OFL |
+| Lato | OFL | Bitter | OFL |
+| Atkinson Hyperlegible | OFL | Playfair Display | OFL |
+| OpenDyslexic | OFL | Crimson Pro | OFL |
+| JetBrains Mono | OFL | Fira Code | OFL |
+| Source Code Pro | OFL | | |
+
+### Google Fonts (optional, off by default)
+
+When the user enables **Application Settings → Fonts → Google Fonts library**,
+the app loads the chosen families from Google's CDN (`fonts.googleapis.com` /
+`fonts.gstatic.com`). Every Google Fonts family is released under the SIL Open
+Font License, Apache-2.0, or the Ubuntu Font License. This is opt-in because it
+contacts Google's servers (see `PRIVACY.md`).
+
+The companion `Associated Guides/typing-speed-field-guide.html` likewise loads
+Fraunces, IBM Plex Sans, and JetBrains Mono from Google Fonts (SIL OFL).
 
 ---
 

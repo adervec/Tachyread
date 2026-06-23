@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useVoices } from '../features/tts.js';
-import { THEME_NAMES } from '../state/themes.js';
+import { THEME_NAMES, HEADING_PACKS } from '../state/themes.js';
 import { createMetronome } from '../features/metronome.js';
 import { DEFAULT_METRONOME } from '../engine/metronome.js';
 import { LINE_SOUNDS, playLineSound } from '../features/clickSound.js';
@@ -36,7 +36,7 @@ function Section({ children }) {
   return <div className="field-section">{children}</div>;
 }
 
-export default function SettingsDialog({ settings, onPatch, onClose, title = 'Tab Settings', matchCurrent }) {
+export default function SettingsDialog({ settings, onPatch, onClose, title = 'Tab Settings', matchCurrent, onResetFactory }) {
   const [s, setS] = useState(settings);
   const voices = useVoices();
   const metroRef = useRef(null);
@@ -82,6 +82,18 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
         <p className="settings-note" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={() => { const next = matchCurrent(); if (next) patch(next); }}>⤓ Match current tab</button>
           <span>Copy the open tab’s appearance &amp; behaviour into these defaults (its reading progress isn’t copied).</span>
+        </p>
+      )}
+      {onResetFactory && (
+        <p className="settings-note" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={() => {
+              if (!window.confirm('Reset these default tab settings to the original factory defaults? Open tabs keep their own settings.')) return;
+              const d = onResetFactory();
+              if (d) setS(d);
+            }}
+          >↺ Reset to factory defaults</button>
+          <span>Restore the original out-of-the-box defaults for new tabs.</span>
         </p>
       )}
       <Section>Fast Reader</Section>
@@ -229,6 +241,19 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       </Field>
 
       <Section>Table of contents</Section>
+      <Field label="Heading line style (line view)">
+        <select value={s.tocHeadingStyle ?? 'auto'} onChange={(e) => patch({ tocHeadingStyle: e.target.value })}>
+          <option value="auto">Auto (match theme)</option>
+          <option value="off">Off (plain)</option>
+          {HEADING_PACKS.map((p) => (
+            <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+          ))}
+        </select>
+      </Field>
+      <p className="settings-note" style={{ margin: '2px 0 0' }}>
+        Styles the lines that are chapter/section headings in the Lines pane, with a distinct look per
+        tier. “Auto” picks a style that suits the current theme.
+      </p>
       <Field label="Auto-collapse completed sections">
         <input
           type="checkbox"

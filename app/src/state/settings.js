@@ -79,6 +79,10 @@ export function defaultFileSettings() {
     },
     tocBarNumeralStyle: 'none', // none | arabic | roman | words — numeral shown on TOC-bar icons
     tocNumeralRegex: [], // per-tier custom numeral-extraction regex (capture group 1 = numeral)
+    // Elaborate styling of the line-view lines that are TOC headings, with a distinct look per
+    // tier. 'auto' = use the current theme's heading-style pack; 'off' = plain; or a pack name
+    // (classic | rule | terminal | deco | ornate | engraved | neon | retro) to force one.
+    tocHeadingStyle: 'auto',
     // Animated faces
     showEyes: false,
     faceCount: 1,
@@ -110,10 +114,43 @@ export function tabDefaultsFrom(settings) {
   return out;
 }
 
+// How many of a tab's reusable settings differ from the given defaults (the user's Default Tab
+// Settings). Per-document/progress fields (NON_DEFAULT_FIELDS) are ignored — they always differ.
+// Used to badge the "Tab Settings…" menu item with the number of off-default tweaks.
+export function countOffDefaultSettings(settings, defaults) {
+  const cur = tabDefaultsFrom(settings);
+  const base = tabDefaultsFrom({ ...defaultFileSettings(), ...(defaults || {}) });
+  let n = 0;
+  for (const k of new Set([...Object.keys(cur), ...Object.keys(base)])) {
+    if (JSON.stringify(cur[k]) !== JSON.stringify(base[k])) n++;
+  }
+  return n;
+}
+
+// Global fields that hold user DATA / content (not preferences). An "application settings reset"
+// restores every preference to its default but preserves these so a reset never destroys the
+// user's library, history, saved work, sync setup, or their separate Default Tab Settings.
+export const GLOBAL_DATA_KEYS = new Set([
+  'recentFiles', 'ocrTemplates', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'typingPlans',
+  'readingList', 'drillBestSpan', 'bestFlowWpm', 'bestDictationWpm', 'webcamCalib', 'sync',
+  'deviceName', 'fileDefaults', 'ambient',
+]);
+
+// Reset global preferences to defaults while keeping the user's data (GLOBAL_DATA_KEYS).
+export function resetGlobalToDefaults(current) {
+  const out = { ...defaultGlobalSettings() };
+  for (const k of GLOBAL_DATA_KEYS) if (current && current[k] !== undefined) out[k] = current[k];
+  return out;
+}
+
 export function defaultGlobalSettings() {
   return {
     defaultSerifFamily: 'Cambria, Georgia, "Times New Roman", serif',
     defaultSansFamily: 'Segoe UI, Arial, sans-serif',
+    // Opt-in: load the full Google Fonts library from Google's CDN on demand. OFF by default
+    // because it reveals the reader's IP/usage to Google and needs the network (see PRIVACY.md).
+    // Bundled open fonts + the device's installed fonts work offline regardless of this setting.
+    enableGoogleFonts: false,
     audioCtrlMode: 'Both', // Voice | Claps | Both
     fileDefaults: defaultFileSettings(),
     recentFiles: [], // {name, checksum, lastOpened}
