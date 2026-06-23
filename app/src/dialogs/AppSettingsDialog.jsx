@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { DEFAULT_COMFORT } from '../engine/comfort.js';
+import { resetGlobalToDefaults } from '../state/settings.js';
+import FontPicker from '../components/FontPicker.jsx';
 
 // Application-wide settings only. These are deliberately disjoint from per-tab settings:
 // anything that varies per document lives in Tab Settings / Default Tab Settings instead.
@@ -27,32 +29,68 @@ export default function AppSettingsDialog({ global, onPatch, onCalibrate, onClos
     patch({ comfort: { ...comfort, ...p } });
   }
 
+  function resetAll() {
+    if (!window.confirm(
+      'Reset all application settings to their defaults?\n\n' +
+      'Your documents, recent files, vocabulary, book groups, sync setup, calibration and your ' +
+      'Default Tab Settings are kept — only app preferences (fonts, startup, guards, audio, etc.) ' +
+      'are restored.'
+    )) return;
+    const next = resetGlobalToDefaults(g);
+    setG(next);
+    onPatch(next);
+  }
+
   return (
-    <Dialog title="Application Settings" onClose={onClose} width={560} buttons={<button onClick={onClose}>Close</button>}>
+    <Dialog
+      title="Application Settings"
+      onClose={onClose}
+      width={560}
+      buttons={
+        <>
+          <button onClick={resetAll} title="Restore app preferences to defaults (your data is kept)">↺ Reset to defaults</button>
+          <button onClick={onClose}>Close</button>
+        </>
+      }
+    >
       <p className="settings-note">
         App-wide options. Per-document appearance and behavior live in <strong>View → Tab Settings</strong>;
         the defaults for new tabs live in <strong>File → Default Tab Settings</strong>.
       </p>
 
       <div className="field-section">Fonts</div>
-      <Field label="Default serif font family">
-        <input
-          type="text"
+      <Field label="Serif font">
+        <FontPicker
           value={g.defaultSerifFamily || ''}
-          onChange={(e) => patch({ defaultSerifFamily: e.target.value })}
-          style={{ width: '100%' }}
-          placeholder='Cambria, Georgia, "Times New Roman", serif'
+          defaultCategory="serif"
+          googleEnabled={!!g.enableGoogleFonts}
+          onChange={(css) => patch({ defaultSerifFamily: css })}
         />
       </Field>
-      <Field label="Default sans font family">
-        <input
-          type="text"
+      <Field label="Sans font">
+        <FontPicker
           value={g.defaultSansFamily || ''}
-          onChange={(e) => patch({ defaultSansFamily: e.target.value })}
-          style={{ width: '100%' }}
-          placeholder="Segoe UI, Arial, sans-serif"
+          defaultCategory="sans"
+          googleEnabled={!!g.enableGoogleFonts}
+          onChange={(css) => patch({ defaultSansFamily: css })}
         />
       </Field>
+      <Field label="Google Fonts library">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.enableGoogleFonts}
+            onChange={(e) => patch({ enableGoogleFonts: e.target.checked })}
+          />
+          Allow loading any of the ~1,700 Google Fonts from Google’s CDN
+        </label>
+      </Field>
+      <p className="settings-note">
+        Bundled open fonts and your device’s installed fonts work offline and send nothing anywhere.
+        Turning on the Google Fonts library lets you pick from the full catalogue (or type any family
+        name), but each font is fetched from <strong>Google’s servers</strong> when used — which needs
+        the network and reveals your IP/usage to Google. Off by default; see PRIVACY.md.
+      </p>
 
       <div className="field-section">Startup &amp; mobile</div>
       <Field label="Start on the landing page">

@@ -77,6 +77,7 @@ const WEBCAM_LABEL = {
 import { getSyncProvider } from './features/sync/syncProviders.js';
 import { backupToProvider } from './features/sync/syncManager.js';
 import { applyTheme } from './state/themes.js';
+import { ensureFamilyLoaded } from './state/fonts.js';
 import './App.css';
 
 // A word at index i starts a new sentence if it's the first word or the previous word ends with
@@ -196,6 +197,15 @@ function AppInner() {
     state.global.defaultSerifFamily,
     state.global.defaultSansFamily,
   ]);
+
+  // Make sure the configured reading fonts are actually loadable. Bundled families register their
+  // own @font-face (and only fetch the woff2 when rendered); a Google family is fetched from the CDN
+  // only when the user has opted in (state.global.enableGoogleFonts).
+  useEffect(() => {
+    const en = !!state.global.enableGoogleFonts;
+    ensureFamilyLoaded(state.global.defaultSerifFamily, en);
+    ensureFamilyLoaded(state.global.defaultSansFamily, en);
+  }, [state.global.defaultSerifFamily, state.global.defaultSansFamily, state.global.enableGoogleFonts]);
 
   // Pause playback and stop counting reading time while the tab is hidden (the user is
   // doing something else) — the reading tracker should not credit background time.
@@ -1489,6 +1499,7 @@ function AppInner() {
           onClose={closeDialog}
           title="Default Tab Settings"
           matchCurrent={activeTab ? () => tabDefaultsFrom(activeTab.settings) : null}
+          onResetFactory={() => { const d = defaultFileSettings(); updateGlobal({ fileDefaults: d }); return d; }}
         />
       )}
       {dialog?.kind === 'app-settings' && (

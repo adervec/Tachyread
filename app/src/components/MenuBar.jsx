@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { THEME_NAMES } from '../state/themes.js';
+import { countOffDefaultSettings, defaultFileSettings } from '../state/settings.js';
 import { useIsCompact } from '../state/device.js';
 
 const MENUS = {
@@ -57,12 +58,15 @@ const MENUS = {
   ],
 };
 
-// One menu entry (file/view list) rendered as a drawer/dropdown row.
-function MenuItem({ it, onPick }) {
+// One menu entry (file/view list) rendered as a drawer/dropdown row. `badges` optionally maps an
+// action → a small count shown as a pill (e.g. how many tab settings differ from the defaults).
+function MenuItem({ it, onPick, badges }) {
   if (it.kind === 'separator') return <div className="separator" />;
+  const badge = badges?.[it.action];
   return (
     <div className="item" onClick={() => onPick(it.action)}>
       <span>{it.label}</span>
+      {badge ? <span className="menu-badge" title={`${badge} setting${badge === 1 ? '' : 's'} differ from your defaults`}>{badge}</span> : null}
       {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
     </div>
   );
@@ -85,6 +89,13 @@ export default function MenuBar({ onFileOpen, onAction }) {
     activeTab?.settings?.themeName || (activeTab?.settings?.darkMode ? 'Dark' : 'Light');
   const [openMenu, setOpenMenu] = useState(null);
   const ref = useRef(null);
+
+  // Badge the "Tab Settings…" item with how many of the active tab's settings differ from the
+  // user's Default Tab Settings (so it's visible at a glance that the tab has been customised).
+  const offCount = activeTab && !activeTab.lazy && activeTab.settings
+    ? countOffDefaultSettings(activeTab.settings, state.global?.fileDefaults || defaultFileSettings())
+    : 0;
+  const badges = offCount > 0 ? { 'tab-settings': offCount } : null;
 
   useEffect(() => {
     function onDoc(e) {
@@ -154,10 +165,10 @@ export default function MenuBar({ onFileOpen, onAction }) {
             <ToggleItem on={state.incognito} label="🕶 Incognito (no tracking)" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })} />
 
             <div className="menu-drawer-section">File</div>
-            {MENUS.file.map((it, i) => <MenuItem key={`f${i}`} it={it} onPick={handle} />)}
+            {MENUS.file.map((it, i) => <MenuItem key={`f${i}`} it={it} onPick={handle} badges={badges} />)}
 
             <div className="menu-drawer-section">View &amp; tools</div>
-            {MENUS.view.map((it, i) => <MenuItem key={`v${i}`} it={it} onPick={handle} />)}
+            {MENUS.view.map((it, i) => <MenuItem key={`v${i}`} it={it} onPick={handle} badges={badges} />)}
 
             <div className="menu-drawer-section">Data</div>
             <div className="item" onClick={() => { setOpenMenu(null); onAction('data'); }}>
@@ -178,16 +189,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
         File
         {openMenu === 'file' && (
           <div className="menu-dropdown">
-            {MENUS.file.map((it, i) =>
-              it.kind === 'separator' ? (
-                <div key={i} className="separator" />
-              ) : (
-                <div key={i} className="item" onClick={() => handle(it.action)}>
-                  <span>{it.label}</span>
-                  {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
-                </div>
-              )
-            )}
+            {MENUS.file.map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
           </div>
         )}
       </div>
@@ -198,16 +200,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
         View
         {openMenu === 'view' && (
           <div className="menu-dropdown">
-            {MENUS.view.map((it, i) =>
-              it.kind === 'separator' ? (
-                <div key={i} className="separator" />
-              ) : (
-                <div key={i} className="item" onClick={() => handle(it.action)}>
-                  <span>{it.label}</span>
-                  {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
-                </div>
-              )
-            )}
+            {MENUS.view.map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
           </div>
         )}
       </div>

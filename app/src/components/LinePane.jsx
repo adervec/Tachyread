@@ -1,6 +1,8 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { List, useDynamicRowHeight, useListRef } from 'react-window';
 import { ReadStatus, orpIndex, getLineIndex, getParagraphRange } from '../document/readerDocument.js';
+import { getTocEntries } from '../document/toc.js';
+import { resolveHeadingPack } from '../state/themes.js';
 import Pointer from './Pointer.jsx';
 import { useReportVisibility } from '../state/useReportVisibility.js';
 
@@ -85,12 +87,17 @@ function statusForLine(li, ctx) {
 // `dsettings` is a STABLE display-settings subset (see LinePane) rather than the whole settings
 // object, whose identity changes on every word step; that, plus the memo() comparator below, is
 // what keeps unchanged lines from re-rendering on each tick of playback.
-function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys }) {
+function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, headingPack }) {
   const line = doc.lines[index];
   const status = statusForLine(index, ctx);
   const isCurrent = status === ReadStatus.Current;
   const isHF = doc.headerFooterLines.has(index);
   const inPara = index >= ctx.paraStart && index <= ctx.paraEnd && status !== ReadStatus.Current;
+  // TOC-heading styling: headingMap (null when disabled) maps line index → tier (0..2). Terminal
+  // and retro packs read better left-aligned; the others centre the heading.
+  const headLevel = headingMap && headingMap.has(index) ? headingMap.get(index) : -1;
+  const isHead = headLevel >= 0;
+  const headCenter = isHead && headingPack && headingPack !== 'terminal' && headingPack !== 'retro';
 
   // Focus blur: blur lines within the configured window before/after the current line.
   const before = dsettings.blurLinesBefore || 0;
@@ -103,7 +110,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys }) {
 
   const boost = dsettings.currentLineFontSizeBoost || 0;
   const textStyle = {
-    textAlign: (dsettings.textAlignment || 'Left').toLowerCase(),
+    textAlign: headCenter ? 'center' : (dsettings.textAlignment || 'Left').toLowerCase(),
     filter: blur ? `blur(${blur}px)` : undefined,
     fontSize: isCurrent && boost ? `calc(1em + ${boost}px)` : undefined,
   };
@@ -123,7 +130,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys }) {
 
   return (
     <div
-      className={`line-row status-${status} ${isHF ? 'is-header-footer' : ''} ${inPara ? 'in-current-para' : ''} ${pressing ? 'pressing' : ''}`}
+      className={`line-row status-${status} ${isHF ? 'is-header-footer' : ''} ${inPara ? 'in-current-para' : ''} ${pressing ? 'pressing' : ''} ${isHead ? `toc-head toc-head-l${headLevel}` : ''}`}
       data-line={index}
       data-start={line.startWordIndex}
       style={pressing ? { '--lp-ms': `${ctx.longPressMs}ms` } : undefined}
@@ -156,6 +163,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys }) {
 // so without this every visible line (and all ~120 in the split view) would re-render each tick.
 function lineRowEqual(p, n) {
   if (p.index !== n.index || p.doc !== n.doc || p.dsettings !== n.dsettings || p.propNameKeys !== n.propNameKeys) return false;
+  if (p.headingMap !== n.headingMap || p.headingPack !== n.headingPack) return false; // stable refs; see LinePane
   const pc = p.ctx, nc = n.ctx;
   if (pc === nc) return true;
   const i = n.index;
@@ -176,7 +184,7 @@ function lineRowEqual(p, n) {
 const LineRow = memo(LineRowImpl, lineRowEqual);
 
 // Row component for react-window: positions LineRow absolutely and measures its height.
-function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl }) {
+function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl, headingMap, headingPack }) {
   const ref = useRef(null);
   useEffect(() => {
     if (!ref.current) return;
@@ -194,7 +202,7 @@ function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, pr
           <hr />
         </div>
       )}
-      <LineRow index={index} doc={doc} dsettings={dsettings} ctx={ctx} onJumpWord={onJumpWord} propNameKeys={propNameKeys} />
+      <LineRow index={index} doc={doc} dsettings={dsettings} ctx={ctx} onJumpWord={onJumpWord} propNameKeys={propNameKeys} headingMap={headingMap} headingPack={headingPack} />
     </div>
   );
 }
@@ -203,10 +211,10 @@ function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, pr
 // centre band, and upcoming lines (top-aligned). Renders a bounded window around the current
 // line — no scrolling, so the current line stays fixed in place and never jitters.
 const SPLIT_WINDOW = 60;
-function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, onContextMenu, pressHandlers, windowSize = SPLIT_WINDOW, peekLine = -1 }) {
+function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, onContextMenu, pressHandlers, windowSize = SPLIT_WINDOW, peekLine = -1, headingMap, headingPack }) {
   const cur = ctx.currentLine;
   const total = doc.lines.length;
-  const common = { doc, dsettings, ctx, onJumpWord, propNameKeys };
+  const common = { doc, dsettings, ctx, onJumpWord, propNameKeys, headingMap, headingPack };
   const beforeRef = useRef(null);
   const afterRef = useRef(null);
   // While peeking, the bottom zone shows the previewed area instead of the lines after the current
@@ -320,6 +328,29 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     [doc, settings.enableProperNames]
   );
 
+  // TOC-heading styling. Resolve the style pack (theme default, a forced pack, or off) and build a
+  // stable line-index → tier map (tiers clamped to 0..2 — three elaborate levels). Both are memoised
+  // on doc + the TOC entries + the chosen style, so they keep a stable identity across word steps
+  // (the precondition that lets memo(LineRow) skip unchanged lines during playback).
+  const headingStyle = settings.tocHeadingStyle ?? 'auto';
+  const themeName = settings.themeName || (settings.darkMode ? 'Dark' : 'Light');
+  const headingPack = useMemo(() => {
+    if (headingStyle === 'off') return '';
+    return headingStyle && headingStyle !== 'auto' ? headingStyle : resolveHeadingPack(themeName);
+  }, [headingStyle, themeName]);
+  const headingMap = useMemo(() => {
+    if (headingStyle === 'off') return null;
+    const entries = getTocEntries({ settings, doc });
+    if (!entries.length) return null;
+    const m = new Map();
+    for (const e of entries) {
+      const li = getLineIndex(doc, e.wordIndex);
+      if (li >= 0) m.set(li, Math.max(0, Math.min(2, e.level || 0)));
+    }
+    return m.size ? m : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, settings.tocEntries, headingStyle]);
+
   // Stable display-settings subset handed to each line. Unlike `settings` (new identity on every
   // word step, via patchSettings), this keeps the same reference until a display option actually
   // changes — the precondition that lets memo(LineRow) skip unchanged lines during playback.
@@ -403,8 +434,8 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
 
   // rowProps must not contain ariaAttributes/index/style (those are auto-passed by List).
   const rowProps = useMemo(
-    () => ({ doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl }),
-    [doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl]
+    () => ({ doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl, headingMap, headingPack }),
+    [doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl, headingMap, headingPack]
   );
 
   // Long-press to navigate: a single click no longer jumps — you must hold a line for
@@ -488,7 +519,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   });
 
   return (
-    <div className="line-pane" ref={paneVisRef}>
+    <div className={`line-pane${headingPack ? ` hsp-${headingPack}` : ''}`} ref={paneVisRef}>
       <div className="line-pane-toolbar">
         <span>Lines</span>
       </div>
@@ -504,6 +535,8 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
           pressHandlers={pressHandlers}
           windowSize={compact ? 30 : SPLIT_WINDOW}
           peekLine={peek.line}
+          headingMap={headingMap}
+          headingPack={headingPack}
         />
       ) : (
         <div className="line-pane-list" ref={listWrapRef} style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu} {...pressHandlers}>
