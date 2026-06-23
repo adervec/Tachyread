@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { playPerfectClick, playErrorHiss } from '../features/clickSound.js';
+import { playLineSound, playTick, TYPING_SOUNDS } from '../features/clickSound.js';
+import { getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import { deviceKind } from '../state/device.js';
 import { buildPassage, TYPING_MODES, TYPING_MODE_BY_ID } from '../engine/typingModes.js';
 import { letterGrade, playGradeSound, GRADE_STATEMENTS } from '../features/gradeChime.js';
+
+const DEFAULT_SOUNDS = {
+  charCorrect: 'off', charWrong: 'off', wordPerfect: 'click', wordError: 'hiss',
+  linePerfect: 'off', sentencePerfect: 'off', paragraphPerfect: 'off',
+};
 
 // Typing practice as self-contained "runs". A run types the document text forward from the
 // reading position WITHOUT moving the reading index mid-run — so the reading panes don't jump
@@ -35,6 +41,22 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const cfg = settings.typing || {};
   const caseSensitive = !!cfg.caseSensitive;
   const volume = cfg.soundVolume ?? 0.4;
+  const sounds = { ...DEFAULT_SOUNDS, ...(cfg.sounds || {}) };
+  const tickClock = !!cfg.tickClock;
+  const [showSounds, setShowSounds] = useState(false);
+  // Play an event cue ('off' / falsy = silent).
+  const ping = (id) => { if (id && id !== 'off') playLineSound(id, volume); };
+  const setSound = (k, v) => onPatch?.({ typing: { ...cfg, sounds: { ...sounds, [k]: v } } });
+  // One labelled sound dropdown for the on-screen panel; changing it previews the sound.
+  const soundRow = (label, k) => (
+    <label className="tr-snd" key={k}>
+      <span>{label}</span>
+      <select value={sounds[k]} onChange={(e) => { setSound(k, e.target.value); if (e.target.value !== 'off') playLineSound(e.target.value, volume); }}>
+        <option value="off">Off</option>
+        {TYPING_SOUNDS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+      </select>
+    </label>
+  );
 
   // Reading position captured once, when typing opened. Discard returns here.
   const startIndex = useRef(settings.wordIndex);
@@ -47,6 +69,26 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     () => buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: PASSAGE_MAX, seed }),
     [doc, gameMode, seed]
   );
+
+  // Which passage indices end a line / sentence / paragraph — for the "segment complete, no errors"
+  // cues. Only doc-backed modes (the passage runs consecutive document words from startIndex) map to
+  // the book's structure; generated drills have no line/sentence/paragraph layout, so this is null.
+  // ponytail: assumes the passage is consecutive doc words; off by a boundary at most if a mode reorders.
+  const segEnds = useMemo(() => {
+    if (!isDocMode) return null;
+    const base = startIndex.current;
+    const lineOf = (gi) => getLineIndex(doc, gi);
+    const paraOf = (gi) => getParagraphRange(doc, lineOf(gi)).startLine;
+    const line = [], sent = [], para = [];
+    for (let i = 0; i < passage.length; i++) {
+      const gi = base + i, gj = base + i + 1, last = i === passage.length - 1;
+      line[i] = last || lineOf(gi) !== lineOf(gj);
+      sent[i] = last || doc.wordToSentence?.[gi] !== doc.wordToSentence?.[gj];
+      para[i] = last || paraOf(gi) !== paraOf(gj);
+    }
+    return { line, sent, para };
+  }, [doc, isDocMode, passage]);
+  const seg = useRef({ line: true, sent: true, para: true }); // stays true while the current segment is error-free
 
   const [mode, setMode] = useState(cfg.runMode || 'seconds'); // 'seconds' | 'words' | 'endless'
   const [limit, setLimit] = useState(cfg.runLimit || 60);
@@ -129,6 +171,22 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     return () => { if (tickTimer.current) { clearInterval(tickTimer.current); tickTimer.current = null; } };
   }, [phase, mode, effLimitSecs, metrics, endRun]);
 
+  // Countdown clock: tick once a second in a timed run, then accelerate + sharpen over the final ~10s.
+  useEffect(() => {
+    if (phase !== 'running' || !tickClock || mode !== 'seconds') return undefined;
+    let to;
+    const loop = () => {
+      const remaining = effLimitSecs - metrics().secs;
+      if (remaining <= 0) return;
+      const urgency = remaining > 10 ? 0 : Math.min(1, (10 - remaining) / 10);
+      playTick(volume, urgency);
+      const next = remaining > 10 ? 1000 : remaining > 5 ? 500 : remaining > 3 ? 333 : remaining > 1 ? 200 : 120;
+      to = setTimeout(loop, next);
+    };
+    to = setTimeout(loop, 1000);
+    return () => clearTimeout(to);
+  }, [phase, tickClock, mode, effLimitSecs, volume, metrics]);
+
   // Line-by-line scroll: keep the active word's line pinned near the top (updates only when the
   // active word moves to a new visual line, so the text doesn't jitter per word).
   useLayoutEffect(() => {
@@ -147,6 +205,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     stats.current = freshStats();
     stats.current.start = Date.now();
     wordErrors.current = 0;
+    seg.current = { line: true, sent: true, para: true };
     setPhase('running');
     setTrend([]);
     armIdle();
@@ -173,7 +232,16 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     const perfect = wordErrors.current === 0 && typed.length === target.length;
     const s = stats.current;
     s.words += 1;
-    if (perfect) { s.perfect += 1; playPerfectClick(volume); } else { playErrorHiss(volume); }
+    if (perfect) { s.perfect += 1; ping(sounds.wordPerfect); } else { ping(sounds.wordError); }
+    // Segment-complete cues: a segment is "clean" only if every word in it was perfect.
+    seg.current.line = seg.current.line && perfect;
+    seg.current.sent = seg.current.sent && perfect;
+    seg.current.para = seg.current.para && perfect;
+    if (segEnds) {
+      if (segEnds.line[pos]) { if (seg.current.line) ping(sounds.linePerfect); seg.current.line = true; }
+      if (segEnds.sent[pos]) { if (seg.current.sent) ping(sounds.sentencePerfect); seg.current.sent = true; }
+      if (segEnds.para[pos]) { if (seg.current.para) ping(sounds.paragraphPerfect); seg.current.para = true; }
+    }
     wordErrors.current = 0;
     setResults((r) => [...r, { typed, perfect }]);
     setBuf('');
@@ -192,9 +260,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       s.chars += 1;
       if (ch !== undefined && sameChar(str[p], ch, caseSensitive)) {
         s.correct += 1;
+        ping(sounds.charCorrect);
       } else {
         s.errors += 1;
         wordErrors.current += 1;
+        ping(sounds.charWrong);
         if (ch) { const k = caseSensitive ? ch : ch.toLowerCase(); s.errorKeys[k] = (s.errorKeys[k] || 0) + 1; }
       }
     }
@@ -303,11 +373,32 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             <input type="range" min={0} max={1} step={0.05} value={volume}
               onChange={(e) => onPatch?.({ typing: { ...cfg, soundVolume: Number(e.target.value) } })} />
           </label>
+          <button type="button" className={showSounds ? 'toggle-on' : ''} title="Customize the typing sound effects"
+            onClick={() => setShowSounds((v) => !v)}>🎚 Sounds</button>
           {phase === 'running'
             ? <button className="toggle-on" onClick={endRun}>■ End run</button>
             : <button onClick={onExitDiscard}>{plan ? 'Exit plan' : 'Discard'}</button>}
         </div>
       </div>
+
+      {showSounds && (
+        <div className="tr-sounds">
+          {soundRow('Char ✓', 'charCorrect')}
+          {soundRow('Char ✗', 'charWrong')}
+          {soundRow('Word ✓', 'wordPerfect')}
+          {soundRow('Word ✗', 'wordError')}
+          {isDocMode && soundRow('Line ✓', 'linePerfect')}
+          {isDocMode && soundRow('Sentence ✓', 'sentencePerfect')}
+          {isDocMode && soundRow('Paragraph ✓', 'paragraphPerfect')}
+          {mode === 'seconds' && (
+            <label className="tr-snd tr-snd-tick" title="Ticking clock that speeds up in the final seconds">
+              <input type="checkbox" checked={tickClock}
+                onChange={(e) => onPatch?.({ typing: { ...cfg, tickClock: e.target.checked } })} />
+              <span>⏱ Countdown tick</span>
+            </label>
+          )}
+        </div>
+      )}
 
       <Trend trend={trend} />
 

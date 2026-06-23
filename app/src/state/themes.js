@@ -1360,3 +1360,70 @@ const THEME_HEADING_PACK = {
 export function resolveHeadingPack(themeName) {
   return THEME_HEADING_PACK[themeName] || DEFAULT_HEADING_PACK;
 }
+
+// ── Extra themes ─────────────────────────────────────────────────────────────
+// Rather than hand-write a full ~39-key palette per theme, derive one from a compact spec
+// (background, foreground, accent). Colours are mixed toward black/white for surfaces and toward
+// the foreground for dimmed text, which yields coherent palettes from four inputs.
+function _rgb(h) {
+  h = h.replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+function _hex(n) { return Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0'); }
+export function mix(a, b, t) {
+  const A = _rgb(a), B = _rgb(b);
+  return '#' + _hex(A[0] + (B[0] - A[0]) * t) + _hex(A[1] + (B[1] - A[1]) * t) + _hex(A[2] + (B[2] - A[2]) * t);
+}
+
+function makeTheme({ isDark, bg, fg, accent, accent2 }) {
+  const W = '#ffffff', K = '#000000';
+  const surf = (t) => isDark ? mix(bg, W, t) : mix(bg, K, t); // a lighter/darker surface shade
+  const dim = (t) => mix(bg, fg, t);                          // text between bg and fg
+  const green = accent2 || (isDark ? '#66bb6a' : '#2e7d32');
+  const border = surf(0.16);
+  const panel = surf(0.05);
+  return {
+    isDark, windowBg: bg, panelBg: panel, panelBorder: border, menuBg: panel, menuFg: fg,
+    menuHover: mix(bg, accent, 0.22), menuHoverFg: isDark ? '#ffffff' : fg,
+    textViewBg: isDark ? mix(bg, K, 0.1) : bg, leftPaneBg: surf(0.03),
+    lineNumberFg: dim(0.32), lineUnreadFg: fg, lineReadFg: dim(0.46),
+    sessionReadFg: accent, navSessionReadFg: green,
+    currentLineBg: mix(bg, accent, 0.16), currentLineFg: isDark ? mix(fg, W, 0.15) : fg,
+    currentParaBg: mix(bg, accent, 0.07), statsFg: dim(0.55), emptyFg: dim(0.42), metaFg: dim(0.5),
+    wpmFg: fg, statusBarBg: surf(0.08), statusBarBorder: border, statusBarFg: dim(0.55),
+    buttonBg: surf(0.1), buttonFg: fg, buttonBorder: border, buttonHoverBg: mix(bg, accent, 0.2),
+    buttonPressedBg: surf(0.14), toggleActiveBg: accent, toggleActiveFg: '#ffffff',
+    inputBg: surf(0.08), inputFg: fg, inputBorder: border, trackBg: surf(0.12), thumbBg: dim(0.4),
+    gridSplitterBg: border, fontOverride: null,
+  };
+}
+
+const EXTRA_THEMES = {
+  'Slate':         makeTheme({ isDark: true,  bg: '#0f172a', fg: '#e2e8f0', accent: '#38bdf8', accent2: '#34d399' }),
+  'High Contrast': makeTheme({ isDark: true,  bg: '#000000', fg: '#ffffff', accent: '#ffd400', accent2: '#00e676' }),
+  'Sepia':         makeTheme({ isDark: false, bg: '#f4ecd8', fg: '#5b4636', accent: '#8a6d3b', accent2: '#5f7d4f' }),
+  'Dracula':       makeTheme({ isDark: true,  bg: '#282a36', fg: '#f8f8f2', accent: '#bd93f9', accent2: '#50fa7b' }),
+  'Gruvbox':       makeTheme({ isDark: true,  bg: '#282828', fg: '#ebdbb2', accent: '#fe8019', accent2: '#b8bb26' }),
+  'One Dark':      makeTheme({ isDark: true,  bg: '#282c34', fg: '#abb2bf', accent: '#61afef', accent2: '#98c379' }),
+  'Tokyo Night':   makeTheme({ isDark: true,  bg: '#1a1b26', fg: '#c0caf5', accent: '#7aa2f7', accent2: '#9ece6a' }),
+  'Catppuccin':    makeTheme({ isDark: true,  bg: '#1e1e2e', fg: '#cdd6f4', accent: '#cba6f7', accent2: '#a6e3a1' }),
+  'Rosé Pine':     makeTheme({ isDark: true,  bg: '#191724', fg: '#e0def4', accent: '#ebbcba', accent2: '#9ccfd8' }),
+  'Rose':          makeTheme({ isDark: false, bg: '#fff1f3', fg: '#5a2a36', accent: '#e0507a', accent2: '#4f8f6a' }),
+};
+Object.assign(THEMES, EXTRA_THEMES);
+THEME_NAMES.push(...Object.keys(EXTRA_THEMES));
+Object.assign(THEME_HEADING_PACK, {
+  'Slate': 'rule', 'High Contrast': 'rule', 'Sepia': 'ornate', 'Dracula': 'neon',
+  'Gruvbox': 'terminal', 'One Dark': 'rule', 'Tokyo Night': 'neon', 'Catppuccin': 'rule',
+  'Rosé Pine': 'ornate', 'Rose': 'ornate',
+});
+
+// Grouped theme list for the pickers (every theme appears once). New names just get added to a group.
+export const THEME_CATEGORIES = [
+  { label: 'Basic', themes: ['Light', 'Dark', 'Blue', 'Warm Paper', 'Sepia', 'High Contrast', 'Slate'] },
+  { label: 'Editor & code', themes: ['Solarized Light', 'Solarized Dark', 'Nord', 'Monokai', 'Zenburn', 'Dracula', 'Gruvbox', 'One Dark', 'Tokyo Night', 'Catppuccin', 'Rosé Pine', 'Terminal Green', 'Terminal Amber', 'Midnight'] },
+  { label: 'Nature', themes: ['Forest', 'Oceanic', 'Coffee', 'Sakura', 'Rose'] },
+  { label: 'Historical & cultural', themes: ['Japan', 'Norse', 'Steampunk', 'Art Deco', 'Victorian', 'Medieval', 'Rome', 'Greece', 'Egypt'] },
+  { label: 'Decades', themes: ['60s', '70s', '80s', '90s', '2000s'] },
+];

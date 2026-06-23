@@ -100,6 +100,9 @@ const SOUNDS = {
   chime:   { label: 'Chime',       play: (ac, t, v) => { tone(ac, t, { freq: 1318, dur: 0.12, vol: v * 0.7 }); tone(ac, t, { freq: 1760, dur: 0.09, vol: v * 0.4 }); } },
   sonar:   { label: 'Sonar',       play: (ac, t, v) => tone(ac, t, { freq: 720, dur: 0.12, vol: v }) },
   thud:    { label: 'Thud',        play: (ac, t, v) => tone(ac, t, { freq: 140, to: 80, type: 'sine', dur: 0.07, vol: v * 1.3 }) },
+  // The two original typing-run cues, now selectable (and the defaults for word-complete sounds).
+  click:   { label: 'Click',       play: (ac, t, v) => noiseBurst(ac, t, { freq: 2000, dur: 0.03, vol: v * 0.5 }) },
+  hiss:    { label: 'Hiss',        play: (ac, t, v) => noiseBurst(ac, t, { freq: 2600, type: 'lowpass', dur: 0.08, vol: v * 0.35 }) },
 };
 
 // Sound options for the picker (plus a "random each line" mode for variety).
@@ -129,6 +132,22 @@ export function playLineClick(volume = 0.16, kind = 'soft') {
 // Slightly brighter, shorter "shutter" tick for a grab/capture action.
 export function playGrabClick(volume = 0.2) {
   playClick(volume, 2200, 0.04);
+}
+
+// Sound options for the typing game's per-event cues (no "random" — that's a line-advance thing).
+export const TYPING_SOUNDS = Object.entries(SOUNDS).map(([id, s]) => ({ id, label: s.label }));
+
+// Countdown clock tick. urgency 0..1 raises the pitch and loudness so the last seconds feel frantic.
+export function playTick(volume = 0.25, urgency = 0) {
+  try {
+    const ac = getCtx();
+    if (!ac) return;
+    const u = Math.max(0, Math.min(1, urgency));
+    const f = 850 + u * 1150;
+    tone(ac, ac.currentTime, { freq: f, to: f * 0.55, type: 'square', dur: 0.028, vol: volume * (0.5 + u * 0.7) });
+  } catch {
+    /* audio not available — ignore */
+  }
 }
 
 // Light, crisp click for a perfectly typed word.

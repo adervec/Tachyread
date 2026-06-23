@@ -97,6 +97,7 @@ function AppInner() {
   const isCompact = useIsCompact();
   const [mobileView, setMobileView] = useState('rsvp'); // compact-screen single reading view: 'rsvp' | 'lines'
   const [controlsCollapsed, setControlsCollapsed] = useState(false); // minimize the bottom dock for text room
+  const [chromeHidden, setChromeHidden] = useState(false); // mobile: hide menu+tabs above the reader for text room
   const touchRef = useRef(null); // swipe-gesture start point
   const engineRef = useRef(null);
   if (!engineRef.current) engineRef.current = createEngine();
@@ -168,7 +169,10 @@ function AppInner() {
   const activeTabRef = useRef(null);
   activeTabRef.current = activeTab;
   const readAloudRef = useRef(null);
-  const ttsExpectedRef = useRef(-1); // index TTS last set, to tell self-advance from manual nav
+  // Set when the user manually navigates during read-aloud, so speech resyncs to the new spot.
+  // NOT set on read-aloud's own boundary advances — that distinction is what stops each sentence
+  // from being cancelled and re-spoken (the "reads every sentence twice" bug).
+  const ttsNavResyncRef = useRef(false);
   const metronomeRef = useRef(null); // rhythmic auditory pace cue (Web Audio)
 
   // Run proper-name detection lazily when enabled on a tab (it's opt-in due to memory cost). If the
@@ -318,7 +322,6 @@ function AppInner() {
       tab.sessionLinesRead.add(prevLine);
       tab.readLinesAllTime.add(prevLine);
     }
-    ttsExpectedRef.current = wi;
     patchSettings(tab.id, { wordIndex: wi });
   }
 
@@ -335,7 +338,6 @@ function AppInner() {
     }
     const on = playing && !!activeTab?.settings?.readAloud;
     if (on) {
-      ttsExpectedRef.current = activeTab.settings.wordIndex; // seed so we don't self-resync
       readAloudRef.current.start();
     } else {
       readAloudRef.current.stop();
@@ -344,11 +346,13 @@ function AppInner() {
     // eslint-disable-next-line
   }, [playing, activeTab?.settings?.readAloud, activeTab?.id]);
 
-  // Manual navigation while reading aloud → resync speech to the new position.
+  // Manual navigation while reading aloud → resync speech to the new position. Runs after the new
+  // index has committed, but only when the move came from the user (flag set by stepWord/jumpWord),
+  // so read-aloud's own per-word advances never trigger a resync (which would restart the sentence).
   useEffect(() => {
     if (!playing || !activeTab?.settings?.readAloud) return;
-    if (activeTab.settings.wordIndex !== ttsExpectedRef.current) {
-      ttsExpectedRef.current = activeTab.settings.wordIndex; // mark handled before restarting
+    if (ttsNavResyncRef.current) {
+      ttsNavResyncRef.current = false;
       readAloudRef.current?.resync();
     }
     // eslint-disable-next-line
@@ -433,6 +437,7 @@ function AppInner() {
         if (lt) speak(lt, voice);
       }
     }
+    if (opts.nav) ttsNavResyncRef.current = true; // manual step during read-aloud → resync speech
     patchSettings(activeTab.id, { wordIndex: next });
   }
 
@@ -449,6 +454,7 @@ function AppInner() {
     if (!inc && opts.nav) {
       activeTab.sessionNavLinesRead.add(newLine);
     }
+    if (opts.nav) ttsNavResyncRef.current = true; // manual jump during read-aloud → resync speech
     patchSettings(activeTab.id, { wordIndex: next });
   }
 
@@ -733,6 +739,7 @@ function AppInner() {
   useEffect(() => {
     if (!state.global.autoMinimizeControls || !isCompact) return;
     setControlsCollapsed(playing);
+    setChromeHidden(playing); // also tuck the menu/tabs away while reading, for max text room
   }, [playing, isCompact, state.global.autoMinimizeControls]);
 
   // Optional swipe gestures over the reading area: horizontal swipe = prev/next line, a long swipe
@@ -1308,8 +1315,23 @@ function AppInner() {
 
   return (
     <div className={`app${state.incognito ? ' incognito' : ''}`}>
-      <MenuBar onFileOpen={openFile} onAction={handleMenuAction} />
-      <TabBar />
+      <header className={`app-chrome${isCompact && chromeHidden ? ' collapsed' : ''}`}>
+        <div className="chrome-body">
+          <MenuBar onFileOpen={openFile} onAction={handleMenuAction} />
+          <TabBar />
+        </div>
+        {isCompact && (
+          <button
+            className="chrome-handle"
+            onClick={() => setChromeHidden((h) => !h)}
+            title={chromeHidden ? 'Show menu & tabs' : 'Hide menu & tabs — more room for text'}
+            aria-label={chromeHidden ? 'Show menu and tabs' : 'Hide menu and tabs'}
+          >
+            <span className="dock-grip" />
+            <span className="dock-handle-label">{chromeHidden ? '⌄ menu & tabs' : '⌃'}</span>
+          </button>
+        )}
+      </header>
       <div className="content-area">
       {state.incognito && (
         <div className="incognito-banner" role="status">

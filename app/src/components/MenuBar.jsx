@@ -1,8 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
-import { THEME_NAMES } from '../state/themes.js';
+import { THEME_CATEGORIES } from '../state/themes.js';
 import { countOffDefaultSettings, defaultFileSettings } from '../state/settings.js';
 import { useIsCompact } from '../state/device.js';
+
+// Theme <select> options grouped by category (shared by the desktop and compact theme pickers).
+function ThemeOptions() {
+  return THEME_CATEGORIES.map((g) => (
+    <optgroup key={g.label} label={g.label}>
+      {g.themes.map((n) => <option key={n} value={n}>{n}</option>)}
+    </optgroup>
+  ));
+}
 
 const MENUS = {
   file: [
@@ -150,7 +159,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
           aria-label="Theme"
           onChange={(e) => activeTab && patchSettings(activeTab.id, { themeName: e.target.value })}
         >
-          {THEME_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+          <ThemeOptions />
         </select>
         {open && (
           <div className="menu-drawer">
@@ -265,11 +274,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
           title="Reading theme for the current tab"
           onChange={(e) => activeTab && patchSettings(activeTab.id, { themeName: e.target.value })}
         >
-          {THEME_NAMES.map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
+          <ThemeOptions />
         </select>
       </div>
     </div>

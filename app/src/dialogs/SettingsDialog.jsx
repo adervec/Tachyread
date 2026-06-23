@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useVoices } from '../features/tts.js';
-import { THEME_NAMES, HEADING_PACKS } from '../state/themes.js';
+import { THEME_CATEGORIES, HEADING_PACKS } from '../state/themes.js';
 import { createMetronome } from '../features/metronome.js';
 import { DEFAULT_METRONOME } from '../engine/metronome.js';
 import { LINE_SOUNDS, playLineSound } from '../features/clickSound.js';
@@ -141,8 +141,10 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           value={s.themeName || (s.darkMode ? 'Dark' : 'Light')}
           onChange={(e) => patch({ themeName: e.target.value })}
         >
-          {THEME_NAMES.map((n) => (
-            <option key={n}>{n}</option>
+          {THEME_CATEGORIES.map((g) => (
+            <optgroup key={g.label} label={g.label}>
+              {g.themes.map((n) => <option key={n} value={n}>{n}</option>)}
+            </optgroup>
           ))}
         </select>
       </Field>
