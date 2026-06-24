@@ -92,7 +92,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
   const [mode, setMode] = useState(cfg.runMode || 'seconds'); // 'seconds' | 'words' | 'endless'
   const [limit, setLimit] = useState(cfg.runLimit || 60);
-  const [phase, setPhase] = useState('idle'); // idle | running | done
+  const [phase, setPhase] = useState('idle'); // idle | countdown | running | done
+  const [count, setCount] = useState(null);   // 'Ready' | 'Set' | 'Go!' during the countdown
+  const countTimers = useRef([]);
   const [pos, setPos] = useState(0);          // index into passage of the active word
   const [buf, setBuf] = useState('');
   const [results, setResults] = useState([]); // per completed word: { typed, perfect }
@@ -211,6 +213,29 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     armIdle();
   }
 
+  const clearCount = () => { countTimers.current.forEach(clearTimeout); countTimers.current = []; };
+
+  // Run starts on an explicit "Start" (or a done-screen "Onward/Reattempt") with a Ready·Set·Go.
+  // Focus the input synchronously inside the originating tap so the mobile keyboard opens during the
+  // count and is ready the instant we hit "Go!".
+  function beginCountdown() {
+    clearCount();
+    setPos(0); setBuf(''); setResults([]); setSummary(null); setTrend([]);
+    stats.current = freshStats(); wordErrors.current = 0;
+    seg.current = { line: true, sent: true, para: true };
+    if (linesRef.current) linesRef.current.style.transform = 'translateY(0)';
+    setPhase('countdown');
+    setCount('Ready');
+    focus();
+    countTimers.current = [
+      setTimeout(() => setCount('Set'), 600),
+      setTimeout(() => setCount('Go!'), 1200),
+      setTimeout(() => { setCount(null); start(); focus(); }, 1700),
+    ];
+  }
+
+  useEffect(() => () => clearCount(), []); // clear pending countdown timers on unmount
+
   function reattempt() {
     setPos(0);
     setBuf('');
@@ -225,6 +250,14 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     // Refocus the hidden input *within* this tap so the next run accepts keys (and the mobile
     // keyboard reopens) — a programmatic re-focus outside the gesture wouldn't.
     focus();
+  }
+
+  // Start a fresh run beginning where the just-finished run stopped (passage mode walks forward
+  // through the book). Drill modes have no position, so this is just a fresh run with new text.
+  function nextRun() {
+    if (isDocMode) startIndex.current = Math.min(doc.words.length, startIndex.current + stats.current.words);
+    setSeed((s) => s + 1); // force passage rebuild (doc: from the new startIndex; drill: fresh text)
+    beginCountdown();
   }
 
   function commitWord(typed = buf) {
@@ -275,18 +308,16 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // keyCode 229). The input holds the in-progress word (value={buf}); we diff each change. Enter and
   // Escape stay on keydown since a single-line input doesn't surface them as value changes.
   function onChange(e) {
-    if (phase === 'done') return;
+    if (phase !== 'running') { if (buf) setBuf(''); return; } // runs begin via Start (Ready·Set·Go), not on keypress
     const val = e.target.value;
     const sp = val.search(/\s/);
     if (sp >= 0) {
       const typed = val.slice(0, sp);
-      if (phase !== 'running') start();
       scoreChars(buf.length, typed);
       armIdle();
       if (typed.length > 0) commitWord(typed); else setBuf('');
       return;
     }
-    if (phase !== 'running') start();
     armIdle();
     if (val.length > buf.length) scoreChars(buf.length, val);
     setBuf(val);
@@ -294,17 +325,23 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
   function onKeyDown(e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === 'Escape') { e.preventDefault(); phase === 'running' ? endRun() : onExitDiscard?.(); return; }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (phase === 'countdown') { clearCount(); setCount(null); setPhase('idle'); return; }
+      phase === 'running' ? endRun() : onExitDiscard?.();
+      return;
+    }
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (phase === 'done') return;
-      if (phase !== 'running') start();
+      if (phase !== 'running') return; // a run is started with the Start button, not Enter
       if (buf.length === 0) return;
       armIdle();
       commitWord(buf);
     }
   }
 
+  // On the done screen: is there more book ahead to walk into with "Onward"?
+  const moreAhead = !!summary && isDocMode && startIndex.current + (summary.words || 0) < doc.words.length;
   const m = metrics();
   const live = {
     gross: Math.round(m.gross),
@@ -375,6 +412,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           </label>
           <button type="button" className={showSounds ? 'toggle-on' : ''} title="Customize the typing sound effects"
             onClick={() => setShowSounds((v) => !v)}>🎚 Sounds</button>
+          {phase === 'idle' && <button className="toggle-on" onClick={beginCountdown} title="Start the run (Ready·Set·Go)">▶ Start</button>}
           {phase === 'running'
             ? <button className="toggle-on" onClick={endRun}>■ End run</button>
             : <button onClick={onExitDiscard}>{plan ? 'Exit plan' : 'Discard'}</button>}
@@ -403,6 +441,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       <Trend trend={trend} />
 
       <div className="tr-viewport">
+        {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{count}</div>}
         <div className="tr-lines" ref={linesRef}>
           {passage.map((w, i) => {
             if (i < pos) {
@@ -427,7 +466,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         </div>
       </div>
 
-      {phase === 'idle' && <div className="tr-hint">Start typing the text above. Run ends at your limit, on “End run”, or after 5s idle. Esc discards.</div>}
+      {phase === 'idle' && <div className="tr-hint">Press ▶ Start for a Ready·Set·Go. Run ends at your limit, on “End run”, or after 5s idle. Esc discards.</div>}
 
       {phase === 'done' && summary && (
         <div className="tr-results">
@@ -443,13 +482,16 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           <div className="tr-results-actions">
             {plan ? (
               <>
-                <button onClick={reattempt}>↻ Redo set</button>
+                <button onClick={beginCountdown}>↻ Redo set</button>
                 <button className="toggle-on" onClick={onPlanNext}>{plan.step >= plan.steps && plan.set >= plan.sets ? '🏁 Finish plan' : 'Next set →'}</button>
                 <button onClick={onPlanExit}>Exit plan</button>
               </>
             ) : (
               <>
-                <button className="toggle-on" onClick={reattempt}>↻ Reattempt</button>
+                {moreAhead && (
+                  <button className="toggle-on" onClick={nextRun} title="New run starting where this one ended">Onward →</button>
+                )}
+                <button className={moreAhead ? '' : 'toggle-on'} onClick={beginCountdown} title="Re-type the exact same passage">↻ Reattempt</button>
                 {isDocMode && (
                   <button onClick={() => onExitContinue?.(startIndex.current + stats.current.words)}>Continue (count as read)</button>
                 )}

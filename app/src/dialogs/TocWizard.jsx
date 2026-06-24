@@ -103,7 +103,7 @@ export default function TocWizard({ tab, onApply, onClose }) {
 
   const title =
     step === 'method' ? 'Generate Contents — choose a source'
-      : step === 'region' ? 'Generate Contents — point at the printed TOC'
+      : step === 'region' ? 'Generate Contents — point at the printed ToC'
         : 'Generate Contents — review';
 
   return (

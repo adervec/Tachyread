@@ -263,7 +263,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ tocCollapseCompleted: e.target.checked })}
         />
       </Field>
-      <Field label="TOC-bar numeral">
+      <Field label="ToC-bar numeral">
         <select value={s.tocBarNumeralStyle || 'none'} onChange={(e) => patch({ tocBarNumeralStyle: e.target.value })}>
           <option value="none">None</option>
           <option value="arabic">Arabic (2)</option>

@@ -6,8 +6,8 @@ import {
   storeCounts, clearStore, wipeAllData,
 } from '../state/storage.js';
 import { saveBlobToFile, pickFile, readFileText } from '../features/fileSystem.js';
-import { SYNC_PROVIDERS, getSyncProvider } from '../features/sync/syncProviders.js';
-import { backupToProvider, restoreFromProvider } from '../features/sync/syncManager.js';
+import { SYNC_PROVIDERS, getSyncProvider, driveOriginAllowed } from '../features/sync/syncProviders.js';
+import { backupToProvider, restoreFromProvider, syncWithProvider } from '../features/sync/syncManager.js';
 
 // Friendly names + display order for the object stores shown in the Overview.
 const STORE_LABELS = {
@@ -59,11 +59,22 @@ export default function DataDialog({ onClose }) {
   const totalRecords = counts ? STORE_ORDER.reduce((a, k) => a + (counts[k] || 0), 0) : 0;
 
   // ── cloud ──
+  // Two-way sync (pull-merge-push), then reload so merged settings/progress apply to open tabs.
+  // Turning this on flips `auto`, which arms boot-pull + push-on-change (App.jsx).
+  async function cloudSyncNow() {
+    setBusy(true); setMsg('Syncing…');
+    try {
+      await syncWithProvider(sync.provider, sync);
+      patchSync({ lastSync: Date.now(), auto: true });
+      setMsg('Synced — reloading to apply…');
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (e) { setBusy(false); setMsg('Sync failed: ' + (e?.message || e)); }
+  }
   async function cloudBackup() {
     setBusy(true); setMsg('Backing up to your sync target…');
     try {
       const r = await backupToProvider(sync.provider, sync);
-      patchSync({ lastSync: r.at });
+      patchSync({ lastSync: r.at, auto: true });
       setMsg(`Backed up to ${provider.label} (${Math.round(r.bytes / 1024)} KB).`);
     } catch (e) { setMsg('Sync backup failed: ' + (e?.message || e)); }
     setBusy(false);
@@ -72,7 +83,8 @@ export default function DataDialog({ onClose }) {
     setBusy(true); setMsg('Restoring from your sync target…');
     try {
       const r = await restoreFromProvider(sync.provider, sync);
-      setMsg(`Merged progress for ${r.merged} item(s) — reloading…`);
+      patchSync({ auto: true });
+      setMsg(`Merged ${r.merged} item(s) — reloading…`);
       setTimeout(() => window.location.reload(), 1000);
     } catch (e) { setBusy(false); setMsg('Sync restore failed: ' + (e?.message || e)); }
   }
@@ -200,10 +212,11 @@ export default function DataDialog({ onClose }) {
         <>
           <div className="field-section">Cloud sync (beta)</div>
           <p className="settings-note">
-            Syncs your <strong>reading progress only</strong> — how far you've read each file (keyed by the
-            file's content), plus your book groups. Your files, document text, and grabbed pages
-            <strong> never leave this device</strong>. Easiest with no accounts: pick a <strong>local folder</strong>
-            that your Drive / Dropbox / OneDrive desktop app already syncs.
+            Syncs your <strong>reading progress, tab settings, and application settings</strong> across your
+            devices — reading position per file (keyed by content), your Default Tab Settings, and your
+            preferences. Your files, document text, and grabbed pages <strong>never leave this device</strong>,
+            and nothing goes through our servers: it's your browser talking to your own Google Drive (a private
+            app-data folder) or a local folder your Drive / Dropbox / OneDrive desktop app already syncs.
           </p>
           <div className="field-row">
             <label>This device's name</label>
@@ -223,22 +236,30 @@ export default function DataDialog({ onClose }) {
             </div>
           </div>
           {sync.provider === 'googleDrive' && (
-            <>
-              <div className="field-row">
-                <label>Google OAuth client ID</label>
-                <div>
-                  <input type="text" value={sync.driveClientId} onChange={(e) => patchSync({ driveClientId: e.target.value.trim() })} placeholder="xxxxx.apps.googleusercontent.com" style={{ width: '100%' }} />
-                </div>
-              </div>
+            driveOriginAllowed() ? (
               <p className="settings-note">
-                Drive needs your own OAuth client ID (kept on this device): in Google Cloud Console create an
-                <em> OAuth client ID → Web application</em>, add this app's origin to the authorized JavaScript
-                origins, enable the <em>Drive API</em>, and paste the client ID. Backups go to a private app-data folder.
+                ✓ <strong>No setup needed on this site.</strong> Click <em>Sync now</em> and sign in with Google once;
+                your data goes to a private Google Drive <em>app-data folder</em> only this app can see.
               </p>
-            </>
+            ) : (
+              <>
+                <div className="field-row">
+                  <label>Google OAuth client ID</label>
+                  <div>
+                    <input type="text" value={sync.driveClientId} onChange={(e) => patchSync({ driveClientId: e.target.value.trim() })} placeholder="xxxxx.apps.googleusercontent.com" style={{ width: '100%' }} />
+                  </div>
+                </div>
+                <p className="settings-note">
+                  This isn't the authorized deployment, so Drive needs your own OAuth client ID (kept on this device):
+                  in Google Cloud Console create an <em>OAuth client ID → Web application</em>, add this page's origin to
+                  the authorized JavaScript origins, enable the <em>Drive API</em>, and paste the client ID.
+                </p>
+              </>
+            )
           )}
           <div className="data-row">
-            <button className="toggle-on" onClick={cloudBackup} disabled={busy || !providerOk}>☁ Back up now</button>
+            <button className="toggle-on" onClick={cloudSyncNow} disabled={busy || !providerOk}>🔄 Sync now</button>
+            <button onClick={cloudBackup} disabled={busy || !providerOk}>☁ Back up only</button>
             <button onClick={cloudRestore} disabled={busy || !providerOk}>⬇ Restore from sync</button>
             {!providerOk && providerReason && providerReason.reason && <span className="settings-note" style={{ margin: 0 }}>{providerReason.reason}</span>}
             {!providerOk && provider && !provider.supported() && <span className="settings-note" style={{ margin: 0 }}>Needs a Chromium browser.</span>}
@@ -246,12 +267,10 @@ export default function DataDialog({ onClose }) {
           </div>
           <div className="data-row">
             <label className="inline-check">
-              <input type="checkbox" checked={!!sync.autoBackup} onChange={(e) => patchSync({ autoBackup: e.target.checked })} /> Auto-back up every
+              <input type="checkbox" checked={!!sync.auto} onChange={(e) => patchSync({ auto: e.target.checked })} /> Keep synced automatically
             </label>
-            <input type="number" min={5} max={1440} value={sync.autoBackupMinutes} disabled={!sync.autoBackup} onChange={(e) => patchSync({ autoBackupMinutes: Math.max(5, Number(e.target.value) || 30) })} style={{ width: 64 }} />
-            <span className="settings-note" style={{ margin: 0 }}>minutes, and when you disconnect.</span>
+            <span className="settings-note" style={{ margin: 0 }}>Pull on launch and push shortly after each change (when the target is silently ready — never pops a sign-in on a timer).</span>
           </div>
-          <p className="settings-note">Auto-backup only runs when the target is silently ready (a local folder you've granted) — it never pops a picker or sign-in on a timer.</p>
         </>
       )}
 

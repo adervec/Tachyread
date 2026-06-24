@@ -276,7 +276,7 @@ export default function AppSettingsDialog({ global, onPatch, onCalibrate, onClos
 
       <div className="field-section">Table of contents</div>
       <p className="settings-note">
-        Icons shown on the TOC minimap bar for each hierarchy tier (Tier 0 = top, e.g. Book →
+        Icons shown on the ToC minimap bar for each hierarchy tier (Tier 0 = top, e.g. Book →
         Part → Chapter). One emoji or character each. Numeral display and per-tier numeral regex
         are per document — see <strong>View → Tab Settings</strong>.
       </p>
