@@ -154,6 +154,18 @@ export function resetGlobalToDefaults(current) {
   return out;
 }
 
+// The slice of global settings that cloud-syncs as "application settings": every preference PLUS the
+// Default Tab Settings (fileDefaults). User DATA / libraries (the rest of GLOBAL_DATA_KEYS), device-
+// local sync metadata, and the sync timestamp itself stay on the device. bookGroups sync through the
+// progress merge instead. Mirrored by isSyncedGlobalKey (which keys, when changed, bump the stamp).
+const GLOBAL_SYNC_EXCLUDE = new Set([...GLOBAL_DATA_KEYS, 'settingsUpdatedAt']); // note: keeps fileDefaults
+export function isSyncedGlobalKey(k) { return k === 'fileDefaults' || !GLOBAL_SYNC_EXCLUDE.has(k); }
+export function syncableGlobalSettings(g) {
+  const out = {};
+  for (const k of Object.keys(g || {})) if (isSyncedGlobalKey(k)) out[k] = g[k];
+  return out;
+}
+
 export function defaultGlobalSettings() {
   return {
     defaultSerifFamily: 'Cambria, Georgia, "Times New Roman", serif',
@@ -178,7 +190,10 @@ export function defaultGlobalSettings() {
     ambient: { type: 'Brown', volume: 0.18 },
     // Cloud sync / backup target. provider: 'localFolder' | 'googleDrive'; driveClientId is the user's
     // own Google OAuth client ID (kept local). lastSync is a timestamp for the UI.
-    sync: { provider: 'localFolder', driveClientId: '', lastSync: 0, autoBackup: false, autoBackupMinutes: 30 },
+    sync: { provider: 'localFolder', driveClientId: '', lastSync: 0, autoBackup: false, autoBackupMinutes: 30, auto: false },
+    // When the syncable application settings (prefs + Default Tab Settings) last changed on this
+    // device — the last-write-wins clock for settings sync. Bumped by updateGlobal, never by data churn.
+    settingsUpdatedAt: 0,
     deviceName: '', // friendly label this device stamps on synced grab markers (e.g. "Laptop")
     // Book groups: editions of the same book grouped so progress syncs across them as a percentage.
     // { id, name, members:[checksum], createdAt }

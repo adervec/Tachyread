@@ -75,7 +75,7 @@ const WEBCAM_LABEL = {
   unsupported: 'face detection not supported here', denied: 'camera blocked', error: 'camera error', off: '',
 };
 import { getSyncProvider } from './features/sync/syncProviders.js';
-import { backupToProvider } from './features/sync/syncManager.js';
+import { backupToProvider, syncWithProvider } from './features/sync/syncManager.js';
 import { applyTheme } from './state/themes.js';
 import { ensureFamilyLoaded } from './state/fonts.js';
 import './App.css';
@@ -1080,24 +1080,47 @@ function AppInner() {
     }
   }
 
-  // Auto-backup on an interval. Only fires for a target that's already silently usable (a local
-  // folder whose permission is still granted) — it never pops a picker or a sign-in on a timer.
+  // Auto-sync (when "Keep synced automatically" is on). Two halves, both fully silent — they only
+  // reuse an existing grant and never pop a picker or sign-in on a timer:
+  //   • boot: one two-way pull-merge-push so this device starts from the latest.
+  //   • on change: a debounced push. The deps reset the 5s timer on every word step / settings tweak,
+  //     so during continuous reading it never fires mid-stream — it pushes ~5s after you pause.
+  const didBootSync = useRef(false);
+  const pushTimer = useRef(null);
+  const lastAutoPush = useRef(0);
+  const autoReady = (cfg) => {
+    const p = cfg?.auto ? getSyncProvider(cfg.provider) : null;
+    return p && p.supported() && p.available(cfg) === true ? p : null;
+  };
   useEffect(() => {
     const cfg = state.global.sync;
-    if (!cfg?.autoBackup) return;
-    const mins = Math.max(5, Number(cfg.autoBackupMinutes) || 30);
-    const id = setInterval(async () => {
+    if (didBootSync.current || !autoReady(cfg)) return;
+    didBootSync.current = true;
+    (async () => {
       try {
-        const p = getSyncProvider(cfg.provider);
-        if (p && (await p.isConnected())) {
-          const r = await backupToProvider(cfg.provider, cfg);
-          updateGlobal({ sync: { ...cfg, lastSync: r.at } });
-        }
-      } catch { /* silent — manual sync surfaces errors */ }
-    }, mins * 60000);
-    return () => clearInterval(id);
+        await syncWithProvider(cfg.provider, cfg, { silent: true });
+        updateGlobal({ sync: { ...cfg, lastSync: Date.now() } });
+      } catch { /* offline or no prior grant — use “Sync now” in Data once to grant */ }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.global.sync?.autoBackup, state.global.sync?.autoBackupMinutes, state.global.sync?.provider]);
+  }, [state.global.sync?.auto, state.global.sync?.provider]);
+  useEffect(() => {
+    const cfg = state.global.sync;
+    const p = autoReady(cfg);
+    if (!p) return undefined;
+    if (pushTimer.current) clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(async () => {
+      try {
+        if (Date.now() - lastAutoPush.current < 20000) return; // min gap — don't hammer the API
+        if (!(await p.isConnected())) return;                  // only when a silent session exists
+        const r = await backupToProvider(cfg.provider, cfg, { silent: true });
+        lastAutoPush.current = r.at;
+        updateGlobal({ sync: { ...cfg, lastSync: r.at } });
+      } catch { /* silent — the Data dialog surfaces errors */ }
+    }, 5000);
+    return () => clearTimeout(pushTimer.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.tabs, state.global.settingsUpdatedAt, state.global.sync?.auto, state.global.sync?.provider]);
 
   // Save a copy of the active tab's text to an external file (native Save dialog where supported).
   function doSaveTab() {
@@ -1166,13 +1189,13 @@ function AppInner() {
       const open = state.tabs.map((t) => ({ checksum: t.doc.contentChecksum, fileName: t.doc.fileName }));
       saveSession({ open, active: activeTab?.doc.contentChecksum || null }).catch(() => {});
       const finish = () => { setClosing('disconnect'); setTimeout(() => { try { window.close(); } catch { /* tab not script-opened */ } }, 50); };
-      // Best-effort final backup if auto-backup is on and the target is silently usable.
+      // Best-effort final backup if auto-sync is on and the target is silently usable.
       const cfg = state.global.sync;
-      const p = cfg?.autoBackup ? getSyncProvider(cfg.provider) : null;
+      const p = cfg?.auto ? getSyncProvider(cfg.provider) : null;
       if (p) {
         setClosing('disconnect');
         (async () => {
-          try { if (await p.isConnected()) { const r = await backupToProvider(cfg.provider, cfg); updateGlobal({ sync: { ...cfg, lastSync: r.at } }); } } catch { /* ignore */ }
+          try { if (await p.isConnected()) { const r = await backupToProvider(cfg.provider, cfg, { silent: true }); updateGlobal({ sync: { ...cfg, lastSync: r.at } }); } } catch { /* ignore */ }
           setTimeout(() => { try { window.close(); } catch { /* ignore */ } }, 50);
         })();
       } else {
@@ -1262,7 +1285,7 @@ function AppInner() {
     if (state.showToc)
       arr.push({
         id: 'toc',
-        label: 'TOC',
+        label: 'ToC',
         node: (
           <TocPane
             tab={activeTab}

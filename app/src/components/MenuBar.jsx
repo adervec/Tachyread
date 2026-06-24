@@ -170,7 +170,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
               <ToggleItem on={state.showSource} label="Source page" onClick={() => dispatch({ type: 'TOGGLE_SOURCE' })} />
             )}
             <ToggleItem on={state.showIndex} label="Index" onClick={() => dispatch({ type: 'TOGGLE_INDEX' })} />
-            <ToggleItem on={!state.showRsvp} label="Hide Fast Reader" onClick={() => dispatch({ type: 'TOGGLE_SHOW_RSVP' })} />
+            <ToggleItem on={state.showRsvp} label="Fast Reader" onClick={() => dispatch({ type: 'TOGGLE_SHOW_RSVP' })} />
             <ToggleItem on={state.incognito} label="🕶 Incognito (no tracking)" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })} />
 
             <div className="menu-drawer-section">File</div>
@@ -218,7 +218,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
         onClick={() => dispatch({ type: 'TOGGLE_TOC' })}
         title="Toggle Table of Contents panel"
       >
-        {state.showToc ? '☑ ' : '☐ '}TOC
+        {state.showToc ? '☑ ' : '☐ '}ToC
       </div>
       <div
         className={`menu-item ${state.showDash ? 'open' : ''}`}
@@ -244,11 +244,11 @@ export default function MenuBar({ onFileOpen, onAction }) {
         {state.showIndex ? '☑ ' : '☐ '}Index
       </div>
       <div
-        className={`menu-item ${!state.showRsvp ? 'open' : ''}`}
+        className={`menu-item ${state.showRsvp ? 'open' : ''}`}
         onClick={() => dispatch({ type: 'TOGGLE_SHOW_RSVP' })}
-        title="Hide the Fast Reader pane"
+        title="Show the Fast Reader pane"
       >
-        {!state.showRsvp ? '☑ ' : '☐ '}Hide Fast Reader
+        {state.showRsvp ? '☑ ' : '☐ '}Fast Reader
       </div>
       <div
         className={`menu-item incognito-menu ${state.incognito ? 'open' : ''}`}

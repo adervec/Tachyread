@@ -2,7 +2,10 @@
 // so non-React modules (storage, engine) can call the plain functions too.
 import { useEffect, useState } from 'react';
 
-// The breakpoint the responsive CSS uses to stack panes (see App.css @media max-width: 860px).
+// The breakpoint the responsive CSS uses to stack panes. The CSS query mirrors compactFor below:
+//   @media (max-width: 860px), (pointer: coarse) and (max-height: 860px)
+// so a touch device stays in the stacked layout in BOTH orientations (landscape width > 860 alone
+// would otherwise drop the phone CSS and the layout would appear to "rotate" to desktop).
 export const COMPACT_MAX = 860;
 
 export function isCoarsePointer() {

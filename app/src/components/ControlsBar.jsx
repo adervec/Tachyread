@@ -213,7 +213,7 @@ function GoalRow({ tab, onGoalComplete, goalKills }) {
           }
         >
           <option>None</option>
-          <option value="Section">Section (set via TOC)</option>
+          <option value="Section">Section (set via ToC)</option>
           <option>AbsoluteWords</option>
           <option>AbsoluteLines</option>
           <option>AbsolutePercent</option>

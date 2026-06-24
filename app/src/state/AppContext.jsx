@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useReducer, useRef, useCallback } from 'react';
-import { defaultFileSettings, defaultGlobalSettings } from './settings.js';
+import { defaultFileSettings, defaultGlobalSettings, isSyncedGlobalKey } from './settings.js';
 import { loadGlobal, saveGlobal, loadFile, saveFile, loadReadState, saveReadState, saveDocPayload, loadDocPayload, loadSession, saveSession } from './storage.js';
 import { parseFile, parseClipboardText } from '../document/parsers.js';
 import { readerDocFromText, attachChecksum } from '../document/readerDocument.js';
@@ -47,7 +47,7 @@ function makeLazyTab({ checksum, fileName, wordIndex = 0, totalWords = 0 }) {
 // On phones / portrait tablets the panes stack, so opening with several is a long scroll. Start
 // compact screens with just the reader + lines; the rest are one tap away in the menu bar. Evaluated
 // at load (these view toggles aren't persisted), so a reload picks the right default after a resize.
-const compactStart = typeof window !== 'undefined' && window.innerWidth <= 860;
+const compactStart = isCompactScreen(); // touch + short-side aware, so a phone booting in landscape still counts
 
 const init = {
   global: defaultGlobalSettings(),
@@ -481,6 +481,10 @@ export function AppProvider({ children }) {
 
   const updateGlobal = useCallback(async (patch) => {
     const g = { ...stateRef.current.global, ...patch };
+    // Stamp the settings-sync clock only when a synced setting actually changed (not on sync metadata
+    // or data-library churn) — otherwise lastSync writes would keep this device "newest" forever and
+    // it would never adopt another device's settings.
+    if (Object.keys(patch).some(isSyncedGlobalKey)) g.settingsUpdatedAt = Date.now();
     dispatch({ type: 'SET_GLOBAL', global: g });
     await saveGlobal(g);
   }, []);

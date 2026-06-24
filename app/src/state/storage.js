@@ -2,7 +2,7 @@
 // but keyed by content checksum so renamed/moved files keep their progress.
 
 import { openDB } from 'idb';
-import { defaultGlobalSettings, defaultFileSettings } from './settings.js';
+import { defaultGlobalSettings, defaultFileSettings, tabDefaultsFrom, syncableGlobalSettings } from './settings.js';
 
 const DB_NAME = 'Tachyread';
 const DB_VERSION = 8;
@@ -100,7 +100,8 @@ export async function loadFile(checksum) {
 export async function saveFile(settings) {
   if (!settings.contentChecksum) return;
   const db = await getDB();
-  await db.put('files', { ...settings, checksum: settings.contentChecksum });
+  // updatedAt is the per-file last-write-wins clock for the tab-settings half of cloud sync.
+  await db.put('files', { ...settings, checksum: settings.contentChecksum, updatedAt: Date.now() });
 }
 
 export async function allFiles() {
@@ -499,8 +500,12 @@ export async function exportProgressData() {
   const g = (await db.get('global', 'settings')) || {};
   const nameByChecksum = new Map((g.recentFiles || []).map((r) => [r.checksum, r.name]));
   const out = {
-    app: 'tachyread-progress', version: 1, exportedAt: Date.now(),
+    app: 'tachyread-progress', version: 2, exportedAt: Date.now(),
     device: g.deviceName || '', readstate: {}, files: {}, grabMarkers: {}, bookGroups: g.bookGroups || [],
+    // Settings half of the sync (added in v2): the syncable application settings (prefs + Default Tab
+    // Settings) and per-file tab settings, each with a last-write-wins timestamp.
+    global: { settings: syncableGlobalSettings(g), updatedAt: g.settingsUpdatedAt || 0 },
+    fileSettings: {},
   };
   const rsKeys = await db.getAllKeys('readstate');
   const rsVals = await db.getAll('readstate');
@@ -513,6 +518,8 @@ export async function exportProgressData() {
     const rec = { name: nameByChecksum.get(f.checksum) || '' };
     for (const k of PROGRESS_FILE_FIELDS) if (f[k] !== undefined) rec[k] = f[k];
     out.files[f.checksum] = rec;
+    // Reusable per-file appearance/behaviour settings (no progress, no identity), LWW by updatedAt.
+    out.fileSettings[f.checksum] = { ...tabDefaultsFrom(f), updatedAt: f.updatedAt || 0 };
   }
   for (const gr of await db.getAll('grabbed')) {
     if (!gr?.checksum) continue;
@@ -557,8 +564,27 @@ export async function importProgressData(bundle) {
     await tx.done;
     merged++;
   }
+  // Per-file tab settings (appearance/behaviour) — last-write-wins by updatedAt. The progress fields
+  // merged above are left untouched; only the reusable settings are overlaid.
+  for (const [checksum, inc] of Object.entries(bundle.fileSettings || {})) {
+    const tx = db.transaction('files', 'readwrite');
+    const cur = (await tx.store.get(checksum)) || { ...defaultFileSettings(), contentChecksum: checksum, checksum };
+    if ((inc.updatedAt || 0) > (cur.updatedAt || 0)) {
+      const { updatedAt, ...fields } = inc;
+      Object.assign(cur, tabDefaultsFrom(fields)); // only reusable keys (never progress/identity)
+      cur.updatedAt = inc.updatedAt || 0;
+      cur.contentChecksum = checksum; cur.checksum = checksum;
+      await tx.store.put(cur);
+    }
+    await tx.done;
+  }
   // Global: remote-grab markers (only for grabs we DON'T already have locally) + book groups.
   const g = (await db.get('global', 'settings')) || defaultGlobalSettings();
+  // Application settings (prefs + Default Tab Settings) — last-write-wins by the settings clock.
+  if (bundle.global && bundle.global.settings && (bundle.global.updatedAt || 0) > (g.settingsUpdatedAt || 0)) {
+    Object.assign(g, syncableGlobalSettings(bundle.global.settings));
+    g.settingsUpdatedAt = bundle.global.updatedAt || 0;
+  }
   const localGrabKeys = new Set(await db.getAllKeys('grabbed'));
   const remoteMap = new Map((g.remoteGrabs || []).map((r) => [r.checksum, r]));
   for (const [checksum, inc] of Object.entries(bundle.grabMarkers || {})) {

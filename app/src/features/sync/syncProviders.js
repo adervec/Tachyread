@@ -66,6 +66,25 @@ export const localFolderProvider = {
 };
 
 // ---- Google Drive (private appDataFolder) -------------------------------------------------------
+// Public OAuth client id (shared with the GymTracker app — an identifier, not a secret). It only
+// works from the JavaScript origins registered with Google; the origin gate below ALSO refuses it
+// app-side on any other origin (e.g. a fork deployed elsewhere) so a different deployment must
+// supply its own client id. With this, Drive sync needs zero per-user setup on the authorized site.
+export const BUILTIN_DRIVE_CLIENT_ID = '547617739897-br6dj2facmsc34qnkjb5u4dbfhju39pu.apps.googleusercontent.com';
+const OAUTH_ORIGINS = ['https://adervec.github.io'];
+export function driveOriginAllowed() {
+  try {
+    const h = location.hostname;
+    if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]') return true; // local dev, any port
+    return OAUTH_ORIGINS.indexOf(location.origin) !== -1;
+  } catch { return false; }
+}
+// Effective client id: a user-supplied one (fork / self-host) wins; otherwise the built-in id on the
+// authorized origin. Empty → Drive isn't available here (a fork without its own id).
+export function driveClientId(cfg) {
+  return (cfg?.driveClientId || '').trim() || (driveOriginAllowed() ? BUILTIN_DRIVE_CLIENT_ID : '');
+}
+
 let gisLoaded = null;
 function loadGis() {
   if (gisLoaded) return gisLoaded;
@@ -80,14 +99,25 @@ function loadGis() {
   });
   return gisLoaded;
 }
-function requestToken(clientId) {
+// Access token cached in memory only (never persisted). Lets isConnected() report a live session so
+// the auto-sync timer can fire for Drive, and lets a silent (prompt:'') refresh reconnect on boot.
+let _driveToken = null; // { value, exp }
+function driveTokenValid() { return !!_driveToken && _driveToken.exp > Date.now() + 60000; }
+function requestToken(clientId, prompt = '') {
   return new Promise((resolve, reject) => {
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: 'https://www.googleapis.com/auth/drive.appdata',
-      callback: (resp) => (resp && resp.access_token ? resolve(resp.access_token) : reject(new Error(resp?.error || 'Sign-in failed.'))),
+      callback: (resp) => {
+        if (resp && resp.access_token) {
+          _driveToken = { value: resp.access_token, exp: Date.now() + ((resp.expires_in || 3600) * 1000) };
+          resolve(resp.access_token);
+        } else reject(new Error(resp?.error || 'Sign-in failed.'));
+      },
     });
-    client.requestAccessToken({ prompt: '' });
+    // prompt:'' → silent when a prior grant + active Google session exist (boot/auto); a consent
+    // popup only when needed (call from a click). prompt:'consent' forces the chooser.
+    client.requestAccessToken({ prompt });
   });
 }
 async function driveFindId(token, name) {
@@ -104,15 +134,22 @@ export const googleDriveProvider = {
   id: 'googleDrive',
   label: 'Google Drive (private app folder)',
   supported: () => true,
-  available: (cfg) => (cfg?.driveClientId ? true : { ok: false, reason: 'Add your Google OAuth client ID below to enable Drive.' }),
-  async connect(cfg) {
-    if (!cfg?.driveClientId) throw new Error('Set your Google OAuth client ID first.');
+  available: (cfg) => (driveClientId(cfg) ? true : { ok: false, reason: 'Google Drive sync isn’t enabled on this deployment — add your own OAuth client ID below.' }),
+  // `silent` (used by auto-sync / boot) only reuses an existing grant — it never opens a popup.
+  async connect(cfg, { silent = false } = {}) {
+    const clientId = driveClientId(cfg);
+    if (!clientId) throw new Error('Google Drive sync isn’t available here.');
+    if (driveTokenValid()) return { token: _driveToken.value };
     await loadGis();
-    const token = await requestToken(cfg.driveClientId);
-    return { token };
+    try {
+      return { token: await requestToken(clientId, '') }; // try silent (existing grant) first
+    } catch (e) {
+      if (silent) throw e;                                 // auto/boot: never pop a sign-in
+      return { token: await requestToken(clientId, 'consent') }; // user-initiated: ask once
+    }
   },
-  async isConnected() { return false; }, // tokens are per-session; reconnect (silently) each time
-  async disconnect() {},
+  async isConnected() { return driveTokenValid(); }, // a live in-session token → auto-sync may fire
+  async disconnect() { _driveToken = null; },
   async upload(conn, name, blob) {
     const existing = await driveFindId(conn.token, name);
     const meta = existing ? {} : { name, parents: ['appDataFolder'] };

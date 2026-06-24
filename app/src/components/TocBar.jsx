@@ -23,7 +23,7 @@ export default function TocBar({ tab, onIconClick }) {
   const goalPct = target ? (target.index / total) * 100 : null;
 
   return (
-    <div className="toc-bar" title="Table-of-contents minimap — click an icon to reveal it in the TOC">
+    <div className="toc-bar" title="Table-of-contents minimap — click an icon to reveal it in the ToC">
       <div className="toc-bar-track" />
       {goalPct != null && (
         <div
