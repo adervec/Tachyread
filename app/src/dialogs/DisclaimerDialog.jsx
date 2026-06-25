@@ -1,4 +1,6 @@
+/* global __BUILD_NUMBER__, __BUILD_SHA__, __BUILD_DATE__ */
 import Dialog from './Dialog.jsx';
+import { deviceKind, isCompactScreen, isCoarsePointer } from '../state/device.js';
 
 const REPO_URL = 'https://github.com/adervec/Tachyread';
 
@@ -48,6 +50,11 @@ export default function DisclaimerDialog({ onClose }) {
           <a href={`${REPO_URL}/blob/main/DISCLAIMER.md`} target="_blank" rel="noopener noreferrer">disclaimer</a>
           {' · '}
           <a href={`${REPO_URL}/blob/main/PRIVACY.md`} target="_blank" rel="noopener noreferrer">privacy</a>.
+        </p>
+        <p style={{ fontSize: 11, opacity: 0.6, lineHeight: 1.5, margin: '12px 0 0', borderTop: '1px solid var(--divider)', paddingTop: 8 }}>
+          Build <strong>{__BUILD_NUMBER__}</strong> · {__BUILD_SHA__} · {__BUILD_DATE__}<br />
+          Detected: <strong>{deviceKind()}</strong> — {isCoarsePointer() ? 'touch pointer' : 'fine pointer'},{' '}
+          {isCompactScreen() ? 'compact layout' : 'full layout'} ({typeof window !== 'undefined' ? `${window.innerWidth}×${window.innerHeight}` : '—'})
         </p>
       </div>
     </Dialog>
