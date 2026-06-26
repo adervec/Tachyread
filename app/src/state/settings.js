@@ -69,7 +69,7 @@ export function defaultFileSettings() {
     },
     speaking: { enabled: false, confidence: 'Medium', perWordTimeoutMs: 0, allowPartial: true },
     centerOnCurrent: true,
-    lineLongPressMs: 3000, // hold a line this long to jump to it (0 = instant click)
+    lineLongPressMs: 450, // hold a line this long to jump to it — just long enough to reject accidental taps (0 = instant click)
     linePaneSplit: false, // split the Lines pane into before / current line / after zones
     lineAdvanceSound: false, // soft click when the current line changes
     lineSoundKind: 'soft', // which newline sound to play (see features/clickSound.js LINE_SOUNDS)

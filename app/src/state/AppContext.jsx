@@ -201,6 +201,10 @@ export function AppProvider({ children }) {
       ...(stateRef.current.global.fileDefaults || {}),
       ...(stored || {}),
     };
+    // Migrate the old 3000ms line long-press default (way too long — it just needs to reject
+    // accidental taps) down to the new 450ms default. ponytail: also remaps a deliberate 3000, which
+    // nobody sets; anyone wanting a different hold just uses the slider.
+    if (baseSettings.lineLongPressMs === 3000) baseSettings.lineLongPressMs = 450;
     // Record the book's name on its settings so the reading history can label it without a payload load.
     baseSettings.fileName = doc.fileName || baseSettings.fileName || '';
     // Clamp wordIndex if it overruns the new doc length
