@@ -781,26 +781,67 @@ function AppInner() {
       }
     : {};
 
-  // Scroll-to-read: when enabled, the mouse wheel / trackpad over the reader advances (or rewinds)
-  // the reading position instead of scrolling the pane. Uses a native non-passive listener because
-  // React's onWheel is passive — preventDefault wouldn't otherwise suppress the pane's own scroll.
+  // Scroll-to-read: when enabled, scrolling the reader advances (or rewinds) the reading position and
+  // counts the text passed as read — instead of just scrolling the pane. Two input paths: mouse wheel
+  // / trackpad on desktop, and a thumb-drag on touch (the mobile "scroll to progress" mode). Native
+  // non-passive listeners because React's onWheel/onTouchMove are passive, so preventDefault wouldn't
+  // otherwise suppress the pane's own scroll. Scoped to the reading panes so it never hijacks the
+  // TOC / aux panes (you can still scroll those normally).
   const mainAreaRef = useRef(null);
   const stepWordRef = useRef(stepWord);
   useEffect(() => { stepWordRef.current = stepWord; });
   const wheelAccum = useRef(0);
+  const touchDrag = useRef(null); // { x, y, lastY, axis, accum } during a thumb scroll
   useEffect(() => {
     const el = mainAreaRef.current;
     if (!el || !state.global.scrollAdvances) return undefined;
-    const PX_PER_WORD = 30; // ponytail: scroll sensitivity tuned by feel; lower = faster reading
+    const PX_PER_WORD = 30;      // wheel sensitivity (lower = faster reading)
+    const TOUCH_PX_PER_WORD = 8; // thumb-drag sensitivity — a swipe covers far more pixels than a wheel notch
+    const inReader = (e) => !!e.target?.closest?.('.line-pane, .rsvp-pane');
+    const blocked = () => activeTabRef.current?.settings.typing?.enabled;
+
     const onWheel = (e) => {
-      if (activeTabRef.current?.settings.typing?.enabled) return; // typing run keeps normal scroll
+      if (blocked() || !inReader(e)) return; // typing run / non-reading areas keep normal scroll
       e.preventDefault();
       wheelAccum.current += e.deltaY;
       const n = Math.trunc(wheelAccum.current / PX_PER_WORD);
       if (n) { wheelAccum.current -= n * PX_PER_WORD; stepWordRef.current(n); }
     };
+    const onTouchStart = (e) => {
+      if (blocked() || e.touches.length !== 1 || !inReader(e)) { touchDrag.current = null; return; }
+      const t = e.touches[0];
+      touchDrag.current = { x: t.clientX, y: t.clientY, lastY: t.clientY, axis: null, accum: 0 };
+    };
+    const onTouchMove = (e) => {
+      const s = touchDrag.current;
+      if (!s || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      if (s.axis === null) {
+        const dx = Math.abs(t.clientX - s.x), dy = Math.abs(t.clientY - s.y);
+        if (Math.max(dx, dy) < 8) return;   // wait until the drag has a clear direction
+        s.axis = dy > dx ? 'v' : 'h';
+      }
+      if (s.axis !== 'v') return;            // horizontal drag → leave it for swipe-nav
+      e.preventDefault();                    // take over the vertical scroll
+      s.accum += s.lastY - t.clientY;        // drag up = read forward
+      s.lastY = t.clientY;
+      const n = Math.trunc(s.accum / TOUCH_PX_PER_WORD);
+      if (n) { s.accum -= n * TOUCH_PX_PER_WORD; stepWordRef.current(n); }
+    };
+    const endTouch = () => { touchDrag.current = null; };
+
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', endTouch);
+    el.addEventListener('touchcancel', endTouch);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', endTouch);
+      el.removeEventListener('touchcancel', endTouch);
+    };
   }, [state.global.scrollAdvances]);
 
   // Focus mode: fullscreen the app + (Chromium) black out other monitors with cover windows. Must run
