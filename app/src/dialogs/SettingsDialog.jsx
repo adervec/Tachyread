@@ -5,8 +5,8 @@ import { THEME_CATEGORIES, HEADING_PACKS } from '../state/themes.js';
 import { createMetronome } from '../features/metronome.js';
 import { DEFAULT_METRONOME } from '../engine/metronome.js';
 import { LINE_SOUNDS, playLineSound } from '../features/clickSound.js';
+import { FACE_STYLES } from '../components/faceDecor3d.js';
 
-const FACE_STYLES = ['Man', 'Owl', 'Robot', 'Alien', 'Wizard', 'Cat', 'Baby', 'Skull', 'Panda', 'Frankenstein', 'Vampire', 'Viking', 'Clown', 'Bunny', 'Dragon', 'Ninja'];
 const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel'];
 // Reading-pointer options archived with its Settings section (see below). Restore alongside it.
 // const POINTER_STYLES = ['Arrow', 'Diamond', 'Star', 'Circle', 'Hand'];

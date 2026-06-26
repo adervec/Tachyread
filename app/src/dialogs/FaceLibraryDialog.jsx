@@ -3,8 +3,8 @@ import Dialog from './Dialog.jsx';
 import FaceSVG from '../components/FaceSVG.jsx';
 import FacePreview from '../components/FacePreview.jsx';
 import { useApp } from '../state/AppContext.jsx';
+import { FACE_STYLES } from '../components/faceDecor3d.js';
 
-const FACE_STYLES = ['Man', 'Owl', 'Robot', 'Alien', 'Wizard', 'Cat', 'Baby', 'Skull', 'Panda', 'Frankenstein', 'Vampire', 'Viking', 'Clown', 'Bunny', 'Dragon', 'Ninja'];
 const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel'];
 
 // Face Library: browse every procedural face style, preview how it animates across the
