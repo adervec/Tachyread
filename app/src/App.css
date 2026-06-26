@@ -1424,6 +1424,10 @@
 .pd-day-date { width: 92px; font-variant-numeric: tabular-nums; }
 .pd-day-words { flex: 1; text-align: right; }
 .pd-day-time { width: 64px; text-align: right; opacity: 0.7; }
+.pd-sess-row { cursor: pointer; }
+.pd-sess-row:hover { background: var(--controls-bg); }
+.pd-sess-range { flex: 1; text-align: center; opacity: 0.8; font-variant-numeric: tabular-nums; }
+.pd-sess-paras { width: 56px; text-align: right; opacity: 0.7; }
 
 .finish-btn {
   background: var(--nav-session-read-fg);

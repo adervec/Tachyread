@@ -22,6 +22,10 @@ function fmtDuration(ms) {
   return `${sec}s`;
 }
 
+function fmtWhen(ts) {
+  return new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 // Reading-pace heat: slow = blue, through green/yellow, fast = red.
 function paceColor(wpm, maxWpm) {
   const t = Math.max(0, Math.min(1, maxWpm > 0 ? wpm / maxWpm : 0));
@@ -76,6 +80,26 @@ export default function ProgressDetailDialog({ tab, onJumpWord, onClose }) {
   const daily = useMemo(() => {
     if (!tracker) return [];
     return tracker.dailyArray().slice().sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [tracker, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reading sessions from the paragraph-resolution timeline: group first-read paragraph stamps,
+  // starting a new session after a >25-minute lull. Each session = when (start→end) and where
+  // (position range) you read. Newest first.
+  const sessions = useMemo(() => {
+    const tl = tracker ? tracker.paraTimeline() : [];
+    tl.sort((a, b) => a.ts - b.ts);
+    const GAP = 25 * 60 * 1000;
+    const out = [];
+    for (const e of tl) {
+      const last = out[out.length - 1];
+      if (last && e.ts - last.endTs <= GAP) {
+        last.endTs = e.ts; last.paras += 1;
+        last.minW = Math.min(last.minW, e.startWord); last.maxW = Math.max(last.maxW, e.startWord);
+      } else {
+        out.push({ startTs: e.ts, endTs: e.ts, paras: 1, minW: e.startWord, maxW: e.startWord });
+      }
+    }
+    return out.reverse();
   }, [tracker, tick]); // eslint-disable-line react-hooks/exhaustive-deps
   const maxDayWords = Math.max(1, ...daily.map((d) => d.words));
 
@@ -216,6 +240,23 @@ export default function ProgressDetailDialog({ tab, onJumpWord, onClose }) {
                 ))}
               </div>
             </>
+          )}
+
+          <div className="field-section">Reading sessions — when &amp; where (by paragraph)</div>
+          {sessions.length === 0 ? (
+            <p className="settings-note">No sessions recorded yet — keep reading and they'll appear here, tracked at paragraph resolution.</p>
+          ) : (
+            <div className="pd-days">
+              {sessions.map((s, i) => (
+                <div key={i} className="pd-day-row pd-sess-row" title="Jump to where this session started"
+                  onClick={() => { onJumpWord?.(s.minW); onClose?.(); }}>
+                  <span className="pd-day-date">{fmtWhen(s.startTs)}</span>
+                  <span className="pd-sess-range">{((s.minW / total) * 100).toFixed(0)}–{((s.maxW / total) * 100).toFixed(0)}%</span>
+                  <span className="pd-sess-paras">{s.paras} ¶</span>
+                  <span className="pd-day-time">{fmtDuration(s.endTs - s.startTs)}</span>
+                </div>
+              ))}
+            </div>
           )}
 
           <div className="field-section">When you read — daily totals</div>
