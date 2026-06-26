@@ -222,6 +222,180 @@ function decor(style) {
         fg: [],
         hideNose: true, hideMouth: true,
       };
+    case 'Devil':
+      return {
+        skin: '#c0392b', stroke: '#7a1f16', brow: '#3a0a06',
+        bg: [
+          P('hornL', { points: '34,24 20,-4 50,18', fill: '#8a2018', stroke: '#5a1410', strokeWidth: 1.5 }),
+          P('hornR', { points: '96,24 110,-4 80,18', fill: '#8a2018', stroke: '#5a1410', strokeWidth: 1.5 }),
+          E('head', { cx: 65, cy: 90, rx: 57, ry: 65, fill: '#c0392b', stroke: '#7a1f16', strokeWidth: 2.5 }),
+        ],
+        fg: [PATH('goatee', { d: 'M52,142 C58,166 72,166 78,142 C72,152 58,152 52,142 Z', fill: '#3a0a06' })],
+      };
+    case 'Goblin':
+      return {
+        skin: '#86b04a', stroke: '#46641f', brow: '#2c4414', hideNose: true,
+        bg: [
+          P('earL', { points: '14,72 -14,88 16,104', fill: '#86b04a', stroke: '#46641f', strokeWidth: 1.5 }),
+          P('earR', { points: '116,72 144,88 114,104', fill: '#86b04a', stroke: '#46641f', strokeWidth: 1.5 }),
+          P('hornL', { points: '46,28 40,6 58,24', fill: '#5a7a30' }),
+          P('hornR', { points: '84,28 90,6 72,24', fill: '#5a7a30' }),
+          E('head', { cx: 65, cy: 90, rx: 53, ry: 63, fill: '#86b04a', stroke: '#46641f', strokeWidth: 2.5 }),
+        ],
+        fg: [PATH('nose', { d: 'M65,104 C73,114 72,126 62,128 C70,122 67,112 65,104 Z', fill: '#6a8a36' })],
+      };
+    case 'Pirate':
+      return {
+        skin: '#e8b88a', stroke: '#9b643c', brow: '#3a2a1a',
+        bg: [
+          E('head', { cx: 65, cy: 90, rx: 57, ry: 65, fill: '#e8b88a', stroke: '#9b643c', strokeWidth: 2.5 }),
+          PATH('bandana', { d: 'M9,56 Q65,18 121,56 L121,34 Q65,8 9,34 Z', fill: '#c0392b', stroke: '#8a2018', strokeWidth: 1.5 }),
+        ],
+        fg: [
+          L('strap', { points: '16,72 114,84', stroke: '#1a1a1a', strokeWidth: 3, fill: 'none' }),
+          E('patch', { cx: 93, cy: 82, rx: 18, ry: 15, fill: '#1a1a1a' }),
+          E('earring', { cx: 11, cy: 108, rx: 6, ry: 6, fill: 'none', stroke: '#e0b020', strokeWidth: 2.5 }),
+        ],
+      };
+    case 'Zombie':
+      return {
+        skin: '#8fae7a', stroke: '#3a5a30', brow: '#2a3a20', sclera: '#e8e8c0',
+        bg: [
+          E('head', { cx: 65, cy: 90, rx: 56, ry: 64, fill: '#8fae7a', stroke: '#3a5a30', strokeWidth: 2.5 }),
+          PATH('hair', { d: 'M14,46 Q40,18 65,30 Q90,18 116,46 Q92,36 65,42 Q38,36 14,46 Z', fill: '#3a4a28' }),
+        ],
+        fg: [
+          L('stitch', { points: '24,60 52,66', stroke: '#2a3a20', strokeWidth: 1.5, fill: 'none' }),
+          L('s1', { points: '30,57 28,69', stroke: '#2a3a20', strokeWidth: 1.5 }),
+          L('s2', { points: '40,59 38,71', stroke: '#2a3a20', strokeWidth: 1.5 }),
+          E('decay', { cx: 96, cy: 118, rx: 10, ry: 7, fill: '#6a8a52' }),
+        ],
+      };
+    case 'Pig':
+      return {
+        skin: '#ffb6c1', stroke: '#d98a98', brow: '#c07080', hideNose: true,
+        bg: [
+          P('earL', { points: '30,40 18,12 52,30', fill: '#ffb6c1', stroke: '#d98a98', strokeWidth: 1.5 }),
+          P('earR', { points: '100,40 112,12 78,30', fill: '#ffb6c1', stroke: '#d98a98', strokeWidth: 1.5 }),
+          E('head', { cx: 65, cy: 92, rx: 58, ry: 62, fill: '#ffb6c1', stroke: '#d98a98', strokeWidth: 2.5 }),
+        ],
+        fg: [
+          E('snout', { cx: 65, cy: 116, rx: 20, ry: 14, fill: '#ff9aa8', stroke: '#d98a98', strokeWidth: 1.5 }),
+          E('nos1', { cx: 58, cy: 116, rx: 3, ry: 5, fill: '#c06070' }),
+          E('nos2', { cx: 72, cy: 116, rx: 3, ry: 5, fill: '#c06070' }),
+        ],
+      };
+    case 'Bear':
+      return {
+        skin: '#a9744f', stroke: '#6a4428', brow: '#3a2414', hideNose: true,
+        bg: [
+          E('earL', { cx: 24, cy: 40, rx: 18, ry: 18, fill: '#a9744f', stroke: '#6a4428', strokeWidth: 2 }),
+          E('earR', { cx: 106, cy: 40, rx: 18, ry: 18, fill: '#a9744f', stroke: '#6a4428', strokeWidth: 2 }),
+          E('earLi', { cx: 24, cy: 42, rx: 9, ry: 9, fill: '#caa07a' }),
+          E('earRi', { cx: 106, cy: 42, rx: 9, ry: 9, fill: '#caa07a' }),
+          E('head', { cx: 65, cy: 90, rx: 57, ry: 62, fill: '#a9744f', stroke: '#6a4428', strokeWidth: 2.5 }),
+        ],
+        fg: [
+          E('muzzle', { cx: 65, cy: 118, rx: 24, ry: 18, fill: '#d8b48a' }),
+          E('nose', { cx: 65, cy: 108, rx: 9, ry: 6, fill: '#2a1a12' }),
+        ],
+      };
+    case 'Fox':
+      return {
+        skin: '#e8772e', stroke: '#a8521a', brow: '#7a3a10', hideNose: true,
+        bg: [
+          P('earL', { points: '18,30 8,-8 50,22', fill: '#e8772e', stroke: '#a8521a', strokeWidth: 1.5 }),
+          P('earR', { points: '112,30 122,-8 80,22', fill: '#e8772e', stroke: '#a8521a', strokeWidth: 1.5 }),
+          P('earLt', { points: '14,8 8,-8 26,8', fill: '#2a1a12' }),
+          P('earRt', { points: '116,8 122,-8 104,8', fill: '#2a1a12' }),
+          E('head', { cx: 65, cy: 90, rx: 56, ry: 60, fill: '#e8772e', stroke: '#a8521a', strokeWidth: 2.5 }),
+        ],
+        fg: [
+          E('snout', { cx: 65, cy: 120, rx: 22, ry: 18, fill: '#fff4ee' }),
+          E('nose', { cx: 65, cy: 112, rx: 7, ry: 5, fill: '#2a1a12' }),
+        ],
+      };
+    case 'Mouse':
+      return {
+        skin: '#b8b8c0', stroke: '#8a8a92', brow: '#5a5a62', hideNose: true,
+        bg: [
+          E('earL', { cx: 22, cy: 38, rx: 24, ry: 24, fill: '#b8b8c0', stroke: '#8a8a92', strokeWidth: 2 }),
+          E('earR', { cx: 108, cy: 38, rx: 24, ry: 24, fill: '#b8b8c0', stroke: '#8a8a92', strokeWidth: 2 }),
+          E('earLi', { cx: 22, cy: 40, rx: 13, ry: 13, fill: '#f0b8c8' }),
+          E('earRi', { cx: 108, cy: 40, rx: 13, ry: 13, fill: '#f0b8c8' }),
+          E('head', { cx: 65, cy: 92, rx: 55, ry: 60, fill: '#b8b8c0', stroke: '#8a8a92', strokeWidth: 2.5 }),
+        ],
+        fg: [E('nose', { cx: 65, cy: 112, rx: 6, ry: 5, fill: '#e87090' })],
+      };
+    case 'Penguin':
+      return {
+        skin: '#2a2a32', stroke: '#15151a', brow: '#2a2a32', hideNose: true,
+        bg: [
+          E('head', { cx: 65, cy: 90, rx: 56, ry: 64, fill: '#2a2a32', stroke: '#15151a', strokeWidth: 2.5 }),
+          E('facePatch', { cx: 65, cy: 96, rx: 40, ry: 48, fill: '#fafafa' }),
+        ],
+        fg: [P('beak', { points: '54,116 76,116 65,134', fill: '#f0a020', stroke: '#c07a10', strokeWidth: 1 })],
+      };
+    case 'Astronaut':
+      return {
+        skin: '#ffd5aa', stroke: '#9b643c', brow: '#231608',
+        bg: [E('head', { cx: 65, cy: 90, rx: 54, ry: 62, fill: '#ffd5aa', stroke: '#9b643c', strokeWidth: 2.5 })],
+        fg: [
+          L('ant', { points: '104,30 112,14', stroke: '#bbbbbb', strokeWidth: 2, fill: 'none' }),
+          E('antBulb', { cx: 113, cy: 12, rx: 4, ry: 4, fill: '#ff5252' }),
+          E('helmet', { cx: 65, cy: 86, rx: 64, ry: 70, fill: '#bfe0ff', opacity: 0.22, stroke: '#9ec8e8', strokeWidth: 2.5 }),
+          PATH('ring', { d: 'M8,150 Q65,168 122,150', fill: 'none', stroke: '#e0e0e4', strokeWidth: 6 }),
+        ],
+      };
+    case 'Unicorn':
+      return {
+        skin: '#fbefff', stroke: '#d8a0c0', brow: '#c890b0', hideNose: true,
+        bg: [
+          E('maneL', { cx: 24, cy: 50, rx: 12, ry: 12, fill: '#ff8ac0' }),
+          E('maneM', { cx: 65, cy: 24, rx: 12, ry: 12, fill: '#8ac0ff' }),
+          E('maneR', { cx: 106, cy: 50, rx: 12, ry: 12, fill: '#b0ff8a' }),
+          P('horn', { points: '59,18 71,18 65,-18', fill: '#ffd24a', stroke: '#e0b020', strokeWidth: 1 }),
+          P('earL', { points: '34,30 28,8 50,28', fill: '#fbefff', stroke: '#d8a0c0', strokeWidth: 1.5 }),
+          P('earR', { points: '96,30 102,8 80,28', fill: '#fbefff', stroke: '#d8a0c0', strokeWidth: 1.5 }),
+          E('head', { cx: 65, cy: 92, rx: 55, ry: 60, fill: '#fbefff', stroke: '#d8a0c0', strokeWidth: 2.5 }),
+        ],
+        fg: [],
+      };
+    case 'Santa':
+      return {
+        skin: '#ffcaa0', stroke: '#b07050', brow: '#d8d8d8',
+        bg: [
+          E('head', { cx: 65, cy: 92, rx: 55, ry: 60, fill: '#ffcaa0', stroke: '#b07050', strokeWidth: 2.5 }),
+          P('hat', { points: '18,40 80,40 110,-16', fill: '#c0392b', stroke: '#8a2018', strokeWidth: 1.5 }),
+          R('trim', { x: 14, y: 34, width: 96, height: 14, rx: 7, fill: '#fafafa' }),
+          E('pompom', { cx: 110, cy: -16, rx: 9, ry: 9, fill: '#fafafa' }),
+        ],
+        fg: [PATH('beard', { d: 'M34,138 C40,178 90,178 96,138 C88,158 42,158 34,138 Z', fill: '#fafafa', stroke: '#dddddd', strokeWidth: 1 })],
+      };
+    case 'Knight':
+      return {
+        skin: '#c8b89a', stroke: '#6a5a3a', brow: '#3a2a1a', sclera: '#1a1a1a', hideNose: true,
+        bg: [
+          E('head', { cx: 65, cy: 90, rx: 55, ry: 62, fill: '#c8b89a', stroke: '#6a5a3a', strokeWidth: 2.5 }),
+          PATH('dome', { d: 'M12,72 Q65,2 118,72 Z', fill: '#9aa0a8', stroke: '#6a6a72', strokeWidth: 2 }),
+          L('plume', { points: '65,8 65,-22', stroke: '#c0392b', strokeWidth: 6, fill: 'none' }),
+        ],
+        fg: [
+          R('browband', { x: 12, y: 64, width: 106, height: 12, fill: '#8a9098' }),
+          R('noseguard', { x: 59, y: 70, width: 12, height: 60, rx: 3, fill: '#9aa0a8', stroke: '#6a6a72', strokeWidth: 1 }),
+        ],
+      };
+    case 'Witch':
+      return {
+        skin: '#9fce7a', stroke: '#4f7a30', brow: '#2c4414',
+        bg: [
+          E('head', { cx: 65, cy: 92, rx: 55, ry: 60, fill: '#9fce7a', stroke: '#4f7a30', strokeWidth: 2.5 }),
+          P('hat', { points: '30,36 100,36 78,-44', fill: '#1a1430', stroke: '#0a0820', strokeWidth: 1.5 }),
+          E('brim', { cx: 65, cy: 38, rx: 62, ry: 12, fill: '#1a1430' }),
+          R('band', { x: 42, y: 24, width: 46, height: 8, fill: '#7a30c0' }),
+        ],
+        fg: [E('wart', { cx: 84, cy: 120, rx: 4, ry: 4, fill: '#6a8a36' })],
+      };
     case 'Man':
     default:
       return {
