@@ -38,6 +38,7 @@ const MENUS = {
   view: [
     { label: 'Tab Settings...', action: 'tab-settings' },
     { label: 'Statistics...', shortcut: 'Ctrl+T', action: 'stats' },
+    { label: 'Progress Detail...', action: 'progress-detail' },
     { label: 'Regression Report...', action: 'regressions' },
     { label: 'Attention Check...', action: 'attention' },
     { label: 'Reading History...', shortcut: 'Ctrl+H', action: 'history' },

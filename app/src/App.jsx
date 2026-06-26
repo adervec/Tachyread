@@ -42,6 +42,7 @@ import SpanDrillDialog from './dialogs/SpanDrillDialog.jsx';
 import FlowWriterDialog from './dialogs/FlowWriterDialog.jsx';
 import VocabDialog from './dialogs/VocabDialog.jsx';
 import RegressionDialog from './dialogs/RegressionDialog.jsx';
+import ProgressDetailDialog from './dialogs/ProgressDetailDialog.jsx';
 import DictationDialog from './dialogs/DictationDialog.jsx';
 import AttentionDialog from './dialogs/AttentionDialog.jsx';
 import AmbientDialog from './dialogs/AmbientDialog.jsx';
@@ -1307,6 +1308,7 @@ function AppInner() {
       return;
     }
     if (action === 'stats') return openDialog({ kind: 'stats' });
+    if (action === 'progress-detail' && activeTab) return openDialog({ kind: 'progress-detail' });
     if (action === 'history') return openDialog({ kind: 'history' });
     if (action === 'proper-names' && activeTab) return openDialog({ kind: 'proper-names' });
     if (action === 'toc-wizard' && activeTab) return openDialog({ kind: 'toc-wizard' });
@@ -1676,6 +1678,9 @@ function AppInner() {
       {dialog?.kind === 'vocab' && <VocabDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'regressions' && activeTab && (
         <RegressionDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
+      )}
+      {dialog?.kind === 'progress-detail' && activeTab && (
+        <ProgressDetailDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
       )}
       {dialog?.kind === 'attention' && activeTab && (
         <AttentionDialog tab={activeTab} recentScores={probeScoresRef.current} onClose={closeDialog} />

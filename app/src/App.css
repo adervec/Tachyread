@@ -1379,6 +1379,52 @@
 .trendline .tl-skip { fill: rgba(217, 131, 36, 0.20); }
 .trendline .tl-peek { stroke: var(--toggle-active-bg); stroke-width: 1.5; stroke-dasharray: 3 2; }
 
+/* ── Progress Detail dialog ───────────────────────────────────────────────── */
+.pd-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 6px; }
+.pd-card { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: var(--controls-bg); border: 1px solid var(--divider); border-radius: 8px; }
+.pd-card-num { font-size: 20px; font-weight: 700; line-height: 1; }
+.pd-card-label { font-size: 11px; opacity: 0.7; }
+@media (max-width: 700px) { .pd-cards { grid-template-columns: repeat(2, 1fr); } }
+
+.pd-bar-wrap { position: relative; margin: 4px 0 2px; cursor: pointer; }
+.pd-bar { display: block; width: 100%; height: 168px; }
+.pd-bar .pd-base { stroke: var(--divider); stroke-width: 1; }
+.pd-bar .pd-skipband { fill: rgba(217, 131, 36, 0.16); }
+.pd-bar .pd-pos { stroke: var(--orp-fg); stroke-width: 2; }
+.pd-bar .pd-reg-tick { stroke: var(--orp-fg); stroke-width: 1.5; opacity: 0.65; }
+/* coverage strip + legend swatches share these fills */
+.pd-cv-session { fill: var(--nav-session-read-fg); background: var(--nav-session-read-fg); }
+.pd-cv-history { fill: var(--session-read-fg); background: var(--session-read-fg); opacity: 0.6; }
+.pd-cv-unread { fill: var(--line-number-fg); background: var(--line-number-fg); opacity: 0.3; }
+.pd-cv-skip { fill: rgba(217, 131, 36, 0.5); background: rgba(217, 131, 36, 0.5); }
+
+.pd-cursor { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--orp-fg); opacity: 0.5; pointer-events: none; }
+.pd-tip { position: absolute; top: -4px; transform: translateX(-50%); background: var(--dialog-bg, var(--controls-bg)); border: 1px solid var(--divider); border-radius: 6px; padding: 5px 8px; font-size: 11px; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,0.25); z-index: 2; }
+.pd-tip-row { line-height: 1.4; }
+.pd-tip-sec { opacity: 0.75; font-style: italic; }
+
+.pd-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11px; opacity: 0.8; margin: 4px 0 2px; align-items: center; }
+.pd-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.pd-sw { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
+.pd-sw.pd-reg-sw { background: var(--orp-fg); width: 2px; height: 12px; border-radius: 0; }
+.pd-heat { gap: 6px !important; }
+.pd-heatbar { width: 70px; height: 8px; border-radius: 2px; background: linear-gradient(90deg, hsl(220 72% 52%), hsl(140 72% 52%), hsl(60 72% 52%), hsl(0 72% 52%)); }
+
+.pd-sections, .pd-days { max-height: 200px; overflow-y: auto; border: 1px solid var(--divider); border-radius: 8px; }
+.pd-sec-row, .pd-day-row { display: flex; align-items: center; gap: 10px; padding: 5px 10px; font-size: 12px; border-bottom: 1px solid var(--divider); }
+.pd-sec-row:last-child, .pd-day-row:last-child { border-bottom: none; }
+.pd-sec-row { cursor: pointer; }
+.pd-sec-row:hover { background: var(--controls-bg); }
+.pd-sec-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-sec-bar, .pd-day-bar { width: 90px; height: 8px; background: var(--line-number-fg, #ccc); border-radius: 4px; overflow: hidden; flex: none; opacity: 0.5; }
+.pd-sec-bar i, .pd-day-bar i { display: block; height: 100%; background: var(--nav-session-read-fg); }
+.pd-sec-pct { width: 38px; text-align: right; opacity: 0.75; }
+.pd-sec-wpm { width: 64px; text-align: right; opacity: 0.85; }
+.pd-sec-words { width: 70px; text-align: right; opacity: 0.6; font-variant-numeric: tabular-nums; }
+.pd-day-date { width: 92px; font-variant-numeric: tabular-nums; }
+.pd-day-words { flex: 1; text-align: right; }
+.pd-day-time { width: 64px; text-align: right; opacity: 0.7; }
+
 .finish-btn {
   background: var(--nav-session-read-fg);
   color: #fff;
