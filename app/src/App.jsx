@@ -13,7 +13,7 @@ import PaneLayout from './components/PaneLayout.jsx';
 import ReaderRotator from './components/ReaderRotator.jsx';
 import FaceStage from './components/FaceStage.jsx';
 import PerfMonitor from './components/PerfMonitor.jsx';
-import { useIsCompact, deviceKind } from './state/device.js';
+import { useIsCompact, deviceKind, isCompactScreen } from './state/device.js';
 import AudioChat from './components/AudioChat.jsx';
 import TypingRun from './components/TypingRun.jsx';
 import FindDialog from './dialogs/FindDialog.jsx';
@@ -1356,6 +1356,34 @@ function AppInner() {
   // Mobile-only quarter-turn applied to just the reader box (not the menus/controls).
   const readerRotation = state.global.readerRotation || 0;
 
+  // Lock the app to portrait: the web has no reliable cross-platform orientation lock, so when a phone
+  // is physically turned to landscape we counter-rotate the WHOLE app by -angle — undoing the browser's
+  // auto-rotation so the layout stays portrait instead of reflowing. Only fires on a compact/touch
+  // device in landscape at a quarter-turn (angle 90/270), so it's a no-op on desktop and on tablets
+  // used in their natural orientation. The manual ⟳ reader rotation is independent of this.
+  const lockPortrait = state.global.lockPortrait !== false;
+  const [forcePortrait, setForcePortrait] = useState(null); // counter-rotation in degrees, or null
+  useEffect(() => {
+    const evaluate = () => {
+      const landscape = window.innerWidth > window.innerHeight;
+      if (!lockPortrait || !isCompactScreen() || !landscape) { setForcePortrait(null); return; }
+      let angle;
+      if (typeof window.screen?.orientation?.angle === 'number') angle = window.screen.orientation.angle;
+      else if (typeof window.orientation === 'number') angle = window.orientation === 90 ? 270 : window.orientation === -90 ? 90 : Math.abs(window.orientation);
+      else angle = 90; // unknown but landscape → assume a quarter turn
+      setForcePortrait(angle === 90 || angle === 270 ? -angle : null);
+    };
+    evaluate();
+    window.addEventListener('resize', evaluate);
+    window.addEventListener('orientationchange', evaluate);
+    window.screen?.orientation?.addEventListener?.('change', evaluate);
+    return () => {
+      window.removeEventListener('resize', evaluate);
+      window.removeEventListener('orientationchange', evaluate);
+      window.screen?.orientation?.removeEventListener?.('change', evaluate);
+    };
+  }, [lockPortrait]);
+
   // Opening an aux pane on a phone pauses playback (you're navigating, not reading the text).
   useEffect(() => {
     if (auxOpen && playing) { engineRef.current.pause(); setPlaying(false); cancelSpeech(); }
@@ -1422,7 +1450,10 @@ function AppInner() {
   const dialog = state.dialog;
 
   return (
-    <div className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}`}>
+    <div
+      className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}${forcePortrait != null ? ' force-portrait' : ''}`}
+      style={forcePortrait != null ? { transform: `translate(-50%, -50%) rotate(${forcePortrait}deg)` } : undefined}
+    >
       <header className={`app-chrome${isCompact && chromeHidden ? ' collapsed' : ''}`}>
         <div className="chrome-body">
           <MenuBar onFileOpen={openFile} onAction={handleMenuAction} />
@@ -1481,6 +1512,16 @@ function AppInner() {
                 onClick={() => updateGlobal({ readerRotation: ((state.global.readerRotation || 0) + 90) % 360 })}
               >
                 ⟳{readerRotation ? ` ${readerRotation}°` : ''}
+              </button>
+              {/* Lock the whole app to portrait — ignore the phone's physical auto-rotate. */}
+              <button
+                className={`rv-rotate${lockPortrait ? ' on' : ''}`}
+                title={lockPortrait ? 'Portrait locked — the app ignores the phone’s auto-rotate. Tap to allow landscape.' : 'Tap to lock portrait (ignore the phone’s auto-rotate)'}
+                aria-label="Lock portrait orientation"
+                aria-pressed={lockPortrait}
+                onClick={() => updateGlobal({ lockPortrait: !lockPortrait })}
+              >
+                {lockPortrait ? '🔒' : '🔓'}
               </button>
             </div>
           )}
