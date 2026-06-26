@@ -1303,6 +1303,16 @@
 .dashboard-pane.dock .dash-stat-row { gap: 8px; }
 
 /* Bottom controls */
+/* Focus mode (in-app spotlight): fade the chrome, tab bar, controls and status so only the reading
+   surface stands out; hovering any of them brings it back. The other-monitor blackout is handled by
+   cover windows in features/focusMode.js. */
+.app.focus-on .app-chrome,
+.app.focus-on .controls-bar,
+.app.focus-on .app-status { opacity: 0.12; transition: opacity 0.25s ease; }
+.app.focus-on .app-chrome:hover,
+.app.focus-on .controls-bar:hover,
+.app.focus-on .app-status:hover { opacity: 1; }
+
 .controls-bar {
   background: var(--controls-bg);
   border-top: 1px solid var(--divider);

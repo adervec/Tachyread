@@ -251,5 +251,9 @@ export function defaultGlobalSettings() {
     // When on, mouse-wheel / trackpad scrolling over the reader advances/rewinds the reading
     // position instead of scrolling the pane.
     scrollAdvances: false,
+    // Focus mode: fullscreen + fade chrome + (Chromium) black out other monitors. focusDim is how
+    // dark the other-monitor cover windows are (1 = pure black, lower = dark grey).
+    focusMode: false,
+    focusDim: 0.92,
   };
 }

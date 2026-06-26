@@ -55,6 +55,7 @@ import { cancelSpeech, rateFromIndex, speak } from './features/tts.js';
 import TypingPlanDialog from './dialogs/TypingPlanDialog.jsx';
 import SaveTabDialog from './dialogs/SaveTabDialog.jsx';
 import { createReadAloud } from './features/readAloud.js';
+import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
 import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession } from './state/storage.js';
@@ -784,6 +785,49 @@ function AppInner() {
     return () => el.removeEventListener('wheel', onWheel);
   }, [state.global.scrollAdvances]);
 
+  // Focus mode: fullscreen the app + (Chromium) black out other monitors with cover windows. Must run
+  // straight from the toggle click — the user gesture is what unlocks fullscreen / window-management /
+  // pop-ups, so this can't live in an effect.
+  const focusCoversRef = useRef([]);
+  async function toggleFocusMode() {
+    if (state.global.focusMode) {
+      exitFocus(focusCoversRef.current); focusCoversRef.current = [];
+      updateGlobal({ focusMode: false });
+      return;
+    }
+    const res = await enterFocus(document.documentElement, state.global.focusDim ?? 0.92);
+    focusCoversRef.current = res.covers;
+    updateGlobal({ focusMode: true });
+    const msg = {
+      unsupported: 'Focus on. Multi-monitor blackout needs Chrome or Edge — app is fullscreen only.',
+      denied: 'Focus on. Allow “window management” to black out other monitors.',
+      single: 'Focus on. Only one monitor detected.',
+      blocked: 'Focus on. Allow pop-ups to black out other monitors.',
+      ok: `Focus on. Blacked out ${res.covers.length} other monitor${res.covers.length === 1 ? '' : 's'}.`,
+    }[res.reason];
+    if (msg) setStatus(msg);
+  }
+  // Keep cover dimness live as the slider moves; tear focus down if the user Escapes fullscreen.
+  useEffect(() => {
+    if (state.global.focusMode) repaintCovers(focusCoversRef.current, state.global.focusDim ?? 0.92);
+  }, [state.global.focusDim, state.global.focusMode]);
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement && state.global.focusMode) {
+        exitFocus(focusCoversRef.current); focusCoversRef.current = [];
+        updateGlobal({ focusMode: false });
+      }
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, [state.global.focusMode, updateGlobal]);
+  // Never leave orphaned cover windows behind if the app tab goes away.
+  useEffect(() => {
+    const onHide = () => exitFocus(focusCoversRef.current);
+    window.addEventListener('pagehide', onHide);
+    return () => window.removeEventListener('pagehide', onHide);
+  }, []);
+
   // ── Typing plan runner ──────────────────────────────────────────────────────────────────────
   // A plan runs step by step, set by set; each step's drill config is pushed into the typing
   // settings, and the step's description is spoken (TTS) at the start of its first set. TypingRun is
@@ -1359,7 +1403,7 @@ function AppInner() {
   const dialog = state.dialog;
 
   return (
-    <div className={`app${state.incognito ? ' incognito' : ''}`}>
+    <div className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}`}>
       <header className={`app-chrome${isCompact && chromeHidden ? ' collapsed' : ''}`}>
         <div className="chrome-body">
           <MenuBar onFileOpen={openFile} onAction={handleMenuAction} />
@@ -1504,6 +1548,7 @@ function AppInner() {
             onConfirmFinished={() => openDialog({ kind: 'finished' })}
             audioCtrl={!!activeTab.settings.audioCtrl}
             readAloud={!!activeTab.settings.readAloud}
+            onToggleFocus={toggleFocusMode}
             onToggleReadAloud={() =>
               patchSettings(activeTab.id, {
                 readAloud: !activeTab.settings.readAloud,
