@@ -201,6 +201,10 @@ export function AppProvider({ children }) {
       ...(stateRef.current.global.fileDefaults || {}),
       ...(stored || {}),
     };
+    // Migrate the old 3000ms line long-press default (way too long — it just needs to reject
+    // accidental taps) down to the new 450ms default. ponytail: also remaps a deliberate 3000, which
+    // nobody sets; anyone wanting a different hold just uses the slider.
+    if (baseSettings.lineLongPressMs === 3000) baseSettings.lineLongPressMs = 450;
     // Record the book's name on its settings so the reading history can label it without a payload load.
     baseSettings.fileName = doc.fileName || baseSettings.fileName || '';
     // Clamp wordIndex if it overruns the new doc length
@@ -208,12 +212,17 @@ export function AppProvider({ children }) {
       baseSettings.wordIndex = Math.max(0, doc.words.length - 1);
     // Reading tracker, seeded from the persisted read mask + lifetime active time.
     const rs = await loadReadState(doc.contentChecksum);
+    // Paragraph boundaries (first word index of each paragraph) for the paragraph-resolution timeline.
+    const paragraphStarts = [];
+    { let inPara = false; for (const ln of doc.lines) { if (ln.isEmpty) { inPara = false; continue; } if (!inPara) { paragraphStarts.push(ln.startWordIndex); inPara = true; } } }
     const tracker = createReadingTracker({
       wordCount: doc.words.length,
       maskB64: rs?.maskB64 || '',
       wpmB64: rs?.wpmB64 || '',
       lifetimeActiveMs: rs?.lifetimeActiveMs || 0,
       daily: rs?.daily || [],
+      paragraphStarts,
+      paraTsB64: rs?.paraTsB64 || '',
     });
     // Book-group catch-up: if this file is grouped with other editions, resume at the furthest
     // percent any of them reached (progress shared as a fraction, since masks can't cross editions).
@@ -235,6 +244,7 @@ export function AppProvider({ children }) {
           saveReadState(doc.contentChecksum, {
             maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(),
             lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(),
+            paraTsB64: tracker.serializeParaTs(),
           }).catch(() => {});
         }
         groupNote = ` — caught up to ${Math.round(best * 100)}% from “${group.name}”`;
@@ -317,6 +327,7 @@ export function AppProvider({ children }) {
       wpmB64: tr.serializeWpm(),
       lifetimeActiveMs: tr.lifetimeActiveMs,
       daily: tr.dailyArray(),
+      paraTsB64: tr.serializeParaTs(),
     }).catch(() => {});
     dispatch({
       type: 'PATCH_SETTINGS',

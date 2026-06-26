@@ -305,7 +305,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   const [menu, setMenu] = useState(null);
   const [pressingStart, setPressingStart] = useState(-1); // wordIndex of the line being long-pressed
   const pressRef = useRef({});
-  const longPressMs = settings.lineLongPressMs ?? 3000;
+  const longPressMs = settings.lineLongPressMs ?? 450;
   const hideBeyond = useMemo(() => revealBoundary(doc, idx, hideMode), [doc, idx, hideMode]);
 
   function onContextMenu(e) {
@@ -439,7 +439,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   );
 
   // Long-press to navigate: a single click no longer jumps — you must hold a line for
-  // lineLongPressMs (default 3000). Pointer drift or release cancels the press. Set 0 for the
+  // lineLongPressMs (default 450). Pointer drift or release cancels the press. Set 0 for the
   // old instant-click behaviour. The "pressing" highlight is React state (not a manual class) so
   // a background re-render mid-hold can't wipe the progress indicator.
   function cancelPress() {

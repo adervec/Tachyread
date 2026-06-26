@@ -4,6 +4,8 @@ import { getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import { deviceKind } from '../state/device.js';
 import { buildPassage, TYPING_MODES, TYPING_MODE_BY_ID } from '../engine/typingModes.js';
 import { letterGrade, playGradeSound, GRADE_STATEMENTS } from '../features/gradeChime.js';
+import { createReadAloud } from '../features/readAloud.js';
+import { rateFromIndex } from '../features/tts.js';
 
 const DEFAULT_SOUNDS = {
   charCorrect: 'off', charWrong: 'off', wordPerfect: 'click', wordError: 'hiss',
@@ -40,6 +42,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const { doc, settings } = tab;
   const cfg = settings.typing || {};
   const caseSensitive = !!cfg.caseSensitive;
+  const oneWord = !!cfg.oneWord; // show one word at a time; it must be typed perfectly to advance
+  const raceVoice = !!cfg.raceVoice; // race the TTS voice: it reads the passage; get caught if it passes you
   const volume = cfg.soundVolume ?? 0.4;
   const sounds = { ...DEFAULT_SOUNDS, ...(cfg.sounds || {}) };
   const tickClock = !!cfg.tickClock;
@@ -101,6 +105,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const [, setTick] = useState(0);
   const [trend, setTrend] = useState([]);     // {t, gross, net, acc}
   const [summary, setSummary] = useState(null);
+  const [voicePos, setVoicePos] = useState(-1); // word the racing voice is currently speaking
 
   const stats = useRef(freshStats());
   const wordErrors = useRef(0);
@@ -110,6 +115,15 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const linesRef = useRef(null);
   const activeRef = useRef(null);
   const lineH = useRef(0);
+  // Voice-race state. posRef mirrors `pos` so the speech callbacks (which close over a stale render)
+  // can read your live typing position; the rest track the racing voice.
+  const posRef = useRef(0);
+  const voiceRef = useRef(0);       // voice's current word index
+  const racerRef = useRef(null);    // active read-aloud "racer"
+  const caughtRef = useRef(false);  // did the voice pass you this run
+  const racedRef = useRef(false);   // was a race actually running (speech available)
+  const raceStartRef = useRef(0);   // race start time — a short grace ignores instant speech errors
+  useEffect(() => { posRef.current = pos; }, [pos]);
 
   const effLimitSecs = mode === 'endless' ? ENDLESS_SECS : limit;
 
@@ -130,6 +144,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const endRun = useCallback(() => {
     if (tickTimer.current) { clearInterval(tickTimer.current); tickTimer.current = null; }
     if (idleTimer.current) { clearTimeout(idleTimer.current); idleTimer.current = null; }
+    if (racerRef.current) { racerRef.current.stop(); racerRef.current = null; }
     const s = stats.current;
     const m = metrics();
     const net = Math.round(m.net);
@@ -149,6 +164,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       grade: letterGrade(net),
       device: deviceKind(), // 'Mobile' | 'Desktop' — which device this run was typed on
       mode: gameMode,       // which typing mode/drill this run used
+      raced: racedRef.current,    // was this a voice race
+      caught: caughtRef.current,  // did the voice catch you
     };
     setSummary(run);
     setPhase('done');
@@ -203,6 +220,31 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     lines.style.transform = `translateY(${-Math.max(0, lineIdx - 1) * lineH.current}px)`;
   }, [pos, buf]);
 
+  function stopRace() { racerRef.current?.stop(); racerRef.current = null; }
+  // Start the voice racer: it reads the passage aloud and reports the word it's speaking. You're
+  // "caught" the instant the voice is on a word PAST the one you're typing. The 400ms grace gives a
+  // fair head start and ignores an immediate onerror (so a missing/broken voice can't insta-catch you).
+  // ponytail: needs word-boundary events; voices that don't emit them just never advance (you win).
+  function startRace() {
+    stopRace();
+    if (typeof window === 'undefined' || !window.speechSynthesis) { racedRef.current = false; return; }
+    voiceRef.current = 0; setVoicePos(0); caughtRef.current = false; racedRef.current = true;
+    raceStartRef.current = Date.now();
+    const racer = createReadAloud({
+      getWords: () => passage,
+      getIndex: () => voiceRef.current,
+      setIndex: (wi) => {
+        voiceRef.current = wi; setVoicePos(wi);
+        if (wi > posRef.current && Date.now() - raceStartRef.current > 400) { caughtRef.current = true; endRun(); }
+      },
+      getVoiceName: () => settings.annunciateVoice,
+      getRate: () => rateFromIndex(settings.annunciateRate || 0),
+      onEnd: () => {}, // voice reached the end without passing you — you outran it
+    });
+    racerRef.current = racer;
+    racer.start();
+  }
+
   function start() {
     stats.current = freshStats();
     stats.current.start = Date.now();
@@ -211,6 +253,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     setPhase('running');
     setTrend([]);
     armIdle();
+    if (raceVoice) startRace();
   }
 
   const clearCount = () => { countTimers.current.forEach(clearTimeout); countTimers.current = []; };
@@ -220,6 +263,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // count and is ready the instant we hit "Go!".
   function beginCountdown() {
     clearCount();
+    stopRace(); setVoicePos(-1); voiceRef.current = 0; caughtRef.current = false; racedRef.current = false;
     setPos(0); setBuf(''); setResults([]); setSummary(null); setTrend([]);
     stats.current = freshStats(); wordErrors.current = 0;
     seg.current = { line: true, sent: true, para: true };
@@ -234,9 +278,10 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     ];
   }
 
-  useEffect(() => () => clearCount(), []); // clear pending countdown timers on unmount
+  useEffect(() => () => { clearCount(); racerRef.current?.stop(); }, []); // clear timers / silence voice on unmount
 
   function reattempt() {
+    stopRace(); setVoicePos(-1); voiceRef.current = 0; caughtRef.current = false; racedRef.current = false;
     setPos(0);
     setBuf('');
     setResults([]);
@@ -262,6 +307,13 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
   function commitWord(typed = buf) {
     const target = passage[pos] || '';
+    // One-word mode gates advancement on an exact match (case rule applied). A wrong word stays put:
+    // clear the buffer and let them retype. A mistyped-then-fixed word still matches, so it advances.
+    if (oneWord) {
+      const exact = typed.length === target.length && [...typed].every((c, j) => sameChar(c, target[j], caseSensitive));
+      if (!exact) { ping(sounds.wordError); wordErrors.current = 0; setBuf(''); return; }
+      wordErrors.current = 0; // matched exactly → counts as perfect even if chars were corrected
+    }
     const perfect = wordErrors.current === 0 && typed.length === target.length;
     const s = stats.current;
     s.words += 1;
@@ -404,6 +456,16 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                   onChange={(e) => { const v = Math.max(1, Number(e.target.value) || 1); setLimit(v); onPatch?.({ typing: { ...cfg, runLimit: v } }); }}
                   style={{ width: 64 }} />
               )}
+              <label className="tr-oneword" title="One word at a time — each word must be typed perfectly to advance">
+                <input type="checkbox" checked={oneWord}
+                  onChange={(e) => onPatch?.({ typing: { ...cfg, oneWord: e.target.checked } })} />
+                <span>1-word</span>
+              </label>
+              <label className="tr-oneword" title="Race the TTS voice — it reads the passage aloud; if it passes the word you're typing, you're caught. Lower the read-aloud rate in Settings to make it easier.">
+                <input type="checkbox" checked={raceVoice}
+                  onChange={(e) => onPatch?.({ typing: { ...cfg, raceVoice: e.target.checked } })} />
+                <span>🏁 Race voice</span>
+              </label>
             </>
           )}
           <label className="tr-vol" title="Sound volume">🔊
@@ -442,13 +504,15 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
       <div className="tr-viewport">
         {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{count}</div>}
-        <div className="tr-lines" ref={linesRef}>
+        <div className={`tr-lines${oneWord ? ' one-word' : ''}`} ref={linesRef}>
           {passage.map((w, i) => {
+            if (oneWord && i !== pos) return null; // one-word mode shows only the current word
+            const vc = i === voicePos ? ' voice' : ''; // word the racing voice is currently speaking
             if (i < pos) {
               const r = results[i];
-              return <span key={i} className={`trw ${r && !r.perfect ? 'imperfect' : 'done'}`}>{w} </span>;
+              return <span key={i} className={`trw ${r && !r.perfect ? 'imperfect' : 'done'}${vc}`}>{w} </span>;
             }
-            if (i > pos) return <span key={i} className="trw pending">{w} </span>;
+            if (i > pos) return <span key={i} className={`trw pending${vc}`}>{w} </span>;
             // active word — per-char colouring + caret
             const len = Math.max(w.length, buf.length);
             const chars = [];
@@ -461,7 +525,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               chars.push(<span key={j} className={cls}>{j >= w.length ? buf[j] : w[j]}</span>);
             }
             if (buf.length >= len) chars.push(<span key="ce" className="trc caret" />);
-            return <span key={i} className="trw active" ref={activeRef}>{chars}{' '}</span>;
+            return <span key={i} className={`trw active${vc}`} ref={activeRef}>{chars}{' '}</span>;
           })}
         </div>
       </div>
@@ -474,6 +538,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             <div className={`tr-grade tr-grade-${summary.grade}`}>
               <span className="tr-grade-letter">{summary.grade}</span>
               <span className="tr-grade-statement">{GRADE_STATEMENTS[summary.grade]}</span>
+            </div>
+          )}
+          {summary.raced && (
+            <div className={`tr-race-result${summary.caught ? ' caught' : ''}`}>
+              {summary.caught ? '🔊 The voice caught you!' : '🏁 You outran the voice!'}
             </div>
           )}
           <div className="tr-results-head">

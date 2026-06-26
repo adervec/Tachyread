@@ -14,7 +14,7 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon }) {
+export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus }) {
   const { patchSettings, state, updateGlobal } = useApp();
   const isCompact = useIsCompact();
   // On phones the full playback row (10 nav buttons + speed unit + 4 mode toggles + goal) wraps into
@@ -143,6 +143,38 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
               <option value="firstWord">First word</option>
               <option value="line">Line</option>
             </select>
+          </div>
+          <div className="mode-pair">
+            <span title="Focus mode: fullscreen the app, fade the controls, and (Chrome/Edge) black out your other monitors">FOCUS</span>
+            <button
+              className={state.global.focusMode ? 'toggle-on' : ''}
+              onClick={onToggleFocus}
+              title="Block distractions: fullscreen + black out other monitors"
+            >
+              {state.global.focusMode ? 'On' : 'Off'}
+            </button>
+            {state.global.focusMode && (
+              <input
+                type="range"
+                min={0.4}
+                max={1}
+                step={0.05}
+                value={state.global.focusDim ?? 0.92}
+                onChange={(e) => updateGlobal({ focusDim: Number(e.target.value) })}
+                title="Other-monitor dimness (black ↔ light)"
+                style={{ width: 70 }}
+              />
+            )}
+          </div>
+          <div className="mode-pair">
+            <span title="Mouse-wheel / trackpad scrolling over the reader moves your reading position forward and back">SCROLL</span>
+            <button
+              className={state.global.scrollAdvances ? 'toggle-on' : ''}
+              onClick={() => updateGlobal({ scrollAdvances: !state.global.scrollAdvances })}
+              title="Scroll to advance reading (instead of just scrolling the pane)"
+            >
+              {state.global.scrollAdvances ? 'On' : 'Off'}
+            </button>
           </div>
           <div className="mode-pair">
             <span>VOICE COMMAND</span>

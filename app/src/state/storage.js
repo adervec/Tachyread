@@ -511,7 +511,7 @@ export async function exportProgressData() {
   const rsVals = await db.getAll('readstate');
   for (let i = 0; i < rsKeys.length; i++) {
     const v = rsVals[i] || {};
-    out.readstate[rsKeys[i]] = { maskB64: v.maskB64 || '', wpmB64: v.wpmB64 || '', lifetimeActiveMs: v.lifetimeActiveMs || 0, daily: v.daily || [] };
+    out.readstate[rsKeys[i]] = { maskB64: v.maskB64 || '', wpmB64: v.wpmB64 || '', lifetimeActiveMs: v.lifetimeActiveMs || 0, daily: v.daily || [], paraTsB64: v.paraTsB64 || '' };
   }
   for (const f of await db.getAll('files')) {
     if (!f?.checksum) continue;
@@ -541,6 +541,7 @@ export async function importProgressData(bundle) {
       wpmB64: cur.wpmB64 || inc.wpmB64 || '',
       lifetimeActiveMs: Math.max(cur.lifetimeActiveMs || 0, inc.lifetimeActiveMs || 0),
       daily: mergeDaily(cur.daily, inc.daily),
+      paraTsB64: cur.paraTsB64 || inc.paraTsB64 || '',
     }, checksum);
     await tx.done;
     merged++;

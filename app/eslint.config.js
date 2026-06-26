@@ -18,6 +18,8 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
     rules: {
+      // Allow the `const { dropMe, ...rest } = obj` idiom for omitting a key (used in the sync merge).
+      'no-unused-vars': ['error', { ignoreRestSiblings: true }],
       // This project does NOT enable the React Compiler (see README), so the
       // compiler-oriented "rules of React" below flag intentional escape-hatch
       // patterns (live ref mirrors, DOM writes in event handlers, state resets
@@ -30,5 +32,10 @@ export default defineConfig([
       // Fast Refresh DX hint (mixed component/hook exports), not correctness.
       'react-refresh/only-export-components': 'warn',
     },
+  },
+  {
+    // Node-context config files (vite.config.js, eslint.config.js) use Node globals like `process`.
+    files: ['**/*.config.js'],
+    languageOptions: { globals: globals.node },
   },
 ])

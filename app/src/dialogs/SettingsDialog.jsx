@@ -193,7 +193,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           min={0}
           max={6000}
           step={250}
-          value={s.lineLongPressMs ?? 3000}
+          value={s.lineLongPressMs ?? 450}
           onChange={(e) => patch({ lineLongPressMs: Math.max(0, Number(e.target.value)) })}
         />
       </Field>

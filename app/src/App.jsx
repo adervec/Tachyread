@@ -42,6 +42,7 @@ import SpanDrillDialog from './dialogs/SpanDrillDialog.jsx';
 import FlowWriterDialog from './dialogs/FlowWriterDialog.jsx';
 import VocabDialog from './dialogs/VocabDialog.jsx';
 import RegressionDialog from './dialogs/RegressionDialog.jsx';
+import ProgressDetailDialog from './dialogs/ProgressDetailDialog.jsx';
 import DictationDialog from './dialogs/DictationDialog.jsx';
 import AttentionDialog from './dialogs/AttentionDialog.jsx';
 import AmbientDialog from './dialogs/AmbientDialog.jsx';
@@ -55,6 +56,7 @@ import { cancelSpeech, rateFromIndex, speak } from './features/tts.js';
 import TypingPlanDialog from './dialogs/TypingPlanDialog.jsx';
 import SaveTabDialog from './dialogs/SaveTabDialog.jsx';
 import { createReadAloud } from './features/readAloud.js';
+import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
 import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession } from './state/storage.js';
@@ -408,15 +410,20 @@ function AppInner() {
     const inc = incognitoRef.current;
     // Reading-efficiency tracking (classifies read / skip / re-read / revisit + active time).
     if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now());
+    // Forward motion (playback, a forward word step, scrolling forward) means you read the text you
+    // passed — credit those words for coverage even on a multi-word step the move-classifier treats
+    // as a skim/skip. recordMove above keeps the time/WPM accounting honest.
+    if (!inc && next > cur) activeTab.tracker?.markRangeRead(cur, next);
     // Line status coloring for the right pane.
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
     if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick(0.16, activeTab.settings.lineSoundKind);
     if (!inc) {
-      if (delta === 1 && next > cur && !opts.nav) {
-        if (newLine !== prevLine) {
-          activeTab.sessionLinesRead.add(prevLine);
-          activeTab.readLinesAllTime.add(prevLine);
+      if (next > cur) {
+        // Mark every line we left behind as read (covers single steps and multi-line scroll jumps).
+        for (let li = prevLine; li < newLine; li++) {
+          activeTab.sessionLinesRead.add(li);
+          activeTab.readLinesAllTime.add(li);
         }
       } else if (opts.nav) {
         activeTab.sessionNavLinesRead.add(newLine);
@@ -447,12 +454,23 @@ function AppInner() {
     const next = Math.max(0, Math.min(activeTab.doc.words.length - 1, wi));
     if (next === cur) return;
     const inc = incognitoRef.current;
+    // opts.read marks a DELIBERATE forward navigation (end of line/paragraph, page down) as reading
+    // the text passed — unlike a jump to elsewhere (TOC/Find/Go-to), which stays a skip.
+    const fwdRead = opts.read && next > cur;
     if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now());
+    if (!inc && fwdRead) activeTab.tracker?.markRangeRead(cur, next);
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
     if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick(0.16, activeTab.settings.lineSoundKind);
-    if (!inc && opts.nav) {
-      activeTab.sessionNavLinesRead.add(newLine);
+    if (!inc) {
+      if (fwdRead) {
+        for (let li = prevLine; li < newLine; li++) {
+          activeTab.sessionLinesRead.add(li);
+          activeTab.readLinesAllTime.add(li);
+        }
+      } else if (opts.nav) {
+        activeTab.sessionNavLinesRead.add(newLine);
+      }
     }
     if (opts.nav) ttsNavResyncRef.current = true; // manual jump during read-aloud → resync speech
     patchSettings(activeTab.id, { wordIndex: next });
@@ -484,11 +502,11 @@ function AppInner() {
     if (kind === 'nextLine') {
       for (let li = curLine + 1; li < doc.lines.length; li++) {
         if (!doc.lines[li].isEmpty) {
-          jumpWord(doc.lines[li].startWordIndex);
+          jumpWord(doc.lines[li].startWordIndex, { nav: true, read: true });
           return;
         }
       }
-      jumpWord(doc.words.length - 1);
+      jumpWord(doc.words.length - 1, { nav: true, read: true });
       return;
     }
     if (kind === 'prevPara') {
@@ -513,10 +531,10 @@ function AppInner() {
       let li = rng.endLine + 1;
       while (li < doc.lines.length && doc.lines[li].isEmpty) li++;
       if (li >= doc.lines.length) {
-        jumpWord(doc.words.length - 1);
+        jumpWord(doc.words.length - 1, { nav: true, read: true });
         return;
       }
-      jumpWord(doc.lines[li].startWordIndex);
+      jumpWord(doc.lines[li].startWordIndex, { nav: true, read: true });
       return;
     }
     if (kind === 'restart') {
@@ -537,7 +555,8 @@ function AppInner() {
     const li = Math.max(0, Math.min(doc.lines.length - 1, target));
     const wi = doc.lines[li].startWordIndex;
     if (wi === activeTab.settings.wordIndex) { nav(dir > 0 ? 'nextPara' : 'prevPara'); return; }
-    jumpWord(wi);
+    // Paging DOWN counts as reading the text you paged past; paging up is just navigation.
+    jumpWord(wi, dir > 0 ? { nav: true, read: true } : { nav: true });
   }
 
   // ── Pause when the reader isn't engaged ─────────────────────────────────────────────────────
@@ -761,6 +780,71 @@ function AppInner() {
         },
       }
     : {};
+
+  // Scroll-to-read: when enabled, the mouse wheel / trackpad over the reader advances (or rewinds)
+  // the reading position instead of scrolling the pane. Uses a native non-passive listener because
+  // React's onWheel is passive — preventDefault wouldn't otherwise suppress the pane's own scroll.
+  const mainAreaRef = useRef(null);
+  const stepWordRef = useRef(stepWord);
+  useEffect(() => { stepWordRef.current = stepWord; });
+  const wheelAccum = useRef(0);
+  useEffect(() => {
+    const el = mainAreaRef.current;
+    if (!el || !state.global.scrollAdvances) return undefined;
+    const PX_PER_WORD = 30; // ponytail: scroll sensitivity tuned by feel; lower = faster reading
+    const onWheel = (e) => {
+      if (activeTabRef.current?.settings.typing?.enabled) return; // typing run keeps normal scroll
+      e.preventDefault();
+      wheelAccum.current += e.deltaY;
+      const n = Math.trunc(wheelAccum.current / PX_PER_WORD);
+      if (n) { wheelAccum.current -= n * PX_PER_WORD; stepWordRef.current(n); }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [state.global.scrollAdvances]);
+
+  // Focus mode: fullscreen the app + (Chromium) black out other monitors with cover windows. Must run
+  // straight from the toggle click — the user gesture is what unlocks fullscreen / window-management /
+  // pop-ups, so this can't live in an effect.
+  const focusCoversRef = useRef([]);
+  async function toggleFocusMode() {
+    if (state.global.focusMode) {
+      exitFocus(focusCoversRef.current); focusCoversRef.current = [];
+      updateGlobal({ focusMode: false });
+      return;
+    }
+    const res = await enterFocus(document.documentElement, state.global.focusDim ?? 0.92);
+    focusCoversRef.current = res.covers;
+    updateGlobal({ focusMode: true });
+    const msg = {
+      unsupported: 'Focus on. Multi-monitor blackout needs Chrome or Edge — app is fullscreen only.',
+      denied: 'Focus on. Allow “window management” to black out other monitors.',
+      single: 'Focus on. Only one monitor detected.',
+      blocked: 'Focus on. Allow pop-ups to black out other monitors.',
+      ok: `Focus on. Blacked out ${res.covers.length} other monitor${res.covers.length === 1 ? '' : 's'}.`,
+    }[res.reason];
+    if (msg) setStatus(msg);
+  }
+  // Keep cover dimness live as the slider moves; tear focus down if the user Escapes fullscreen.
+  useEffect(() => {
+    if (state.global.focusMode) repaintCovers(focusCoversRef.current, state.global.focusDim ?? 0.92);
+  }, [state.global.focusDim, state.global.focusMode]);
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement && state.global.focusMode) {
+        exitFocus(focusCoversRef.current); focusCoversRef.current = [];
+        updateGlobal({ focusMode: false });
+      }
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, [state.global.focusMode, updateGlobal]);
+  // Never leave orphaned cover windows behind if the app tab goes away.
+  useEffect(() => {
+    const onHide = () => exitFocus(focusCoversRef.current);
+    window.addEventListener('pagehide', onHide);
+    return () => window.removeEventListener('pagehide', onHide);
+  }, []);
 
   // ── Typing plan runner ──────────────────────────────────────────────────────────────────────
   // A plan runs step by step, set by set; each step's drill config is pushed into the typing
@@ -1224,6 +1308,7 @@ function AppInner() {
       return;
     }
     if (action === 'stats') return openDialog({ kind: 'stats' });
+    if (action === 'progress-detail' && activeTab) return openDialog({ kind: 'progress-detail' });
     if (action === 'history') return openDialog({ kind: 'history' });
     if (action === 'proper-names' && activeTab) return openDialog({ kind: 'proper-names' });
     if (action === 'toc-wizard' && activeTab) return openDialog({ kind: 'toc-wizard' });
@@ -1337,7 +1422,7 @@ function AppInner() {
   const dialog = state.dialog;
 
   return (
-    <div className={`app${state.incognito ? ' incognito' : ''}`}>
+    <div className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}`}>
       <header className={`app-chrome${isCompact && chromeHidden ? ' collapsed' : ''}`}>
         <div className="chrome-body">
           <MenuBar onFileOpen={openFile} onAction={handleMenuAction} />
@@ -1399,7 +1484,7 @@ function AppInner() {
               </button>
             </div>
           )}
-          <div className={`main-area${panesFull ? ' panes-full' : ''}`} {...gestureHandlers}>
+          <div className={`main-area${panesFull ? ' panes-full' : ''}`} ref={mainAreaRef} {...gestureHandlers}>
             {isCompact && readerRotation && !auxOpen ? (
               <ReaderRotator rotation={readerRotation}>
                 <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
@@ -1482,6 +1567,7 @@ function AppInner() {
             onConfirmFinished={() => openDialog({ kind: 'finished' })}
             audioCtrl={!!activeTab.settings.audioCtrl}
             readAloud={!!activeTab.settings.readAloud}
+            onToggleFocus={toggleFocusMode}
             onToggleReadAloud={() =>
               patchSettings(activeTab.id, {
                 readAloud: !activeTab.settings.readAloud,
@@ -1592,6 +1678,9 @@ function AppInner() {
       {dialog?.kind === 'vocab' && <VocabDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'regressions' && activeTab && (
         <RegressionDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
+      )}
+      {dialog?.kind === 'progress-detail' && activeTab && (
+        <ProgressDetailDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
       )}
       {dialog?.kind === 'attention' && activeTab && (
         <AttentionDialog tab={activeTab} recentScores={probeScoresRef.current} onClose={closeDialog} />

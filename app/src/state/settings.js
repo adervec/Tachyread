@@ -69,7 +69,7 @@ export function defaultFileSettings() {
     },
     speaking: { enabled: false, confidence: 'Medium', perWordTimeoutMs: 0, allowPartial: true },
     centerOnCurrent: true,
-    lineLongPressMs: 3000, // hold a line this long to jump to it (0 = instant click)
+    lineLongPressMs: 450, // hold a line this long to jump to it — just long enough to reject accidental taps (0 = instant click)
     linePaneSplit: false, // split the Lines pane into before / current line / after zones
     lineAdvanceSound: false, // soft click when the current line changes
     lineSoundKind: 'soft', // which newline sound to play (see features/clickSound.js LINE_SOUNDS)
@@ -248,5 +248,12 @@ export function defaultGlobalSettings() {
     // Mobile-only quarter-turn (0 | 90 | 180 | 270) applied to JUST the reader box (Fast Reader /
     // Lines), leaving the menus, tabs and controls upright. Not a full device landscape mode.
     readerRotation: 0,
+    // When on, mouse-wheel / trackpad scrolling over the reader advances/rewinds the reading
+    // position instead of scrolling the pane.
+    scrollAdvances: false,
+    // Focus mode: fullscreen + fade chrome + (Chromium) black out other monitors. focusDim is how
+    // dark the other-monitor cover windows are (1 = pure black, lower = dark grey).
+    focusMode: false,
+    focusDim: 0.92,
   };
 }

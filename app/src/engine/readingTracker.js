@@ -81,15 +81,46 @@ function decodeWpm(b64, wordCount) {
   return arr;
 }
 
+// ── per-paragraph first-read timestamp trace (Uint32 seconds since epoch, little-endian) ──
+// Tracking the reading timeline per PARAGRAPH rather than per word keeps it ~50-100× smaller (a few
+// KB/book vs hundreds): one timestamp per paragraph instead of per word.
+function encodeU32(arr) {
+  const bytes = new Uint8Array(arr.length * 4);
+  for (let i = 0; i < arr.length; i++) {
+    const v = arr[i] >>> 0;
+    bytes[i * 4] = v & 0xff; bytes[i * 4 + 1] = (v >>> 8) & 0xff;
+    bytes[i * 4 + 2] = (v >>> 16) & 0xff; bytes[i * 4 + 3] = (v >>> 24) & 0xff;
+  }
+  return toBase64(bytes);
+}
+function decodeU32(b64, n) {
+  const arr = new Uint32Array(n);
+  if (!b64) return arr;
+  try {
+    const bin = atob(b64);
+    for (let i = 0; i < n; i++) {
+      arr[i] = (((bin.charCodeAt(i * 4) || 0)) | ((bin.charCodeAt(i * 4 + 1) || 0) << 8)
+        | ((bin.charCodeAt(i * 4 + 2) || 0) << 16) | ((bin.charCodeAt(i * 4 + 3) || 0) << 24)) >>> 0;
+    }
+  } catch {
+    /* corrupt → fresh */
+  }
+  return arr;
+}
+
 function popcount(mask) {
   let n = 0;
   for (let i = 0; i < mask.length; i++) if (mask[i]) n++;
   return n;
 }
 
-export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lifetimeActiveMs = 0, daily = [] } = {}) {
+export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lifetimeActiveMs = 0, daily = [], paragraphStarts = [], paraTsB64 = '' } = {}) {
   const mask = decodeMask(maskB64, wordCount); // 1 = read (cumulative, all sessions)
   const wpm = decodeWpm(wpmB64, wordCount); // per-word recorded reading pace
+  // Paragraph-resolution reading timeline: first-read clock time per paragraph (0 = unread).
+  const paraStart = paragraphStarts && paragraphStarts.length ? paragraphStarts : [0];
+  const paraCount = paraStart.length;
+  const paraTs = decodeU32(paraTsB64, paraCount);
   const sessionMask = new Uint8Array(wordCount); // words touched this session (transient)
   let readCount = popcount(mask);
   let sessionNewWords = 0;
@@ -111,6 +142,20 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     cur.words += words;
     cur.ms += ms;
     dayMap.set(d, cur);
+  }
+
+  function paraLowerBound(x) { // first paragraph index whose start >= x
+    let lo = 0, hi = paraCount;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (paraStart[m] < x) lo = m + 1; else hi = m; }
+    return lo;
+  }
+  // Stamp the first-read time onto every paragraph overlapping the forward span [from,to). Only sets
+  // unstamped paragraphs, so re-reading never rewrites when a paragraph was first reached.
+  function stampParas(from, to, nowMs) {
+    if (to <= from) return;
+    const ts = Math.floor(nowMs / 1000);
+    let i = Math.max(0, paraLowerBound(from + 1) - 1); // paragraph containing `from`
+    for (; i < paraCount && paraStart[i] < to; i++) if (!paraTs[i]) { paraTs[i] = ts; dirty = true; }
   }
 
   // Mark [from,to) as read at the given pace; record per-word wpm + session flag.
@@ -184,6 +229,17 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     const to = Math.min(wordCount, Math.max(0, n | 0));
     for (let i = 0; i < to; i++) if (!mask[i]) { mask[i] = 1; readCount++; }
     if (to > 0) dirty = true;
+  }
+
+  // Mark an arbitrary forward span [from,to) read for COVERAGE only — no active time, no pace, no
+  // WPM/efficiency credit. Used when the user deliberately navigates forward (end of line/paragraph,
+  // page down, a short forward jump) and counts that text as read. recordMove still runs alongside to
+  // account dwell time honestly; this only ensures the spanned words show as read in "% read".
+  function markRangeRead(from, to) {
+    const a = Math.max(0, from | 0);
+    const b = Math.min(wordCount, to | 0);
+    for (let i = a; i < b; i++) if (!mask[i]) { mask[i] = 1; readCount++; sessionMask[i] = 1; }
+    if (b > a) { stampParas(a, b, Date.now()); dirty = true; }
   }
 
   function setHidden(h, now = Date.now()) {
@@ -300,6 +356,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     recordMove,
     setHidden,
     markPrefixRead,
+    markRangeRead,
     recentWpm,
     sampleTrend,
     rangeStats,
@@ -350,6 +407,15 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     },
     serializeMask: () => encodeMask(mask),
     serializeWpm: () => encodeWpm(wpm),
+    serializeParaTs: () => encodeU32(paraTs),
+    // Paragraph-resolution reading timeline: [{ para, startWord, ts(ms) }] for paragraphs read,
+    // oldest first by paragraph order. Backs the "when & where" session view.
+    paraTimeline: () => {
+      const out = [];
+      for (let p = 0; p < paraCount; p++) if (paraTs[p]) out.push({ para: p, startWord: paraStart[p], ts: paraTs[p] * 1000 });
+      return out;
+    },
+    get paraCount() { return paraCount; },
     dailyArray: () => [...dayMap.values()],
   };
 }
