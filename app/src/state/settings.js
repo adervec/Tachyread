@@ -248,5 +248,8 @@ export function defaultGlobalSettings() {
     // Mobile-only quarter-turn (0 | 90 | 180 | 270) applied to JUST the reader box (Fast Reader /
     // Lines), leaving the menus, tabs and controls upright. Not a full device landscape mode.
     readerRotation: 0,
+    // When on, mouse-wheel / trackpad scrolling over the reader advances/rewinds the reading
+    // position instead of scrolling the pane.
+    scrollAdvances: false,
   };
 }

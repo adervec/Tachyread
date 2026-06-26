@@ -762,6 +762,28 @@ function AppInner() {
       }
     : {};
 
+  // Scroll-to-read: when enabled, the mouse wheel / trackpad over the reader advances (or rewinds)
+  // the reading position instead of scrolling the pane. Uses a native non-passive listener because
+  // React's onWheel is passive — preventDefault wouldn't otherwise suppress the pane's own scroll.
+  const mainAreaRef = useRef(null);
+  const stepWordRef = useRef(stepWord);
+  useEffect(() => { stepWordRef.current = stepWord; });
+  const wheelAccum = useRef(0);
+  useEffect(() => {
+    const el = mainAreaRef.current;
+    if (!el || !state.global.scrollAdvances) return undefined;
+    const PX_PER_WORD = 30; // ponytail: scroll sensitivity tuned by feel; lower = faster reading
+    const onWheel = (e) => {
+      if (activeTabRef.current?.settings.typing?.enabled) return; // typing run keeps normal scroll
+      e.preventDefault();
+      wheelAccum.current += e.deltaY;
+      const n = Math.trunc(wheelAccum.current / PX_PER_WORD);
+      if (n) { wheelAccum.current -= n * PX_PER_WORD; stepWordRef.current(n); }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [state.global.scrollAdvances]);
+
   // ── Typing plan runner ──────────────────────────────────────────────────────────────────────
   // A plan runs step by step, set by set; each step's drill config is pushed into the typing
   // settings, and the step's description is spoken (TTS) at the start of its first set. TypingRun is
@@ -1399,7 +1421,7 @@ function AppInner() {
               </button>
             </div>
           )}
-          <div className={`main-area${panesFull ? ' panes-full' : ''}`} {...gestureHandlers}>
+          <div className={`main-area${panesFull ? ' panes-full' : ''}`} ref={mainAreaRef} {...gestureHandlers}>
             {isCompact && readerRotation && !auxOpen ? (
               <ReaderRotator rotation={readerRotation}>
                 <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />

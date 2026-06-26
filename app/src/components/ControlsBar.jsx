@@ -145,6 +145,16 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             </select>
           </div>
           <div className="mode-pair">
+            <span title="Mouse-wheel / trackpad scrolling over the reader moves your reading position forward and back">SCROLL</span>
+            <button
+              className={state.global.scrollAdvances ? 'toggle-on' : ''}
+              onClick={() => updateGlobal({ scrollAdvances: !state.global.scrollAdvances })}
+              title="Scroll to advance reading (instead of just scrolling the pane)"
+            >
+              {state.global.scrollAdvances ? 'On' : 'Off'}
+            </button>
+          </div>
+          <div className="mode-pair">
             <span>VOICE COMMAND</span>
             <button className={audioCtrl ? 'toggle-on' : ''} onClick={onToggleAudioCtrl} title="Voice / clap commands">{audioCtrl ? 'On' : 'Off'}</button>
           </div>
