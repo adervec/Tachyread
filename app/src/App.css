@@ -15,6 +15,21 @@
   color: var(--menu-fg);
 }
 
+/* Portrait lock: when a phone is physically turned to landscape we counter-rotate the whole app back
+   to portrait (transform set inline by App.jsx as -orientation-angle). The app is sized to the SWAPPED
+   viewport dims and centred, so the rotated portrait box fills the landscape screen exactly. Because
+   .app then carries a transform, its position:fixed descendants (dialogs) are contained by it and
+   rotate along too. */
+.app.force-portrait {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 100dvh;   /* portrait width  = viewport's short side */
+  height: 100vw;   /* portrait height = viewport's long side  */
+  transform-origin: center center;
+  overflow: hidden;
+}
+
 /* Top chrome (menu bar + tab bar) — collapsible on mobile via its handle, mirroring the bottom dock. */
 .app-chrome { display: flex; flex-direction: column; min-width: 0; }
 .app-chrome > .chrome-body { display: flex; flex-direction: column; min-width: 0; }
