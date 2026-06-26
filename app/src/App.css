@@ -1873,6 +1873,10 @@
   line-height: 96px;
 }
 .tr-oneword { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+/* Voice race: highlight the word the TTS is speaking (it creeps up behind your typing position). */
+.trw.voice { background: rgba(220, 80, 60, .35); border-radius: 3px; }
+.tr-race-result { margin: 4px 0 2px; font-weight: 700; color: var(--nav-session-read-fg); }
+.tr-race-result.caught { color: var(--orp-fg, #d24); }
 .trw { color: var(--line-number-fg); }
 .trw.done { color: var(--nav-session-read-fg); }
 .trw.imperfect { color: var(--orp-fg); }
