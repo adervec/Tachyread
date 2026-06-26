@@ -753,13 +753,7 @@ function AppInner() {
     ambient.setDucked(playing && !!activeTab?.settings?.readAloud);
   }, [playing, activeTab?.settings?.readAloud]);
 
-  // Adaptive minimize: on compact screens, collapse the controls dock while playing to give the
-  // text the most room, and restore it on pause. Opt-in.
-  useEffect(() => {
-    if (!state.global.autoMinimizeControls || !isCompact) return;
-    setControlsCollapsed(playing);
-    setChromeHidden(playing); // also tuck the menu/tabs away while reading, for max text room
-  }, [playing, isCompact, state.global.autoMinimizeControls]);
+  // Mobile text-maximise effect lives further down, after `hideWord` is computed (it depends on it).
 
   // Optional swipe gestures over the reading area: horizontal swipe = prev/next line, a long swipe
   // = prev/next paragraph. Off by default (vertical scroll/selection are left untouched either way).
@@ -1386,14 +1380,26 @@ function AppInner() {
   }
 
   const hideWord = !state.showRsvp || !!activeTab?.settings?.hideRsvpPane;
-  // On a phone showing only the Lines view, lock it to the viewport (no page scroll) so the split
-  // view's three zones stay fully on screen with the current line centred.
+  // On a phone showing only the Lines view, lock it to the viewport (no page scroll) so the lines
+  // pane fills the whole screen (current line kept centred) instead of stacking at a fraction height.
   const linesLocked = isCompact && (mobileView === 'lines' || hideWord)
     && !state.showToc && !state.showSource && !state.showIndex;
   // On a phone, an open TOC / Source / Index takes over the reader's space (rather than stacking)
   // and pauses playback — there's no room to do both, and you're not reading the text then.
   const auxOpen = isCompact && (state.showToc || (state.showSource && !!activeTab?.doc?.source) || state.showIndex);
   const panesFull = linesLocked || auxOpen;
+
+  // Maximise the text on a phone. The Lines view is for immersive (often thumb-scrolled) reading, so
+  // tuck the top chrome AND minimise the controls dock to their handles whenever it's showing — the
+  // lines pane then fills the screen. The Fast Reader view does the same only while playing, and only
+  // if the user opted into auto-minimise. Either ⌃/⌄ handle pulls its bar back any time.
+  useEffect(() => {
+    if (!isCompact) return;
+    const inLines = mobileView === 'lines' || hideWord;
+    const minimize = inLines || (state.global.autoMinimizeControls && playing);
+    setControlsCollapsed(minimize);
+    setChromeHidden(minimize);
+  }, [playing, isCompact, mobileView, hideWord, state.global.autoMinimizeControls]);
   // Mobile-only quarter-turn applied to just the reader box (not the menus/controls).
   const readerRotation = state.global.readerRotation || 0;
 

@@ -391,9 +391,10 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
 
   const listRef = useListRef();
   const listWrapRef = useRef(null); // scroll container, queried for the visible-line range
-  // On compact screens always use the split view: the virtualized list (per-row measurement +
-  // observers) is heavy on phones, and the split view is a fixed, viewport-locked window.
-  const split = !!settings.linePaneSplit || compact;
+  // Use the split view only when the user opts in. Mobile used to force it, but the scrollable list
+  // pairs better with thumb-scroll-to-read (drag the whole list to advance), and it still fills the
+  // phone screen via the panes-full lock in App.jsx (see linesLocked).
+  const split = !!settings.linePaneSplit;
 
   useEffect(() => {
     if (split || !settings.centerOnCurrent) return;
