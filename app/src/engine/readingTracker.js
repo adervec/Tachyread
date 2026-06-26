@@ -186,6 +186,17 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     if (to > 0) dirty = true;
   }
 
+  // Mark an arbitrary forward span [from,to) read for COVERAGE only — no active time, no pace, no
+  // WPM/efficiency credit. Used when the user deliberately navigates forward (end of line/paragraph,
+  // page down, a short forward jump) and counts that text as read. recordMove still runs alongside to
+  // account dwell time honestly; this only ensures the spanned words show as read in "% read".
+  function markRangeRead(from, to) {
+    const a = Math.max(0, from | 0);
+    const b = Math.min(wordCount, to | 0);
+    for (let i = a; i < b; i++) if (!mask[i]) { mask[i] = 1; readCount++; sessionMask[i] = 1; }
+    if (b > a) dirty = true;
+  }
+
   function setHidden(h, now = Date.now()) {
     if (h === hidden) return;
     hidden = h;
@@ -300,6 +311,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     recordMove,
     setHidden,
     markPrefixRead,
+    markRangeRead,
     recentWpm,
     sampleTrend,
     rangeStats,

@@ -409,15 +409,20 @@ function AppInner() {
     const inc = incognitoRef.current;
     // Reading-efficiency tracking (classifies read / skip / re-read / revisit + active time).
     if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now());
+    // Forward motion (playback, a forward word step, scrolling forward) means you read the text you
+    // passed — credit those words for coverage even on a multi-word step the move-classifier treats
+    // as a skim/skip. recordMove above keeps the time/WPM accounting honest.
+    if (!inc && next > cur) activeTab.tracker?.markRangeRead(cur, next);
     // Line status coloring for the right pane.
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
     if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick(0.16, activeTab.settings.lineSoundKind);
     if (!inc) {
-      if (delta === 1 && next > cur && !opts.nav) {
-        if (newLine !== prevLine) {
-          activeTab.sessionLinesRead.add(prevLine);
-          activeTab.readLinesAllTime.add(prevLine);
+      if (next > cur) {
+        // Mark every line we left behind as read (covers single steps and multi-line scroll jumps).
+        for (let li = prevLine; li < newLine; li++) {
+          activeTab.sessionLinesRead.add(li);
+          activeTab.readLinesAllTime.add(li);
         }
       } else if (opts.nav) {
         activeTab.sessionNavLinesRead.add(newLine);
@@ -448,12 +453,23 @@ function AppInner() {
     const next = Math.max(0, Math.min(activeTab.doc.words.length - 1, wi));
     if (next === cur) return;
     const inc = incognitoRef.current;
+    // opts.read marks a DELIBERATE forward navigation (end of line/paragraph, page down) as reading
+    // the text passed — unlike a jump to elsewhere (TOC/Find/Go-to), which stays a skip.
+    const fwdRead = opts.read && next > cur;
     if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now());
+    if (!inc && fwdRead) activeTab.tracker?.markRangeRead(cur, next);
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
     if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick(0.16, activeTab.settings.lineSoundKind);
-    if (!inc && opts.nav) {
-      activeTab.sessionNavLinesRead.add(newLine);
+    if (!inc) {
+      if (fwdRead) {
+        for (let li = prevLine; li < newLine; li++) {
+          activeTab.sessionLinesRead.add(li);
+          activeTab.readLinesAllTime.add(li);
+        }
+      } else if (opts.nav) {
+        activeTab.sessionNavLinesRead.add(newLine);
+      }
     }
     if (opts.nav) ttsNavResyncRef.current = true; // manual jump during read-aloud → resync speech
     patchSettings(activeTab.id, { wordIndex: next });
@@ -485,11 +501,11 @@ function AppInner() {
     if (kind === 'nextLine') {
       for (let li = curLine + 1; li < doc.lines.length; li++) {
         if (!doc.lines[li].isEmpty) {
-          jumpWord(doc.lines[li].startWordIndex);
+          jumpWord(doc.lines[li].startWordIndex, { nav: true, read: true });
           return;
         }
       }
-      jumpWord(doc.words.length - 1);
+      jumpWord(doc.words.length - 1, { nav: true, read: true });
       return;
     }
     if (kind === 'prevPara') {
@@ -514,10 +530,10 @@ function AppInner() {
       let li = rng.endLine + 1;
       while (li < doc.lines.length && doc.lines[li].isEmpty) li++;
       if (li >= doc.lines.length) {
-        jumpWord(doc.words.length - 1);
+        jumpWord(doc.words.length - 1, { nav: true, read: true });
         return;
       }
-      jumpWord(doc.lines[li].startWordIndex);
+      jumpWord(doc.lines[li].startWordIndex, { nav: true, read: true });
       return;
     }
     if (kind === 'restart') {
@@ -538,7 +554,8 @@ function AppInner() {
     const li = Math.max(0, Math.min(doc.lines.length - 1, target));
     const wi = doc.lines[li].startWordIndex;
     if (wi === activeTab.settings.wordIndex) { nav(dir > 0 ? 'nextPara' : 'prevPara'); return; }
-    jumpWord(wi);
+    // Paging DOWN counts as reading the text you paged past; paging up is just navigation.
+    jumpWord(wi, dir > 0 ? { nav: true, read: true } : { nav: true });
   }
 
   // ── Pause when the reader isn't engaged ─────────────────────────────────────────────────────
