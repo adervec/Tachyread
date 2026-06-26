@@ -40,6 +40,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const { doc, settings } = tab;
   const cfg = settings.typing || {};
   const caseSensitive = !!cfg.caseSensitive;
+  const oneWord = !!cfg.oneWord; // show one word at a time; it must be typed perfectly to advance
   const volume = cfg.soundVolume ?? 0.4;
   const sounds = { ...DEFAULT_SOUNDS, ...(cfg.sounds || {}) };
   const tickClock = !!cfg.tickClock;
@@ -262,6 +263,13 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
   function commitWord(typed = buf) {
     const target = passage[pos] || '';
+    // One-word mode gates advancement on an exact match (case rule applied). A wrong word stays put:
+    // clear the buffer and let them retype. A mistyped-then-fixed word still matches, so it advances.
+    if (oneWord) {
+      const exact = typed.length === target.length && [...typed].every((c, j) => sameChar(c, target[j], caseSensitive));
+      if (!exact) { ping(sounds.wordError); wordErrors.current = 0; setBuf(''); return; }
+      wordErrors.current = 0; // matched exactly → counts as perfect even if chars were corrected
+    }
     const perfect = wordErrors.current === 0 && typed.length === target.length;
     const s = stats.current;
     s.words += 1;
@@ -404,6 +412,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                   onChange={(e) => { const v = Math.max(1, Number(e.target.value) || 1); setLimit(v); onPatch?.({ typing: { ...cfg, runLimit: v } }); }}
                   style={{ width: 64 }} />
               )}
+              <label className="tr-oneword" title="One word at a time — each word must be typed perfectly to advance">
+                <input type="checkbox" checked={oneWord}
+                  onChange={(e) => onPatch?.({ typing: { ...cfg, oneWord: e.target.checked } })} />
+                <span>1-word</span>
+              </label>
             </>
           )}
           <label className="tr-vol" title="Sound volume">🔊
@@ -442,8 +455,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
       <div className="tr-viewport">
         {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{count}</div>}
-        <div className="tr-lines" ref={linesRef}>
+        <div className={`tr-lines${oneWord ? ' one-word' : ''}`} ref={linesRef}>
           {passage.map((w, i) => {
+            if (oneWord && i !== pos) return null; // one-word mode shows only the current word
             if (i < pos) {
               const r = results[i];
               return <span key={i} className={`trw ${r && !r.perfect ? 'imperfect' : 'done'}`}>{w} </span>;

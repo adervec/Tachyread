@@ -1866,6 +1866,13 @@
   font-size: 26px; line-height: 44px; letter-spacing: .01em;
   transition: transform 140ms ease;
 }
+/* One-word mode renders only the active word — center it and size it up so it reads as a flashcard. */
+.tr-lines.one-word {
+  text-align: center;
+  font-size: 56px;
+  line-height: 96px;
+}
+.tr-oneword { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .trw { color: var(--line-number-fg); }
 .trw.done { color: var(--nav-session-read-fg); }
 .trw.imperfect { color: var(--orp-fg); }
