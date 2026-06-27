@@ -48,9 +48,6 @@ const MENUS = {
     { label: 'Generate Index (Wizard)...', action: 'index-wizard' },
     { label: 'Locate Footnotes (Wizard)...', action: 'notes-wizard' },
     { label: 'Proper Names Index...', shortcut: 'Ctrl+I', action: 'proper-names' },
-    { label: 'Typing Practice', action: 'typing' },
-    { label: 'Typing Plans...', action: 'typing-plans' },
-    { label: 'Typing Progress...', action: 'typing-progress' },
     { label: 'Span Drill...', action: 'span-drill' },
     { label: 'Flow Writer...', action: 'flow-writer' },
     { label: 'Dictation (speak to write)...', action: 'dictation' },
@@ -65,6 +62,11 @@ const MENUS = {
     { kind: 'separator' },
     { label: 'Ambient Sound...', action: 'ambient' },
     { label: 'About / Disclaimer...', action: 'disclaimer' },
+  ],
+  typing: [
+    { label: 'Typing Practice', action: 'typing' },
+    { label: 'Typing Plans...', action: 'typing-plans' },
+    { label: 'Typing Progress...', action: 'typing-progress' },
   ],
 };
 
@@ -180,6 +182,9 @@ export default function MenuBar({ onFileOpen, onAction }) {
             <div className="menu-drawer-section">View &amp; tools</div>
             {MENUS.view.map((it, i) => <MenuItem key={`v${i}`} it={it} onPick={handle} badges={badges} />)}
 
+            <div className="menu-drawer-section">Typing</div>
+            {MENUS.typing.map((it, i) => <MenuItem key={`t${i}`} it={it} onPick={handle} badges={badges} />)}
+
             <div className="menu-drawer-section">Data</div>
             <div className="item" onClick={() => { setOpenMenu(null); onAction('data'); }}>
               <span>☁ Data management…</span>
@@ -211,6 +216,17 @@ export default function MenuBar({ onFileOpen, onAction }) {
         {openMenu === 'view' && (
           <div className="menu-dropdown">
             {MENUS.view.map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
+          </div>
+        )}
+      </div>
+      <div
+        className={`menu-item ${openMenu === 'typing' ? 'open' : ''}`}
+        onClick={() => setOpenMenu(openMenu === 'typing' ? null : 'typing')}
+      >
+        Typing
+        {openMenu === 'typing' && (
+          <div className="menu-dropdown">
+            {MENUS.typing.map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
           </div>
         )}
       </div>
