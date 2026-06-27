@@ -1937,7 +1937,9 @@
      (line 0 = 0). Without position:relative the offsetParent is .type-run, so offsetTop includes the
      toolbar + trend height and the passage scrolls several lines too far on open. */
   position: relative;
-  font-family: var(--serif-family, Georgia, serif);
+  /* Typing has its OWN font (independent of the reader's serif/sans choice) and prefers monospace, so
+     every character is the same width — far easier to track which letter you're on while typing. */
+  font-family: var(--typing-family, 'JetBrains Mono Variable', 'Source Code Pro Variable', 'Fira Code Variable', ui-monospace, Consolas, monospace);
   font-size: 26px; line-height: 44px; letter-spacing: .01em;
   transition: transform 140ms ease;
 }
