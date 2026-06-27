@@ -76,7 +76,7 @@ const WEBCAM_LABEL = {
   starting: 'starting camera…', watching: 'watching', away: 'looked away — paused', drowsy: 'drowsy',
   unsupported: 'face detection not supported here', denied: 'camera blocked', error: 'camera error', off: '',
 };
-import { getSyncProvider } from './features/sync/syncProviders.js';
+import { getSyncProvider, getDriveProfile } from './features/sync/syncProviders.js';
 import { backupToProvider, syncWithProvider } from './features/sync/syncManager.js';
 import { applyTheme } from './state/themes.js';
 import { ensureFamilyLoaded } from './state/fonts.js';
@@ -1159,7 +1159,7 @@ function AppInner() {
     (async () => {
       try {
         await syncWithProvider(cfg.provider, cfg, { silent: true });
-        updateGlobal({ sync: { ...cfg, lastSync: Date.now() } });
+        updateGlobal({ sync: { ...cfg, lastSync: Date.now(), profile: getDriveProfile() || cfg.profile } });
       } catch { /* offline or no prior grant — use “Sync now” in Data once to grant */ }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1175,7 +1175,7 @@ function AppInner() {
         if (!(await p.isConnected())) return;                  // only when a silent session exists
         const r = await backupToProvider(cfg.provider, cfg, { silent: true });
         lastAutoPush.current = r.at;
-        updateGlobal({ sync: { ...cfg, lastSync: r.at } });
+        updateGlobal({ sync: { ...cfg, lastSync: r.at, profile: getDriveProfile() || cfg.profile } });
       } catch { /* silent — the Data dialog surfaces errors */ }
     }, 5000);
     return () => clearTimeout(pushTimer.current);
@@ -1255,7 +1255,7 @@ function AppInner() {
       if (p) {
         setClosing('disconnect');
         (async () => {
-          try { if (await p.isConnected()) { const r = await backupToProvider(cfg.provider, cfg, { silent: true }); updateGlobal({ sync: { ...cfg, lastSync: r.at } }); } } catch { /* ignore */ }
+          try { if (await p.isConnected()) { const r = await backupToProvider(cfg.provider, cfg, { silent: true }); updateGlobal({ sync: { ...cfg, lastSync: r.at, profile: getDriveProfile() || cfg.profile } }); } } catch { /* ignore */ }
           setTimeout(() => { try { window.close(); } catch { /* ignore */ } }, 50);
         })();
       } else {
