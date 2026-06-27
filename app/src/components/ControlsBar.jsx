@@ -167,11 +167,11 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             )}
           </div>
           <div className="mode-pair">
-            <span title="Scroll the reader to move your reading position — mouse wheel / trackpad on desktop, or drag the pane with your thumb on mobile. The text you pass counts as read.">SCROLL</span>
+            <span title="Scroll-to-read (Lines pane): scroll the text normally and whatever passes the top edge counts as read — your reading position follows the topmost visible line.">SCROLL</span>
             <button
               className={state.global.scrollAdvances ? 'toggle-on' : ''}
               onClick={() => updateGlobal({ scrollAdvances: !state.global.scrollAdvances })}
-              title="Scroll / thumb-drag to advance reading (instead of just scrolling the pane)"
+              title="Scroll-to-read: scroll the Lines pane; text that leaves the top counts as read"
             >
               {state.global.scrollAdvances ? 'On' : 'Off'}
             </button>

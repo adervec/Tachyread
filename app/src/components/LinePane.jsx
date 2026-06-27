@@ -298,7 +298,7 @@ function revealBoundary(doc, idx, mode) {
   return Infinity;
 }
 
-export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { line: -1, token: 0 }, visibleRef, onVisible, compact = false }) {
+export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { line: -1, token: 0 }, visibleRef, onVisible, compact = false, scrollRead = false }) {
   const { doc, settings } = tab;
   const paneVisRef = useReportVisibility(onVisible || (() => {}));
   const idx = settings.wordIndex;
@@ -397,11 +397,74 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   const split = !!settings.linePaneSplit;
 
   useEffect(() => {
-    if (split || !settings.centerOnCurrent) return;
+    // In scroll-to-read mode the scroll is the user's — don't yank it back to centre the cursor.
+    if (split || !settings.centerOnCurrent || scrollRead) return;
     const api = listRef.current;
     if (!api?.scrollToRow) return;
     api.scrollToRow({ index: currentLine, align: 'center' });
-  }, [currentLine, settings.centerOnCurrent, split, listRef]);
+  }, [currentLine, settings.centerOnCurrent, split, listRef, scrollRead]);
+
+  // Scroll-to-read: the list scrolls normally and whatever passes the TOP edge counts as read — the
+  // reading position follows the word at the top edge (forward only), which credits the spanned words.
+  // Resume once at the current line when the mode starts, then leave the scroll alone.
+  const resumedRef = useRef(false);
+  useEffect(() => { resumedRef.current = false; }, [doc, scrollRead]);
+  useEffect(() => {
+    if (split || !scrollRead || resumedRef.current) return;
+    const api = listRef.current;
+    if (!api?.scrollToRow) return;
+    api.scrollToRow({ index: currentLine, align: 'start' });
+    resumedRef.current = true;
+  }, [split, scrollRead, currentLine, listRef]);
+
+  // Latest reading index / jump fn via refs so the scroll handler needn't re-bind every word step.
+  const idxRef = useRef(idx);
+  const jumpRef = useRef(onJumpWord);
+  useEffect(() => { idxRef.current = idx; jumpRef.current = onJumpWord; });
+
+  // The word currently at the very top edge of the pane: the topmost line still on screen, then
+  // interpolated within it by how far it's scrolled off — so progress is word-level even inside one
+  // long wrapped paragraph (a single line-row spanning many visual rows).
+  function frontierWord() {
+    const wrap = listWrapRef.current;
+    if (!wrap) return null;
+    const top = wrap.getBoundingClientRect().top;
+    for (const row of wrap.querySelectorAll('.line-row[data-line]')) {
+      const rr = row.getBoundingClientRect();
+      if (rr.bottom <= top + 1) continue; // fully above the edge → already read
+      const ln = doc.lines[Number(row.getAttribute('data-line'))];
+      if (!ln) return null;
+      const end = ln.endWordIndex >= 0 ? ln.endWordIndex : ln.startWordIndex;
+      const frac = Math.max(0, Math.min(1, (top - rr.top) / Math.max(1, rr.height)));
+      return ln.startWordIndex + Math.round(frac * Math.max(0, end - ln.startWordIndex));
+    }
+    return null;
+  }
+
+  // onRowsRendered is the reliable line-granular signal; a scroll listener refines it to word-level
+  // within the straddling line. Both advance the frontier forward only.
+  function onRowsRendered({ startIndex }) {
+    if (!scrollRead) return;
+    const ln = doc.lines[startIndex];
+    if (ln && ln.startWordIndex > idxRef.current) jumpRef.current(ln.startWordIndex, { read: true });
+  }
+  useEffect(() => {
+    if (split || !scrollRead) return undefined;
+    const wrap = listWrapRef.current;
+    if (!wrap) return undefined;
+    const scroller = [...wrap.querySelectorAll('*')].find((el) => /(auto|scroll)/.test(getComputedStyle(el).overflowY)) || wrap;
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const f = frontierWord();
+        if (f != null && f > idxRef.current) jumpRef.current(f, { read: true });
+      });
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => { scroller.removeEventListener('scroll', onScroll); if (raf) cancelAnimationFrame(raf); };
+  }, [split, scrollRead, doc]);
 
   // Peek: scroll the (list-view) viewport to a previewed line without moving the reading position,
   // and scroll back to the current line when the peek clears. (Split view handles peek in its bottom
@@ -548,6 +611,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
             rowComponent={Row}
             rowProps={rowProps}
             overscanCount={8}
+            onRowsRendered={onRowsRendered}
             style={{ height: '100%', width: '100%' }}
           />
         </div>
