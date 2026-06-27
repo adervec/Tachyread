@@ -6,7 +6,7 @@ import {
   storeCounts, clearStore, wipeAllData,
 } from '../state/storage.js';
 import { saveBlobToFile, pickFile, readFileText } from '../features/fileSystem.js';
-import { SYNC_PROVIDERS, getSyncProvider, driveOriginAllowed } from '../features/sync/syncProviders.js';
+import { SYNC_PROVIDERS, getSyncProvider, driveOriginAllowed, getDriveProfile } from '../features/sync/syncProviders.js';
 import { backupToProvider, restoreFromProvider, syncWithProvider } from '../features/sync/syncManager.js';
 
 // Friendly names + display order for the object stores shown in the Overview.
@@ -58,6 +58,9 @@ export default function DataDialog({ onClose }) {
   useEffect(() => { refreshCounts(); }, []);
   const totalRecords = counts ? STORE_ORDER.reduce((a, k) => a + (counts[k] || 0), 0) : 0;
 
+  // The signed-in Google account (live token's profile, or the last one we persisted for display).
+  const account = (sync.provider === 'googleDrive' && (getDriveProfile() || sync.profile)) || null;
+
   // ── cloud ──
   // Two-way sync (pull-merge-push), then reload so merged settings/progress apply to open tabs.
   // Turning this on flips `auto`, which arms boot-pull + push-on-change (App.jsx).
@@ -65,7 +68,7 @@ export default function DataDialog({ onClose }) {
     setBusy(true); setMsg('Syncing…');
     try {
       await syncWithProvider(sync.provider, sync);
-      patchSync({ lastSync: Date.now(), auto: true });
+      patchSync({ lastSync: Date.now(), auto: true, profile: getDriveProfile() || sync.profile });
       setMsg('Synced — reloading to apply…');
       setTimeout(() => window.location.reload(), 1000);
     } catch (e) { setBusy(false); setMsg('Sync failed: ' + (e?.message || e)); }
@@ -74,7 +77,7 @@ export default function DataDialog({ onClose }) {
     setBusy(true); setMsg('Backing up to your sync target…');
     try {
       const r = await backupToProvider(sync.provider, sync);
-      patchSync({ lastSync: r.at, auto: true });
+      patchSync({ lastSync: r.at, auto: true, profile: getDriveProfile() || sync.profile });
       setMsg(`Backed up to ${provider.label} (${Math.round(r.bytes / 1024)} KB).`);
     } catch (e) { setMsg('Sync backup failed: ' + (e?.message || e)); }
     setBusy(false);
@@ -83,10 +86,25 @@ export default function DataDialog({ onClose }) {
     setBusy(true); setMsg('Restoring from your sync target…');
     try {
       const r = await restoreFromProvider(sync.provider, sync);
-      patchSync({ auto: true });
+      patchSync({ auto: true, profile: getDriveProfile() || sync.profile });
       setMsg(`Merged ${r.merged} item(s) — reloading…`);
       setTimeout(() => window.location.reload(), 1000);
     } catch (e) { setBusy(false); setMsg('Sync restore failed: ' + (e?.message || e)); }
+  }
+  // Sign in to Google without syncing yet — verifies OAuth and loads the account name/photo.
+  async function connectGoogle() {
+    setBusy(true); setMsg('Opening Google sign-in…');
+    try {
+      await provider.connect(sync);
+      patchSync({ profile: getDriveProfile() });
+      setMsg('Signed in to Google.');
+    } catch (e) { setMsg('Google sign-in failed: ' + (e?.message || e)); }
+    setBusy(false);
+  }
+  async function signOutGoogle() {
+    try { await provider.disconnect(); } catch { /* ignore */ }
+    patchSync({ profile: null });
+    setMsg('Signed out of Google on this device.');
   }
 
   // ── file backup / restore ──
@@ -235,13 +253,26 @@ export default function DataDialog({ onClose }) {
               </select>
             </div>
           </div>
+          {sync.provider === 'googleDrive' && account && (
+            <div className="gsync-account">
+              {account.picture
+                ? <img className="gsync-pfp" src={account.picture} alt="" referrerPolicy="no-referrer" />
+                : <span className="gsync-pfp gsync-pfp-fallback">{(account.name || '?').charAt(0).toUpperCase()}</span>}
+              <div className="gsync-id">
+                <div>Signed in as <strong>{account.name}</strong></div>
+                {account.email && <div className="settings-note" style={{ margin: 0 }}>{account.email}</div>}
+              </div>
+              <button onClick={signOutGoogle} disabled={busy}>Sign out</button>
+            </div>
+          )}
+          {sync.provider === 'googleDrive' && !account && driveOriginAllowed() && (
+            <div className="data-row">
+              <button className="toggle-on" onClick={connectGoogle} disabled={busy || !providerOk}> Sign in with Google</button>
+              <span className="settings-note" style={{ margin: 0 }}>Connect your Google account, then Sync now. Data goes to a private Drive app-data folder only this app can see.</span>
+            </div>
+          )}
           {sync.provider === 'googleDrive' && (
-            driveOriginAllowed() ? (
-              <p className="settings-note">
-                ✓ <strong>No setup needed on this site.</strong> Click <em>Sync now</em> and sign in with Google once;
-                your data goes to a private Google Drive <em>app-data folder</em> only this app can see.
-              </p>
-            ) : (
+            driveOriginAllowed() ? null : (
               <>
                 <div className="field-row">
                   <label>Google OAuth client ID</label>

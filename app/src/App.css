@@ -676,6 +676,12 @@
 
 /* Backup & data dialog */
 .data-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+/* Signed-in Google account card (cloud sync tab). */
+.gsync-account { display: flex; align-items: center; gap: 10px; margin: 8px 0; padding: 8px 10px; border: 1px solid var(--divider); border-radius: 10px; background: var(--controls-bg); }
+.gsync-pfp { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex: none; }
+.gsync-pfp-fallback { display: inline-flex; align-items: center; justify-content: center; background: var(--toggle-active-bg); color: var(--toggle-active-fg, #fff); font-weight: 700; font-size: 16px; }
+.gsync-id { flex: 1; min-width: 0; line-height: 1.3; }
+.gsync-id > div:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .data-json { width: 100%; box-sizing: border-box; font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace); font-size: 11px; line-height: 1.4; resize: vertical; margin-top: 6px; white-space: pre; }
 
 /* Book groups + remote-grab markers */

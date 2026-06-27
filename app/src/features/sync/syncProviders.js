@@ -99,21 +99,43 @@ function loadGis() {
   });
   return gisLoaded;
 }
+// Scopes: the private app-data folder for sync, plus the standard identity scopes so we can show
+// which Google account is signed in (name + photo). `drive.appdata` only sees this app's own folder.
+const DRIVE_SCOPE = 'openid email profile https://www.googleapis.com/auth/drive.appdata';
+
 // Access token cached in memory only (never persisted). Lets isConnected() report a live session so
 // the auto-sync timer can fire for Drive, and lets a silent (prompt:'') refresh reconnect on boot.
 let _driveToken = null; // { value, exp }
+let _driveProfile = null; // { name, picture, email } — the signed-in Google account (cosmetic)
 function driveTokenValid() { return !!_driveToken && _driveToken.exp > Date.now() + 60000; }
+export function getDriveProfile() { return _driveProfile; }
+
+// Best-effort: fetch the signed-in account's name/photo for display. Never blocks or fails sync.
+async function fetchDriveProfile(token) {
+  try {
+    const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${token}` } });
+    if (r.ok) {
+      const j = await r.json();
+      _driveProfile = { name: j.name || j.email || 'Google account', picture: j.picture || '', email: j.email || '' };
+    }
+  } catch { /* cosmetic only */ }
+  return _driveProfile;
+}
+
 function requestToken(clientId, prompt = '') {
   return new Promise((resolve, reject) => {
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
-      scope: 'https://www.googleapis.com/auth/drive.appdata',
+      scope: DRIVE_SCOPE,
       callback: (resp) => {
         if (resp && resp.access_token) {
           _driveToken = { value: resp.access_token, exp: Date.now() + ((resp.expires_in || 3600) * 1000) };
           resolve(resp.access_token);
         } else reject(new Error(resp?.error || 'Sign-in failed.'));
       },
+      // Fires when the flow can't even produce a response (popup closed/blocked, network) — without
+      // this the promise would hang on a dismissed popup.
+      error_callback: (err) => reject(new Error(err?.message || err?.type || 'Sign-in was dismissed.')),
     });
     // prompt:'' → silent when a prior grant + active Google session exist (boot/auto); a consent
     // popup only when needed (call from a click). prompt:'consent' forces the chooser.
@@ -139,17 +161,23 @@ export const googleDriveProvider = {
   async connect(cfg, { silent = false } = {}) {
     const clientId = driveClientId(cfg);
     if (!clientId) throw new Error('Google Drive sync isn’t available here.');
-    if (driveTokenValid()) return { token: _driveToken.value };
+    if (driveTokenValid()) {
+      if (!_driveProfile) await fetchDriveProfile(_driveToken.value);
+      return { token: _driveToken.value };
+    }
     await loadGis();
+    let token;
     try {
-      return { token: await requestToken(clientId, '') }; // try silent (existing grant) first
+      token = await requestToken(clientId, '');            // try silent (existing grant) first
     } catch (e) {
       if (silent) throw e;                                 // auto/boot: never pop a sign-in
-      return { token: await requestToken(clientId, 'consent') }; // user-initiated: ask once
+      token = await requestToken(clientId, 'consent');     // user-initiated: ask once
     }
+    await fetchDriveProfile(token);                        // load name/photo (best-effort)
+    return { token };
   },
   async isConnected() { return driveTokenValid(); }, // a live in-session token → auto-sync may fire
-  async disconnect() { _driveToken = null; },
+  async disconnect() { _driveToken = null; _driveProfile = null; },
   async upload(conn, name, blob) {
     const existing = await driveFindId(conn.token, name);
     const meta = existing ? {} : { name, parents: ['appDataFolder'] };
