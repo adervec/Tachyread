@@ -815,6 +815,21 @@ function AppInner() {
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, [state.global.focusMode, updateGlobal]);
+  // Closing the blackout (cover) windows directly should also end focus mode — otherwise the chrome
+  // keeps fading. They're separate windows that can't notify us, so poll: once they're all gone, tear
+  // focus down (exit fullscreen, drop focus-on).
+  useEffect(() => {
+    if (!state.global.focusMode) return undefined;
+    const covers = focusCoversRef.current;
+    if (!covers || !covers.length) return undefined; // single monitor / pop-ups blocked: nothing to watch
+    const id = setInterval(() => {
+      if (covers.every((w) => !w || w.closed)) {
+        exitFocus(focusCoversRef.current); focusCoversRef.current = [];
+        updateGlobal({ focusMode: false });
+      }
+    }, 800);
+    return () => clearInterval(id);
+  }, [state.global.focusMode, updateGlobal]);
   // Never leave orphaned cover windows behind if the app tab goes away.
   useEffect(() => {
     const onHide = () => exitFocus(focusCoversRef.current);
