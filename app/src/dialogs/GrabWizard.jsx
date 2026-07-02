@@ -16,6 +16,7 @@ import {
 } from '../features/screenCapture.js';
 import { recognizeImageEx, ocrSupported, loadImage, glyphCategory } from '../features/ocr.js';
 import { getLanguage } from '../state/languages.js';
+import { armPing, armStep, DEFAULT_ARM_PORT } from '../features/pageArm.js';
 import { buildGrabbedDoc } from '../document/grab.js';
 import { playGrabClick } from '../features/clickSound.js';
 import { speechRecognitionSupported } from '../features/speechRecognition.js';
@@ -231,6 +232,31 @@ export default function GrabWizard({ onClose }) {
   const [watchDwell, setWatchDwell] = useState(0.6); // seconds a page must hold still before it's grabbed
   const [watching, setWatching] = useState(false);
   const watchRef = useRef({ running: false });
+  // SimpleClicker "arm": after each grab, ask the clicker to turn the page (see features/pageArm.js).
+  const [armOn, setArmOn] = useState(false);
+  const [armPort, setArmPort] = useState(DEFAULT_ARM_PORT);
+  const [armStatus, setArmStatus] = useState('unknown'); // unknown | ok | missing
+  const armRef = useRef({});
+  armRef.current = { on: armOn, port: armPort };
+
+  // Turn the page via the arm. False (with a message) when it couldn't — never throws.
+  async function armAdvance() {
+    if (!armRef.current.on) return false;
+    try {
+      await armStep(armRef.current.port);
+      return true;
+    } catch (e) {
+      setMsg(`🦾 Arm error: ${e?.message || e} — advance the page manually.`);
+      return false;
+    }
+  }
+  async function toggleArm(on) {
+    setArmOn(on);
+    if (on) {
+      setArmStatus('unknown');
+      setArmStatus((await armPing(armPort)) ? 'ok' : 'missing');
+    }
+  }
   const skipSigsRef = useRef([]); // signatures of frames to ignore (loading screens / blanks the user marked)
   const [skipCount, setSkipCount] = useState(0);
 
@@ -561,9 +587,14 @@ export default function GrabWizard({ onClose }) {
         lastSig = sig; consec = 0; captured++;
         playGrabClick();
         addSeg(canvasToDataUrl(canvas), cap.ocrCrop);
-        setMsg(`Auto-grab: captured ${captured} page(s)… (advance the page now)`);
+        setMsg(armRef.current.on
+          ? `Auto-grab: captured ${captured} page(s)… 🦾 arm turning the page`
+          : `Auto-grab: captured ${captured} page(s)… (advance the page now)`);
       }
-      if (i < count - 1 && autoRef.current.running) await delay(interval);
+      if (i < count - 1 && autoRef.current.running) {
+        await armAdvance(); // no-op unless the SimpleClicker arm is enabled
+        await delay(interval);
+      }
     }
     autoRef.current.running = false;
     setAutoRunning(false);
@@ -586,7 +617,7 @@ export default function GrabWizard({ onClose }) {
     // and stop the watcher from re-grabbing that same page.
     watchRef.current.lastCapSig = null;
     watchRef.current.decidedSig = null;
-    let captured = 0, skipped = 0;
+    let captured = 0, skipped = 0, dupRuns = 0, endMsg = null;
     while (watchRef.current.running) {
       const v = videoRef.current;
       if (!v || !v.videoWidth) { await delay(POLL); continue; }
@@ -607,23 +638,39 @@ export default function GrabWizard({ onClose }) {
         holdSig = sig; holdStart = now; handled = false; // (re)start the settle timer
       } else if (!handled && now - holdStart >= dwellMs) {
         handled = true; watchRef.current.decidedSig = sig; // the page settled — decide once
+        let decision = 'grab';
         if (signatureBandVariance(sig) < BLANK_STD) {
+          decision = 'blank';
           skipped++; setMsg(`👁 Skipped a blank page (${captured} grabbed · ${skipped} skipped).`);
         } else if (skipSigsRef.current.some((s) => signatureDiff(sig, s) < DUP_THRESHOLD)) {
+          decision = 'ignored'; // a loading screen resolves on its own — don't page past it
           skipped++; setMsg(`👁 Skipped a loading / ignored screen (${captured} grabbed · ${skipped} skipped).`);
         } else if (lastCapSig && signatureDiff(sig, lastCapSig) < DUP_THRESHOLD && signatureBandDiff(sig, lastCapSig) < BAND_EPS) {
-          /* same page already grabbed — keep watching for the next one */
+          decision = 'dup'; // same page already grabbed — keep watching for the next one
         } else {
           watchRef.current.lastCapSig = sig; captured++;
           playGrabClick();
           addSeg(canvasToDataUrl(canvas), cap.ocrCrop);
-          setMsg(`👁 Grabbed page ${captured} — advance to the next (${skipped} skipped).`);
+          setMsg(armRef.current.on
+            ? `👁 Grabbed page ${captured} — 🦾 arm turning the page (${skipped} skipped).`
+            : `👁 Grabbed page ${captured} — advance to the next (${skipped} skipped).`);
+        }
+        // With the arm driving, a settled page that's STILL the last-captured one means the page
+        // no longer advances — after a few tries that's the end of the document: stop cleanly.
+        if (armRef.current.on && decision !== 'ignored') {
+          dupRuns = decision === 'dup' ? dupRuns + 1 : 0;
+          if (dupRuns >= 3) {
+            endMsg = `👁🦾 Stopped — the page no longer advances (end of document?). ${captured} page(s) grabbed.`;
+            break;
+          }
+          await armAdvance();
         }
       }
       await delay(POLL);
     }
+    watchRef.current.running = false;
     setWatching(false);
-    setMsg(`👁 Watch stopped — ${captured} page(s) grabbed, ${skipped} skipped.`);
+    setMsg(endMsg || `👁 Watch stopped — ${captured} page(s) grabbed, ${skipped} skipped.`);
   }
   function stopWatch() { watchRef.current.running = false; setWatching(false); }
   // Mark the frame currently on the preview as a pattern to ignore (e.g. a loading spinner / splash).
@@ -1029,6 +1076,23 @@ export default function GrabWizard({ onClose }) {
                   <button onClick={markSkipPattern} title="Mark the frame on screen now as a loading/blank pattern to ignore">🚫 Ignore this frame</button>
                   {skipCount > 0 && <button onClick={clearSkipPatterns} title="Clear ignore patterns">clear {skipCount} ignored</button>}
                 </>
+              )}
+              <span className="grab-sep" />
+              <label className="inline-check" title="Let SimpleClicker turn the pages: enable “Remote arm (HTTP)” in SimpleClicker, drop a clicker's marker on your reader's next-page button, then each grab asks it to click. Fully hands-free with Watch mode.">
+                <input type="checkbox" checked={armOn} onChange={(e) => toggleArm(e.target.checked)} />
+                🦾 SimpleClicker arm
+              </label>
+              {armOn && (
+                <input
+                  type="number" min={1024} max={65535} value={armPort} style={{ width: 62 }}
+                  title="Port of SimpleClicker's Remote arm"
+                  onChange={async (e) => { const p = e.target.value; setArmPort(p); setArmStatus((await armPing(p)) ? 'ok' : 'missing'); }}
+                />
+              )}
+              {armOn && (
+                <span className="settings-note" style={{ margin: 0 }}>
+                  {armStatus === 'ok' ? '✓ arm connected' : armStatus === 'missing' ? '✗ not found — enable “Remote arm (HTTP)” in SimpleClicker' : 'checking…'}
+                </span>
               )}
             </div>
             <div className="grab-voice">
