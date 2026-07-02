@@ -71,6 +71,8 @@ import { saveTextToFile, saveBlobToFile } from './features/fileSystem.js';
 import { buildTabPdf } from './features/exportPdf.js';
 import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
+import { createGestureMonitor, DEFAULT_HAND_CALIB, DEFAULT_GESTURES } from './features/handGestures.js';
+import HandCalibrationDialog from './dialogs/HandCalibrationDialog.jsx';
 import WebcamPreview from './components/WebcamPreview.jsx';
 import WebcamCalibrationDialog from './dialogs/WebcamCalibrationDialog.jsx';
 import { createAlarm } from './features/alarm.js';
@@ -78,6 +80,10 @@ import { createAlarm } from './features/alarm.js';
 const WEBCAM_LABEL = {
   starting: 'starting camera…', watching: 'watching', away: 'looked away — paused', drowsy: 'drowsy',
   unsupported: 'face detection not supported here', denied: 'camera blocked', error: 'camera error', off: '',
+};
+const HAND_LABEL = {
+  starting: 'starting camera…', watching: 'show a hand', hand: 'hand ✋', 'scroll-up': 'scroll ↑', 'scroll-down': 'scroll ↓',
+  unsupported: 'hand tracking not supported here', denied: 'camera blocked', error: 'camera error', off: '',
 };
 import { getSyncProvider, getDriveProfile } from './features/sync/syncProviders.js';
 import { backupToProvider, syncWithProvider } from './features/sync/syncManager.js';
@@ -765,6 +771,87 @@ function AppInner() {
       setPlaying(true);
     }
   }
+  const playPauseRef = useRef(null);
+  playPauseRef.current = playPause;
+
+  // Discrete hand gestures → reader actions (each gesture is individually enabled in settings).
+  const handleGestureRef = useRef(null);
+  handleGestureRef.current = (kind) => {
+    if (!activeTab) return;
+    if (kind === 'thumbUp' || kind === 'thumbDown') {
+      const wpm = Math.max(60, Math.min(1500, (activeTab.settings.wpm || 300) + (kind === 'thumbUp' ? 25 : -25)));
+      patchSettings(activeTab.id, { wpm });
+      setStatus(`${kind === 'thumbUp' ? '👍' : '👎'} WPM ${wpm}.`);
+    } else if (kind === 'fist') {
+      if (playingRef.current) { playPauseRef.current?.(); setStatus('✊ Paused.'); }
+    } else if (kind === 'victory') {
+      nav('nextPara');
+      setStatus('✌ Next paragraph.');
+    }
+  };
+
+  // Hand-gesture controls (opt-in): open palm = scroll joystick over the Lines pane (raise/lower
+  // = direction, distance from your calibrated rest = speed); a wave toggles play/pause.
+  const [handState, setHandState] = useState('off');
+  const handRef = useRef(null);
+  const handVelRef = useRef(0);
+  useEffect(() => {
+    if (!state.global.handGestures) {
+      handRef.current?.stop();
+      handRef.current = null;
+      handVelRef.current = 0;
+      setHandState('off');
+      return undefined;
+    }
+    const mon = createGestureMonitor({
+      calib: state.global.handCalib || DEFAULT_HAND_CALIB,
+      gestures: state.global.handGestureSet || DEFAULT_GESTURES,
+      intervalMs: deviceKind() === 'Mobile' ? 150 : 100,
+      onState: setHandState,
+      onGesture: (kind) => handleGestureRef.current?.(kind),
+      onHand: ({ present, v }) => {
+        setHandState(!present ? 'watching' : v < 0 ? 'scroll-up' : v > 0 ? 'scroll-down' : 'hand');
+      },
+      onScroll: (v) => { handVelRef.current = v; },
+      onWave: () => {
+        playPauseRef.current?.();
+        setStatus('🖐 Wave — play/pause.');
+      },
+    });
+    handRef.current = mon;
+    mon.start();
+    // Smooth scroll pump: apply the joystick velocity to the Lines pane scroller every frame.
+    let scroller = null;
+    let raf;
+    const pump = () => {
+      raf = requestAnimationFrame(pump);
+      const v = handVelRef.current;
+      if (!v) return;
+      if (!scroller || !scroller.isConnected) {
+        const wrap = document.querySelector('.line-pane-list');
+        scroller = wrap
+          ? [...wrap.querySelectorAll('*')].find((el) => /(auto|scroll)/.test(getComputedStyle(el).overflowY)) || wrap
+          : null;
+      }
+      scroller?.scrollBy(0, v * 9); // full deflection ≈ half a screen per second
+    };
+    raf = requestAnimationFrame(pump);
+    return () => {
+      cancelAnimationFrame(raf);
+      mon.stop();
+      handRef.current = null;
+      handVelRef.current = 0;
+      setHandState('off');
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.global.handGestures]);
+  // Calibration / gesture toggles saved while running → apply live without restarting the camera.
+  useEffect(() => {
+    handRef.current?.setCalib(state.global.handCalib || DEFAULT_HAND_CALIB);
+  }, [state.global.handCalib]);
+  useEffect(() => {
+    handRef.current?.setGestures(state.global.handGestureSet || DEFAULT_GESTURES);
+  }, [state.global.handGestureSet]);
 
   // Auto-stop timer: after this many minutes of continuous playback, pause and silence speech.
   // Handy for winding down to read-aloud without it running all night. Restarts on each Play.
@@ -1688,6 +1775,11 @@ function AppInner() {
             📷 {WEBCAM_LABEL[webcamState] || webcamState}
           </span>
         )}
+        {state.global.handGestures && handState !== 'off' && (
+          <span className={`webcam-badge wb-${handState.startsWith('scroll') || handState === 'hand' ? 'watching' : handState}`} title="Hand gestures — open palm above/below rest scrolls (farther = faster), a wave toggles play/pause. Frames stay on your device.">
+            🖐 {HAND_LABEL[handState] || handState}
+          </span>
+        )}
       </div>
 
       {/* Dialogs */}
@@ -1720,6 +1812,7 @@ function AppInner() {
           global={state.global}
           onPatch={(p) => updateGlobal(p)}
           onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
+          onCalibrateHand={() => openDialog({ kind: 'hand-calib' })}
           onClose={closeDialog}
         />
       )}
@@ -1797,6 +1890,13 @@ function AppInner() {
             webcamRef.current?.setBlinkThreshold(threshold);
             updateGlobal({ webcamCalib: { ...(state.global.webcamCalib || {}), threshold } });
           }}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog?.kind === 'hand-calib' && (
+        <HandCalibrationDialog
+          monitor={handRef.current}
+          onSave={(cal) => updateGlobal({ handCalib: cal })}
           onClose={closeDialog}
         />
       )}
