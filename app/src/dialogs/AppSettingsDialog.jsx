@@ -3,6 +3,7 @@ import Dialog from './Dialog.jsx';
 import { DEFAULT_COMFORT } from '../engine/comfort.js';
 import { resetGlobalToDefaults } from '../state/settings.js';
 import { LANGUAGES } from '../state/languages.js';
+import { DEFAULT_GESTURES, GESTURE_INFO } from '../features/handGestures.js';
 import FontPicker from '../components/FontPicker.jsx';
 
 // Application-wide settings only. These are deliberately disjoint from per-tab settings:
@@ -18,7 +19,7 @@ function Field({ label, children }) {
 
 const AUDIO_MODES = ['Voice', 'Claps', 'Both'];
 
-export default function AppSettingsDialog({ global, onPatch, onCalibrate, onClose }) {
+export default function AppSettingsDialog({ global, onPatch, onCalibrate, onCalibrateHand, onClose }) {
   const [g, setG] = useState(global);
   function patch(p) {
     setG({ ...g, ...p });
@@ -255,6 +256,43 @@ export default function AppSettingsDialog({ global, onPatch, onCalibrate, onClos
       </Field>
       <Field label="Eye calibration">
         <button onClick={onCalibrate} disabled={!onCalibrate}>⚙ Calibrate eye detection…</button>
+      </Field>
+      <Field label="Hand gestures (experimental)">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.handGestures}
+            onChange={(e) => patch({ handGestures: e.target.checked })}
+          />
+          Control the reader with hand gestures via the camera (pick which below)
+        </label>
+      </Field>
+      <Field label="Gestures">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {Object.entries(GESTURE_INFO).map(([k, info]) => {
+            const gset = { ...DEFAULT_GESTURES, ...(g.handGestureSet || {}) };
+            return (
+              <label key={k} className="inline-check" title={info.desc} style={{ opacity: g.handGestures ? 1 : 0.55 }}>
+                <input
+                  type="checkbox"
+                  disabled={!g.handGestures}
+                  checked={!!gset[k]}
+                  onChange={(e) => patch({ handGestureSet: { ...gset, [k]: e.target.checked } })}
+                />
+                {info.icon} <strong>{info.label}</strong> — {info.desc}
+              </label>
+            );
+          })}
+        </div>
+      </Field>
+      <p className="settings-note">
+        Fewer enabled gestures = fewer false positives: disabled gestures are ignored entirely, and
+        the discrete ones must be held steady for ~half a second before they fire.
+      </p>
+      <Field label="Hand calibration">
+        <button onClick={onCalibrateHand} disabled={!onCalibrateHand || !g.handGestures} title={g.handGestures ? '' : 'Turn on Hand gestures first'}>
+          🖐 Calibrate hand range…
+        </button>
       </Field>
       <p className="settings-note">
         Both use on-device face detection — camera frames are analysed locally and are never recorded,

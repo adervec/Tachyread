@@ -35,27 +35,12 @@ const MENUS = {
     { label: 'Disconnect (keep session for next time)', action: 'disconnect' },
     { label: 'Shut Down (close all, start clean next time)', action: 'shutdown' },
   ],
+  // What you see & hear right now: appearance, panes, audio companions, app info.
   view: [
     { label: 'Tab Settings...', action: 'tab-settings' },
-    { label: 'Statistics...', shortcut: 'Ctrl+T', action: 'stats' },
-    { label: 'Progress Detail...', action: 'progress-detail' },
-    { label: 'Regression Report...', action: 'regressions' },
-    { label: 'Attention Check...', action: 'attention' },
-    { label: 'Reading History...', shortcut: 'Ctrl+H', action: 'history' },
-    { kind: 'separator' },
-    { label: 'Generate Contents (Wizard)...', action: 'toc-wizard' },
-    { label: 'Generate Proper Names (Wizard)...', action: 'names-wizard' },
-    { label: 'Generate Index (Wizard)...', action: 'index-wizard' },
-    { label: 'Locate Footnotes (Wizard)...', action: 'notes-wizard' },
     { label: 'Proper Names Index...', shortcut: 'Ctrl+I', action: 'proper-names' },
-    { label: 'Span Drill...', action: 'span-drill' },
-    { label: 'Eye Warmup...', action: 'eye-warmup' },
-    { label: 'Flow Writer...', action: 'flow-writer' },
-    { label: 'Dictation (speak to write)...', action: 'dictation' },
-    { label: 'Vocabulary...', action: 'vocab' },
-    { label: 'Take a Break Now', action: 'take-break' },
-    { label: 'Incognito Reading (no tracking)', action: 'toggle-incognito' },
     { label: 'Preview Footnote', shortcut: 'Ctrl+Shift+F', action: 'footnote' },
+    { label: 'Incognito Reading (no tracking)', action: 'toggle-incognito' },
     { kind: 'separator' },
     { label: 'Audiobook Manager...', shortcut: 'Ctrl+Shift+A', action: 'audiobook' },
     { label: 'Text-to-Speech Reader...', shortcut: 'Ctrl+Shift+T', action: 'tts-popup' },
@@ -64,12 +49,47 @@ const MENUS = {
     { label: 'Ambient Sound...', action: 'ambient' },
     { label: 'About / Disclaimer...', action: 'disclaimer' },
   ],
+  // Drills & practice.
+  train: [
+    { label: 'Eye Warmup...', action: 'eye-warmup' },
+    { label: 'Span Drill...', action: 'span-drill' },
+    { label: 'Flow Writer...', action: 'flow-writer' },
+    { label: 'Dictation (speak to write)...', action: 'dictation' },
+    { label: 'Vocabulary...', action: 'vocab' },
+    { kind: 'separator' },
+    { label: 'Take a Break Now', action: 'take-break' },
+  ],
+  // Progress & analytics.
+  stats: [
+    { label: 'Statistics...', shortcut: 'Ctrl+T', action: 'stats' },
+    { label: 'Progress Detail...', action: 'progress-detail' },
+    { label: 'Regression Report...', action: 'regressions' },
+    { label: 'Attention Check...', action: 'attention' },
+    { label: 'Reading History...', shortcut: 'Ctrl+H', action: 'history' },
+  ],
+  // Document-resource generators.
+  tools: [
+    { label: 'Generate Contents (Wizard)...', action: 'toc-wizard' },
+    { label: 'Generate Proper Names (Wizard)...', action: 'names-wizard' },
+    { label: 'Generate Index (Wizard)...', action: 'index-wizard' },
+    { label: 'Locate Footnotes (Wizard)...', action: 'notes-wizard' },
+  ],
   typing: [
     { label: 'Typing Practice', action: 'typing' },
     { label: 'Typing Plans...', action: 'typing-plans' },
     { label: 'Typing Progress...', action: 'typing-progress' },
   ],
 };
+
+// Menu-bar order + display titles (desktop dropdowns and the mobile drawer sections).
+const MENU_ORDER = [
+  ['file', 'File'],
+  ['view', 'View'],
+  ['train', 'Train'],
+  ['stats', 'Stats'],
+  ['tools', 'Tools'],
+  ['typing', 'Typing'],
+];
 
 // One menu entry (file/view list) rendered as a drawer/dropdown row. `badges` optionally maps an
 // action → a small count shown as a pill (e.g. how many tab settings differ from the defaults).
@@ -177,14 +197,12 @@ export default function MenuBar({ onFileOpen, onAction }) {
             <ToggleItem on={state.showRsvp} label="Fast Reader" onClick={() => dispatch({ type: 'TOGGLE_SHOW_RSVP' })} />
             <ToggleItem on={state.incognito} label="🕶 Incognito (no tracking)" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })} />
 
-            <div className="menu-drawer-section">File</div>
-            {MENUS.file.map((it, i) => <MenuItem key={`f${i}`} it={it} onPick={handle} badges={badges} />)}
-
-            <div className="menu-drawer-section">View &amp; tools</div>
-            {MENUS.view.map((it, i) => <MenuItem key={`v${i}`} it={it} onPick={handle} badges={badges} />)}
-
-            <div className="menu-drawer-section">Typing</div>
-            {MENUS.typing.map((it, i) => <MenuItem key={`t${i}`} it={it} onPick={handle} badges={badges} />)}
+            {MENU_ORDER.map(([key, title]) => (
+              <div key={key}>
+                <div className="menu-drawer-section">{title}</div>
+                {MENUS[key].map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
+              </div>
+            ))}
 
             <div className="menu-drawer-section">Data</div>
             <div className="item" onClick={() => { setOpenMenu(null); onAction('data'); }}>
@@ -198,39 +216,20 @@ export default function MenuBar({ onFileOpen, onAction }) {
 
   return (
     <div className="menu-bar" ref={ref}>
-      <div
-        className={`menu-item ${openMenu === 'file' ? 'open' : ''}`}
-        onClick={() => setOpenMenu(openMenu === 'file' ? null : 'file')}
-      >
-        File
-        {openMenu === 'file' && (
-          <div className="menu-dropdown">
-            {MENUS.file.map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
-          </div>
-        )}
-      </div>
-      <div
-        className={`menu-item ${openMenu === 'view' ? 'open' : ''}`}
-        onClick={() => setOpenMenu(openMenu === 'view' ? null : 'view')}
-      >
-        View
-        {openMenu === 'view' && (
-          <div className="menu-dropdown">
-            {MENUS.view.map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
-          </div>
-        )}
-      </div>
-      <div
-        className={`menu-item ${openMenu === 'typing' ? 'open' : ''}`}
-        onClick={() => setOpenMenu(openMenu === 'typing' ? null : 'typing')}
-      >
-        Typing
-        {openMenu === 'typing' && (
-          <div className="menu-dropdown">
-            {MENUS.typing.map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
-          </div>
-        )}
-      </div>
+      {MENU_ORDER.map(([key, title]) => (
+        <div
+          key={key}
+          className={`menu-item ${openMenu === key ? 'open' : ''}`}
+          onClick={() => setOpenMenu(openMenu === key ? null : key)}
+        >
+          {title}
+          {openMenu === key && (
+            <div className="menu-dropdown">
+              {MENUS[key].map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
+            </div>
+          )}
+        </div>
+      ))}
       <div
         className={`menu-item ${state.showToc ? 'open' : ''}`}
         onClick={() => dispatch({ type: 'TOGGLE_TOC' })}

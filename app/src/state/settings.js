@@ -224,6 +224,12 @@ export function defaultGlobalSettings() {
     // Touch gesture navigation (off by default — it can interfere with text selection/scroll):
     // horizontal swipes over the reading area step lines (long swipes step paragraphs).
     gestureControls: false,
+    // Webcam hand-gesture controls: open-palm joystick scrolls the Lines pane at variable speed,
+    // a wave toggles play/pause. handCalib = { centerY, topY, bottomY } from the calibration.
+    // handGestureSet = per-gesture on/off (null → feature defaults; discrete gestures start off).
+    handGestures: false,
+    handCalib: null,
+    handGestureSet: null,
     // Auto-minimize the controls dock while playing on compact screens, for more text room.
     autoMinimizeControls: false,
     // Pause non-TTS playback when the reading text scrolls off-screen (you can't read what you can't
