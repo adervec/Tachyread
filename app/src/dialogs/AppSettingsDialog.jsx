@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { DEFAULT_COMFORT } from '../engine/comfort.js';
 import { resetGlobalToDefaults } from '../state/settings.js';
+import { LANGUAGES } from '../state/languages.js';
 import FontPicker from '../components/FontPicker.jsx';
 
 // Application-wide settings only. These are deliberately disjoint from per-tab settings:
@@ -56,6 +57,21 @@ export default function AppSettingsDialog({ global, onPatch, onCalibrate, onClos
       <p className="settings-note">
         App-wide options. Per-document appearance and behavior live in <strong>View → Tab Settings</strong>;
         the defaults for new tabs live in <strong>File → Default Tab Settings</strong>.
+      </p>
+
+      <div className="field-section">Language</div>
+      <Field label="Document language">
+        <select
+          value={g.language || 'en'}
+          onChange={(e) => patch({ language: e.target.value })}
+          title="Language of the documents you read — drives OCR, dictation & read-along speech recognition, and TTS voice matching. The app UI stays English."
+        >
+          {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+        </select>
+      </Field>
+      <p className="settings-note">
+        Used by Grab Text (OCR), Dictation, read-along Speaking mode, and to pick a matching
+        read-aloud voice. The first Grab in a new language downloads its recognition data once.
       </p>
 
       <div className="field-section">Fonts</div>

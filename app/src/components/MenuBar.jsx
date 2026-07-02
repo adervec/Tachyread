@@ -49,6 +49,7 @@ const MENUS = {
     { label: 'Locate Footnotes (Wizard)...', action: 'notes-wizard' },
     { label: 'Proper Names Index...', shortcut: 'Ctrl+I', action: 'proper-names' },
     { label: 'Span Drill...', action: 'span-drill' },
+    { label: 'Eye Warmup...', action: 'eye-warmup' },
     { label: 'Flow Writer...', action: 'flow-writer' },
     { label: 'Dictation (speak to write)...', action: 'dictation' },
     { label: 'Vocabulary...', action: 'vocab' },

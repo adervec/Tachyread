@@ -14,6 +14,8 @@ const COMMAND_MAP = {
 
 // onHeard({ transcript, isFinal, command }) fires for every result (for the live transcript
 // chat); onCommand(command) fires only when a final transcript matches a known command.
+// ponytail: voice commands stay en-US — COMMAND_MAP is English keywords; localize both together
+// if non-English command words are ever wanted.
 export function startVoiceCommands({ onHeard, onCommand } = {}) {
   if (!speechRecognitionSupported()) return null;
   const r = createRecognizer({

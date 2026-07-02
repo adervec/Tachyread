@@ -33,16 +33,29 @@ export function useVoices() {
   return voices;
 }
 
-// Pick a sensible default voice when the user hasn't chosen one. Preference order, best first:
-// Google UK English → any English Google voice → any Google voice → any en-GB → any English. Google's
-// neural voices read markedly better than the Microsoft/eSpeak system voices, so we steer to them.
+// The app's document language (BCP-47), set once by App from global settings so every speak()
+// call site gets language-matched voices without threading a param through all of them.
+let _prefLang = 'en-US';
+export function setPreferredLanguage(bcp) {
+  _prefLang = bcp || 'en-US';
+}
+export function preferredLanguage() {
+  return _prefLang;
+}
+
+// Pick a sensible default voice when the user hasn't chosen one: a voice matching the document
+// language first (Google's neural voices read markedly better than the Microsoft/eSpeak system
+// voices, so steer to them), then the classic English chain as the fallback.
 export function pickDefaultVoice(voices = listVoices()) {
   if (!voices || !voices.length) return null;
   const find = (pred) => voices.find(pred);
   const isGoogle = (v) => /\bgoogle\b/i.test(v.name);
+  const base = _prefLang.split(/[-_]/)[0].toLowerCase();
+  const isPref = (v) => (v.lang || '').toLowerCase().replace('_', '-').startsWith(base);
   const isEn = (v) => /^en\b|^en[-_]/i.test(v.lang || '');
   const isEnGb = (v) => /^en[-_]?gb/i.test(v.lang || '') || /uk english/i.test(v.name);
   return (
+    (base !== 'en' && (find((v) => isGoogle(v) && isPref(v)) || find(isPref))) ||
     find((v) => /google uk english female/i.test(v.name)) ||
     find((v) => /google uk english/i.test(v.name)) ||
     find((v) => isGoogle(v) && isEnGb(v)) ||
@@ -68,6 +81,7 @@ export function speak(text, { voiceName, rate = 1, pitch = 1, onEnd, onError } =
   const u = new SpeechSynthesisUtterance(text);
   const v = resolveVoice(voiceName);
   if (v) u.voice = v;
+  u.lang = v?.lang || _prefLang; // hint engines even when no explicit voice matched
   u.rate = rate;
   u.pitch = pitch;
   if (onEnd) u.onend = onEnd;

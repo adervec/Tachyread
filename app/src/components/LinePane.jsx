@@ -427,7 +427,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   function onRowsRendered({ startIndex }) {
     if (!scrollRead) return;
     const ln = doc.lines[startIndex];
-    if (ln && ln.startWordIndex > idxRef.current) jumpRef.current(ln.startWordIndex, { read: true });
+    if (ln && ln.startWordIndex > idxRef.current) jumpRef.current(ln.startWordIndex, { read: true, src: 'scroll' });
   }
   useEffect(() => {
     if (split || !scrollRead) return undefined;
@@ -455,7 +455,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       raf = requestAnimationFrame(() => {
         raf = 0;
         const f = frontierWord();
-        if (f != null && f > idxRef.current) jumpRef.current(f, { read: true });
+        if (f != null && f > idxRef.current) jumpRef.current(f, { read: true, src: 'scroll' });
       });
     };
     scroller.addEventListener('scroll', onScroll, { passive: true });
