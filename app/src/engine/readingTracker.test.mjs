@@ -41,6 +41,40 @@ t.noteScrollAdvance(900, 950, T + 901000);
 t.noteScrollAdvance(950, 960, T + 903000);
 assert(t.sessionActiveMs - ms0 < 10000, 'hidden time is not credited');
 
+// Live readout accuracy in scroll mode (the "WPM not accurate when scroll-reading" fixes):
+const t3 = createReadingTracker({ wordCount: 5000 });
+t3.noteScrollAdvance(0, 50, T);
+t3.noteScrollAdvance(50, 130, T + 40000);  // 80 words after a 40s dwell → 120 wpm gesture
+t3.noteScrollAdvance(130, 210, T + 80000); // commits the first, starts the second
+
+// 1. Mid-dwell (window empty) the readout holds the last gesture's pace instead of flapping to 0.
+const held = t3.recentWpm(T + 150000); // 70s into the next dwell
+assert(held >= 110 && held <= 130, `dwell holds last screenful's pace ≈ 120, got ${held}`);
+assert.equal(t3.recentWpm(T + 80000 + 200000), 0, 'hold expires once scrolling has clearly stopped');
+
+// 2. The first frames of a scroll (few words + full dwell) don't drag the readout down.
+const t4 = createReadingTracker({ wordCount: 5000 });
+t4.noteScrollAdvance(0, 50, T);
+t4.noteScrollAdvance(50, 130, T + 40000);
+t4.noteScrollAdvance(130, 210, T + 80000); // commit #1 (120 wpm), pend #2 open
+t4.noteScrollAdvance(210, 213, T + 120000); // commit #2, new pend: 3 words on a 40s dwell
+const early = t4.recentWpm(T + 120100);
+assert(early >= 100, `tiny in-flight gesture is ignored, not averaged in (got ${early})`);
+
+// 3. Overlapping/stale frontier reports (the pane's two scroll signals racing) don't split the
+//    gesture or re-count words; a forward relocation is NOT folded into the gesture.
+const t5 = createReadingTracker({ wordCount: 5000 });
+t5.noteScrollAdvance(0, 50, T);
+t5.noteScrollAdvance(50, 120, T + 40000); // gesture: 70 words over 40s
+t5.noteScrollAdvance(100, 118, T + 40016); // stale overlap → no-op
+t5.noteScrollAdvance(100, 125, T + 40032); // stale prev, frontier really at 125 → extend
+t5.noteScrollAdvance(125, 200, T + 80000); // commits: 50→125 = 75 words / 40s ≈ 112 wpm
+const r5 = t5.recentWpm(T + 80100);
+assert(r5 >= 100 && r5 <= 125, `overlaps don't inflate the rate (got ${r5})`);
+// relocation: click ahead to 1000, scroll within the gesture gap — jumped span earns nothing
+t5.noteScrollAdvance(1000, 1010, T + 80200);
+assert(!t5.isRead(500), 'relocated-past words are not credited by the scroll gesture');
+
 // Plain recordMove still behaves: 10 forward words in 3s ≈ 200 wpm events.
 const t2 = createReadingTracker({ wordCount: 100 });
 t2.recordMove(0, 0, T); // seed clock

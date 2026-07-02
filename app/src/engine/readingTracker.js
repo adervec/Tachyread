@@ -32,6 +32,13 @@ const SCROLL_GESTURE_GAP_MS = 600; // a pause this long between advances = the g
 // without it, "read 45s, then fling 700 words" blends into a plausible-looking wpm and the whole
 // flung span earns reading credit. Flings keep coverage (scroll contract) but no pace/efficiency.
 const SCROLL_MAX_WPM = 900;
+// Live-readout behaviour between scroll gestures. A gesture's event ages out of the 30s window
+// during the (longer) dwell that follows it, which would read as 0 wpm mid-read — so the last
+// committed gesture's pace is held while a dwell is plausibly still reading toward the next one.
+const SCROLL_HOLD_MS = 180000;
+// An in-flight gesture is only counted in the live readout once this many words have crossed —
+// the first frames of a scroll pair a full dwell with a handful of words and read as ~5 wpm.
+const SCROLL_LIVE_MIN_WORDS = 8;
 const REVISIT_WORDS = 50; // backward jump larger than this is a far revisit, not a re-read
 const WINDOW_MS = 30000; // sliding window for the live "recent WPM"
 const MIN_MS_PER_WORD = 25; // faster than this (~2400 wpm) over a multi-word move = skim/skip
@@ -234,6 +241,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
 
   // ── scroll-to-read gesture aggregation ─────────────────────────────────────
   let scrollPend = null; // { from, to, ms } — the in-flight gesture (span + accrued dwell)
+  let lastScroll = null; // { ts, pace } of the last committed gesture, for the between-dwells hold
 
   // Commit the aggregated gesture: the span is credited as read at the dwell pace, unless the
   // implied pace exceeds SCROLL_MAX_WPM — then it's coverage only (matching the mode's "whatever
@@ -249,11 +257,14 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     let processed = 0;
     if (d > 0) {
       if (ms > 0 && (60000 * d) / ms <= SCROLL_MAX_WPM) {
-        newWords = markReading(g.from, g.to, Math.round((60000 * d) / ms));
+        const pace = Math.round((60000 * d) / ms);
+        newWords = markReading(g.from, g.to, pace);
         stampParas(g.from, g.to, now);
         processed = d;
+        lastScroll = { ts: now, pace };
       } else {
         markRangeRead(g.from, g.to); // fling: covered, not "read at a pace"
+        lastScroll = { ts: now, pace: 0 }; // a fling honestly zeroes the live readout
       }
     }
     sessionActiveMs += ms;
@@ -267,21 +278,31 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
   }
 
   // Record one scroll-mode frontier advance (forward only). Frame-sized advances chain into the
-  // current gesture; a gap or a continuity break (position moved elsewhere in between) commits it.
+  // current gesture; a real pause commits it. The pane's two scroll signals (line-granular and
+  // word-interpolated) can race within a frame and report overlapping/stale frontiers — those
+  // extend or no-op rather than splitting the gesture (a split would re-count the overlap).
   function noteScrollAdvance(prev, next, now = Date.now()) {
-    const gap = lastTs != null && !hidden ? Math.min(Math.max(0, now - lastTs), SCROLL_DWELL_CAP_MS) : 0;
+    const prevTs = lastTs;
+    const gap = prevTs != null && !hidden ? Math.min(Math.max(0, now - prevTs), SCROLL_DWELL_CAP_MS) : 0;
     lastTs = now;
     if (hidden || prev == null || next == null || next <= prev) return;
-    if (scrollPend && (gap > SCROLL_GESTURE_GAP_MS || scrollPend.to !== prev)) commitScroll(now);
-    if (!scrollPend) scrollPend = { from: prev, to: next, ms: gap };
-    else { scrollPend.to = next; scrollPend.ms += gap; }
+    // Continuation = quick succession AND prev inside the gesture's covered span. A prev beyond
+    // pend.to is a relocation (clicked ahead, then scrolled) — extending would credit the jump.
+    if (scrollPend && gap <= SCROLL_GESTURE_GAP_MS && prev <= scrollPend.to) {
+      if (next > scrollPend.to) { scrollPend.to = next; scrollPend.ms += gap; dirty = true; }
+      return; // next <= pend.to: a stale overlapping report — nothing new to account
+    }
+    // Pause or relocation ended the previous gesture — it ended at its LAST advance (prevTs),
+    // not now; stamping now would smear the event/hold timeline forward by a whole dwell.
+    if (scrollPend) commitScroll(prevTs ?? now);
+    scrollPend = { from: prev, to: next, ms: gap };
     dirty = true;
   }
 
   // Commit a gesture that ended without a successor (no scroll for a while). Called from the
   // polled readouts so pending credit lands without a timer.
   function flushScroll(now = Date.now()) {
-    if (scrollPend && lastTs != null && now - lastTs > SCROLL_GESTURE_GAP_MS) commitScroll(now);
+    if (scrollPend && lastTs != null && now - lastTs > SCROLL_GESTURE_GAP_MS) commitScroll(lastTs);
   }
 
   // Mark a contiguous prefix [0, n) as read without crediting any time/pace. Used by book-group
@@ -306,7 +327,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
 
   function setHidden(h, now = Date.now()) {
     if (h === hidden) return;
-    if (h) commitScroll(now); // don't let a pending gesture absorb hidden time
+    if (h) commitScroll(lastTs ?? now); // don't let a pending gesture absorb hidden time
     hidden = h;
     if (!h) lastTs = now;
   }
@@ -322,10 +343,16 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     }
     if (scrollPend) { // live scroll gesture: count as if committed now, for a live readout
       const d = scrollPend.to - scrollPend.from;
-      if (d > 0 && scrollPend.ms > 0 && (60000 * d) / scrollPend.ms <= SCROLL_MAX_WPM) { p += d; ms += scrollPend.ms; }
+      if (d >= SCROLL_LIVE_MIN_WORDS && scrollPend.ms > 0 && (60000 * d) / scrollPend.ms <= SCROLL_MAX_WPM) {
+        p += d;
+        ms += scrollPend.ms;
+      }
     }
-    if (ms < 400) return 0;
-    return Math.min(MAX_RECENT_WPM, Math.round((p / ms) * 60000));
+    if (ms >= 400) return Math.min(MAX_RECENT_WPM, Math.round((p / ms) * 60000));
+    // Scroll mode between gestures: the window is empty while a long dwell is still reading
+    // toward the next scroll — hold the last screenful's pace instead of flapping to 0.
+    if (lastScroll && now - lastScroll.ts < SCROLL_HOLD_MS) return Math.min(MAX_RECENT_WPM, lastScroll.pace);
+    return 0;
   }
 
   const wpmFrom = (words, ms) => (ms > 1000 ? Math.round((words / ms) * 60000) : 0);
