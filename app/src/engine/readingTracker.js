@@ -22,6 +22,16 @@
 
 const IDLE_CAP_MS = 12000; // max active time credited to a single gap between moves
 const SKIP_WORDS = 50; // forward jump larger than this (when not contiguous) is a skip
+// Scroll-to-read accounting. Scroll reading inverts the timing model: the user reads the visible
+// pane for a while (the dwell), THEN scrolls what they finished past the top edge in a burst of
+// frame-sized advances. Per-move classification would see a skim (many words, tiny gaps) preceded
+// by capped idle — so scroll advances aggregate into one "gesture" credited at the dwell pace.
+const SCROLL_DWELL_CAP_MS = 90000; // a screenful can legitimately take this long to read
+const SCROLL_GESTURE_GAP_MS = 600; // a pause this long between advances = the gesture ended
+// A gesture claiming a faster sustained pace than this is a fling past unread text, not reading —
+// without it, "read 45s, then fling 700 words" blends into a plausible-looking wpm and the whole
+// flung span earns reading credit. Flings keep coverage (scroll contract) but no pace/efficiency.
+const SCROLL_MAX_WPM = 900;
 const REVISIT_WORDS = 50; // backward jump larger than this is a far revisit, not a re-read
 const WINDOW_MS = 30000; // sliding window for the live "recent WPM"
 const MIN_MS_PER_WORD = 25; // faster than this (~2400 wpm) over a multi-word move = skim/skip
@@ -222,6 +232,58 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     dirty = true;
   }
 
+  // ── scroll-to-read gesture aggregation ─────────────────────────────────────
+  let scrollPend = null; // { from, to, ms } — the in-flight gesture (span + accrued dwell)
+
+  // Commit the aggregated gesture: the span is credited as read at the dwell pace, unless the
+  // implied pace exceeds SCROLL_MAX_WPM — then it's coverage only (matching the mode's "whatever
+  // passes the top edge counts as read" contract) with no pace/efficiency credit. A dwell followed
+  // by a fling forfeits that dwell's read credit: the tracker can't tell which words were read.
+  function commitScroll(now = Date.now()) {
+    const g = scrollPend;
+    scrollPend = null;
+    if (!g) return;
+    const d = g.to - g.from;
+    const ms = g.ms;
+    let newWords = 0;
+    let processed = 0;
+    if (d > 0) {
+      if (ms > 0 && (60000 * d) / ms <= SCROLL_MAX_WPM) {
+        newWords = markReading(g.from, g.to, Math.round((60000 * d) / ms));
+        stampParas(g.from, g.to, now);
+        processed = d;
+      } else {
+        markRangeRead(g.from, g.to); // fling: covered, not "read at a pace"
+      }
+    }
+    sessionActiveMs += ms;
+    lifetimeMs += ms;
+    sessionNewWords += newWords;
+    readCount += newWords;
+    if (ms > 0 || newWords > 0) bumpDay(newWords, ms);
+    if (ms > 0 || processed > 0) events.push({ ts: now, processed, activeMs: ms });
+    trim(now);
+    dirty = true;
+  }
+
+  // Record one scroll-mode frontier advance (forward only). Frame-sized advances chain into the
+  // current gesture; a gap or a continuity break (position moved elsewhere in between) commits it.
+  function noteScrollAdvance(prev, next, now = Date.now()) {
+    const gap = lastTs != null && !hidden ? Math.min(Math.max(0, now - lastTs), SCROLL_DWELL_CAP_MS) : 0;
+    lastTs = now;
+    if (hidden || prev == null || next == null || next <= prev) return;
+    if (scrollPend && (gap > SCROLL_GESTURE_GAP_MS || scrollPend.to !== prev)) commitScroll(now);
+    if (!scrollPend) scrollPend = { from: prev, to: next, ms: gap };
+    else { scrollPend.to = next; scrollPend.ms += gap; }
+    dirty = true;
+  }
+
+  // Commit a gesture that ended without a successor (no scroll for a while). Called from the
+  // polled readouts so pending credit lands without a timer.
+  function flushScroll(now = Date.now()) {
+    if (scrollPend && lastTs != null && now - lastTs > SCROLL_GESTURE_GAP_MS) commitScroll(now);
+  }
+
   // Mark a contiguous prefix [0, n) as read without crediting any time/pace. Used by book-group
   // catch-up: when a grouped edition resumes at another edition's further position, the coverage
   // mask is advanced to match the new cursor so "% read" stays consistent with "% position".
@@ -244,17 +306,23 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
 
   function setHidden(h, now = Date.now()) {
     if (h === hidden) return;
+    if (h) commitScroll(now); // don't let a pending gesture absorb hidden time
     hidden = h;
     if (!h) lastTs = now;
   }
 
   function recentWpm(now = Date.now()) {
+    flushScroll(now);
     trim(now);
     let p = 0;
     let ms = 0;
     for (const e of events) {
       p += e.processed;
       ms += e.activeMs;
+    }
+    if (scrollPend) { // live scroll gesture: count as if committed now, for a live readout
+      const d = scrollPend.to - scrollPend.from;
+      if (d > 0 && scrollPend.ms > 0 && (60000 * d) / scrollPend.ms <= SCROLL_MAX_WPM) { p += d; ms += scrollPend.ms; }
     }
     if (ms < 400) return 0;
     return Math.min(MAX_RECENT_WPM, Math.round((p / ms) * 60000));
@@ -354,6 +422,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
 
   return {
     recordMove,
+    noteScrollAdvance,
     setHidden,
     markPrefixRead,
     markRangeRead,
@@ -364,7 +433,10 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     resetRegressions,
     recentRegressionCount,
     recentPaceCv,
-    sessionWpm: () => wpmFrom(sessionNewWords, sessionActiveMs),
+    sessionWpm: (now = Date.now()) => {
+      flushScroll(now);
+      return wpmFrom(sessionNewWords, sessionActiveMs);
+    },
     lifetimeWpm: () => wpmFrom(readCount, lifetimeMs),
     coverage: () => (wordCount ? readCount / wordCount : 0),
     // Completion fraction with some word ranges excluded from BOTH numerator and denominator —

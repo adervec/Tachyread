@@ -787,6 +787,33 @@
   font-weight: 600;
 }
 
+/* Reading-mode chip (controls bar): how the app currently classifies your reading */
+.reading-mode { white-space: nowrap; }
+.reading-mode.rm-idle { opacity: 0.45; }
+
+/* Eye warmup */
+.eye-warmup { display: flex; flex-direction: column; gap: 10px; }
+.ew-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.ew-chip {
+  font-size: 12px; padding: 3px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border, #444); background: transparent; color: var(--text3, #888);
+}
+.ew-chip.done { opacity: 0.5; }
+.ew-chip.active { font-weight: 700; }
+.ew-stage { position: relative; }
+.ew-stage canvas {
+  display: block; width: 100%; height: clamp(240px, 45vh, 380px);
+  border-radius: 8px; background: #080b12;
+}
+.ew-overlay {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 0 32px;
+}
+.ew-overlay .settings-note { color: #b9c2d4; max-width: 420px; }
+.ew-controls { display: flex; align-items: center; gap: 8px; }
+.ew-controls .grow { flex: 1; }
+.ew-tip { font-size: 13px; color: var(--text3, #888); }
+
 /* Span drill */
 .span-drill { min-width: 440px; }
 .sd-stats { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text3, #888); margin-bottom: 10px; }

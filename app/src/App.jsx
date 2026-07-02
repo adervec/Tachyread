@@ -35,10 +35,12 @@ import ResourceWizard from './dialogs/ResourceWizard.jsx';
 import IndexPane from './components/IndexPane.jsx';
 import { buildProperNamesFromList } from './document/resourceWizard.js';
 import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
+import { createModeDetector } from './engine/readingMode.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import AdaptiveProbe from './components/AdaptiveProbe.jsx';
 import { computeSurprisalWeights } from './engine/surprisal.js';
 import SpanDrillDialog from './dialogs/SpanDrillDialog.jsx';
+import EyeWarmupDialog from './dialogs/EyeWarmupDialog.jsx';
 import FlowWriterDialog from './dialogs/FlowWriterDialog.jsx';
 import VocabDialog from './dialogs/VocabDialog.jsx';
 import RegressionDialog from './dialogs/RegressionDialog.jsx';
@@ -52,7 +54,8 @@ import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan, mergeSkipRanges } from './document/toc.js';
 import { defaultFileSettings, tabDefaultsFrom } from './state/settings.js';
-import { cancelSpeech, rateFromIndex, speak } from './features/tts.js';
+import { cancelSpeech, rateFromIndex, speak, setPreferredLanguage } from './features/tts.js';
+import { getLanguage } from './state/languages.js';
 import TypingPlanDialog from './dialogs/TypingPlanDialog.jsx';
 import SaveTabDialog from './dialogs/SaveTabDialog.jsx';
 import { createReadAloud } from './features/readAloud.js';
@@ -104,6 +107,16 @@ function AppInner() {
   const engineRef = useRef(null);
   if (!engineRef.current) engineRef.current = createEngine();
   const [playing, setPlaying] = useState(false);
+
+  // Document language (Application Settings) → speech recognition + TTS voice matching.
+  const docLang = getLanguage(state.global.language);
+  useEffect(() => { setPreferredLanguage(docLang.bcp); }, [docLang.bcp]);
+
+  // Live reading-mode detection: every advancement notes its input source; the chip in the
+  // controls bar shows how the app currently thinks you're reading (see engine/readingMode.js).
+  const modeDetRef = useRef(null);
+  if (!modeDetRef.current) modeDetRef.current = createModeDetector();
+  const [readingMode, setReadingMode] = useState('idle');
 
   // When the active tab is a lazy placeholder (e.g. selected via a restored tab strip, or auto-
   // selected after closing another tab), build its document on demand.
@@ -158,6 +171,16 @@ function AppInner() {
     if (!state.showToc) dispatch({ type: 'TOGGLE_TOC' });
     setTocFlash((s) => ({ index, token: s.token + 1 }));
   }, [dispatch, state.showToc]);
+
+  // Poll the mode detector (1 Hz + immediately on state flips) into a stable string for the chip.
+  useEffect(() => {
+    const listening = playing && !!activeTab?.settings.readAloud;
+    const peeking = peek.line >= 0;
+    const compute = () => setReadingMode(modeDetRef.current.current({ playing, listening, peeking }));
+    compute();
+    const id = setInterval(compute, 1000);
+    return () => clearInterval(id);
+  }, [playing, activeTab?.settings.readAloud, peek.line]);
   const [paneWidths, setPaneWidths] = useState({ toc: 320, dash: 260, rsvp: 420, source: 380 });
   const resizePane = (id, w) => setPaneWidths((prev) => ({ ...prev, [id]: w }));
   // Filled by the Lines pane: page(dir) → the top/bottom currently-visible line index (excluding
@@ -407,6 +430,7 @@ function AppInner() {
       }
     }
     if (next === cur) return;
+    modeDetRef.current.note(opts.src || 'auto'); // untagged steps come from the playback engine
     const inc = incognitoRef.current;
     // Reading-efficiency tracking (classifies read / skip / re-read / revisit + active time).
     if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now());
@@ -453,12 +477,22 @@ function AppInner() {
     const cur = activeTab.settings.wordIndex;
     const next = Math.max(0, Math.min(activeTab.doc.words.length - 1, wi));
     if (next === cur) return;
+    modeDetRef.current.note(opts.src || 'jump'); // untagged jumps are TOC/Find/click navigation
     const inc = incognitoRef.current;
     // opts.read marks a DELIBERATE forward navigation (end of line/paragraph, page down) as reading
     // the text passed — unlike a jump to elsewhere (TOC/Find/Go-to), which stays a skip.
     const fwdRead = opts.read && next > cur;
-    if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now());
-    if (!inc && fwdRead) activeTab.tracker?.markRangeRead(cur, next);
+    if (!inc) {
+      if (opts.src === 'scroll') {
+        // Scroll-to-read: frame-sized frontier advances aggregate into a gesture credited at the
+        // dwell pace (see readingTracker.noteScrollAdvance) — recordMove would misread them as
+        // skims (burst of tiny gaps) after an idle-capped dwell.
+        activeTab.tracker?.noteScrollAdvance(cur, next, Date.now());
+      } else {
+        activeTab.tracker?.recordMove(cur, next, Date.now());
+        if (fwdRead) activeTab.tracker?.markRangeRead(cur, next);
+      }
+    }
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
     if (newLine !== prevLine && activeTab.settings.lineAdvanceSound) playLineClick(0.16, activeTab.settings.lineSoundKind);
@@ -487,43 +521,43 @@ function AppInner() {
     const doc = activeTab.doc;
     const cur = activeTab.settings.wordIndex;
     const curLine = getLineIndex(doc, cur);
-    if (kind === 'prevWord') return stepWord(-1, { nav: true });
-    if (kind === 'nextWord') return stepWord(1, { nav: true });
+    if (kind === 'prevWord') return stepWord(-1, { nav: true, src: 'word' });
+    if (kind === 'nextWord') return stepWord(1, { nav: true, src: 'word' });
     if (kind === 'prevLine') {
       for (let li = curLine - 1; li >= 0; li--) {
         if (!doc.lines[li].isEmpty) {
-          jumpWord(doc.lines[li].startWordIndex);
+          jumpWord(doc.lines[li].startWordIndex, { nav: true, src: 'line' });
           return;
         }
       }
-      jumpWord(0);
+      jumpWord(0, { nav: true, src: 'line' });
       return;
     }
     if (kind === 'nextLine') {
       for (let li = curLine + 1; li < doc.lines.length; li++) {
         if (!doc.lines[li].isEmpty) {
-          jumpWord(doc.lines[li].startWordIndex, { nav: true, read: true });
+          jumpWord(doc.lines[li].startWordIndex, { nav: true, read: true, src: 'line' });
           return;
         }
       }
-      jumpWord(doc.words.length - 1, { nav: true, read: true });
+      jumpWord(doc.words.length - 1, { nav: true, read: true, src: 'line' });
       return;
     }
     if (kind === 'prevPara') {
       const rng = getParagraphRange(doc, curLine);
       if (cur > doc.lines[rng.startLine].startWordIndex) {
-        jumpWord(doc.lines[rng.startLine].startWordIndex);
+        jumpWord(doc.lines[rng.startLine].startWordIndex, { nav: true, src: 'para' });
         return;
       }
       // Previous paragraph
       let li = rng.startLine - 1;
       while (li >= 0 && doc.lines[li].isEmpty) li--;
       if (li < 0) {
-        jumpWord(0);
+        jumpWord(0, { nav: true, src: 'para' });
         return;
       }
       const prng = getParagraphRange(doc, li);
-      jumpWord(doc.lines[prng.startLine].startWordIndex);
+      jumpWord(doc.lines[prng.startLine].startWordIndex, { nav: true, src: 'para' });
       return;
     }
     if (kind === 'nextPara') {
@@ -531,10 +565,10 @@ function AppInner() {
       let li = rng.endLine + 1;
       while (li < doc.lines.length && doc.lines[li].isEmpty) li++;
       if (li >= doc.lines.length) {
-        jumpWord(doc.words.length - 1, { nav: true, read: true });
+        jumpWord(doc.words.length - 1, { nav: true, read: true, src: 'para' });
         return;
       }
-      jumpWord(doc.lines[li].startWordIndex, { nav: true, read: true });
+      jumpWord(doc.lines[li].startWordIndex, { nav: true, read: true, src: 'para' });
       return;
     }
     if (kind === 'restart') {
@@ -556,7 +590,7 @@ function AppInner() {
     const wi = doc.lines[li].startWordIndex;
     if (wi === activeTab.settings.wordIndex) { nav(dir > 0 ? 'nextPara' : 'prevPara'); return; }
     // Paging DOWN counts as reading the text you paged past; paging up is just navigation.
-    jumpWord(wi, dir > 0 ? { nav: true, read: true } : { nav: true });
+    jumpWord(wi, dir > 0 ? { nav: true, read: true, src: 'page' } : { nav: true, src: 'page' });
   }
 
   // ── Pause when the reader isn't engaged ─────────────────────────────────────────────────────
@@ -1021,11 +1055,12 @@ function AppInner() {
     const cfg = activeTab.settings.speaking;
     const minConf = cfg.confidence === 'High' ? 0.8 : cfg.confidence === 'Low' ? 0.3 : 0.55;
     const r = createRecognizer({
+      lang: docLang.bcp,
       onResult: ({ transcript, confidence, isFinal }) => {
         if (!isFinal && !cfg.allowPartial) return;
         const target = activeTab.doc.words[activeTab.settings.wordIndex] || '';
         if ((confidence || 0) >= minConf && wordMatches(target, transcript)) {
-          stepWord(1);
+          stepWord(1, { src: 'speak' });
         }
       },
       onError: (err) => {
@@ -1043,7 +1078,7 @@ function AppInner() {
       }
     };
     // eslint-disable-next-line
-  }, [activeTab?.id, activeTab?.settings.speaking?.enabled, activeTab?.settings.wordIndex]);
+  }, [activeTab?.id, activeTab?.settings.speaking?.enabled, activeTab?.settings.wordIndex, docLang.bcp]);
 
   // Audiobook recording: capture per-line clips
   useEffect(() => {
@@ -1104,8 +1139,8 @@ function AppInner() {
         onCommand: (cmd) => {
           if (cmd === 'play') setPlaying(true);
           else if (cmd === 'pause') setPlaying(false);
-          else if (cmd === 'next') stepWord(1, { nav: true });
-          else if (cmd === 'back') stepWord(-1, { nav: true });
+          else if (cmd === 'next') stepWord(1, { nav: true, src: 'word' });
+          else if (cmd === 'back') stepWord(-1, { nav: true, src: 'word' });
         },
       });
       audioCtrlRef.current = r;
@@ -1114,8 +1149,8 @@ function AppInner() {
       startClapDetector((claps) => {
         let action = null;
         if (claps === 1) { setPlaying((p) => !p); action = '⏯ play/pause'; }
-        else if (claps === 2) { stepWord(1, { nav: true }); action = '→ next word'; }
-        else if (claps === 3) { stepWord(-1, { nav: true }); action = '← prev word'; }
+        else if (claps === 2) { stepWord(1, { nav: true, src: 'word' }); action = '→ next word'; }
+        else if (claps === 3) { stepWord(-1, { nav: true, src: 'word' }); action = '← prev word'; }
         pushAudioLog({ transcript: `👏 × ${claps}`, command: action ? 'clap' : null, action });
       }).then((cd) => (clapRef.current = cd)).catch(() => {});
     }
@@ -1322,6 +1357,7 @@ function AppInner() {
     if (action === 'typing-progress') return openDialog({ kind: 'typing-progress' });
     if (action === 'typing-plans') return openDialog({ kind: 'typing-plan' });
     if (action === 'span-drill') return openDialog({ kind: 'span-drill' });
+    if (action === 'eye-warmup') return openDialog({ kind: 'eye-warmup' });
     if (action === 'flow-writer') return openDialog({ kind: 'flow-writer' });
     if (action === 'vocab') return openDialog({ kind: 'vocab' });
     if (action === 'regressions' && activeTab) return openDialog({ kind: 'regressions' });
@@ -1606,6 +1642,7 @@ function AppInner() {
           <ControlsBar
             tab={activeTab}
             playing={playing}
+            readingMode={readingMode}
             onJumpWord={jumpWord}
             onPeek={(wi) => peekToLine(getLineIndex(activeTab.doc, wi))}
             peekIdx={peek.line >= 0 ? (activeTab.doc.lines[peek.line]?.startWordIndex ?? -1) : -1}
@@ -1717,6 +1754,7 @@ function AppInner() {
       )}
       {dialog?.kind === 'typing-progress' && <TypingProgressDialog onClose={closeDialog} />}
       {dialog?.kind === 'span-drill' && <SpanDrillDialog doc={activeTab?.doc} onClose={closeDialog} />}
+      {dialog?.kind === 'eye-warmup' && <EyeWarmupDialog onClose={closeDialog} />}
       {dialog?.kind === 'flow-writer' && <FlowWriterDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'dictation' && <DictationDialog onClose={closeDialog} />}
       {dialog?.kind === 'ambient' && <AmbientDialog onClose={closeDialog} />}

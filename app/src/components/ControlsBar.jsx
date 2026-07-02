@@ -4,6 +4,7 @@ import { useIsCompact } from '../state/device.js';
 import Trendline from './Trendline.jsx';
 import TocBar from './TocBar.jsx';
 import { goalFraction, computeGoalStatus } from '../engine/goals.js';
+import { MODES } from '../engine/readingMode.js';
 import { lastCountableWord } from '../document/toc.js';
 
 function formatTime(secs) {
@@ -14,7 +15,7 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus }) {
+export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus }) {
   const { patchSettings, state, updateGlobal } = useApp();
   const isCompact = useIsCompact();
   // On phones the full playback row (10 nav buttons + speed unit + 4 mode toggles + goal) wraps into
@@ -46,6 +47,12 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
         </div>
         <div className="progress-meta" title={skipRanges.length ? 'Percent of the countable book read (flagged front/back matter excluded)' : 'Percent of the book actually read'}>📖 {coverage.toFixed(1)}%{skipRanges.length ? '*' : ''}</div>
         <div className="progress-meta" title="Estimated time remaining at your measured pace">⏱ {formatTime(secs)}</div>
+        <div
+          className={`progress-meta reading-mode${readingMode === 'idle' ? ' rm-idle' : ''}`}
+          title={`How the app thinks you're reading right now — ${MODES[readingMode]?.hint || ''}`}
+        >
+          {MODES[readingMode]?.icon} {MODES[readingMode]?.label}
+        </div>
         {atEnd && (
           <button className="finish-btn" title="Mark this book finished and review your stats" onClick={onConfirmFinished}>
             ✓ Confirm finished
