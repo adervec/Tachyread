@@ -15,6 +15,7 @@ import {
   signatureBandVariance,
 } from '../features/screenCapture.js';
 import { recognizeImageEx, ocrSupported, loadImage, glyphCategory } from '../features/ocr.js';
+import { getLanguage } from '../state/languages.js';
 import { buildGrabbedDoc } from '../document/grab.js';
 import { playGrabClick } from '../features/clickSound.js';
 import { speechRecognitionSupported } from '../features/speechRecognition.js';
@@ -304,8 +305,9 @@ export default function GrabWizard({ onClose }) {
   segmentsRef.current = segments;
   const autoOcrRef = useRef(autoOcr);
   autoOcrRef.current = autoOcr;
+  const ocrLang = getLanguage(state.global.language).tess;
   const ocrParamsRef = useRef(null);
-  ocrParamsRef.current = { segRegions, segConfig, activeProfile };
+  ocrParamsRef.current = { segRegions, segConfig, activeProfile, ocrLang };
   const ocrChainRef = useRef(Promise.resolve()); // serializes background OCR (one page at a time)
 
   // Recognize one page in the background. Chained so pages OCR one at a time while the user keeps
@@ -321,6 +323,7 @@ export default function GrabWizard({ onClose }) {
             regions: params.segRegions(seg),
             config: params.segConfig(seg),
             profile: params.activeProfile,
+            lang: params.ocrLang,
           });
           setSegments((arr) => arr.map((s) => (s.id === seg.id ? { ...s, text: s.text || text, ocrStatus: 'done' } : s)));
         } catch {
@@ -686,7 +689,7 @@ export default function GrabWizard({ onClose }) {
       patchSeg(seg.id, { ocrStatus: 'doing' });
       setMsg(`Recognizing page ${i + 1} of ${ids.length}… (first run downloads the OCR engine)`);
       try {
-        const { text } = await recognizeImageEx(seg.image, { regions: segRegions(seg), config: segConfig(seg), profile: activeProfile });
+        const { text } = await recognizeImageEx(seg.image, { regions: segRegions(seg), config: segConfig(seg), profile: activeProfile, lang: ocrLang });
         setSegments((arr) => arr.map((s) => (s.id === seg.id ? { ...s, text, ocrStatus: 'done', flagged: false } : s)));
       } catch (e) {
         patchSeg(seg.id, { ocrStatus: 'error' });

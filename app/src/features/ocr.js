@@ -9,12 +9,17 @@
 //    TextGrabber's EnhanceForOcr), or an explicit background/text colour binarization.
 
 let _workerPromise = null;
+let _workerLang = null;
 
-async function getWorker() {
+// One cached worker; switching language tears it down and spins up a new one (a tesseract
+// worker is bound to its traineddata, which downloads on first use per language).
+async function getWorker(lang = 'eng') {
+  if (_workerPromise && _workerLang !== lang) await terminateOcr();
   if (!_workerPromise) {
+    _workerLang = lang;
     _workerPromise = (async () => {
       const { createWorker } = await import('tesseract.js');
-      return createWorker('eng'); // downloads core+lang on first use
+      return createWorker(lang); // downloads core+lang on first use
     })();
   }
   return _workerPromise;
@@ -260,9 +265,10 @@ async function correctWithTemplates(canvas, data, compiled) {
 //   regions: array of {fx,fy,fw,fh} (OCR'd separately, in order, joined by blank lines), or null
 //   config:  preprocessForOcr config (see above)
 //   profile: optional OCR profile (whitelist + template-match assist)
-export async function recognizeImageEx(src, { regions = null, config = {}, profile = null } = {}) {
+//   lang:    tesseract language code (state/languages.js `tess`), default English
+export async function recognizeImageEx(src, { regions = null, config = {}, profile = null, lang = 'eng' } = {}) {
   const full = await toCanvas(src);
-  const worker = await getWorker();
+  const worker = await getWorker(lang);
   const compiled = profile ? await compileOcrProfile(profile) : null;
   const wantBlocks = !!(compiled && compiled.useTemplates && compiled.byChar.length);
   if (compiled && compiled.useWhitelist) {

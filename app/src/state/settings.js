@@ -168,6 +168,9 @@ export function syncableGlobalSettings(g) {
 
 export function defaultGlobalSettings() {
   return {
+    // Document language (state/languages.js code) — drives OCR, dictation/read-along speech
+    // recognition, and TTS voice matching. The UI itself stays English.
+    language: 'en',
     defaultSerifFamily: 'Cambria, Georgia, "Times New Roman", serif',
     defaultSansFamily: 'Segoe UI, Arial, sans-serif',
     // Opt-in: load the full Google Fonts library from Google's CDN on demand. OFF by default

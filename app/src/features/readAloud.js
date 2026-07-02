@@ -8,7 +8,7 @@
 // Text is spoken one sentence-sized chunk at a time so prosody is natural and utterances stay
 // short (avoiding the long-utterance cutoff bug in some engines).
 
-import { resolveVoice } from './tts.js';
+import { resolveVoice, preferredLanguage } from './tts.js';
 
 const MAX_CHUNK_WORDS = 40;
 
@@ -49,6 +49,7 @@ export function createReadAloud({ getWords, getIndex, setIndex, getVoiceName, ge
     // Use the chosen voice, or fall back to a good default (Google UK English where available).
     const v = resolveVoice(getVoiceName?.());
     if (v) u.voice = v;
+    u.lang = v?.lang || preferredLanguage(); // hint engines even when no voice matched
     u.rate = getRate?.() || 1;
 
     const myGen = ++gen;

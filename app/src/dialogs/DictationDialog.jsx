@@ -3,6 +3,7 @@ import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { createRecognizer, speechRecognitionSupported } from '../features/speechRecognition.js';
 import { countWords, netWpm, formatElapsed } from '../engine/dictation.js';
+import { getLanguage } from '../state/languages.js';
 
 // Dictation throughput — put spoken output on the same footing as the typing / Flow Writer track.
 // Speech (Web Speech API) fills a transcript; net WPM = words / active minutes. The transcript is an
@@ -40,6 +41,7 @@ export default function DictationDialog({ onClose }) {
     setRecording(true);
     setBlocks((bs) => [...bs, '']); // begin a fresh colour block for this recording burst
     const r = createRecognizer({
+      lang: getLanguage(state.global.language).bcp,
       onResult: ({ transcript: text, isFinal }) => {
         if (isFinal) {
           setTranscript((prev) => (prev ? prev + ' ' : '') + text);
