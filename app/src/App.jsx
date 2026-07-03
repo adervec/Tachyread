@@ -41,6 +41,10 @@ import AdaptiveProbe from './components/AdaptiveProbe.jsx';
 import { computeSurprisalWeights } from './engine/surprisal.js';
 import SpanDrillDialog from './dialogs/SpanDrillDialog.jsx';
 import EyeWarmupDialog from './dialogs/EyeWarmupDialog.jsx';
+import TypingSettingsDialog from './dialogs/TypingSettingsDialog.jsx';
+import AudioSettingsDialog from './dialogs/AudioSettingsDialog.jsx';
+import FontManagerDialog from './dialogs/FontManagerDialog.jsx';
+import HelpDialog from './dialogs/HelpDialog.jsx';
 import FlowWriterDialog from './dialogs/FlowWriterDialog.jsx';
 import VocabDialog from './dialogs/VocabDialog.jsx';
 import RegressionDialog from './dialogs/RegressionDialog.jsx';
@@ -1083,6 +1087,9 @@ function AppInner() {
       } else if (ctrl && shift && (e.key === 'G' || e.key === 'g')) {
         e.preventDefault();
         openDialog({ kind: 'grab' });
+      } else if (e.key === 'F1') {
+        e.preventDefault();
+        openDialog({ kind: 'help' });
       } else if (e.key === 'Escape') {
         if (showFootnote) setShowFootnote(false);
       }
@@ -1411,6 +1418,11 @@ function AppInner() {
     if (action === 'find' && activeTab) return openDialog({ kind: 'find' });
     if (action === 'goto' && activeTab) return openDialog({ kind: 'goto' });
     if (action === 'app-settings') return openDialog({ kind: 'app-settings' });
+    if (action === 'toggle-lines') { dispatch({ type: 'TOGGLE_LINES' }); return; }
+    if (action === 'typing-settings' && activeTab) return openDialog({ kind: 'typing-settings' });
+    if (action === 'audio-settings' && activeTab) return openDialog({ kind: 'audio-settings' });
+    if (action === 'font-manager' && activeTab) return openDialog({ kind: 'font-manager' });
+    if (action === 'help') return openDialog({ kind: 'help' });
     if (action === 'data') return openDialog({ kind: 'data' });
     if (action === 'book-groups') return openDialog({ kind: 'book-groups' });
     if (action === 'def-settings') return openDialog({ kind: 'def-settings' });
@@ -1542,7 +1554,7 @@ function AppInner() {
     // On compact screens show exactly one reading view at a time (Fast Reader OR Lines) so the
     // single column isn't a long scroll past two stacked readers. Desktop keeps both side by side.
     let showRsvpPane = !hideWord;
-    let showLinesPane = true;
+    let showLinesPane = state.showLines !== false; // desktop Lines-pane toggle (View menu / panel bar)
     if (isCompact) {
       if (auxOpen) { showRsvpPane = false; showLinesPane = false; } // TOC/Source/Index takes the reader's space
       else if (hideWord) { showRsvpPane = false; showLinesPane = true; }
@@ -1572,7 +1584,7 @@ function AppInner() {
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showDash, state.showSource, state.showIndex, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances]);
+  }, [activeTab, state.showToc, state.showDash, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances]);
 
   const dialog = state.dialog;
 
@@ -1795,14 +1807,45 @@ function AppInner() {
           onPatch={(p) => patchSettings(activeTab.id, p)}
           onClose={closeDialog}
           title="Tab Settings"
+          onOpenFontManager={() => openDialog({ kind: 'font-manager' })}
+          diffAgainst={{ other: state.global.fileDefaults || {}, label: 'Differs from your defaults:', resettable: true }}
         />
       )}
+      {dialog?.kind === 'typing-settings' && activeTab && (
+        <TypingSettingsDialog
+          settings={activeTab.settings}
+          onPatch={(p) => patchSettings(activeTab.id, p)}
+          global={state.global}
+          onPatchGlobal={updateGlobal}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog?.kind === 'audio-settings' && activeTab && (
+        <AudioSettingsDialog
+          settings={activeTab.settings}
+          onPatch={(p) => patchSettings(activeTab.id, p)}
+          global={state.global}
+          onPatchGlobal={updateGlobal}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog?.kind === 'font-manager' && activeTab && (
+        <FontManagerDialog
+          tab={activeTab}
+          global={state.global}
+          onPatchSettings={(p) => patchSettings(activeTab.id, p)}
+          onPatchGlobal={updateGlobal}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog?.kind === 'help' && <HelpDialog onClose={closeDialog} />}
       {dialog?.kind === 'def-settings' && (
         <SettingsDialog
           settings={state.global.fileDefaults}
           onPatch={(p) => updateGlobal({ fileDefaults: { ...state.global.fileDefaults, ...p } })}
           onClose={closeDialog}
           title="Default Tab Settings"
+          diffAgainst={activeTab ? { other: activeTab.settings, label: 'The open tab differs on:', resettable: false } : null}
           matchCurrent={activeTab ? () => tabDefaultsFrom(activeTab.settings) : null}
           onResetFactory={() => { const d = defaultFileSettings(); updateGlobal({ fileDefaults: d }); return d; }}
         />

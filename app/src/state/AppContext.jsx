@@ -56,6 +56,7 @@ const init = {
   appStatus: 'Ready.',
   dialog: null, // {kind, props}
   showRsvp: true,
+  showLines: true,
   showToc: false,
   showDash: !compactStart,
   showSource: false,
@@ -112,6 +113,8 @@ function reducer(state, action) {
       return { ...state, dialog: null };
     case 'TOGGLE_SHOW_RSVP':
       return { ...state, showRsvp: !state.showRsvp };
+    case 'TOGGLE_LINES':
+      return { ...state, showLines: !state.showLines };
     case 'TOGGLE_TOC':
       return { ...state, showToc: !state.showToc };
     case 'TOGGLE_DASH':

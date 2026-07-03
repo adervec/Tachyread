@@ -578,7 +578,11 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   });
 
   return (
-    <div className={`line-pane${headingPack ? ` hsp-${headingPack}` : ''}`} ref={paneVisRef}>
+    <div
+      className={`line-pane${headingPack ? ` hsp-${headingPack}` : ''}`}
+      ref={paneVisRef}
+      style={settings.fontFamily ? { fontFamily: settings.fontFamily } : undefined}
+    >
       <div className="line-pane-toolbar">
         <span>Lines</span>
       </div>

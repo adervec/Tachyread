@@ -35,6 +35,10 @@ function netTier(net) {
 const PASSAGE_MAX = 600;     // words pulled ahead for a run
 const IDLE_END_MS = 5000;    // auto-end after this much inactivity
 const ENDLESS_SECS = 99999;
+// Cap how many typed-past-the-end characters render (stats still count them all). Together with
+// the container's end-of-line slack (.tr-lines padding-right) this stops the last word of a line
+// from reflowing onto the next line while it's being typed.
+const OVERTYPE_MAX = 4;
 
 const freshStats = () => ({ start: 0, chars: 0, correct: 0, errors: 0, words: 0, perfect: 0, errorKeys: {} });
 
@@ -103,7 +107,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const [buf, setBuf] = useState('');
   const [results, setResults] = useState([]); // per completed word: { typed, perfect }
   const [, setTick] = useState(0);
-  const [trend, setTrend] = useState([]);     // {t, gross, net, acc}
+  const [trend, setTrend] = useState([]);     // {t, gross, net, acc, burst}
+  const trendRef = useRef([]);                // mirror for endRun (avoids a stale closure)
+  const snapsRef = useRef([]);                // recent {ts, chars} snapshots → burst WPM
   const [summary, setSummary] = useState(null);
   const [voicePos, setVoicePos] = useState(-1); // word the racing voice is currently speaking
 
@@ -114,6 +120,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const tickTimer = useRef(null);
   const linesRef = useRef(null);
   const activeRef = useRef(null);
+  const caretRef = useRef(null);
   const lineH = useRef(0);
   // Voice-race state. posRef mirrors `pos` so the speech callbacks (which close over a stale render)
   // can read your live typing position; the rest track the racing voice.
@@ -166,6 +173,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       mode: gameMode,       // which typing mode/drill this run used
       raced: racedRef.current,    // was this a voice race
       caught: caughtRef.current,  // did the voice catch you
+      trend: trendRef.current,    // per-half-second samples for the results chart (not persisted)
     };
     setSummary(run);
     setPhase('done');
@@ -178,13 +186,24 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     idleTimer.current = setTimeout(() => endRun(), IDLE_END_MS);
   }, [endRun]);
 
-  // Run timer / live sampling.
+  // Run timer / live sampling. Burst WPM = your rate over just the trailing ~2s window — the
+  // "how fast are my fingers right now" line, vs gross (raw) and net (effective) over the run.
   useEffect(() => {
     if (phase !== 'running') return undefined;
     tickTimer.current = setInterval(() => {
       const m = metrics();
+      const now = Date.now();
+      const snaps = snapsRef.current;
+      snaps.push({ ts: now, chars: stats.current.chars });
+      while (snaps.length > 1 && snaps[0].ts < now - 2200) snaps.shift();
+      const dt = (now - snaps[0].ts) / 1000;
+      const burst = dt >= 0.4 ? ((stats.current.chars - snaps[0].chars) / 5) / (dt / 60) : 0;
       setTick((n) => n + 1);
-      setTrend((tr) => [...tr.slice(-150), { t: m.secs, gross: m.gross, net: m.net, acc: m.acc }]);
+      setTrend((tr) => {
+        const next = [...tr.slice(-600), { t: m.secs, gross: m.gross, net: m.net, acc: m.acc, burst }];
+        trendRef.current = next;
+        return next;
+      });
       if (mode !== 'endless' && mode !== 'words' && m.secs >= effLimitSecs) endRun();
     }, 500);
     return () => { if (tickTimer.current) { clearInterval(tickTimer.current); tickTimer.current = null; } };
@@ -220,6 +239,22 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     lines.style.transform = `translateY(${-Math.max(0, lineIdx - 1) * lineH.current}px)`;
   }, [pos, buf]);
 
+  // Floating cursor (monkeytype-style): a single absolutely-positioned bar that GLIDES to the
+  // zero-width anchor rendered at the typing position, instead of a caret that pops per keystroke.
+  // Uses layout offsets + the FINAL line-scroll translate — client rects are mid-transition here
+  // (the passage scroll animates), so a rect-based target would land on a moving line.
+  useLayoutEffect(() => {
+    const caret = caretRef.current;
+    const lines = linesRef.current;
+    const anchor = activeRef.current?.querySelector('.caret-anchor');
+    if (!caret || !lines || !anchor) return;
+    const m = /translateY\((-?\d+(?:\.\d+)?)px\)/.exec(lines.style.transform || '');
+    const shift = m ? parseFloat(m[1]) : 0;
+    const fs = parseFloat(getComputedStyle(lines).fontSize) || 26;
+    caret.style.height = `${Math.round(fs * 1.15)}px`;
+    caret.style.transform = `translate(${anchor.offsetLeft}px, ${anchor.offsetTop + shift + lines.offsetTop + Math.round(fs * 0.18)}px)`;
+  }, [pos, buf, phase, oneWord]);
+
   function stopRace() { racerRef.current?.stop(); racerRef.current = null; }
   // Start the voice racer: it reads the passage aloud and reports the word it's speaking. You're
   // "caught" the instant the voice is on a word PAST the one you're typing. The 400ms grace gives a
@@ -252,6 +287,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     seg.current = { line: true, sent: true, para: true };
     setPhase('running');
     setTrend([]);
+    trendRef.current = [];
+    snapsRef.current = [];
     armIdle();
     if (raceVoice) startRace();
   }
@@ -360,8 +397,18 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // keyCode 229). The input holds the in-progress word (value={buf}); we diff each change. Enter and
   // Escape stay on keydown since a single-line input doesn't surface them as value changes.
   function onChange(e) {
-    if (phase !== 'running') { if (buf) setBuf(''); return; } // runs begin via Start (Ready·Set·Go), not on keypress
-    const val = e.target.value;
+    let val = e.target.value;
+    if (phase !== 'running') {
+      // Typing the first letter starts the run from idle (monkeytype-style) — no Ready·Set·Go
+      // needed. Countdown/done screens still ignore keys (they have their own controls).
+      if (phase === 'idle' && val.trim()) {
+        val = val.trim();
+        start();
+      } else {
+        if (buf) setBuf('');
+        return;
+      }
+    }
     const sp = val.search(/\s/);
     if (sp >= 0) {
       const typed = val.slice(0, sp);
@@ -502,35 +549,52 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
       <Trend trend={trend} />
 
-      <div className="tr-viewport">
+      {/* The passage hides on the done screen so the results (chart included) get the room —
+          otherwise they overflow beneath the bottom dock, which also swallows chart hovers. */}
+      <div className="tr-viewport" style={{ display: phase === 'done' ? 'none' : undefined, ...(settings.fontFamily ? { fontFamily: settings.fontFamily } : null) }}>
         {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{count}</div>}
+        <div className="tr-cursor" ref={caretRef} style={{ opacity: phase === 'running' ? 1 : 0 }} />
         <div className={`tr-lines${oneWord ? ' one-word' : ''}`} ref={linesRef}>
           {passage.map((w, i) => {
             if (oneWord && i !== pos) return null; // one-word mode shows only the current word
             const vc = i === voicePos ? ' voice' : ''; // word the racing voice is currently speaking
             if (i < pos) {
+              // Committed words keep their per-character verdict (monkeytype-style): what you
+              // actually typed stays visible — wrong chars, chars you never typed, and (capped)
+              // extra chars beyond the word.
               const r = results[i];
-              return <span key={i} className={`trw ${r && !r.perfect ? 'imperfect' : 'done'}${vc}`}>{w} </span>;
+              const typed = r?.typed ?? w;
+              const len = Math.max(w.length, Math.min(typed.length, w.length + OVERTYPE_MAX));
+              const chars = [];
+              for (let j = 0; j < len; j++) {
+                const cls = j >= w.length ? 'trc extra'
+                  : j >= typed.length ? 'trc missed'
+                    : sameChar(typed[j], w[j], caseSensitive) ? 'trc correct' : 'trc wrong';
+                chars.push(<span key={j} className={cls}>{j >= w.length ? typed[j] : w[j]}</span>);
+              }
+              return <span key={i} className={`trw ${r && !r.perfect ? 'imperfect' : 'done'}${vc}`}>{chars} </span>;
             }
             if (i > pos) return <span key={i} className={`trw pending${vc}`}>{w} </span>;
-            // active word — per-char colouring + caret
-            const len = Math.max(w.length, buf.length);
+            // Active word — per-char colouring + a zero-width caret anchor the floating cursor
+            // tracks. Overtyped chars render capped so the word can't balloon past the line slack.
+            const shownBuf = buf.length > w.length + OVERTYPE_MAX ? buf.slice(0, w.length + OVERTYPE_MAX) : buf;
+            const len = Math.max(w.length, shownBuf.length);
             const chars = [];
             for (let j = 0; j < len; j++) {
-              if (j === buf.length) chars.push(<span key={`k${j}`} className="trc caret" />);
-              const typed = j < buf.length;
+              if (j === shownBuf.length) chars.push(<span key={`k${j}`} className="trc caret-anchor" />);
+              const typed = j < shownBuf.length;
               const cls = !typed ? 'trc pending'
-                : j >= w.length ? 'trc wrong'
-                  : sameChar(buf[j], w[j], caseSensitive) ? 'trc correct' : 'trc wrong';
-              chars.push(<span key={j} className={cls}>{j >= w.length ? buf[j] : w[j]}</span>);
+                : j >= w.length ? 'trc extra'
+                  : sameChar(shownBuf[j], w[j], caseSensitive) ? 'trc correct' : 'trc wrong';
+              chars.push(<span key={j} className={cls}>{j >= w.length ? shownBuf[j] : w[j]}</span>);
             }
-            if (buf.length >= len) chars.push(<span key="ce" className="trc caret" />);
+            if (shownBuf.length >= len) chars.push(<span key="ce" className="trc caret-anchor" />);
             return <span key={i} className={`trw active${vc}`} ref={activeRef}>{chars}{' '}</span>;
           })}
         </div>
       </div>
 
-      {phase === 'idle' && <div className="tr-hint">Press ▶ Start for a Ready·Set·Go. Run ends at your limit, on “End run”, or after 5s idle. Esc discards.</div>}
+      {phase === 'idle' && <div className="tr-hint">Just start typing — the run begins on your first letter (or press ▶ Start for a Ready·Set·Go). It ends at your limit, on “End run”, or after 5s idle. Esc discards.</div>}
 
       {phase === 'done' && summary && (
         <div className="tr-results">
@@ -548,6 +612,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           <div className="tr-results-head">
             <strong>{summary.netWpm} net WPM</strong> · {summary.grossWpm} gross · {summary.accuracy}% acc · {summary.tier}
           </div>
+          <RunChart trend={summary.trend} />
           <div className="tr-results-actions">
             {plan ? (
               <>
@@ -588,6 +653,80 @@ function Stat({ v, l, hero }) {
     <div className={`tr-stat${hero ? ' tr-stat-hero' : ''}`}>
       <span className="tr-v">{v}</span>
       <span className="tr-l">{l}</span>
+    </div>
+  );
+}
+
+// Monkeytype-style results chart: raw (gross), effective (net) and burst WPM over the run, with
+// accuracy overlaid on a 0–100 scale. Move the mouse (or finger) across it to inspect the exact
+// values at any moment of the run.
+function RunChart({ trend }) {
+  const [hover, setHover] = useState(null); // nearest sample index
+  const svgRef = useRef(null);
+  if (!trend || trend.length < 3) return null;
+  const W = 760;
+  const H = 210;
+  const PAD = { l: 38, r: 12, t: 12, b: 20 };
+  const iw = W - PAD.l - PAD.r;
+  const ih = H - PAD.t - PAD.b;
+  const maxT = trend[trend.length - 1].t || 1;
+  const maxW = Math.max(60, ...trend.map((p) => Math.max(p.gross || 0, p.net || 0, p.burst || 0))) * 1.06;
+  const x = (t) => PAD.l + (t / maxT) * iw;
+  const yW = (v) => PAD.t + ih - Math.min(1, Math.max(0, v) / maxW) * ih;
+  const yA = (v) => PAD.t + ih - (Math.min(100, v) / 100) * ih;
+  const path = (key, yFn) => trend.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)} ${yFn(p[key] || 0).toFixed(1)}`).join(' ');
+  const wStep = maxW > 240 ? 100 : maxW > 120 ? 50 : 25;
+  const wTicks = [];
+  for (let v = wStep; v < maxW; v += wStep) wTicks.push(v);
+
+  function onMove(e) {
+    const r = svgRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const t = ((e.clientX - r.left) / r.width * W - PAD.l) / iw * maxT;
+    let best = 0;
+    for (let i = 1; i < trend.length; i++) if (Math.abs(trend[i].t - t) < Math.abs(trend[best].t - t)) best = i;
+    setHover(best);
+  }
+  const h = hover != null ? trend[hover] : null;
+
+  return (
+    <div className="tr-chart-wrap">
+      <svg
+        ref={svgRef}
+        className="tr-chart"
+        viewBox={`0 0 ${W} ${H}`}
+        onMouseMove={onMove}
+        onMouseLeave={() => setHover(null)}
+        onTouchMove={(e) => e.touches[0] && onMove(e.touches[0])}
+      >
+        {wTicks.map((v) => (
+          <g key={v}>
+            <line className="trch-grid" x1={PAD.l} x2={W - PAD.r} y1={yW(v)} y2={yW(v)} />
+            <text className="trch-label" x={PAD.l - 6} y={yW(v) + 3} textAnchor="end">{v}</text>
+          </g>
+        ))}
+        <text className="trch-label" x={PAD.l} y={H - 6}>0s</text>
+        <text className="trch-label" x={W - PAD.r} y={H - 6} textAnchor="end">{Math.round(maxT)}s</text>
+        <path d={path('burst', yW)} className="trend-burst" />
+        <path d={path('gross', yW)} className="trend-gross" />
+        <path d={path('net', yW)} className="trend-net" />
+        <path d={path('acc', yA)} className="trend-acc" />
+        {h && (
+          <g>
+            <line className="trch-cursor" x1={x(h.t)} x2={x(h.t)} y1={PAD.t} y2={PAD.t + ih} />
+            <circle className="trch-dot dot-burst" cx={x(h.t)} cy={yW(h.burst || 0)} r={3} />
+            <circle className="trch-dot dot-gross" cx={x(h.t)} cy={yW(h.gross || 0)} r={3} />
+            <circle className="trch-dot dot-net" cx={x(h.t)} cy={yW(h.net || 0)} r={3} />
+          </g>
+        )}
+      </svg>
+      <div className="tr-chart-legend">
+        <span className="lg lg-net">effective {h ? Math.round(h.net) : ''}</span>
+        <span className="lg lg-gross">raw {h ? Math.round(h.gross) : ''}</span>
+        <span className="lg lg-burst">burst {h ? Math.round(h.burst || 0) : ''}</span>
+        <span className="lg lg-acc">accuracy {h ? `${h.acc.toFixed(0)}%` : ''}</span>
+        <span className="lg lg-t">{h ? `at ${h.t.toFixed(1)}s` : 'hover to inspect'}</span>
+      </div>
     </div>
   );
 }

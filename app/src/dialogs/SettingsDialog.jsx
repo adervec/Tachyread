@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
-import { useVoices } from '../features/tts.js';
 import { THEME_CATEGORIES, HEADING_PACKS } from '../state/themes.js';
+import { offDefaultKeys, defaultFileSettings } from '../state/settings.js';
 import { createMetronome } from '../features/metronome.js';
 import { DEFAULT_METRONOME } from '../engine/metronome.js';
 import { LINE_SOUNDS, playLineSound } from '../features/clickSound.js';
@@ -36,9 +36,11 @@ function Section({ children }) {
   return <div className="field-section">{children}</div>;
 }
 
-export default function SettingsDialog({ settings, onPatch, onClose, title = 'Tab Settings', matchCurrent, onResetFactory }) {
+// 'rightPaneFontSize' → 'right pane font size' for the difference chips.
+const prettyKey = (k) => k.replace(/([A-Z])/g, ' $1').toLowerCase().trim();
+
+export default function SettingsDialog({ settings, onPatch, onClose, title = 'Tab Settings', matchCurrent, onResetFactory, onOpenFontManager, diffAgainst }) {
   const [s, setS] = useState(settings);
-  const voices = useVoices();
   const metroRef = useRef(null);
 
   function patch(p) {
@@ -46,6 +48,15 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
     setS(next);
     onPatch(p);
   }
+
+  // Difference chips: Tab Settings and Default Tab Settings share this dialog, and the settings
+  // that currently DIFFER between the open tab and the defaults are named individually here.
+  // diffAgainst = { other, label, resettable } — resettable chips carry an ✕ that restores that
+  // one setting to its default.
+  const diffKeys = diffAgainst?.other
+    ? (diffAgainst.resettable ? offDefaultKeys(s, diffAgainst.other) : offDefaultKeys(diffAgainst.other, s))
+    : [];
+  const diffBase = diffAgainst?.other ? { ...defaultFileSettings(), ...diffAgainst.other } : null;
 
   const metro = { ...DEFAULT_METRONOME, ...(s.metronome || {}) };
   function patchMetro(p) {
@@ -84,6 +95,20 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           <span>Copy the open tab’s appearance &amp; behaviour into these defaults (its reading progress isn’t copied).</span>
         </p>
       )}
+      {diffAgainst && (
+        <div className="sd-diffs">
+          <span className="sd-diffs-label">{diffAgainst.label}</span>
+          {diffKeys.length === 0 && <span className="sd-diff-none">none — identical</span>}
+          {diffKeys.map((k) => (
+            <span key={k} className="sd-diff-chip" title={diffAgainst.resettable ? 'Click ✕ to restore this setting to your default' : ''}>
+              {prettyKey(k)}
+              {diffAgainst.resettable && (
+                <button type="button" onClick={() => patch({ [k]: diffBase[k] })} title="Reset to default">✕</button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
       {onResetFactory && (
         <p className="settings-note" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
@@ -115,9 +140,13 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ contextWordsAfter: Math.max(0, Number(e.target.value)) })}
         />
       </Field>
-      <Field label="Serif font (Fast Reader word)">
-        <input type="checkbox" checked={s.serif} onChange={(e) => patch({ serif: e.target.checked })} />
-      </Field>
+      {onOpenFontManager && (
+        <Field label="Reading font">
+          <button type="button" onClick={onOpenFontManager} title="One font for the Fast Reader word, the Lines pane, and typing — with search, favorites and readability sorting">
+            🗛 Open Font Manager…
+          </button>
+        </Field>
+      )}
       <Field label="Show guide lines">
         <input type="checkbox" checked={s.showGuideLines} onChange={(e) => patch({ showGuideLines: e.target.checked })} />
       </Field>
@@ -150,13 +179,13 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       </Field>
 
       <Section>Line view (right pane)</Section>
-      <Field label="Right pane font size (px)">
+      <Field label="Lines pane font size (px)">
         <input
           type="number"
-          min={10}
-          max={20}
+          min={8}
+          max={40}
           value={s.rightPaneFontSize}
-          onChange={(e) => patch({ rightPaneFontSize: Number(e.target.value) })}
+          onChange={(e) => patch({ rightPaneFontSize: Math.max(8, Math.min(40, Number(e.target.value) || 12)) })}
         />
       </Field>
       <Field label="Text alignment">
@@ -500,51 +529,8 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       )}
       <p className="settings-note" style={{ margin: '2px 0 0' }}>Spends more time on rare/informative words and less on common ones — your average WPM is unchanged.</p>
 
-      <Section>Read aloud (TTS)</Section>
-      <Field label={`Voice (${voices.length} available)`}>
-        <select value={s.annunciateVoice || ''} onChange={(e) => patch({ annunciateVoice: e.target.value })}>
-          <option value="">(default)</option>
-          {voices.map((v) => (
-            <option key={v.name} value={v.name}>
-              {v.name} ({v.lang}){v.localService ? '' : ' — online'}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Rate (−5..+8)">
-        <input
-          type="number"
-          min={-5}
-          max={8}
-          value={s.annunciateRate}
-          onChange={(e) => patch({ annunciateRate: Number(e.target.value) })}
-        />
-      </Field>
-
-      <Section>Minigames</Section>
-      <Field label="Typing — case sensitive">
-        <input
-          type="checkbox"
-          checked={!!s.typing?.caseSensitive}
-          onChange={(e) => patch({ typing: { ...s.typing, caseSensitive: e.target.checked } })}
-        />
-      </Field>
-      <Field label="Typing — strip punctuation">
-        <input
-          type="checkbox"
-          checked={s.typing?.stripPunctuation ?? true}
-          onChange={(e) => patch({ typing: { ...s.typing, stripPunctuation: e.target.checked } })}
-        />
-      </Field>
-      <Field label="Typing — per-word timeout (ms, 0 = off)">
-        <input
-          type="number"
-          min={0}
-          max={60000}
-          value={s.typing?.perWordTimeoutMs || 0}
-          onChange={(e) => patch({ typing: { ...s.typing, perWordTimeoutMs: Number(e.target.value) } })}
-        />
-      </Field>
+      {/* Read-aloud voice/rate live in Audio → Audio Settings; typing rules in Typing → Typing Settings. */}
+      <Section>Speaking minigame</Section>
       <Field label="Speaking — confidence">
         <select
           value={s.speaking?.confidence || 'Medium'}

@@ -26,34 +26,21 @@ const MENUS = {
     { label: 'Close Tab', action: 'close-tab' },
     { label: 'Close All Tabs', action: 'close-all' },
     { kind: 'separator' },
-    { label: 'Application Settings...', action: 'app-settings' },
-    { label: 'Data Management...', action: 'data' },
-    { label: 'Book Groups...', action: 'book-groups' },
-    { label: 'Default Tab Settings...', action: 'def-settings' },
-    { label: 'Reset Tab to Default Settings', action: 'reset-tab' },
-    { kind: 'separator' },
     { label: 'Disconnect (keep session for next time)', action: 'disconnect' },
     { label: 'Shut Down (close all, start clean next time)', action: 'shutdown' },
   ],
-  // What you see & hear right now: appearance, panes, audio companions, app info.
+  // What's on screen right now.
   view: [
-    { label: 'Tab Settings...', action: 'tab-settings' },
+    { label: 'Show / Hide Lines Pane', action: 'toggle-lines' },
     { label: 'Proper Names Index...', shortcut: 'Ctrl+I', action: 'proper-names' },
     { label: 'Preview Footnote', shortcut: 'Ctrl+Shift+F', action: 'footnote' },
     { label: 'Incognito Reading (no tracking)', action: 'toggle-incognito' },
-    { kind: 'separator' },
-    { label: 'Audiobook Manager...', shortcut: 'Ctrl+Shift+A', action: 'audiobook' },
-    { label: 'Text-to-Speech Reader...', shortcut: 'Ctrl+Shift+T', action: 'tts-popup' },
     { label: 'Face Library...', action: 'face-library' },
-    { kind: 'separator' },
-    { label: 'Ambient Sound...', action: 'ambient' },
-    { label: 'About / Disclaimer...', action: 'disclaimer' },
   ],
   // Drills & practice.
   train: [
     { label: 'Eye Warmup...', action: 'eye-warmup' },
     { label: 'Span Drill...', action: 'span-drill' },
-    { label: 'Flow Writer...', action: 'flow-writer' },
     { label: 'Dictation (speak to write)...', action: 'dictation' },
     { label: 'Vocabulary...', action: 'vocab' },
     { kind: 'separator' },
@@ -76,8 +63,33 @@ const MENUS = {
   ],
   typing: [
     { label: 'Typing Practice', action: 'typing' },
+    { label: 'Flow Writer...', action: 'flow-writer' },
     { label: 'Typing Plans...', action: 'typing-plans' },
     { label: 'Typing Progress...', action: 'typing-progress' },
+    { kind: 'separator' },
+    { label: 'Typing Settings...', action: 'typing-settings' },
+  ],
+  audio: [
+    { label: 'Audiobook Manager...', shortcut: 'Ctrl+Shift+A', action: 'audiobook' },
+    { label: 'Text-to-Speech Reader...', shortcut: 'Ctrl+Shift+T', action: 'tts-popup' },
+    { label: 'Ambient Sound...', action: 'ambient' },
+    { kind: 'separator' },
+    { label: 'Audio Settings...', action: 'audio-settings' },
+  ],
+  settings: [
+    { label: 'Tab Settings...', action: 'tab-settings' },
+    { label: 'Application Settings...', action: 'app-settings' },
+    { label: 'Default Tab Settings...', action: 'def-settings' },
+    { label: 'Reset Tab to Default Settings', action: 'reset-tab' },
+    { kind: 'separator' },
+    { label: 'Font Manager...', action: 'font-manager' },
+    { kind: 'separator' },
+    { label: 'Data Management...', action: 'data' },
+    { label: 'Book Groups...', action: 'book-groups' },
+  ],
+  help: [
+    { label: 'Help...', shortcut: 'F1', action: 'help' },
+    { label: 'About / Disclaimer...', action: 'disclaimer' },
   ],
 };
 
@@ -89,6 +101,9 @@ const MENU_ORDER = [
   ['stats', 'Stats'],
   ['tools', 'Tools'],
   ['typing', 'Typing'],
+  ['audio', 'Audio'],
+  ['settings', 'Settings'],
+  ['help', 'Help'],
 ];
 
 // One menu entry (file/view list) rendered as a drawer/dropdown row. `badges` optionally maps an
@@ -195,6 +210,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
             )}
             <ToggleItem on={state.showIndex} label="Index" onClick={() => dispatch({ type: 'TOGGLE_INDEX' })} />
             <ToggleItem on={state.showRsvp} label="Fast Reader" onClick={() => dispatch({ type: 'TOGGLE_SHOW_RSVP' })} />
+            <ToggleItem on={state.showLines !== false} label="Lines" onClick={() => dispatch({ type: 'TOGGLE_LINES' })} />
             <ToggleItem on={state.incognito} label="🕶 Incognito (no tracking)" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })} />
 
             {MENU_ORDER.map(([key, title]) => (
@@ -266,6 +282,13 @@ export default function MenuBar({ onFileOpen, onAction }) {
         title="Show the Fast Reader pane"
       >
         {state.showRsvp ? '☑ ' : '☐ '}Fast Reader
+      </div>
+      <div
+        className={`menu-item ${state.showLines !== false ? 'open' : ''}`}
+        onClick={() => dispatch({ type: 'TOGGLE_LINES' })}
+        title="Show the Lines pane"
+      >
+        {state.showLines !== false ? '☑ ' : '☐ '}Lines
       </div>
       <div
         className={`menu-item incognito-menu ${state.incognito ? 'open' : ''}`}
