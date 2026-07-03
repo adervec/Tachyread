@@ -58,7 +58,7 @@ const init = {
   showRsvp: true,
   showLines: true,
   showToc: false,
-  showDash: !compactStart,
+  showStats: !compactStart, // reading-stats panel (faces are gated per-tab by settings.showEyes)
   showSource: false,
   showIndex: false,
   hideMode: 'None',
@@ -119,8 +119,8 @@ function reducer(state, action) {
       return { ...state, showLines: !state.showLines };
     case 'TOGGLE_TOC':
       return { ...state, showToc: !state.showToc };
-    case 'TOGGLE_DASH':
-      return { ...state, showDash: !state.showDash };
+    case 'TOGGLE_STATS':
+      return { ...state, showStats: !state.showStats };
     case 'TOGGLE_SOURCE':
       return { ...state, showSource: !state.showSource };
     case 'TOGGLE_INDEX':

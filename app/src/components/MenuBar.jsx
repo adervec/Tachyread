@@ -218,7 +218,8 @@ export default function MenuBar({ onFileOpen, onAction }) {
                 <div className="menu-drawer-section">Panels</div>
                 <div className="menu-panel-grid">
                   <PanelChip on={state.showToc} label="ToC" onClick={() => dispatch({ type: 'TOGGLE_TOC' })} />
-                  <PanelChip on={state.showDash} label="Faces/Stats" onClick={() => dispatch({ type: 'TOGGLE_DASH' })} />
+                  <PanelChip on={!!activeTab?.settings?.showEyes} label="Faces" onClick={() => activeTab && patchSettings(activeTab.id, { showEyes: !activeTab.settings.showEyes })} />
+                  <PanelChip on={state.showStats} label="Stats" onClick={() => dispatch({ type: 'TOGGLE_STATS' })} />
                   {activeTab?.doc?.source && (
                     <PanelChip on={state.showSource} label="Source" onClick={() => dispatch({ type: 'TOGGLE_SOURCE' })} />
                   )}
@@ -277,11 +278,18 @@ export default function MenuBar({ onFileOpen, onAction }) {
         {state.showToc ? '☑ ' : '☐ '}ToC
       </div>
       <div
-        className={`menu-item ${state.showDash ? 'open' : ''}`}
-        onClick={() => dispatch({ type: 'TOGGLE_DASH' })}
-        title="Toggle the Faces / Stats pane"
+        className={`menu-item ${activeTab?.settings?.showEyes ? 'open' : ''}`}
+        onClick={() => activeTab && patchSettings(activeTab.id, { showEyes: !activeTab.settings.showEyes })}
+        title="Toggle the animated reader faces"
       >
-        {state.showDash ? '☑ ' : '☐ '}Faces/Stats
+        {activeTab?.settings?.showEyes ? '☑ ' : '☐ '}Faces
+      </div>
+      <div
+        className={`menu-item ${state.showStats ? 'open' : ''}`}
+        onClick={() => dispatch({ type: 'TOGGLE_STATS' })}
+        title="Toggle the reading-stats panel"
+      >
+        {state.showStats ? '☑ ' : '☐ '}Stats
       </div>
       {activeTab?.doc?.source && (
         <div
