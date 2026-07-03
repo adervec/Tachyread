@@ -107,6 +107,8 @@ function reducer(state, action) {
     }
     case 'SET_STATUS':
       return { ...state, appStatus: action.text };
+    case 'SET_IMPORT':
+      return { ...state, importing: action.payload };
     case 'OPEN_DIALOG':
       return { ...state, dialog: action.dialog };
     case 'CLOSE_DIALOG':
@@ -210,6 +212,10 @@ export function AppProvider({ children }) {
     if (baseSettings.lineLongPressMs === 3000) baseSettings.lineLongPressMs = 450;
     // Record the book's name on its settings so the reading history can label it without a payload load.
     baseSettings.fileName = doc.fileName || baseSettings.fileName || '';
+    // Markdown/HTML parsing yields an EXACT TOC (the document's real headings). Seed it once for
+    // files with no stored TOC, so the ToC pane doesn't fall back to text heuristics; after that
+    // the persisted (possibly user-edited) entries win.
+    if (doc.tocEntries?.length && !stored?.tocEntries?.length) baseSettings.tocEntries = doc.tocEntries;
     // Clamp wordIndex if it overruns the new doc length
     if (baseSettings.wordIndex >= doc.words.length)
       baseSettings.wordIndex = Math.max(0, doc.words.length - 1);
@@ -447,11 +453,30 @@ export function AppProvider({ children }) {
 
   const openFile = useCallback(async (file) => {
     dispatch({ type: 'SET_STATUS', text: `Parsing ${file.name}…` });
+    // Import wizard: stream parser phases into state.importing; end on a summary card with the
+    // detected structure + suggested next steps (or clear on failure).
+    dispatch({ type: 'SET_IMPORT', payload: { fileName: file.name, phase: 'Reading file' } });
     try {
-      const doc = await parseFile(file);
+      const doc = await parseFile(file, (p) => dispatch({ type: 'SET_IMPORT', payload: { fileName: file.name, ...p } }));
+      dispatch({ type: 'SET_IMPORT', payload: { fileName: file.name, phase: 'Opening tab' } });
       await openDoc(doc);
+      const exactToc = !!doc.tocEntries?.length;
+      dispatch({
+        type: 'SET_IMPORT',
+        payload: {
+          fileName: file.name,
+          done: true,
+          words: doc.words.length,
+          lines: doc.lines.length,
+          tocCount: exactToc ? doc.tocEntries.length : 0,
+          exactToc,
+          hasSource: !!doc.source,
+          sections: doc.segmentCount || 0,
+        },
+      });
     } catch (e) {
       console.error(e);
+      dispatch({ type: 'SET_IMPORT', payload: null });
       dispatch({ type: 'SET_STATUS', text: `Failed to open ${file.name}: ${e.message}` });
     }
   }, [openDoc]);

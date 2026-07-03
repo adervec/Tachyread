@@ -36,6 +36,7 @@ import IndexPane from './components/IndexPane.jsx';
 import { buildProperNamesFromList } from './document/resourceWizard.js';
 import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
 import { createModeDetector } from './engine/readingMode.js';
+import { startMediaSession, updateMediaSession, stopMediaSession } from './features/mediaSession.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import AdaptiveProbe from './components/AdaptiveProbe.jsx';
 import { computeSurprisalWeights } from './engine/surprisal.js';
@@ -43,6 +44,9 @@ import SpanDrillDialog from './dialogs/SpanDrillDialog.jsx';
 import EyeWarmupDialog from './dialogs/EyeWarmupDialog.jsx';
 import TypingSettingsDialog from './dialogs/TypingSettingsDialog.jsx';
 import AudioSettingsDialog from './dialogs/AudioSettingsDialog.jsx';
+import CameraSettingsDialog from './dialogs/CameraSettingsDialog.jsx';
+import ComfortSettingsDialog from './dialogs/ComfortSettingsDialog.jsx';
+import ImportDialog from './dialogs/ImportDialog.jsx';
 import FontManagerDialog from './dialogs/FontManagerDialog.jsx';
 import HelpDialog from './dialogs/HelpDialog.jsx';
 import FlowWriterDialog from './dialogs/FlowWriterDialog.jsx';
@@ -56,7 +60,7 @@ import DataDialog from './dialogs/DataDialog.jsx';
 import BookGroupsDialog from './dialogs/BookGroupsDialog.jsx';
 import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
-import { getTocEntries, sectionSpan, mergeSkipRanges } from './document/toc.js';
+import { getTocEntries, sectionSpan, mergeSkipRanges, currentChapter } from './document/toc.js';
 import { defaultFileSettings, tabDefaultsFrom } from './state/settings.js';
 import { cancelSpeech, rateFromIndex, speak, setPreferredLanguage } from './features/tts.js';
 import { getLanguage } from './state/languages.js';
@@ -246,16 +250,20 @@ function AppInner() {
     ensureFamilyLoaded(state.global.defaultSansFamily, en);
   }, [state.global.defaultSerifFamily, state.global.defaultSansFamily, state.global.enableGoogleFonts]);
 
-  // Pause playback and stop counting reading time while the tab is hidden (the user is
-  // doing something else) — the reading tracker should not credit background time.
+  // Pause visual playback and stop counting reading time while the tab is hidden (the user is
+  // doing something else). Read-aloud is EXEMPT: it's audio, so it should keep playing with the
+  // screen off / phone locked (a Media Session keeps it alive — see the read-aloud effect).
   useEffect(() => {
     function onVis() {
       const hidden = document.visibilityState === 'hidden';
-      if (hidden) {
+      const listening = !!activeTab?.settings?.readAloud;
+      if (hidden && !listening) {
         setPlaying(false);
         cancelSpeech();
       }
-      activeTab?.tracker?.setHidden(hidden);
+      // While listening, keep crediting the words TTS reads out — they're being consumed even
+      // with the screen off. Otherwise pause time accounting for the backgrounded tab.
+      activeTab?.tracker?.setHidden(hidden && !listening);
     }
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
@@ -374,12 +382,35 @@ function AppInner() {
     const on = playing && !!activeTab?.settings?.readAloud;
     if (on) {
       readAloudRef.current.start();
+      // Lock-screen controls + background keep-alive so listening survives the screen turning off.
+      startMediaSession(mediaMeta(), {
+        onPlay: () => { if (!playingRef.current) playPauseRef.current?.(); },
+        onPause: () => { if (playingRef.current) playPauseRef.current?.(); },
+        onNext: () => navRef.current?.('nextPara'),
+        onPrev: () => navRef.current?.('prevPara'),
+        onSeekForward: () => navRef.current?.('nextLine'),
+        onSeekBackward: () => navRef.current?.('prevLine'),
+      });
     } else {
       readAloudRef.current.stop();
+      stopMediaSession();
     }
-    return () => readAloudRef.current?.stop();
+    return () => { readAloudRef.current?.stop(); stopMediaSession(); };
     // eslint-disable-next-line
   }, [playing, activeTab?.settings?.readAloud, activeTab?.id]);
+
+  // Keep the lock-screen metadata current as reading moves between chapters (only when the
+  // chapter label actually changes — TTS advances the word index constantly).
+  const mediaChapterRef = useRef('');
+  useEffect(() => {
+    if (!(playing && activeTab?.settings?.readAloud)) return;
+    const meta = mediaMeta();
+    if (meta.artist !== mediaChapterRef.current) {
+      mediaChapterRef.current = meta.artist;
+      updateMediaSession(meta);
+    }
+    // eslint-disable-next-line
+  }, [activeTab?.settings.wordIndex, playing, activeTab?.settings?.readAloud]);
 
   // Manual navigation while reading aloud → resync speech to the new position. Runs after the new
   // index has committed, but only when the move came from the user (flag set by stepWord/jumpWord),
@@ -777,6 +808,23 @@ function AppInner() {
   }
   const playPauseRef = useRef(null);
   playPauseRef.current = playPause;
+  const navRef = useRef(null);
+  navRef.current = nav;
+
+  // Lock-screen / notification metadata for the current read-aloud: the book title + the chapter
+  // being read (so the phone's media controls show where you are).
+  function mediaMeta() {
+    const tab = activeTabRef.current;
+    if (!tab) return { title: 'Reading', artist: '', album: 'Tachyread' };
+    const title = tab.doc?.fileName || 'Reading';
+    let chapter = '';
+    try {
+      const entries = getTocEntries(tab);
+      const ch = currentChapter(entries, tab.settings.wordIndex, tab.doc.words.length);
+      if (ch?.title) chapter = ch.title;
+    } catch { /* no toc */ }
+    return { title, artist: chapter, album: 'Tachyread — read-aloud' };
+  }
 
   // Discrete hand gestures → reader actions (each gesture is individually enabled in settings).
   const handleGestureRef = useRef(null);
@@ -1056,7 +1104,7 @@ function AppInner() {
         triggerOpen('.txt,.md,.csv,.log');
       } else if (ctrl && !shift && (e.key === 'd' || e.key === 'D')) {
         e.preventDefault();
-        triggerOpen('.docx,.pdf,.epub,.txt,.md');
+        triggerOpen('.docx,.pdf,.epub,.txt,.md,.markdown,.html,.htm');
       } else if (ctrl && !shift && (e.key === 'b' || e.key === 'B')) {
         e.preventDefault();
         openClipboard();
@@ -1418,6 +1466,8 @@ function AppInner() {
     if (action === 'find' && activeTab) return openDialog({ kind: 'find' });
     if (action === 'goto' && activeTab) return openDialog({ kind: 'goto' });
     if (action === 'app-settings') return openDialog({ kind: 'app-settings' });
+    if (action === 'camera-settings') return openDialog({ kind: 'camera-settings' });
+    if (action === 'comfort-settings') return openDialog({ kind: 'comfort-settings' });
     if (action === 'toggle-lines') { dispatch({ type: 'TOGGLE_LINES' }); return; }
     if (action === 'typing-settings' && activeTab) return openDialog({ kind: 'typing-settings' });
     if (action === 'audio-settings' && activeTab) return openDialog({ kind: 'audio-settings' });
@@ -1563,7 +1613,7 @@ function AppInner() {
     }
     if (showRsvpPane) arr.push({ id: 'rsvp', label: 'Fast Reader', node: <RsvpPane tab={activeTab} onVisible={onRsvpVisible} /> });
     if (state.showSource && activeTab.doc.source)
-      arr.push({ id: 'source', label: 'Source', node: <SourcePane tab={activeTab} /> });
+      arr.push({ id: 'source', label: 'Source', node: <SourcePane tab={activeTab} onPatch={(p) => patchSettings(activeTab.id, p)} /> });
     if (state.showIndex)
       arr.push({ id: 'index', label: 'Index', node: <IndexPane tab={activeTab} onJumpWord={jumpWord} onWizard={() => openDialog({ kind: 'resource-wizard', resourceKind: 'index' })} /> });
     if (showLinesPane) arr.push({
@@ -1707,7 +1757,7 @@ function AppInner() {
           <img className="empty-logo" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="Tachyread — the astral gavage goose" width="132" height="132" />
           <h1>Tachyread</h1>
           <p>Open a file (File → Open TXT, Ctrl+O), open a document (Ctrl+D), or drop a file here.</p>
-          <p>Supports .txt, .md, .docx, .pdf, .epub.</p>
+          <p>Supports .txt, .md, .html, .docx, .pdf, .epub.</p>
           {state.tabs.length > 0 && <p>Or pick one of your {state.tabs.length} open tab(s) above.</p>}
           <p className="hint">Shortcuts: Space play, ←→ word, ↑↓ line, Ctrl+↑↓ paragraph, Home restart, Ctrl+F find</p>
         </div>
@@ -1839,6 +1889,13 @@ function AppInner() {
         />
       )}
       {dialog?.kind === 'help' && <HelpDialog onClose={closeDialog} />}
+      {state.importing && (
+        <ImportDialog
+          imp={state.importing}
+          onClose={() => dispatch({ type: 'SET_IMPORT', payload: null })}
+          onAction={handleMenuAction}
+        />
+      )}
       {dialog?.kind === 'def-settings' && (
         <SettingsDialog
           settings={state.global.fileDefaults}
@@ -1854,8 +1911,22 @@ function AppInner() {
         <AppSettingsDialog
           global={state.global}
           onPatch={(p) => updateGlobal(p)}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog?.kind === 'camera-settings' && (
+        <CameraSettingsDialog
+          global={state.global}
+          onPatch={(p) => updateGlobal(p)}
           onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
           onCalibrateHand={() => openDialog({ kind: 'hand-calib' })}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog?.kind === 'comfort-settings' && (
+        <ComfortSettingsDialog
+          global={state.global}
+          onPatch={(p) => updateGlobal(p)}
           onClose={closeDialog}
         />
       )}

@@ -251,8 +251,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     const m = /translateY\((-?\d+(?:\.\d+)?)px\)/.exec(lines.style.transform || '');
     const shift = m ? parseFloat(m[1]) : 0;
     const fs = parseFloat(getComputedStyle(lines).fontSize) || 26;
-    caret.style.height = `${Math.round(fs * 1.15)}px`;
-    caret.style.transform = `translate(${anchor.offsetLeft}px, ${anchor.offsetTop + shift + lines.offsetTop + Math.round(fs * 0.18)}px)`;
+    // The anchor's CSS box (1.12em, dipped below the baseline) IS the caret's geometry. Its
+    // offsetParent is .tr-lines directly — the inline-block word is NOT positioned, so it never
+    // becomes an offset ancestor (adding word offsets here would double-count).
+    caret.style.height = `${anchor.offsetHeight || Math.round(fs * 1.1)}px`;
+    caret.style.transform = `translate(${anchor.offsetLeft}px, ${anchor.offsetTop + shift + lines.offsetTop}px)`;
   }, [pos, buf, phase, oneWord]);
 
   function stopRace() { racerRef.current?.stop(); racerRef.current = null; }

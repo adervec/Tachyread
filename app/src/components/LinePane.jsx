@@ -211,7 +211,7 @@ function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, pr
 // centre band, and upcoming lines (top-aligned). Renders a bounded window around the current
 // line — no scrolling, so the current line stays fixed in place and never jitters.
 const SPLIT_WINDOW = 60;
-function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, onContextMenu, pressHandlers, windowSize = SPLIT_WINDOW, peekLine = -1, headingMap, headingPack }) {
+function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, lineSpacing = 1.5, onContextMenu, pressHandlers, windowSize = SPLIT_WINDOW, peekLine = -1, headingMap, headingPack }) {
   const cur = ctx.currentLine;
   const total = doc.lines.length;
   const common = { doc, dsettings, ctx, onJumpWord, propNameKeys, headingMap, headingPack };
@@ -232,7 +232,7 @@ function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, on
     if (afterRef.current) afterRef.current.scrollTop = 0;
   }, [cur, baseFont, afterStart]);
   return (
-    <div className={`line-pane-split${peeking ? ' peeking' : ''}`} style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu} {...pressHandlers}>
+    <div className={`line-pane-split${peeking ? ' peeking' : ''}`} style={{ fontSize: `${baseFont}px`, lineHeight: lineSpacing }} onContextMenu={onContextMenu} {...pressHandlers}>
       <div className="lps-zone lps-before" ref={beforeRef}>
         {before.map((i) => (
           <LineRow key={i} index={i} {...common} />
@@ -383,10 +383,11 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   const baseFont = compact
     ? Math.max(15, settings.rightPaneFontSize || 12)
     : settings.rightPaneFontSize || 12;
-  const defaultRowHeight = Math.round(baseFont * 1.55) + 4;
+  const lineSpacing = Math.max(1, Math.min(3, settings.lineSpacing || 1.5));
+  const defaultRowHeight = Math.round(baseFont * lineSpacing) + 8;
   const rowHeightCtl = useDynamicRowHeight({
     defaultRowHeight,
-    key: `${doc.contentChecksum}:${baseFont}`,
+    key: `${doc.contentChecksum}:${baseFont}:${lineSpacing}`,
   });
 
   const listRef = useListRef();
@@ -594,6 +595,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
           onJumpWord={onJumpWord}
           propNameKeys={propNameKeys}
           baseFont={baseFont}
+          lineSpacing={lineSpacing}
           onContextMenu={onContextMenu}
           pressHandlers={pressHandlers}
           windowSize={compact ? 30 : SPLIT_WINDOW}
@@ -602,7 +604,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
           headingPack={headingPack}
         />
       ) : (
-        <div className="line-pane-list" ref={listWrapRef} style={{ fontSize: `${baseFont}px` }} onContextMenu={onContextMenu} {...pressHandlers}>
+        <div className="line-pane-list" ref={listWrapRef} style={{ fontSize: `${baseFont}px`, lineHeight: lineSpacing }} onContextMenu={onContextMenu} {...pressHandlers}>
           <List
             listRef={listRef}
             rowCount={totalLines}

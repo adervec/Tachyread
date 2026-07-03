@@ -169,7 +169,15 @@ export default function FontManagerDialog({ tab, global, onPatchSettings, onPatc
           </button>
         )}
         {localStatus && <span className="fp-status">{localStatus}</span>}
-        {googleEnabled ? (
+        <label className="inline-check" title="Adds the ~1,700-family Google Fonts catalogue. Each font loads from Google's servers when used — needs the network and reveals your IP/usage to Google (see PRIVACY.md). Bundled and installed fonts stay fully offline.">
+          <input
+            type="checkbox"
+            checked={googleEnabled}
+            onChange={(e) => onPatchGlobal({ enableGoogleFonts: e.target.checked })}
+          />
+          Google Fonts (CDN)
+        </label>
+        {googleEnabled && (
           <div className="fp-custom">
             <input
               type="text"
@@ -180,8 +188,6 @@ export default function FontManagerDialog({ tab, global, onPatchSettings, onPatc
             />
             <button type="button" onClick={applyCustom}>Use</button>
           </div>
-        ) : (
-          <span className="fp-status">Enable Google Fonts in Application Settings for the full CDN library.</span>
         )}
       </div>
     </Dialog>

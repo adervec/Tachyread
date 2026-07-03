@@ -83,6 +83,8 @@ const MENUS = {
     { label: 'Reset Tab to Default Settings', action: 'reset-tab' },
     { kind: 'separator' },
     { label: 'Font Manager...', action: 'font-manager' },
+    { label: 'Camera & Gestures...', action: 'camera-settings' },
+    { label: 'Comfort & Breaks...', action: 'comfort-settings' },
     { kind: 'separator' },
     { label: 'Data Management...', action: 'data' },
     { label: 'Book Groups...', action: 'book-groups' },
@@ -105,6 +107,16 @@ const MENU_ORDER = [
   ['settings', 'Settings'],
   ['help', 'Help'],
 ];
+const MENU_TITLE = Object.fromEntries(MENU_ORDER);
+
+// Compact pill toggle for a reading pane (mobile drawer top level).
+function PanelChip({ on, label, onClick }) {
+  return (
+    <button className={`menu-panel-chip${on ? ' on' : ''}`} onClick={onClick}>
+      <span className="mpc-check">{on ? '☑' : '☐'}</span>{label}
+    </button>
+  );
+}
 
 // One menu entry (file/view list) rendered as a drawer/dropdown row. `badges` optionally maps an
 // action → a small count shown as a pill (e.g. how many tab settings differ from the defaults).
@@ -120,15 +132,6 @@ function MenuItem({ it, onPick, badges }) {
   );
 }
 
-// A checkable panel-toggle row for the mobile drawer.
-function ToggleItem({ on, label, onClick }) {
-  return (
-    <div className="item" onClick={onClick}>
-      <span className="check">{on ? '☑' : '☐'}</span>
-      <span>{label}</span>
-    </div>
-  );
-}
 
 export default function MenuBar({ onFileOpen, onAction }) {
   const { state, dispatch, activeTab, patchSettings } = useApp();
@@ -136,6 +139,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
   const themeName =
     activeTab?.settings?.themeName || (activeTab?.settings?.darkMode ? 'Dark' : 'Light');
   const [openMenu, setOpenMenu] = useState(null);
+  const [sub, setSub] = useState(null); // mobile drawer: which submenu is drilled into (null = top level)
   const ref = useRef(null);
 
   // Badge the "Tab Settings…" item with how many of the active tab's settings differ from the
@@ -146,11 +150,14 @@ export default function MenuBar({ onFileOpen, onAction }) {
   const badges = offCount > 0 ? { 'tab-settings': offCount } : null;
 
   useEffect(() => {
+    // pointerdown (not click): a menu item that re-renders on tap (mobile drill-in) detaches its
+    // node before a bubbled 'click' runs, which would read as an outside click and close the menu.
+    // isConnected guards the same race for any late-firing event.
     function onDoc(e) {
-      if (!ref.current?.contains(e.target)) setOpenMenu(null);
+      if (e.target.isConnected && !ref.current?.contains(e.target)) { setOpenMenu(null); setSub(null); }
     }
-    if (openMenu) document.addEventListener('click', onDoc);
-    return () => document.removeEventListener('click', onDoc);
+    if (openMenu) document.addEventListener('pointerdown', onDoc);
+    return () => document.removeEventListener('pointerdown', onDoc);
   }, [openMenu]);
 
   function chooseFile() {
@@ -163,17 +170,19 @@ export default function MenuBar({ onFileOpen, onAction }) {
   function chooseDoc() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.docx,.pdf,.epub,.txt,.md';
+    input.accept = '.docx,.pdf,.epub,.txt,.md,.markdown,.html,.htm';
     input.onchange = () => input.files?.[0] && onFileOpen(input.files[0]);
     input.click();
   }
 
   function handle(action) {
     setOpenMenu(null);
+    setSub(null);
     if (action === 'open-txt') chooseFile();
     else if (action === 'open-doc') chooseDoc();
     else onAction(action);
   }
+  function closeDrawer() { setOpenMenu(null); setSub(null); }
 
   // Compact (phone/tablet) menu: a single hamburger that opens a scrollable drawer with the panel
   // toggles, the full File/View lists, theme, and Sync — instead of a desktop menu bar that wraps.
@@ -183,7 +192,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
       <div className="menu-bar compact" ref={ref}>
         <button
           className={`menu-burger${open ? ' open' : ''}`}
-          onClick={() => setOpenMenu(open ? null : 'mobile')}
+          onClick={() => (open ? closeDrawer() : setOpenMenu('mobile'))}
           aria-expanded={open}
           aria-label="Menu"
         >
@@ -202,28 +211,42 @@ export default function MenuBar({ onFileOpen, onAction }) {
         </select>
         {open && (
           <div className="menu-drawer">
-            <div className="menu-drawer-section">Panels</div>
-            <ToggleItem on={state.showToc} label="Table of Contents" onClick={() => dispatch({ type: 'TOGGLE_TOC' })} />
-            <ToggleItem on={state.showDash} label="Faces / Stats" onClick={() => dispatch({ type: 'TOGGLE_DASH' })} />
-            {activeTab?.doc?.source && (
-              <ToggleItem on={state.showSource} label="Source page" onClick={() => dispatch({ type: 'TOGGLE_SOURCE' })} />
+            {sub === null ? (
+              // Top level: quick panel toggles + a short list of menus to drill into (so the whole
+              // menu tree isn't one long scroll — you pick a menu, then its items).
+              <>
+                <div className="menu-drawer-section">Panels</div>
+                <div className="menu-panel-grid">
+                  <PanelChip on={state.showToc} label="ToC" onClick={() => dispatch({ type: 'TOGGLE_TOC' })} />
+                  <PanelChip on={state.showDash} label="Faces/Stats" onClick={() => dispatch({ type: 'TOGGLE_DASH' })} />
+                  {activeTab?.doc?.source && (
+                    <PanelChip on={state.showSource} label="Source" onClick={() => dispatch({ type: 'TOGGLE_SOURCE' })} />
+                  )}
+                  <PanelChip on={state.showIndex} label="Index" onClick={() => dispatch({ type: 'TOGGLE_INDEX' })} />
+                  <PanelChip on={state.showRsvp} label="Fast Reader" onClick={() => dispatch({ type: 'TOGGLE_SHOW_RSVP' })} />
+                  <PanelChip on={state.showLines !== false} label="Lines" onClick={() => dispatch({ type: 'TOGGLE_LINES' })} />
+                  <PanelChip on={state.incognito} label="🕶 Incognito" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })} />
+                </div>
+
+                <div className="menu-drawer-section">Menus</div>
+                {MENU_ORDER.map(([key, title]) => (
+                  <div key={key} className="item menu-cat" onClick={() => setSub(key)}>
+                    <span>{title}</span>
+                    <span className="menu-cat-caret">›</span>
+                  </div>
+                ))}
+                <div className="item menu-cat" onClick={() => { closeDrawer(); onAction('data'); }}>
+                  <span>☁ Data management…</span>
+                </div>
+              </>
+            ) : (
+              // Drilled into one menu: back header + that menu's items only.
+              <>
+                <div className="menu-drawer-back" onClick={() => setSub(null)}>‹ All menus</div>
+                <div className="menu-drawer-section">{MENU_TITLE[sub] || sub}</div>
+                {MENUS[sub].map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
+              </>
             )}
-            <ToggleItem on={state.showIndex} label="Index" onClick={() => dispatch({ type: 'TOGGLE_INDEX' })} />
-            <ToggleItem on={state.showRsvp} label="Fast Reader" onClick={() => dispatch({ type: 'TOGGLE_SHOW_RSVP' })} />
-            <ToggleItem on={state.showLines !== false} label="Lines" onClick={() => dispatch({ type: 'TOGGLE_LINES' })} />
-            <ToggleItem on={state.incognito} label="🕶 Incognito (no tracking)" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })} />
-
-            {MENU_ORDER.map(([key, title]) => (
-              <div key={key}>
-                <div className="menu-drawer-section">{title}</div>
-                {MENUS[key].map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
-              </div>
-            ))}
-
-            <div className="menu-drawer-section">Data</div>
-            <div className="item" onClick={() => { setOpenMenu(null); onAction('data'); }}>
-              <span>☁ Data management…</span>
-            </div>
           </div>
         )}
       </div>
