@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@diffusionstudio/vits-web": "^1.0.3",
     "@fontsource-variable/bitter": "^5.2.10",
     "@fontsource-variable/crimson-pro": "^5.2.8",
     "@fontsource-variable/eb-garamond": "^5.2.7",
