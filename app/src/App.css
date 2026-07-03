@@ -787,6 +787,29 @@
   font-weight: 600;
 }
 
+/* Settings difference chips (Tab Settings vs Default Tab Settings) */
+.sd-diffs {
+  display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+  padding: 7px 9px; margin-bottom: 8px;
+  background: var(--menu-bg); border: 1px solid var(--divider); border-radius: 8px;
+  font-size: 11px;
+}
+.sd-diffs-label { font-weight: 600; color: var(--status-fg); margin-right: 2px; }
+.sd-diff-none { color: var(--status-fg); font-style: italic; }
+.sd-diff-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 7px; border-radius: 999px;
+  border: 1px solid #d98324; color: var(--menu-fg);
+}
+.sd-diff-chip button { border: none; background: transparent; cursor: pointer; color: var(--status-fg); font-size: 11px; padding: 0 1px; }
+.sd-diff-chip button:hover { color: var(--orp-fg); }
+
+/* Help dialog */
+.help-body { max-height: 58vh; overflow-y: auto; padding-right: 6px; }
+.help-section { margin-bottom: 14px; }
+.help-section h3 { margin: 0 0 4px; font-size: 14px; }
+.help-section p { margin: 0 0 6px; font-size: 12.5px; line-height: 1.5; color: var(--menu-fg); }
+
 /* Reading-mode chip (controls bar): how the app currently classifies your reading */
 .reading-mode { white-space: nowrap; }
 .reading-mode.rm-idle { opacity: 0.45; }
@@ -1974,6 +1997,9 @@
      every character is the same width — far easier to track which letter you're on while typing. */
   font-family: var(--typing-family, 'JetBrains Mono Variable', 'Source Code Pro Variable', 'Fira Code Variable', ui-monospace, Consolas, monospace);
   font-size: 26px; line-height: 44px; letter-spacing: .01em;
+  /* End-of-line slack: the active word may grow by the caret + a few (capped) overtyped chars —
+     this reserved gutter absorbs that so the last word never reflows onto the next line mid-word. */
+  padding-right: 5ch;
   transition: transform 140ms ease;
 }
 /* One-word mode renders only the active word — center it and size it up so it reads as a flashcard. */
@@ -1995,7 +2021,17 @@
 .trc.correct { color: var(--nav-session-read-fg); }
 .trc.pending { color: var(--line-number-fg); }
 .trc.wrong { color: #fff; background: var(--orp-fg); border-radius: 2px; }
-.trc.caret { display: inline-block; width: 2px; height: 1.05em; background: var(--toggle-active-bg); vertical-align: text-bottom; margin: 0 -1px; animation: caretBlink 1s steps(1) infinite; }
+.trc.missed { color: var(--line-number-fg); text-decoration: underline; text-decoration-color: var(--orp-fg); text-underline-offset: 3px; }
+.trc.extra { color: var(--orp-fg); opacity: .75; }
+/* Zero-footprint anchor the floating cursor glides to — it must never shift layout. */
+.trc.caret-anchor { display: inline-block; width: 0; }
+/* The floating cursor itself: one absolutely-positioned bar that eases between positions. */
+.tr-cursor {
+  position: absolute; left: 0; top: 0; width: 2.5px; border-radius: 2px;
+  background: var(--toggle-active-bg); z-index: 1; pointer-events: none;
+  transition: transform 85ms cubic-bezier(.2, .7, .3, 1), opacity 200ms ease, height 120ms ease;
+  animation: caretBlink 1.1s steps(1) infinite;
+}
 
 /* On-screen typing sound tuner (toggled by the 🎚 Sounds button) */
 .tr-sounds {
@@ -2010,7 +2046,46 @@
 .tr-snd select { font-size: 11px; padding: 1px 4px; }
 .tr-snd-tick { gap: 5px; font-weight: 600; color: var(--menu-fg); }
 .tr-hint { font-size: 12px; color: var(--status-fg); text-align: center; }
-.tr-results { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 10px; border-top: 1px solid var(--divider); }
+.tr-results { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 10px; border-top: 1px solid var(--divider); flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* Results chart (raw / effective / burst / accuracy over the run) */
+.tr-chart-wrap { width: 100%; max-width: 780px; }
+.tr-chart { width: 100%; height: auto; display: block; cursor: crosshair; }
+.tr-chart path { fill: none; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
+.tr-chart .trend-burst { stroke: var(--status-fg); opacity: .45; stroke-width: 1.2; }
+.trch-grid { stroke: var(--divider); stroke-width: 1; }
+.trch-label { fill: var(--status-fg); font-size: 10px; font-family: Consolas, monospace; }
+.trch-cursor { stroke: var(--menu-fg); stroke-width: 1; opacity: .5; stroke-dasharray: 3 3; }
+.trch-dot { stroke: none; }
+.trch-dot.dot-net { fill: #2e9d4f; }
+.trch-dot.dot-gross { fill: var(--toggle-active-bg); }
+.trch-dot.dot-burst { fill: var(--status-fg); }
+.tr-chart-legend { display: flex; gap: 16px; justify-content: center; font-size: 11px; font-family: Consolas, monospace; color: var(--status-fg); margin-top: 2px; }
+.tr-chart-legend .lg::before { content: '▬ '; }
+.lg-net::before { color: #2e9d4f; }
+.lg-gross::before { color: var(--toggle-active-bg); }
+.lg-burst::before { color: var(--status-fg); }
+.lg-acc::before { color: var(--orp-fg); }
+.lg-t::before { content: ''; }
+
+/* Font Manager */
+.fm-head { margin-bottom: 8px; }
+.fm-current { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.fm-clear { font-size: 11px; }
+.fm-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 6px; }
+.fm-toolbar .fp-search { flex: 1; }
+.fm-toolbar label { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; white-space: nowrap; }
+.fm-list { max-height: 46vh; overflow-y: auto; border: 1px solid var(--divider); border-radius: 8px; }
+.fm-row { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--divider); }
+.fm-row:last-child { border-bottom: none; }
+.fm-row.selected { background: var(--menu-hover-bg, rgba(127,127,127,.12)); }
+.fm-fav { border: none; background: transparent; cursor: pointer; font-size: 15px; padding: 4px 2px 4px 8px; color: var(--status-fg); }
+.fm-fav.on { color: #d64570; }
+.fm-pick { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border: none; background: transparent; cursor: pointer; text-align: left; padding: 6px 8px; color: var(--menu-fg); }
+.fm-pick:hover { background: var(--menu-hover-bg, rgba(127,127,127,.08)); }
+.fm-name { font-size: 12px; font-weight: 600; }
+.fm-read { color: #d98324; margin-left: 6px; letter-spacing: .1em; }
+.fm-preview { font-size: 17px; line-height: 1.25; }
+.fm-meta { font-size: 10px; color: var(--status-fg); white-space: nowrap; padding-right: 10px; }
 /* End-of-run grade + final statement */
 .tr-grade { display: flex; align-items: center; gap: 14px; }
 .tr-grade-letter { font-size: 46px; font-weight: 900; line-height: 1; }

@@ -125,17 +125,20 @@ export function tabDefaultsFrom(settings) {
   return out;
 }
 
-// How many of a tab's reusable settings differ from the given defaults (the user's Default Tab
+// Which of a tab's reusable settings differ from the given defaults (the user's Default Tab
 // Settings). Per-document/progress fields (NON_DEFAULT_FIELDS) are ignored — they always differ.
-// Used to badge the "Tab Settings…" menu item with the number of off-default tweaks.
-export function countOffDefaultSettings(settings, defaults) {
+// Backs the "Tab Settings…" menu badge and the per-setting difference chips inside the dialog.
+export function offDefaultKeys(settings, defaults) {
   const cur = tabDefaultsFrom(settings);
   const base = tabDefaultsFrom({ ...defaultFileSettings(), ...(defaults || {}) });
-  let n = 0;
+  const out = [];
   for (const k of new Set([...Object.keys(cur), ...Object.keys(base)])) {
-    if (JSON.stringify(cur[k]) !== JSON.stringify(base[k])) n++;
+    if (JSON.stringify(cur[k]) !== JSON.stringify(base[k])) out.push(k);
   }
-  return n;
+  return out.sort();
+}
+export function countOffDefaultSettings(settings, defaults) {
+  return offDefaultKeys(settings, defaults).length;
 }
 
 // Global fields that hold user DATA / content (not preferences). An "application settings reset"

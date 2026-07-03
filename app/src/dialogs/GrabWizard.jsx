@@ -293,6 +293,8 @@ export default function GrabWizard({ onClose }) {
   const [recent, setRecent] = useState([]);
   const [ocrProfileId, setOcrProfileId] = useState(null);
   const [editingProfiles, setEditingProfiles] = useState(false);
+  // Identify picture/figure regions (they OCR into low-confidence garbage) and leave them out.
+  const [excludeImages, setExcludeImages] = useState(true);
 
   const savedTemplates = state.global.ocrTemplates || [];
   const ocrProfiles = state.global.ocrProfiles || [];
@@ -333,7 +335,7 @@ export default function GrabWizard({ onClose }) {
   autoOcrRef.current = autoOcr;
   const ocrLang = getLanguage(state.global.language).tess;
   const ocrParamsRef = useRef(null);
-  ocrParamsRef.current = { segRegions, segConfig, activeProfile, ocrLang };
+  ocrParamsRef.current = { segRegions, segConfig, activeProfile, ocrLang, excludeImages };
   const ocrChainRef = useRef(Promise.resolve()); // serializes background OCR (one page at a time)
 
   // Recognize one page in the background. Chained so pages OCR one at a time while the user keeps
@@ -350,6 +352,7 @@ export default function GrabWizard({ onClose }) {
             config: params.segConfig(seg),
             profile: params.activeProfile,
             lang: params.ocrLang,
+            skipImages: params.excludeImages,
           });
           setSegments((arr) => arr.map((s) => (s.id === seg.id ? { ...s, text: s.text || text, ocrStatus: 'done' } : s)));
         } catch {
@@ -736,8 +739,9 @@ export default function GrabWizard({ onClose }) {
       patchSeg(seg.id, { ocrStatus: 'doing' });
       setMsg(`Recognizing page ${i + 1} of ${ids.length}… (first run downloads the OCR engine)`);
       try {
-        const { text } = await recognizeImageEx(seg.image, { regions: segRegions(seg), config: segConfig(seg), profile: activeProfile, lang: ocrLang });
+        const { text, droppedImages } = await recognizeImageEx(seg.image, { regions: segRegions(seg), config: segConfig(seg), profile: activeProfile, lang: ocrLang, skipImages: excludeImages });
         setSegments((arr) => arr.map((s) => (s.id === seg.id ? { ...s, text, ocrStatus: 'done', flagged: false } : s)));
+        if (droppedImages > 0) setMsg(`Recognizing… (🖼 ${droppedImages} image region(s) excluded on page ${i + 1})`);
       } catch (e) {
         patchSeg(seg.id, { ocrStatus: 'error' });
         setMsg('OCR error on a page: ' + (e?.message || e));
@@ -1177,6 +1181,9 @@ export default function GrabWizard({ onClose }) {
             </label>
             <label title="Binarize using known background/text colours (best for coloured pages)">
               <input type="checkbox" checked={useColors} onChange={(e) => setUseColors(e.target.checked)} /> Colours
+            </label>
+            <label title="Identify photos/figures/diagrams on the page (they read as low-confidence garbage) and exclude them from the text">
+              <input type="checkbox" checked={excludeImages} onChange={(e) => setExcludeImages(e.target.checked)} /> 🖼 Exclude images
             </label>
             {useColors && (
               <>

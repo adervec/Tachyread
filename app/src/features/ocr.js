@@ -261,21 +261,50 @@ async function correctWithTemplates(canvas, data, compiled) {
   return changed && rebuilt ? rebuilt : (data.text || '').trim();
 }
 
+// ── image-region exclusion ────────────────────────────────────────────────────────────────────
+// Photos, figures and diagrams have no real text, but tesseract still "reads" them — as garbage
+// words with very low confidence (~20–40). Real prose LINES keep a high mean confidence (~90+)
+// even with the odd hard word, so dropping whole lines below a mean-confidence floor removes
+// image junk while leaving genuine text intact. Line-level (not paragraph) because tesseract
+// often merges a figure into the surrounding text paragraph, which would dilute a paragraph mean.
+const IMAGE_LINE_CONF = 55;
+function textWithoutImages(data, minConf = IMAGE_LINE_CONF) {
+  const parts = [];
+  let dropped = 0;
+  for (const block of (data.blocks || [])) {
+    for (const para of (block.paragraphs || [])) {
+      const kept = [];
+      for (const line of (para.lines || [])) {
+        const words = line.words || [];
+        if (!words.length) continue;
+        const mean = words.reduce((a, w) => a + (w.confidence ?? 0), 0) / words.length;
+        if (mean < minConf) { dropped++; continue; }
+        kept.push(words.map((w) => w.text).join(' '));
+      }
+      if (kept.length) parts.push(kept.join('\n'));
+    }
+  }
+  return { text: parts.join('\n\n').trim(), dropped };
+}
+
 // OCR an image with optional layout regions, preprocessing config, and an OCR profile.
-//   regions: array of {fx,fy,fw,fh} (OCR'd separately, in order, joined by blank lines), or null
-//   config:  preprocessForOcr config (see above)
-//   profile: optional OCR profile (whitelist + template-match assist)
-//   lang:    tesseract language code (state/languages.js `tess`), default English
-export async function recognizeImageEx(src, { regions = null, config = {}, profile = null, lang = 'eng' } = {}) {
+//   regions:    array of {fx,fy,fw,fh} (OCR'd separately, in order, joined by blank lines), or null
+//   config:     preprocessForOcr config (see above)
+//   profile:    optional OCR profile (whitelist + template-match assist)
+//   lang:       tesseract language code (state/languages.js `tess`), default English
+//   skipImages: identify picture/figure regions (garbage low-confidence paragraphs) and leave
+//               them out of the text. Returns `droppedImages` with the count.
+export async function recognizeImageEx(src, { regions = null, config = {}, profile = null, lang = 'eng', skipImages = false } = {}) {
   const full = await toCanvas(src);
   const worker = await getWorker(lang);
   const compiled = profile ? await compileOcrProfile(profile) : null;
-  const wantBlocks = !!(compiled && compiled.useTemplates && compiled.byChar.length);
+  const wantBlocks = !!(compiled && compiled.useTemplates && compiled.byChar.length) || !!skipImages;
   if (compiled && compiled.useWhitelist) {
     try { await worker.setParameters({ tessedit_char_whitelist: compiled.whitelist }); } catch { /* engine may not accept it */ }
   }
   const list = regions && regions.length ? regions : [null];
   const parts = [];
+  let droppedImages = 0;
   try {
     for (const region of list) {
       const crop = cropRegion(full, region);
@@ -287,8 +316,12 @@ export async function recognizeImageEx(src, { regions = null, config = {}, profi
         ({ data } = await worker.recognize(canvas)); // fall back if this build rejects the output option
       }
       let text = (data.text || '').trim();
-      if (wantBlocks && data.blocks) {
+      if (compiled && compiled.useTemplates && compiled.byChar.length && data.blocks) {
         try { text = await correctWithTemplates(canvas, data, compiled); } catch { /* keep plain text */ }
+      } else if (skipImages && data.blocks) {
+        const r = textWithoutImages(data);
+        text = r.text;
+        droppedImages += r.dropped;
       }
       parts.push(text);
     }
@@ -297,7 +330,7 @@ export async function recognizeImageEx(src, { regions = null, config = {}, profi
       try { await worker.setParameters({ tessedit_char_whitelist: '' }); } catch { /* ignore */ }
     }
   }
-  return { text: parts.filter(Boolean).join('\n\n') };
+  return { text: parts.filter(Boolean).join('\n\n'), droppedImages };
 }
 
 // Back-compat: OCR a whole image with auto preprocessing.
