@@ -150,6 +150,23 @@
   top: 0;
   background: var(--menu-bg);
 }
+/* Two-level mobile menu: category rows drill into a submenu, with a back header. */
+.menu-cat { font-weight: 600; }
+.menu-cat-caret { color: var(--status-fg); font-size: 18px; }
+.menu-drawer-back {
+  padding: 11px 16px; font-size: 13px; font-weight: 600; color: var(--toggle-active-bg);
+  cursor: pointer; border-bottom: 1px solid var(--divider); position: sticky; top: 0;
+  background: var(--menu-bg); z-index: 1;
+}
+/* Panel toggles as a compact chip grid instead of a stack of full-width rows. */
+.menu-panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px 12px 8px; }
+.menu-panel-chip {
+  display: inline-flex; align-items: center; gap: 6px; justify-content: flex-start;
+  padding: 9px 10px; font-size: 13px; border: 1px solid var(--divider); border-radius: 8px;
+  background: transparent; color: var(--menu-fg); cursor: pointer; text-align: left;
+}
+.menu-panel-chip.on { border-color: var(--toggle-active-bg); background: var(--menu-highlight); }
+.menu-panel-chip .mpc-check { color: var(--toggle-active-bg); flex: 0 0 auto; }
 
 /* Tab bar */
 .tab-bar {
@@ -787,6 +804,38 @@
   font-weight: 600;
 }
 
+/* ToC "mark as read" toggle (credit sections read elsewhere, e.g. on paper) */
+.toc-act .toc-read-on { color: #2e9d4f; font-weight: 800; }
+
+/* HTML/Markdown source: sandboxed iframe carrying the document's own styling */
+.source-frame { width: 100%; height: 100%; border: none; background: #fff; display: block; }
+
+/* Source view niceties for HTML/Markdown documents (tables, code, quotes) */
+.source-html table { border-collapse: collapse; margin: 8px 0; font-size: 0.92em; }
+.source-html th, .source-html td { border: 1px solid var(--divider); padding: 3px 8px; text-align: left; }
+.source-html pre { background: rgba(127, 127, 127, 0.12); padding: 8px 10px; border-radius: 6px; overflow-x: auto; font-size: 0.88em; }
+.source-html code { background: rgba(127, 127, 127, 0.12); padding: 0 3px; border-radius: 3px; }
+.source-html pre code { background: transparent; padding: 0; }
+.source-html blockquote { border-left: 3px solid var(--divider); margin: 8px 0; padding: 2px 12px; color: var(--status-fg); }
+.source-html img { max-width: 100%; }
+
+/* Progress bars (import wizard, batch OCR, any lengthy action) */
+.imp-phase { font-size: 13px; margin-bottom: 8px; color: var(--menu-fg); }
+.imp-bar {
+  height: 8px; border-radius: 999px; background: var(--divider);
+  overflow: hidden; position: relative;
+}
+.imp-fill { height: 100%; border-radius: 999px; background: var(--toggle-active-bg); transition: width 200ms ease; }
+.imp-bar.indet .imp-fill,
+.imp-bar.indet::after {
+  content: ''; position: absolute; inset: 0; width: 35%; border-radius: 999px;
+  background: var(--toggle-active-bg); animation: impIndet 1.1s ease-in-out infinite;
+}
+@keyframes impIndet { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+.imp-summary { list-style: none; margin: 4px 0 10px; padding: 0; font-size: 13px; line-height: 1.7; }
+.imp-suggest { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+.imp-suggest-label { font-size: 12px; font-weight: 600; color: var(--status-fg); }
+
 /* Settings difference chips (Tab Settings vs Default Tab Settings) */
 .sd-diffs {
   display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
@@ -1138,8 +1187,10 @@
   display: grid;
   grid-template-columns: 48px 3px 1fr;
   padding: 2px 4px 2px 0;
-  font-size: 12px;
-  line-height: 1.5;
+  /* Size and spacing INHERIT from the pane container, which carries the tab's "Lines pane font
+     size" and "Line spacing" settings — a fixed value here silently overrode both for years. */
+  font-size: inherit;
+  line-height: inherit;
   cursor: pointer;
   position: relative;
 }
@@ -2013,7 +2064,10 @@
 .trw.voice { background: rgba(220, 80, 60, .35); border-radius: 3px; }
 .tr-race-result { margin: 4px 0 2px; font-weight: 700; color: var(--nav-session-read-fg); }
 .tr-race-result.caught { color: var(--orp-fg, #d24); }
-.trw { color: var(--line-number-fg); }
+/* Each word is an ATOMIC inline-block: nothing inside it (per-char spans, the caret anchor) can
+   create a mid-word line break — words wrap only as whole units. white-space:pre keeps the
+   trailing space inside the block so inter-word spacing is unchanged. */
+.trw { display: inline-block; white-space: pre; color: var(--line-number-fg); }
 .trw.done { color: var(--nav-session-read-fg); }
 .trw.imperfect { color: var(--orp-fg); }
 .trw.pending { color: var(--line-number-fg); }
@@ -2023,8 +2077,10 @@
 .trc.wrong { color: #fff; background: var(--orp-fg); border-radius: 2px; }
 .trc.missed { color: var(--line-number-fg); text-decoration: underline; text-decoration-color: var(--orp-fg); text-underline-offset: 3px; }
 .trc.extra { color: var(--orp-fg); opacity: .75; }
-/* Zero-footprint anchor the floating cursor glides to — it must never shift layout. */
-.trc.caret-anchor { display: inline-block; width: 0; }
+/* Zero-WIDTH anchor the floating cursor glides to — never shifts layout horizontally, but has a
+   real text-height box (dipping slightly below the baseline) so the cursor's measured
+   offsetTop/offsetHeight land on the glyphs instead of hanging from the baseline. */
+.trc.caret-anchor { display: inline-block; width: 0; height: 1.12em; vertical-align: -0.14em; }
 /* The floating cursor itself: one absolutely-positioned bar that eases between positions. */
 .tr-cursor {
   position: absolute; left: 0; top: 0; width: 2.5px; border-radius: 2px;
@@ -2399,6 +2455,35 @@
     border-bottom: 1px solid var(--divider);
   }
   .goal-row { flex-wrap: wrap; row-gap: 4px; }
+  /* Sleeker mobile controls: the "More"-revealed mode toggles become a tidy 2-column grid of
+     bordered chips (label left, control right) instead of a ragged wrap; the goal row and speed
+     block tighten so the dock stays short. */
+  .controls-bar.compact { gap: 4px; }
+  .controls-bar.compact.more-open .mode-block {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 8px;
+    width: 100%;
+    margin-top: 2px;
+  }
+  .controls-bar.compact.more-open .mode-block .mode-pair {
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    padding: 7px 10px;
+    border: 1px solid var(--divider);
+    border-radius: 9px;
+    min-height: 40px;
+  }
+  .controls-bar.compact.more-open .mode-block .mode-pair > span {
+    font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--status-fg);
+  }
+  .controls-bar.compact.more-open .mode-block .mode-pair select { max-width: 96px; }
+  .controls-bar.compact.more-open .mode-block .mode-pair input[type='range'] { flex: 1 1 100%; }
+  .controls-bar.compact .wpm-block { width: 100%; justify-content: center; gap: 4px; }
+  .controls-bar.compact .playback-row { row-gap: 8px; }
+  .controls-bar.compact .goal-row { font-size: 12px; gap: 6px; }
+  .controls-bar.compact .goal-row select, .controls-bar.compact .goal-row input[type='text'] { max-width: 130px; }
   /* The heard-speech readout sits up top on phones (out of the way of the bottom controls) and,
      with pointer-events:none, never blocks them. */
   /* Right gutter (126px) left clear so the heard-speech readout never sits under the top-right

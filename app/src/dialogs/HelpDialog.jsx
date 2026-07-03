@@ -73,6 +73,7 @@ const SECTIONS = [
       'Audio menu: the Audiobook Manager records/plays per-line narration; the Text-to-Speech Reader is a standalone TTS popup; Ambient Sound plays a low soundscape under your reading.',
       'Audio Settings holds the TTS voice & rate (the default voice follows your document language), the speak-along follow mode, and the auto-stop timer.',
       'Voice commands ("play", "pause", "next", "back") and clap detection toggle from VOICE COMMAND in the controls bar.',
+      'Listen with the screen off: read-aloud keeps playing when you lock the phone or switch apps, and your lock-screen / notification media controls (play·pause·next·previous) drive it — next/previous jump paragraphs. Only read-aloud keeps going in the background; visual fast-reading pauses when the text isn\'t on screen.',
     ],
   },
   {

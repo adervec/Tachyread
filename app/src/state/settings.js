@@ -22,8 +22,6 @@ export function defaultFileSettings() {
     doubleTimeSpecialWordsMultiplier: 1.0,
     longWordThreshold: 9,
     showPercentSeparators: false,
-    lineSpacing: 0,
-    paraSpacing: 0,
     textAlignment: 'Left',
     blurLinesBefore: 0,
     blurLinesAfter: 0,
@@ -34,6 +32,8 @@ export function defaultFileSettings() {
     contextWordsAfter: 0,
     currentWordStyles: ['Underline'], // combinable: Underline | Bold | Background | Color | Box
     rightPaneFontSize: 12,
+    lineSpacing: 1.5, // Lines-pane line-height multiplier
+    sourceChecks: {}, // ticked checkboxes in html/markdown source sections: { section: [box…] }
     bionicFont: false,
     paragraphBreakSecs: 0,
     lineBreakPauseMs: 0,
@@ -115,7 +115,7 @@ const NON_DEFAULT_FIELDS = new Set([
   'wordIndex', 'totalWords', 'contentChecksum', 'fileName',
   'persistentWordsRead', 'persistentActiveTimeSecs', 'persistentTotalTimeSecs',
   'dailyHistory', 'completions', 'rating', 'notes',
-  'tocEntries', 'tocReadStats', 'skipRanges',
+  'tocEntries', 'tocReadStats', 'skipRanges', 'sourceChecks',
   'properNames', 'properNameSeed', 'indexEntries', 'goal',
 ]);
 

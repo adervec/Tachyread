@@ -188,6 +188,16 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ rightPaneFontSize: Math.max(8, Math.min(40, Number(e.target.value) || 12)) })}
         />
       </Field>
+      <Field label="Line spacing (1 = single)">
+        <input
+          type="number"
+          min={1}
+          max={3}
+          step={0.1}
+          value={s.lineSpacing ?? 1.5}
+          onChange={(e) => patch({ lineSpacing: Math.max(1, Math.min(3, Number(e.target.value) || 1.5)) })}
+        />
+      </Field>
       <Field label="Text alignment">
         <select value={s.textAlignment} onChange={(e) => patch({ textAlignment: e.target.value })}>
           {ALIGNMENTS.map((a) => (
