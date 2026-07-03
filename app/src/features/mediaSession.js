@@ -1,16 +1,22 @@
 // Lock-screen media controls + background keep-alive for read-aloud (TTS).
 //
 // Two problems on mobile: (1) a backgrounded/locked tab is throttled and the Web Speech engine
-// stops, and (2) there's no way to control playback without unlocking. Both are solved by holding
-// a real audio session: a looping (silent) <audio> element keeps the page "playing media" so the
-// OS keeps it alive and surfaces lock-screen transport controls, and the Media Session API wires
-// those controls (and the notification metadata) to the reader. speechSynthesis itself is still
-// browser-dependent when fully locked, but the silent-audio session is what keeps it running in
-// practice and is the only route to lock-screen buttons on the web.
+// stops, and (2) there's no way to control playback without unlocking. Both are addressed by
+// holding a real audio session: a looping <audio> element carrying an inaudible low tone (NOT pure
+// silence — that gets released as "silence" and lets the page suspend on lock) keeps the OS
+// treating the page as active media, and the Media Session API wires the lock-screen transport
+// controls + notification metadata to the reader.
+//
+// Platform reality: on Android Chrome this keeps speechSynthesis running with the screen off. iOS
+// Safari suspends Web Speech on a full lock regardless of any web technique — there the lock-screen
+// controls still work, but for guaranteed locked playback the pre-recorded Audiobook is the path.
 
-// A truly-silent looping WAV (all-zero samples). volume stays 1 so browsers don't treat it as a
-// muted element and drop audio focus.
-function silentWavUri(seconds = 1, sampleRate = 8000) {
+// Looping keep-alive WAV. NOT pure silence: a truly-silent (all-zero) track gets classified as
+// silence and the browser releases audio focus, so the page (and speechSynthesis) suspends the
+// instant the screen locks. A very low-amplitude sub-bass tone (~45 Hz, ~-42 dBFS) is genuinely
+// non-silent — it holds audio focus — yet is inaudible on phone speakers/earbuds (which roll off
+// hard below ~150 Hz), and during read-aloud the speech masks it anyway.
+function keepAliveWavUri(seconds = 3, sampleRate = 8000, freq = 45, amp = 0.008) {
   const n = Math.floor(seconds * sampleRate);
   const buf = new ArrayBuffer(44 + n * 2);
   const v = new DataView(buf);
@@ -19,10 +25,15 @@ function silentWavUri(seconds = 1, sampleRate = 8000) {
   v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
   v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true);
   v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
-  // sample bytes are already zero
+  const peak = Math.round(amp * 32767);
+  for (let i = 0; i < n; i++) {
+    // whole number of cycles across the buffer so the loop point is seamless (no click)
+    const s = Math.round(peak * Math.sin((2 * Math.PI * freq * i) / sampleRate));
+    v.setInt16(44 + i * 2, s, true);
+  }
   let bin = '';
   const bytes = new Uint8Array(buf);
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
   return `data:audio/wav;base64,${btoa(bin)}`;
 }
 
@@ -32,10 +43,17 @@ let keepPlaying = false;
 
 function ensureAudio() {
   if (audio || typeof Audio === 'undefined') return audio;
-  audio = new Audio(silentWavUri());
+  audio = new Audio(keepAliveWavUri());
   audio.loop = true;
+  audio.volume = 1;
   audio.setAttribute('aria-hidden', 'true');
   return audio;
+}
+
+// Re-assert the keep-alive while read-aloud is playing (e.g. from the lock/visibility handler):
+// some browsers pause the element as the screen turns off — kick it back so the session holds.
+export function nudgeMediaKeepAlive() {
+  if (keepPlaying && audio && audio.paused) { try { audio.play().catch(() => {}); } catch { /* ignore */ } }
 }
 
 // Arm the background keep-alive: prime the silent audio element on the first user gesture so its
