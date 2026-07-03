@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import Dialog from './Dialog.jsx';
-import { DEFAULT_COMFORT } from '../engine/comfort.js';
 import { resetGlobalToDefaults } from '../state/settings.js';
 import { LANGUAGES } from '../state/languages.js';
-import { DEFAULT_GESTURES, GESTURE_INFO } from '../features/handGestures.js';
-import FontPicker from '../components/FontPicker.jsx';
 
-// Application-wide settings only. These are deliberately disjoint from per-tab settings:
-// anything that varies per document lives in Tab Settings / Default Tab Settings instead.
+// General application settings ONLY. Everything domain-specific lives on its own page under the
+// Settings / Typing / Audio menus: Camera & Gestures, Comfort & Breaks, Font Manager (incl. the
+// Google Fonts opt-in), Typing Settings, Audio Settings. Per-document options are in Tab Settings.
 function Field({ label, children }) {
   return (
     <div className="field-row">
@@ -17,25 +15,18 @@ function Field({ label, children }) {
   );
 }
 
-const AUDIO_MODES = ['Voice', 'Claps', 'Both'];
-
-export default function AppSettingsDialog({ global, onPatch, onCalibrate, onCalibrateHand, onClose }) {
+export default function AppSettingsDialog({ global, onPatch, onClose }) {
   const [g, setG] = useState(global);
   function patch(p) {
     setG({ ...g, ...p });
     onPatch(p);
   }
 
-  const comfort = { ...DEFAULT_COMFORT, ...(g.comfort || {}) };
-  function patchComfort(p) {
-    patch({ comfort: { ...comfort, ...p } });
-  }
-
   function resetAll() {
     if (!window.confirm(
       'Reset all application settings to their defaults?\n\n' +
       'Your documents, recent files, vocabulary, book groups, sync setup, calibration and your ' +
-      'Default Tab Settings are kept — only app preferences (fonts, startup, guards, audio, etc.) ' +
+      'Default Tab Settings are kept — only app preferences (startup, guards, audio, etc.) ' +
       'are restored.'
     )) return;
     const next = resetGlobalToDefaults(g);
@@ -56,8 +47,10 @@ export default function AppSettingsDialog({ global, onPatch, onCalibrate, onCali
       }
     >
       <p className="settings-note">
-        App-wide options. Per-document appearance and behavior live in <strong>View → Tab Settings</strong>;
-        the defaults for new tabs live in <strong>File → Default Tab Settings</strong>.
+        General app-wide options. Camera &amp; Gestures, Comfort &amp; Breaks and the Font Manager
+        have their own pages under <strong>Settings</strong>; typing and audio options live under
+        <strong> Typing</strong> and <strong>Audio</strong>. Per-document appearance is in
+        <strong> Settings → Tab Settings</strong>.
       </p>
 
       <div className="field-section">Language</div>
@@ -73,40 +66,6 @@ export default function AppSettingsDialog({ global, onPatch, onCalibrate, onCali
       <p className="settings-note">
         Used by Grab Text (OCR), Dictation, read-along Speaking mode, and to pick a matching
         read-aloud voice. The first Grab in a new language downloads its recognition data once.
-      </p>
-
-      <div className="field-section">Fonts</div>
-      <Field label="Serif font">
-        <FontPicker
-          value={g.defaultSerifFamily || ''}
-          defaultCategory="serif"
-          googleEnabled={!!g.enableGoogleFonts}
-          onChange={(css) => patch({ defaultSerifFamily: css })}
-        />
-      </Field>
-      <Field label="Sans font">
-        <FontPicker
-          value={g.defaultSansFamily || ''}
-          defaultCategory="sans"
-          googleEnabled={!!g.enableGoogleFonts}
-          onChange={(css) => patch({ defaultSansFamily: css })}
-        />
-      </Field>
-      <Field label="Google Fonts library">
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={!!g.enableGoogleFonts}
-            onChange={(e) => patch({ enableGoogleFonts: e.target.checked })}
-          />
-          Allow loading any of the ~1,700 Google Fonts from Google’s CDN
-        </label>
-      </Field>
-      <p className="settings-note">
-        Bundled open fonts and your device’s installed fonts work offline and send nothing anywhere.
-        Turning on the Google Fonts library lets you pick from the full catalogue (or type any family
-        name), but each font is fetched from <strong>Google’s servers</strong> when used — which needs
-        the network and reveals your IP/usage to Google. Off by default; see PRIVACY.md.
       </p>
 
       <div className="field-section">Startup &amp; mobile</div>
@@ -172,167 +131,12 @@ export default function AppSettingsDialog({ global, onPatch, onCalibrate, onCali
           Pause fast reading if the text scrolls off-screen (read-aloud keeps going)
         </label>
       </Field>
-      <Field label="Webcam attention (experimental)">
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={!!g.webcamAttention}
-            onChange={(e) => patch({ webcamAttention: e.target.checked })}
-          />
-          Pause fast reading when the camera can’t see you facing the screen with eyes open
-        </label>
-      </Field>
-      <Field label="Doze detection (experimental)">
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={!!g.webcamDoze}
-            onChange={(e) => patch({ webcamDoze: e.target.checked })}
-          />
-          Stop read-aloud if your eyes stay shut or you’re away for a while
-        </label>
-      </Field>
-      <Field label="Away alarm (experimental)">
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={!!g.webcamAwayAlarm}
-            onChange={(e) => patch({ webcamAwayAlarm: e.target.checked })}
-          />
-          Sound an alarm if you look away for too long
-        </label>
-      </Field>
-      <Field label="Alarm after (seconds)">
-        <input
-          type="number"
-          min={3}
-          max={300}
-          value={g.webcamAwayAlarmSec ?? 15}
-          disabled={!g.webcamAwayAlarm}
-          onChange={(e) => patch({ webcamAwayAlarmSec: Math.max(3, Math.min(300, Number(e.target.value) || 15)) })}
-          style={{ width: 70 }}
-        />
-      </Field>
-      <Field label="Escalating alarm">
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={!!g.webcamEscalatingAlarm}
-            disabled={!g.webcamAwayAlarm}
-            onChange={(e) => patch({ webcamEscalatingAlarm: e.target.checked })}
-          />
-          Start quiet and get louder the longer you stay away
-        </label>
-      </Field>
-      <Field label="Posture nudge (experimental)">
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={!!g.webcamDistanceNudge}
-            onChange={(e) => patch({ webcamDistanceNudge: e.target.checked })}
-          />
-          Remind me to ease back when I’m sitting too close to the screen
-        </label>
-      </Field>
-      <Field label="Look-away analytics (experimental)">
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={!!g.webcamFocusStats}
-            onChange={(e) => patch({ webcamFocusStats: e.target.checked })}
-          />
-          Log focus % and distractions per session into Reading History
-        </label>
-      </Field>
-      <Field label="Camera preview">
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={g.webcamPreview !== false}
-            onChange={(e) => patch({ webcamPreview: e.target.checked })}
-          />
-          Show a small live self-view while a webcam guard is on
-        </label>
-      </Field>
-      <Field label="Eye calibration">
-        <button onClick={onCalibrate} disabled={!onCalibrate}>⚙ Calibrate eye detection…</button>
-      </Field>
-      <Field label="Hand gestures (experimental)">
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={!!g.handGestures}
-            onChange={(e) => patch({ handGestures: e.target.checked })}
-          />
-          Control the reader with hand gestures via the camera (pick which below)
-        </label>
-      </Field>
-      <Field label="Gestures">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {Object.entries(GESTURE_INFO).map(([k, info]) => {
-            const gset = { ...DEFAULT_GESTURES, ...(g.handGestureSet || {}) };
-            return (
-              <label key={k} className="inline-check" title={info.desc} style={{ opacity: g.handGestures ? 1 : 0.55 }}>
-                <input
-                  type="checkbox"
-                  disabled={!g.handGestures}
-                  checked={!!gset[k]}
-                  onChange={(e) => patch({ handGestureSet: { ...gset, [k]: e.target.checked } })}
-                />
-                {info.icon} <strong>{info.label}</strong> — {info.desc}
-              </label>
-            );
-          })}
-        </div>
-      </Field>
-      <p className="settings-note">
-        Fewer enabled gestures = fewer false positives: disabled gestures are ignored entirely, and
-        the discrete ones must be held steady for ~half a second before they fire.
-      </p>
-      <Field label="Hand calibration">
-        <button onClick={onCalibrateHand} disabled={!onCalibrateHand || !g.handGestures} title={g.handGestures ? '' : 'Turn on Hand gestures first'}>
-          🖐 Calibrate hand range…
-        </button>
-      </Field>
-      <p className="settings-note">
-        Both use on-device face detection — camera frames are analysed locally and are never recorded,
-        saved, or uploaded; the camera only runs while one of these is on. Eye-open detection loads a
-        small face-landmark model on first use (needs network once, like the OCR data) and a WebGL
-        browser; without it, attention falls back to “facing the screen” and doze to “away for a while.”
-        Calibration tunes eyes-open vs eyes-shut to your face/glasses. Typing and (for the attention
-        guard) read-aloud are never paused.
-      </p>
-
-      <div className="field-section">Typing practice</div>
-      <Field label="End-of-run grade fanfare">
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={g.typingEndFanfare !== false}
-            onChange={(e) => patch({ typingEndFanfare: e.target.checked })}
-          />
-          Show a grade + final remark and play a grade-matched sound when a typing run ends
-        </label>
-      </Field>
-
-      <div className="field-section">Audio control</div>
-      <Field label="Hands-free mode">
-        <select value={g.audioCtrlMode || 'Both'} onChange={(e) => patch({ audioCtrlMode: e.target.value })}>
-          {AUDIO_MODES.map((m) => (
-            <option key={m}>{m}</option>
-          ))}
-        </select>
-      </Field>
-      <p className="settings-note">
-        Voice commands and clap detection require microphone permission; voice commands need a
-        Chromium browser. Enable per tab with the <strong>AUDIO</strong> button.
-      </p>
 
       <div className="field-section">Table of contents</div>
       <p className="settings-note">
         Icons shown on the ToC minimap bar for each hierarchy tier (Tier 0 = top, e.g. Book →
         Part → Chapter). One emoji or character each. Numeral display and per-tier numeral regex
-        are per document — see <strong>View → Tab Settings</strong>.
+        are per document — see <strong>Settings → Tab Settings</strong>.
       </p>
       <div className="toc-tier-icons">
         {Array.from({ length: 5 }, (_, lvl) => (
@@ -351,57 +155,6 @@ export default function AppSettingsDialog({ global, onPatch, onCalibrate, onCali
           </label>
         ))}
       </div>
-
-      <div className="field-section">Comfort &amp; breaks</div>
-      <Field label="Eye-rest microbreaks">
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={!!comfort.enabled}
-            onChange={(e) => patchComfort({ enabled: e.target.checked })}
-          />
-          Prompt a 20-20-20 break while reading
-        </label>
-      </Field>
-      <Field label="Break every (minutes of reading)">
-        <input
-          type="number"
-          min={1}
-          max={120}
-          value={comfort.breakIntervalMin}
-          disabled={!comfort.enabled}
-          onChange={(e) => patchComfort({ breakIntervalMin: Math.max(1, Number(e.target.value) || 1) })}
-          style={{ width: 70 }}
-        />
-      </Field>
-      <Field label="Rest length (seconds)">
-        <input
-          type="number"
-          min={1}
-          max={120}
-          value={comfort.microbreakSec}
-          disabled={!comfort.enabled}
-          onChange={(e) => patchComfort({ microbreakSec: Math.max(1, Number(e.target.value) || 1) })}
-          style={{ width: 70 }}
-        />
-      </Field>
-      <Field label="Ease speed when tired">
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={!!comfort.autoBackoff}
-            onChange={(e) => patchComfort({ autoBackoff: e.target.checked })}
-          />
-          Lower WPM after a break if fatigue is high
-        </label>
-      </Field>
-      <p className="settings-note">
-        Speed-reading removes the natural pauses paged reading gives you, so eye strain builds up
-        quietly. Breaks follow the 20-20-20 guideline (every ~20 min, look ~20&nbsp;ft / 6&nbsp;m
-        away for ~20&nbsp;s) and speed-easing nudges WPM down only when comprehension checks and
-        time-on-task both suggest you are tiring. This is a comfort aid, not medical advice. Take a
-        break any time from <strong>View → Take a Break Now</strong>.
-      </p>
     </Dialog>
   );
 }
