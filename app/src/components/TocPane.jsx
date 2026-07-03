@@ -91,6 +91,17 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
     }
   }
 
+  // Toggle a section's coverage directly — for chapters read elsewhere (a paper copy, another
+  // app). Marking credits coverage only (no time, no WPM); unmarking clears it again.
+  const [, setReadBump] = useState(0);
+  function toggleRead(span) {
+    if (!tracker) return;
+    const rs = tracker.rangeStats(span.start, span.end);
+    if (rs.readFrac >= 0.999) tracker.unmarkRangeRead(span.start, span.end);
+    else tracker.markRangeRead(span.start, span.end);
+    setReadBump((n) => n + 1); // tracker is mutable — nudge a re-render so %s update now
+  }
+
   const [editing, setEditing] = useState(false);
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [flashIndex, setFlashIndex] = useState(-1);
@@ -259,6 +270,7 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
                     <th className="toc-act-h" title="Scroll into view (keep reading position)">👁</th>
                     <th className="toc-act-h" title="Set finishing this section as the goal">🎯</th>
                     <th className="toc-act-h" title="Exclude this section from completion %">⊘</th>
+                    <th className="toc-act-h" title="Toggle read — credit a section you read elsewhere (e.g. on paper)">✓</th>
                   </>
                 )}
                 <th className="toc-name-h">Section</th>
@@ -318,6 +330,13 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
                         </td>
                         <td className="toc-act">
                           <button className={skipped ? 'toc-skip-on' : ''} title={skipped ? 'Excluded from completion % — click to include' : 'Exclude this section from completion %'} onClick={() => toggleSkip(span, e.title)}>⊘</button>
+                        </td>
+                        <td className="toc-act">
+                          <button
+                            className={done ? 'toc-read-on' : ''}
+                            title={done ? 'Marked read — click to clear this section’s coverage' : 'Mark as read (e.g. read on paper) — credits coverage, no time or WPM'}
+                            onClick={() => toggleRead(span)}
+                          >✓</button>
                         </td>
                         <td className="toc-name">
                           <span className="toc-indent" style={{ width: row.level * 12 }} />

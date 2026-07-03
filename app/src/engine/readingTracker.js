@@ -325,6 +325,20 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     if (b > a) { stampParas(a, b, Date.now()); dirty = true; }
   }
 
+  // Un-mark a span's coverage (the inverse of markRangeRead) — e.g. a ToC section credited as
+  // "read on paper" being toggled back off. Clears the mask and per-word pace; session counters
+  // are untouched (they record this session's activity, not coverage).
+  function unmarkRangeRead(from, to) {
+    const a = Math.max(0, from | 0);
+    const b = Math.min(wordCount, to | 0);
+    for (let i = a; i < b; i++) {
+      if (mask[i]) { mask[i] = 0; readCount--; }
+      wpm[i] = 0;
+      sessionMask[i] = 0;
+    }
+    if (b > a) dirty = true;
+  }
+
   function setHidden(h, now = Date.now()) {
     if (h === hidden) return;
     if (h) commitScroll(lastTs ?? now); // don't let a pending gesture absorb hidden time
@@ -453,6 +467,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     setHidden,
     markPrefixRead,
     markRangeRead,
+    unmarkRangeRead,
     recentWpm,
     sampleTrend,
     rangeStats,
