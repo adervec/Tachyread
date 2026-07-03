@@ -69,6 +69,8 @@ import { getLanguage } from './state/languages.js';
 import TypingPlanDialog from './dialogs/TypingPlanDialog.jsx';
 import SaveTabDialog from './dialogs/SaveTabDialog.jsx';
 import { createReadAloud } from './features/readAloud.js';
+import { createOfflineReadAloud } from './features/offlineReadAloud.js';
+import { defaultVoiceForLang } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
@@ -220,6 +222,8 @@ function AppInner() {
   const activeTabRef = useRef(null);
   activeTabRef.current = activeTab;
   const readAloudRef = useRef(null);
+  const readAloudModeRef = useRef(null); // false = native Web Speech, true = offline Piper
+  const [ttsStatus, setTtsStatus] = useState('idle'); // offline synth state: idle | synth | playing | error
   // Set when the user manually navigates during read-aloud, so speech resyncs to the new spot.
   // NOT set on read-aloud's own boundary advances — that distinction is what stops each sentence
   // from being cancelled and re-spoken (the "reads every sentence twice" bug).
@@ -385,20 +389,36 @@ function AppInner() {
   }
 
   useEffect(() => {
-    if (!readAloudRef.current) {
-      readAloudRef.current = createReadAloud({
-        getWords: () => activeTabRef.current?.doc.words || [],
-        getIndex: () => activeTabRef.current?.settings.wordIndex || 0,
-        setIndex: ttsSetIndex,
-        getVoiceName: () => activeTabRef.current?.settings.annunciateVoice,
-        getRate: () => rateFromIndex(activeTabRef.current?.settings.annunciateRate || 0),
-        onEnd: () => setPlaying(false),
-      });
+    // Pick the read-aloud backend: offline Piper (real audio → survives screen lock) or the native
+    // Web Speech engine. Rebuild the driver when the mode flips.
+    const offline = !!state.global.offlineVoice;
+    if (!readAloudRef.current || readAloudModeRef.current !== offline) {
+      readAloudRef.current?.stop();
+      readAloudModeRef.current = offline;
+      readAloudRef.current = offline
+        ? createOfflineReadAloud({
+            getWords: () => activeTabRef.current?.doc.words || [],
+            getIndex: () => activeTabRef.current?.settings.wordIndex || 0,
+            setIndex: ttsSetIndex,
+            getVoiceId: () => state.global.offlineVoiceId || defaultVoiceForLang(state.global.language || 'en'),
+            getRate: () => rateFromIndex(activeTabRef.current?.settings.annunciateRate || 0),
+            onEnd: () => setPlaying(false),
+            onStatus: (s) => setTtsStatus(s),
+          })
+        : createReadAloud({
+            getWords: () => activeTabRef.current?.doc.words || [],
+            getIndex: () => activeTabRef.current?.settings.wordIndex || 0,
+            setIndex: ttsSetIndex,
+            getVoiceName: () => activeTabRef.current?.settings.annunciateVoice,
+            getRate: () => rateFromIndex(activeTabRef.current?.settings.annunciateRate || 0),
+            onEnd: () => setPlaying(false),
+          });
     }
     const on = playing && !!activeTab?.settings?.readAloud;
     if (on) {
       readAloudRef.current.start();
-      // Lock-screen controls + background keep-alive so listening survives the screen turning off.
+      // Lock-screen controls. Native mode needs the inaudible keep-alive tone; offline mode's real
+      // synthesized speech IS the session, so skip the tone there.
       startMediaSession(mediaMeta(), {
         onPlay: () => { if (!playingRef.current) playPauseRef.current?.(); },
         onPause: () => { if (playingRef.current) playPauseRef.current?.(); },
@@ -406,14 +426,23 @@ function AppInner() {
         onPrev: () => navRef.current?.('prevPara'),
         onSeekForward: () => navRef.current?.('nextLine'),
         onSeekBackward: () => navRef.current?.('prevLine'),
-      });
+      }, { keepAlive: !offline });
     } else {
       readAloudRef.current.stop();
       stopMediaSession();
+      setTtsStatus('idle');
     }
     return () => { readAloudRef.current?.stop(); stopMediaSession(); };
     // eslint-disable-next-line
-  }, [playing, activeTab?.settings?.readAloud, activeTab?.id]);
+  }, [playing, activeTab?.settings?.readAloud, activeTab?.id, state.global.offlineVoice]);
+
+  // Surface offline-voice synthesis state (the on-device model has a short delay before the first
+  // line of each fresh position — prefetch hides it after that).
+  useEffect(() => {
+    if (!state.global.offlineVoice) return;
+    if (ttsStatus === 'synth') setStatus('🗣 Preparing the offline voice…');
+    else if (ttsStatus === 'error') setStatus('Offline voice unavailable — download its model in Audio → Audio Settings.');
+  }, [ttsStatus, state.global.offlineVoice]);
 
   // Keep the lock-screen metadata current as reading moves between chapters (only when the
   // chapter label actually changes — TTS advances the word index constantly).

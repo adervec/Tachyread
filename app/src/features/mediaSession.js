@@ -40,6 +40,7 @@ function keepAliveWavUri(seconds = 3, sampleRate = 8000, freq = 45, amp = 0.008)
 let audio = null;
 let unlocked = false;
 let keepPlaying = false;
+let toneActive = false; // is the inaudible keep-alive tone the current session (native TTS mode)?
 
 function ensureAudio() {
   if (audio || typeof Audio === 'undefined') return audio;
@@ -53,7 +54,15 @@ function ensureAudio() {
 // Re-assert the keep-alive while read-aloud is playing (e.g. from the lock/visibility handler):
 // some browsers pause the element as the screen turns off — kick it back so the session holds.
 export function nudgeMediaKeepAlive() {
-  if (keepPlaying && audio && audio.paused) { try { audio.play().catch(() => {}); } catch { /* ignore */ } }
+  if (toneActive && audio && audio.paused) { try { audio.play().catch(() => {}); } catch { /* ignore */ } }
+}
+
+// The gesture-UNLOCKED <audio> element. Offline (Piper) read-aloud plays its synthesized speech
+// through this same element — since it was already unlocked on the first tap, playback works
+// without a fresh user gesture (the synth delay would otherwise let the activation expire), and a
+// real audio element playing real speech is exactly what survives an Android screen lock.
+export function getSpeechAudio() {
+  return ensureAudio();
 }
 
 // Arm the background keep-alive: prime the silent audio element on the first user gesture so its
@@ -87,11 +96,15 @@ function setMeta({ title, artist, album }) {
 }
 
 // handlers: { onPlay, onPause, onNext, onPrev, onSeekForward, onSeekBackward }
-export function startMediaSession(meta, handlers = {}) {
+// keepAlive: play the inaudible tone to hold the session. Skip it for offline (Piper) mode — there
+// the real synthesized speech plays through the same element and IS the session.
+export function startMediaSession(meta, handlers = {}, { keepAlive = true } = {}) {
   const a = ensureAudio();
   keepPlaying = true;
-  if (a) {
+  toneActive = keepAlive;
+  if (a && keepAlive) {
     try {
+      a.loop = true;
       a.currentTime = 0;
       const p = a.play();
       // If the element isn't unlocked yet (read-aloud started before any gesture registered),
@@ -118,7 +131,8 @@ export function updateMediaSession(meta) {
 
 export function stopMediaSession() {
   keepPlaying = false;
-  if (audio) { try { audio.pause(); } catch { /* ignore */ } }
+  if (audio && toneActive) { try { audio.pause(); } catch { /* ignore */ } }
+  toneActive = false;
   if (!('mediaSession' in navigator)) return;
   navigator.mediaSession.playbackState = 'none';
   for (const action of ['play', 'pause', 'stop', 'nexttrack', 'previoustrack', 'seekforward', 'seekbackward']) {

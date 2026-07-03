@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useVoices } from '../features/tts.js';
+import { ENGLISH_VOICES, defaultVoiceForLang, downloadVoice, isVoiceDownloaded, piperSupported } from '../features/piperTts.js';
 
 // Audio settings, reachable from the Audio menu: the read-aloud voice + rate (per tab), the
 // speak-along follow mode, and the global auto-stop timer. Ambient sound keeps its own dialog.
@@ -21,9 +22,76 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
     onPatch(p);
   }
 
+  // Offline (Piper) voice: which voice, whether its model is downloaded, download progress.
+  const offlineVoiceId = global.offlineVoiceId || defaultVoiceForLang(global.language || 'en');
+  const [downloaded, setDownloaded] = useState(null); // null = checking
+  const [dlPct, setDlPct] = useState(-1); // -1 = not downloading
+  useEffect(() => {
+    let alive = true;
+    if (!global.offlineVoice) { setDownloaded(null); return undefined; }
+    isVoiceDownloaded(offlineVoiceId).then((d) => { if (alive) setDownloaded(d); });
+    return () => { alive = false; };
+  }, [global.offlineVoice, offlineVoiceId]);
+
+  async function getModel() {
+    setDlPct(0);
+    try {
+      await downloadVoice(offlineVoiceId, (f) => setDlPct(Math.round(f * 100)));
+      setDownloaded(true);
+    } catch {
+      setDownloaded(false);
+    }
+    setDlPct(-1);
+  }
+
   return (
     <Dialog title="Audio Settings" onClose={onClose} width={540} buttons={<button onClick={onClose}>Close</button>}>
       <div className="field-section">Read aloud (TTS)</div>
+      {piperSupported() && (
+        <>
+          <Field label="Offline voice (plays when locked)">
+            <label className="inline-check" title="Use a neural voice that runs on your device and produces real audio — so read-aloud keeps playing with the screen off, unlike the browser's built-in voice which the phone suspends on lock.">
+              <input
+                type="checkbox"
+                checked={!!global.offlineVoice}
+                onChange={(e) => onPatchGlobal({ offlineVoice: e.target.checked })}
+              />
+              Neural voice, works with the screen locked (larger, one-time download)
+            </label>
+          </Field>
+          {global.offlineVoice && (
+            <>
+              <Field label="Offline voice model">
+                <select
+                  value={global.offlineVoiceId || ''}
+                  onChange={(e) => onPatchGlobal({ offlineVoiceId: e.target.value })}
+                >
+                  <option value="">Auto (matches document language)</option>
+                  {ENGLISH_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Model">
+                {dlPct >= 0 ? (
+                  <div className="imp-bar" style={{ maxWidth: 220 }} title={`Downloading ${dlPct}%`}>
+                    <div className="imp-fill" style={{ width: `${dlPct}%` }} />
+                  </div>
+                ) : downloaded ? (
+                  <span className="settings-note" style={{ margin: 0, color: '#2e9d4f' }}>✓ Downloaded — ready offline</span>
+                ) : (
+                  <button onClick={getModel}>⬇ Download voice (~20–30 MB, once)</button>
+                )}
+              </Field>
+              <p className="settings-note">
+                The neural voice model downloads once (from HuggingFace) and is cached on this device;
+                after that it works fully offline and keeps playing with the screen locked. Languages
+                without a neural voice fall back to English. Best on a device with a bit of horsepower —
+                synthesis runs on-device, so the first line has a short delay.
+              </p>
+            </>
+          )}
+        </>
+      )}
+      <div className="field-section">Read aloud (built-in voice)</div>
       <Field label={`Voice (${voices.length} available)`}>
         <select value={s.annunciateVoice || ''} onChange={(e) => patch({ annunciateVoice: e.target.value })}>
           <option value="">(default — matches your document language)</option>
