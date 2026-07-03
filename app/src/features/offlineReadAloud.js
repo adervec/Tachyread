@@ -1,85 +1,90 @@
-// Offline read-aloud driver: same interface as createReadAloud (start/stop/resync/isActive) but
-// backed by Piper (neural WASM TTS) instead of the native Web Speech engine. Each sentence-sized
-// chunk is synthesized to a real WAV and played through the app's gesture-unlocked <audio> element
-// — which keeps playing with the screen locked and drives the lock-screen media controls, unlike
-// native speechSynthesis (which Android suspends on lock). The next chunk is synthesized while the
-// current one plays, so playback is near-gapless after the first.
+// Offline read-aloud driver — same interface as createReadAloud (start/stop/resync/isActive) but
+// backed by the audiobook store + Piper (neural WASM TTS). It plays LINE by line:
+//   • if the line has a stored clip (a mic recording OR a pre-generated Piper clip) → play it;
+//   • otherwise synthesize it with Piper on the fly AND cache it into the store, so the next play
+//     (and, crucially, locked-screen playback) is a pure file play with no synthesis to stall.
+// Everything plays through the app's gesture-unlocked <audio> element (real media → survives an
+// Android screen lock and drives the lock-screen controls). The next line is prepared while the
+// current one plays, so playback is near-gapless.
 
-import { synthToUrl } from './piperTts.js';
+import { synthToBlob } from './piperTts.js';
 import { getSpeechAudio } from './mediaSession.js';
+import { getAudioClip, saveAudioClip } from '../state/storage.js';
 
-const MAX_CHUNK_WORDS = 40;
-function chunkEnd(words, start) {
-  const limit = Math.min(words.length, start + MAX_CHUNK_WORDS);
-  for (let i = start; i < limit; i++) {
-    const last = words[i][words[i].length - 1];
-    if (last === '.' || last === '!' || last === '?') return i + 1;
-  }
-  return limit;
-}
-function textFor(words, start, end) {
-  let t = '';
-  for (let i = start; i < end; i++) t += words[i] + (i < end - 1 ? ' ' : '');
-  return t;
+// Rough clip length from a WAV blob (for the manifest display only; playback uses the real audio).
+function estMs(blob) {
+  return Math.max(200, Math.round(((blob.size - 44) / (22050 * 2)) * 1000));
 }
 
-// getVoiceId() → Piper voice id; onStatus('synth'|'playing'|'error'|'idle') for a UI indicator.
-export function createOfflineReadAloud({ getWords, getIndex, setIndex, getVoiceId, getRate, onEnd, onStatus }) {
+function nextNonEmptyLine(lines, from) {
+  for (let i = from; i < lines.length; i++) if (lines[i] && !lines[i].isEmpty && (lines[i].text || '').trim()) return i;
+  return lines.length;
+}
+
+// Resolve a playable object URL for a line: stored clip first, else synth + cache. Returns null for
+// an empty/blank line. Throws only on a hard synth failure.
+async function clipUrl(doc, li, voiceId) {
+  const stored = await getAudioClip(doc.contentChecksum, li);
+  if (stored?.blob) return URL.createObjectURL(stored.blob);
+  const text = (doc.lines[li]?.text || '').trim();
+  if (!text) return null;
+  const blob = await synthToBlob(text, voiceId);
+  saveAudioClip(doc.contentChecksum, li, blob, estMs(blob), { source: 'tts', voiceId }).catch(() => {});
+  return URL.createObjectURL(blob);
+}
+
+// getDoc() → the active doc ({words, lines, wordToLine, contentChecksum}).
+export function createOfflineReadAloud({ getDoc, getIndex, setIndex, getVoiceId, getRate, onEnd, onStatus }) {
   let active = false;
   let gen = 0;
-  let prefetch = null; // { start, promise } for the next chunk
+  let prefetch = null; // { li, promise }
   const urls = new Set();
+  const revoke = (u) => { if (u) { try { URL.revokeObjectURL(u); } catch { /* ignore */ } urls.delete(u); } };
 
-  function revoke(u) { if (u) { try { URL.revokeObjectURL(u); } catch { /* ignore */ } urls.delete(u); } }
-
-  async function playChunk(start) {
+  async function playLine(li) {
     if (!active) return;
-    const words = getWords();
-    if (!words.length || start >= words.length - 1) { onStatus?.('idle'); stop(); onEnd?.(); return; }
-    const end = chunkEnd(words, start);
+    const doc = getDoc();
+    const lines = doc?.lines || [];
+    li = nextNonEmptyLine(lines, li);
+    if (li >= lines.length) { onStatus?.('idle'); stop(); onEnd?.(); return; }
     const voiceId = getVoiceId();
     const myGen = gen;
 
     let url;
     try {
-      if (prefetch && prefetch.start === start) { url = await prefetch.promise; }
-      else { onStatus?.('synth'); url = await synthToUrl(textFor(words, start, end), voiceId); urls.add(url); }
+      if (prefetch && prefetch.li === li) { url = await prefetch.promise; }
+      else { onStatus?.('synth'); url = await clipUrl(doc, li, voiceId); }
     } catch {
       onStatus?.('error');
-      if (myGen === gen && active) { const n = Math.min(words.length - 1, end); setIndex(n); playChunk(n); }
+      if (myGen === gen && active) playLine(li + 1);
       return;
     }
     prefetch = null;
     if (myGen !== gen || !active) { revoke(url); return; }
+    if (!url) { playLine(li + 1); return; } // blank line
 
+    urls.add(url);
     const a = getSpeechAudio();
     if (!a) { onStatus?.('error'); return; }
     a.loop = false;
     a.src = url;
     a.playbackRate = getRate?.() || 1;
-    setIndex(start); // move the reading position to this chunk's first word when it begins
-    a.onended = () => {
+    setIndex(lines[li].startWordIndex); // move the reading position to this line
+    const advance = () => {
       if (myGen !== gen || !active) return;
       revoke(url);
-      const n = Math.min(words.length - 1, end);
-      setIndex(n);
-      playChunk(n);
+      playLine(li + 1);
     };
-    a.onerror = () => {
-      if (myGen !== gen || !active) return;
-      revoke(url);
-      const n = Math.min(words.length - 1, end);
-      setIndex(n);
-      playChunk(n);
-    };
+    a.onended = advance;
+    a.onerror = advance;
     onStatus?.('playing');
     try { await a.play(); } catch { /* element is gesture-unlocked; ignore transient */ }
 
-    // Prefetch the following chunk while this one plays.
-    if (end < words.length - 1 && myGen === gen && active) {
-      const ns = end;
-      const promise = synthToUrl(textFor(words, ns, chunkEnd(words, ns)), voiceId).then((u) => { urls.add(u); return u; }).catch(() => null);
-      prefetch = { start: ns, promise };
+    // Prepare the next line while this one plays.
+    const ni = nextNonEmptyLine(lines, li + 1);
+    if (ni < lines.length && myGen === gen && active) {
+      const promise = clipUrl(doc, ni, voiceId).then((u) => { if (u) urls.add(u); return u; }).catch(() => null);
+      prefetch = { li: ni, promise };
     }
   }
 
@@ -87,7 +92,9 @@ export function createOfflineReadAloud({ getWords, getIndex, setIndex, getVoiceI
     if (active) return;
     active = true;
     gen++;
-    playChunk(getIndex());
+    const doc = getDoc();
+    const li = doc?.wordToLine?.[getIndex()] ?? 0;
+    playLine(li);
   }
   function stop() {
     active = false;
@@ -103,7 +110,8 @@ export function createOfflineReadAloud({ getWords, getIndex, setIndex, getVoiceI
     const a = getSpeechAudio();
     if (a) { try { a.pause(); } catch { /* ignore */ } }
     prefetch = null;
-    playChunk(getIndex());
+    const doc = getDoc();
+    playLine(doc?.wordToLine?.[getIndex()] ?? 0);
   }
 
   return { start, stop, resync, isActive: () => active };

@@ -41,11 +41,15 @@ export function piperSupported() {
   return typeof navigator !== 'undefined' && !!navigator.storage?.getDirectory && typeof WebAssembly !== 'undefined';
 }
 
+// Synthesize text → a WAV Blob (for saving into the audiobook store).
+export async function synthToBlob(text, voiceId) {
+  const tts = await lib();
+  return tts.predict({ text: text.trim(), voiceId });
+}
+
 // Synthesize text → a WAV object URL (caller revokes it). Downloads the model on first use.
 export async function synthToUrl(text, voiceId) {
-  const tts = await lib();
-  const blob = await tts.predict({ text: text.trim(), voiceId });
-  return URL.createObjectURL(blob);
+  return URL.createObjectURL(await synthToBlob(text, voiceId));
 }
 
 // Pre-download a voice model into OPFS. onProgress(fraction 0..1) reports the download.

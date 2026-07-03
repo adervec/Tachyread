@@ -243,14 +243,14 @@ export async function clearFocusSessions() {
   await db.clear('focusSessions');
 }
 
-// Audiobook clips
-export async function saveAudioClip(checksum, lineIndex, blob, durationMs) {
+// Audiobook clips. `source` marks how the clip was made: 'mic' (recorded voice) or 'tts' (Piper);
+// `voiceId` records which Piper voice, so a re-generate can tell whether a clip is up to date.
+export async function saveAudioClip(checksum, lineIndex, blob, durationMs, meta = {}) {
   const db = await getDB();
   const key = `${checksum}/${String(lineIndex).padStart(5, '0')}`;
   await db.put('audiobook', { blob, durationMs, createdAt: Date.now() }, key);
-  // Update manifest
   let manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
-  manifest.lines[lineIndex] = { durationMs, createdAt: Date.now() };
+  manifest.lines[lineIndex] = { durationMs, createdAt: Date.now(), source: meta.source || 'mic', voiceId: meta.voiceId || null };
   await db.put('audiobookManifest', manifest, checksum);
 }
 
