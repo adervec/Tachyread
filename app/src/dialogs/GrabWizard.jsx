@@ -225,6 +225,7 @@ export default function GrabWizard({ onClose }) {
   const autoRef = useRef({ running: false });
   const [autoRunning, setAutoRunning] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
+  const [ocrProg, setOcrProg] = useState(null); // batch OCR progress: { done, total }
   const [autoOcr, setAutoOcr] = useState(true); // recognize each page in the background the moment it's captured
 
   // Advanced "watch" mode — continuously grab each settled new page; skip blanks/loading screens.
@@ -737,6 +738,7 @@ export default function GrabWizard({ onClose }) {
       const seg = segmentsRef.current.find((s) => s.id === ids[i]);
       if (!seg) continue;
       patchSeg(seg.id, { ocrStatus: 'doing' });
+      setOcrProg({ done: i, total: ids.length });
       setMsg(`Recognizing page ${i + 1} of ${ids.length}… (first run downloads the OCR engine)`);
       try {
         const { text, droppedImages } = await recognizeImageEx(seg.image, { regions: segRegions(seg), config: segConfig(seg), profile: activeProfile, lang: ocrLang, skipImages: excludeImages });
@@ -748,6 +750,7 @@ export default function GrabWizard({ onClose }) {
       }
     }
     setOcrBusy(false);
+    setOcrProg(null);
     setMsg('Recognition complete — review and edit the text, then open it.');
   }
   // Re-OCR everything (e.g. after changing OCR settings) — overwrites existing text.
@@ -965,6 +968,11 @@ export default function GrabWizard({ onClose }) {
       }
     >
       {msg && <p className="settings-note">{msg}</p>}
+      {ocrBusy && ocrProg && (
+        <div className="imp-bar" title={`OCR ${ocrProg.done} / ${ocrProg.total} pages`} style={{ marginBottom: 8 }}>
+          <div className="imp-fill" style={{ width: `${(ocrProg.done / Math.max(1, ocrProg.total)) * 100}%` }} />
+        </div>
+      )}
 
       {step === 'source' && (
         <div className="grab-source">
