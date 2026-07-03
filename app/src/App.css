@@ -2497,6 +2497,11 @@
     border-bottom: 1px solid var(--divider);
   }
   .goal-row { flex-wrap: wrap; row-gap: 4px; }
+  /* On a short phone the fully-expanded controls (transport + fine steps + mode grid + goal) can be
+     taller than the space under the chrome, which pushed the status bar off the bottom of the
+     screen. Cap the dock and let it scroll internally so the status bar (a separate grid row) always
+     stays visible; the collapsed dock is short and never triggers the scroll. */
+  .controls-dock { max-height: 62dvh; overflow-y: auto; }
   /* Sleeker mobile controls: the "More"-revealed mode toggles become a tidy 2-column grid of
      bordered chips (label left, control right) instead of a ragged wrap; the goal row and speed
      block tighten so the dock stays short. */

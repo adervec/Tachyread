@@ -397,7 +397,7 @@ function AppInner() {
       readAloudModeRef.current = offline;
       readAloudRef.current = offline
         ? createOfflineReadAloud({
-            getWords: () => activeTabRef.current?.doc.words || [],
+            getDoc: () => activeTabRef.current?.doc,
             getIndex: () => activeTabRef.current?.settings.wordIndex || 0,
             setIndex: ttsSetIndex,
             getVoiceId: () => state.global.offlineVoiceId || defaultVoiceForLang(state.global.language || 'en'),
