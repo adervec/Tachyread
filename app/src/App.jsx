@@ -38,7 +38,7 @@ import IndexPane from './components/IndexPane.jsx';
 import { buildProperNamesFromList } from './document/resourceWizard.js';
 import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
 import { createModeDetector } from './engine/readingMode.js';
-import { startMediaSession, updateMediaSession, stopMediaSession, armMediaKeepAlive } from './features/mediaSession.js';
+import { startMediaSession, updateMediaSession, stopMediaSession, armMediaKeepAlive, nudgeMediaKeepAlive } from './features/mediaSession.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import AdaptiveProbe from './components/AdaptiveProbe.jsx';
 import { computeSurprisalWeights } from './engine/surprisal.js';
@@ -272,6 +272,10 @@ function AppInner() {
       if (hidden && !listening) {
         setPlaying(false);
         cancelSpeech();
+      } else if (hidden && listening) {
+        // Screen locking / tab hiding tends to pause the keep-alive audio — re-kick it so the
+        // audio session (and thus background speech) survives.
+        nudgeMediaKeepAlive();
       }
       // While listening, keep crediting the words TTS reads out — they're being consumed even
       // with the screen off. Otherwise pause time accounting for the backgrounded tab.
