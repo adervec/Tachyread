@@ -27,24 +27,35 @@ function silentWavUri(seconds = 1, sampleRate = 8000) {
 }
 
 let audio = null;
+let unlocked = false;
+let keepPlaying = false;
+
 function ensureAudio() {
   if (audio || typeof Audio === 'undefined') return audio;
   audio = new Audio(silentWavUri());
   audio.loop = true;
   audio.setAttribute('aria-hidden', 'true');
-  // Autoplay policy: prime the element on the first user gesture so later play() calls (which
-  // happen inside a React effect, not directly in a gesture) are allowed.
-  const unlock = () => {
-    audio.play().then(() => { if (!keepPlaying) audio.pause(); }).catch(() => {});
-    window.removeEventListener('pointerdown', unlock);
-    window.removeEventListener('keydown', unlock);
-  };
-  window.addEventListener('pointerdown', unlock, { once: true });
-  window.addEventListener('keydown', unlock, { once: true });
   return audio;
 }
 
-let keepPlaying = false;
+// Arm the background keep-alive: prime the silent audio element on the first user gesture so its
+// later play() calls (which happen inside a React effect, NOT directly in a gesture) are allowed
+// by the autoplay policy. MUST be called eagerly (app mount) — if we wait until read-aloud starts,
+// the priming play() runs after the tap's gesture has ended and is rejected, so the keep-alive
+// never holds the page alive when the screen locks. Idempotent.
+export function armMediaKeepAlive() {
+  const a = ensureAudio();
+  if (!a || unlocked) return;
+  const unlock = () => {
+    a.play().then(() => { unlocked = true; if (!keepPlaying) a.pause(); }).catch(() => {});
+    window.removeEventListener('pointerdown', unlock);
+    window.removeEventListener('keydown', unlock);
+    window.removeEventListener('touchend', unlock);
+  };
+  window.addEventListener('pointerdown', unlock, { once: true });
+  window.addEventListener('keydown', unlock, { once: true });
+  window.addEventListener('touchend', unlock, { once: true });
+}
 
 export function mediaSessionSupported() {
   return typeof navigator !== 'undefined' && 'mediaSession' in navigator;
@@ -61,7 +72,15 @@ function setMeta({ title, artist, album }) {
 export function startMediaSession(meta, handlers = {}) {
   const a = ensureAudio();
   keepPlaying = true;
-  if (a) { try { a.currentTime = 0; a.play().catch(() => {}); } catch { /* ignore */ } }
+  if (a) {
+    try {
+      a.currentTime = 0;
+      const p = a.play();
+      // If the element isn't unlocked yet (read-aloud started before any gesture registered),
+      // retry once on the next gesture so the keep-alive still comes up.
+      if (p && p.catch) p.catch(() => { armMediaKeepAlive(); });
+    } catch { /* ignore */ }
+  }
   if (!('mediaSession' in navigator)) return;
   setMeta(meta);
   navigator.mediaSession.playbackState = 'playing';

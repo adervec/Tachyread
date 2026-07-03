@@ -5,6 +5,7 @@ import TabBar from './components/TabBar.jsx';
 import RsvpPane from './components/RsvpPane.jsx';
 import DashboardPane from './components/DashboardPane.jsx';
 import FloatingFace from './components/FloatingFace.jsx';
+import FloatingStats from './components/FloatingStats.jsx';
 import SourcePane from './components/SourcePane.jsx';
 import LinePane from './components/LinePane.jsx';
 import ControlsBar from './components/ControlsBar.jsx';
@@ -37,7 +38,7 @@ import IndexPane from './components/IndexPane.jsx';
 import { buildProperNamesFromList } from './document/resourceWizard.js';
 import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
 import { createModeDetector } from './engine/readingMode.js';
-import { startMediaSession, updateMediaSession, stopMediaSession } from './features/mediaSession.js';
+import { startMediaSession, updateMediaSession, stopMediaSession, armMediaKeepAlive } from './features/mediaSession.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import AdaptiveProbe from './components/AdaptiveProbe.jsx';
 import { computeSurprisalWeights } from './engine/surprisal.js';
@@ -127,13 +128,18 @@ function AppInner() {
   const docLang = getLanguage(state.global.language);
   useEffect(() => { setPreferredLanguage(docLang.bcp); }, [docLang.bcp]);
 
+  // Arm the read-aloud background keep-alive early so the silent audio unlocks on the FIRST tap —
+  // otherwise it can't play when the screen locks. Harmless if read-aloud is never used.
+  useEffect(() => { armMediaKeepAlive(); }, []);
+
   // Live reading-mode detection: every advancement notes its input source; the chip in the
   // controls bar shows how the app currently thinks you're reading (see engine/readingMode.js).
   const modeDetRef = useRef(null);
   if (!modeDetRef.current) modeDetRef.current = createModeDetector();
   const [readingMode, setReadingMode] = useState('idle');
-  // Draggable mobile face position (seeded from the last-saved spot; persisted on drop).
+  // Draggable mobile face / stats positions (seeded from the last-saved spot; persisted on drop).
   const [facePos, setFacePos] = useState(() => state.global.mobileFacePos || null);
+  const [statsPos, setStatsPos] = useState(() => state.global.mobileStatsPos || null);
   // Live scroll-mode flag for closures (Space keydown) that would otherwise read a stale value.
   const scrollAdvancesRef = useRef(state.global.scrollAdvances);
   scrollAdvancesRef.current = state.global.scrollAdvances;
@@ -1656,7 +1662,7 @@ function AppInner() {
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showDash, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances]);
+  }, [activeTab, state.showToc, state.showStats, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances]);
 
   const dialog = state.dialog;
 
@@ -1808,11 +1814,11 @@ function AppInner() {
           )
         ) : (
         <div className="dock-row">
-        {activeTab && state.showDash && (
+        {/* Desktop only: faces and/or stats sit in the dock. On mobile they both float as separate
+            draggable popups (FloatingFace / FloatingStats), so the dock stays out of the way. */}
+        {!isCompact && activeTab && (activeTab.settings.showEyes || state.showStats) && (
           <div className="dock-dash">
-            {/* On mobile the face floats as a draggable overlay (see FloatingFace); the dock keeps
-                just the stats. Desktop keeps the face in the dock. */}
-            <DashboardPane tab={activeTab} dock showFaces={!isCompact} />
+            <DashboardPane tab={activeTab} dock showFaces={!!activeTab.settings.showEyes} showStats={state.showStats} />
           </div>
         )}
         {activeTab ? (
@@ -2130,8 +2136,9 @@ function AppInner() {
         </div>
       )}
 
-      {/* Mobile: the reader face floats as a draggable, transparency-adjustable overlay. */}
-      {isCompact && activeTab && state.showDash && !!activeTab.settings.showEyes && (
+      {/* Mobile: the reader face and the stats each float as separate draggable, transparency-
+          adjustable popups. Faces are per-tab (showEyes); stats are the app-level Stats toggle. */}
+      {isCompact && activeTab && !!activeTab.settings.showEyes && (
         <FloatingFace
           tab={activeTab}
           pos={facePos}
@@ -2139,10 +2146,18 @@ function AppInner() {
           onDrop={(p) => p && updateGlobal({ mobileFacePos: p })}
         />
       )}
+      {isCompact && activeTab && state.showStats && (
+        <FloatingStats
+          tab={activeTab}
+          pos={statsPos}
+          onMove={setStatsPos}
+          onDrop={(p) => p && updateGlobal({ mobileStatsPos: p })}
+        />
+      )}
 
       {/* Single shared WebGL context for every 3D reader face (drei <View> portals here).
           Mounted only while faces are actually shown so there's no idle render loop. */}
-      {state.showDash && !!activeTab?.settings?.showEyes && <FaceStage />}
+      {!!activeTab?.settings?.showEyes && <FaceStage />}
     </div>
   );
 }

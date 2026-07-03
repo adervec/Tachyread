@@ -1632,6 +1632,25 @@
 }
 .floating-face:active { cursor: grabbing; }
 .floating-face .rsvp-faces { display: flex; gap: 2px; }
+
+/* Draggable floating reading-stats popup (mobile): the numbers, movable + transparency-adjustable. */
+.floating-stats {
+  position: fixed;
+  z-index: 139;
+  touch-action: none;
+  cursor: grab;
+  max-width: 60vw;
+  padding: 8px 10px;
+  background: var(--menu-bg);
+  border: 1px solid var(--divider);
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  transition: opacity 150ms ease;
+}
+.floating-stats:active { cursor: grabbing; }
+.floating-stats .dash-stats { gap: 4px; }
+.floating-stats .dash-num { font-size: 20px; }
+.floating-stats .dash-stat-hero .dash-num { font-size: 26px; }
 .mode-block {
   display: flex;
   gap: 12px;

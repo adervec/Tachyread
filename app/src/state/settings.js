@@ -35,6 +35,7 @@ export function defaultFileSettings() {
     lineSpacing: 1.5, // Lines-pane line-height multiplier
     sourceChecks: {}, // ticked checkboxes in html/markdown source sections: { section: [box…] }
     faceOpacity: 0.9, // transparency of the floating reader face on mobile (0.15–1)
+    statsOpacity: 0.92, // transparency of the floating stats popup on mobile (0.2–1)
     bionicFont: false,
     paragraphBreakSecs: 0,
     lineBreakPauseMs: 0,
@@ -235,6 +236,7 @@ export function defaultGlobalSettings() {
     handCalib: null,
     handGestureSet: null,
     mobileFacePos: null, // {x,y} of the draggable floating face on mobile (null = default corner)
+    mobileStatsPos: null, // {x,y} of the draggable floating stats popup on mobile
     // Auto-minimize the controls dock while playing on compact screens, for more text room.
     autoMinimizeControls: false,
     // Pause non-TTS playback when the reading text scrolls off-screen (you can't read what you can't

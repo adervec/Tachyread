@@ -380,9 +380,23 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           <span style={{ fontSize: 12, color: 'var(--status-fg)' }}>{Math.round((s.faceOpacity ?? 0.9) * 100)}%</span>
         </div>
       </Field>
+      <Field label="Mobile stats transparency">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="range"
+            min={0.2}
+            max={1}
+            step={0.05}
+            value={s.statsOpacity ?? 0.92}
+            onChange={(e) => patch({ statsOpacity: Number(e.target.value) })}
+          />
+          <span style={{ fontSize: 12, color: 'var(--status-fg)' }}>{Math.round((s.statsOpacity ?? 0.92) * 100)}%</span>
+        </div>
+      </Field>
       <p className="settings-note" style={{ margin: '2px 0 0' }}>
-        On phones the face floats as a draggable overlay — drag it anywhere over the page; this sets
-        how see-through it is.
+        On phones the face and the reading stats each float as separate draggable popups — drag
+        them anywhere over the page; these set how see-through each is. Toggle them from the menu’s
+        Faces / Stats panel chips.
       </p>
 
       {/* Reading-pointer settings archived — the feature isn't useful right now. Re-enable by
