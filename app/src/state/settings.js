@@ -224,6 +224,10 @@ export function defaultGlobalSettings() {
     showPerfMeter: true,
     // Read-aloud auto-stop: pause speech after this many minutes of playback (0 = never).
     ttsAutoStopMin: 0,
+    // Offline neural voice (Piper). When on, read-aloud synthesizes real audio (plays with the
+    // screen locked, unlike native TTS which Android suspends). offlineVoiceId '' = auto by language.
+    offlineVoice: false,
+    offlineVoiceId: '',
     // On a typing run's end, show a grade + final statement and play a grade-matched sound.
     typingEndFanfare: true,
     // Touch gesture navigation (off by default — it can interfere with text selection/scroll):
