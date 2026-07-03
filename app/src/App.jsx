@@ -4,6 +4,7 @@ import MenuBar from './components/MenuBar.jsx';
 import TabBar from './components/TabBar.jsx';
 import RsvpPane from './components/RsvpPane.jsx';
 import DashboardPane from './components/DashboardPane.jsx';
+import FloatingFace from './components/FloatingFace.jsx';
 import SourcePane from './components/SourcePane.jsx';
 import LinePane from './components/LinePane.jsx';
 import ControlsBar from './components/ControlsBar.jsx';
@@ -131,6 +132,11 @@ function AppInner() {
   const modeDetRef = useRef(null);
   if (!modeDetRef.current) modeDetRef.current = createModeDetector();
   const [readingMode, setReadingMode] = useState('idle');
+  // Draggable mobile face position (seeded from the last-saved spot; persisted on drop).
+  const [facePos, setFacePos] = useState(() => state.global.mobileFacePos || null);
+  // Live scroll-mode flag for closures (Space keydown) that would otherwise read a stale value.
+  const scrollAdvancesRef = useRef(state.global.scrollAdvances);
+  scrollAdvancesRef.current = state.global.scrollAdvances;
 
   // When the active tab is a lazy placeholder (e.g. selected via a restored tab strip, or auto-
   // selected after closing another tab), build its document on demand.
@@ -795,6 +801,13 @@ function AppInner() {
 
   function playPause() {
     if (!activeTab) return;
+    // Scroll-to-read owns the pace — auto-play would fight the scroll. Block starting playback
+    // (the play button is disabled too); pausing an already-running player still works. Read from a
+    // ref: the document keydown (Space) handler holds a stale closure that predates the mode flip.
+    if (scrollAdvancesRef.current && !playing) {
+      setStatus('📜 Scroll-to-read is on — scroll the Lines pane to read (auto-play is off).');
+      return;
+    }
     autoPausedRef.current = false; // manual control overrides any auto-pause memory
     if (playing) {
       engineRef.current.pause();
@@ -806,6 +819,15 @@ function AppInner() {
       setPlaying(true);
     }
   }
+  // Turning on scroll-to-read while playing stops the player — the two paces can't coexist.
+  useEffect(() => {
+    if (state.global.scrollAdvances && playing) {
+      engineRef.current.pause();
+      setPlaying(false);
+      cancelSpeech();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.global.scrollAdvances]);
   const playPauseRef = useRef(null);
   playPauseRef.current = playPause;
   const navRef = useRef(null);
@@ -1776,7 +1798,11 @@ function AppInner() {
         {controlsCollapsed ? (
           activeTab && (
             <div className="dock-mini">
-              <button className="play-btn-mini" title="Play / Pause (Space)" onClick={playPause}>{playing ? '❚❚' : '▶'}</button>
+              {state.global.scrollAdvances ? (
+                <button className="play-btn-mini scroll-disabled" disabled title="Scroll-to-read is on — auto-play off">📜</button>
+              ) : (
+                <button className="play-btn-mini" title="Play / Pause (Space)" onClick={playPause}>{playing ? '❚❚' : '▶'}</button>
+              )}
               <span className="dock-mini-meta">{activeTab.settings.wordIndex + 1} / {activeTab.doc.words.length}</span>
             </div>
           )
@@ -1784,7 +1810,9 @@ function AppInner() {
         <div className="dock-row">
         {activeTab && state.showDash && (
           <div className="dock-dash">
-            <DashboardPane tab={activeTab} dock />
+            {/* On mobile the face floats as a draggable overlay (see FloatingFace); the dock keeps
+                just the stats. Desktop keeps the face in the dock. */}
+            <DashboardPane tab={activeTab} dock showFaces={!isCompact} />
           </div>
         )}
         {activeTab ? (
@@ -2100,6 +2128,16 @@ function AppInner() {
             <button onClick={(e) => { e.stopPropagation(); dismissAwayAlarm(); }}>Dismiss</button>
           </div>
         </div>
+      )}
+
+      {/* Mobile: the reader face floats as a draggable, transparency-adjustable overlay. */}
+      {isCompact && activeTab && state.showDash && !!activeTab.settings.showEyes && (
+        <FloatingFace
+          tab={activeTab}
+          pos={facePos}
+          onMove={setFacePos}
+          onDrop={(p) => p && updateGlobal({ mobileFacePos: p })}
+        />
       )}
 
       {/* Single shared WebGL context for every 3D reader face (drei <View> portals here).

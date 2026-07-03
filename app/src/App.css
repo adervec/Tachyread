@@ -1614,6 +1614,24 @@
   font-weight: bold;
   margin: 0 8px;
 }
+/* Scroll-to-read: play is disabled (scrolling drives the pace) and shows a scroll glyph. */
+.play-btn.scroll-disabled, .play-btn-mini.scroll-disabled {
+  opacity: 0.7;
+  cursor: default;
+  color: var(--status-fg);
+}
+
+/* Draggable floating reader face (mobile): sits over the reading area, transparency from settings. */
+.floating-face {
+  position: fixed;
+  z-index: 140;
+  touch-action: none; /* pointer-drag owns the gesture (no scroll/zoom hijack) */
+  cursor: grab;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+  transition: opacity 150ms ease;
+}
+.floating-face:active { cursor: grabbing; }
+.floating-face .rsvp-faces { display: flex; gap: 2px; }
 .mode-block {
   display: flex;
   gap: 12px;
@@ -1626,12 +1644,17 @@
 .mode-block .mode-pair { display: flex; align-items: center; gap: 4px; }
 .mode-block button { font-size: 11px; padding: 3px 8px; }
 
-/* Compact playback row: the "⋯ More" disclosure hides the secondary controls (word/paragraph steps,
-   speed unit, mode toggles, goal) so the default mobile bar is just WPM + page/line stepping + play.
-   Desktop never receives .compact, so it is unaffected. */
-.ctrl-more { display: none; font-size: 12px; padding: 4px 12px; white-space: nowrap; }
-.controls-bar.compact .ctrl-more { display: inline-flex; align-items: center; }
-.controls-bar.compact:not(.more-open) .pb-2nd,
+/* Compact playback: a fixed transport bar (page/line + play, symmetric) with a chevron that
+   expands the slide-in; the finer steps appear as their own aligned row. The chevron replaces the
+   old "⋯ More" text button. Desktop never receives .compact, so it is unaffected. */
+.compact-pb { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
+.pb-transport, .pb-fine { display: flex; align-items: center; justify-content: center; gap: 5px; flex-wrap: nowrap; }
+.pb-toggle {
+  width: 40px; height: 40px; padding: 0; margin-left: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 15px; color: var(--status-fg);
+}
+.pb-toggle.open { color: var(--toggle-active-bg); }
 .controls-bar.compact:not(.more-open) .wpm-block select,
 .controls-bar.compact:not(.more-open) .mode-block,
 .controls-bar.compact:not(.more-open) .goal-row,
