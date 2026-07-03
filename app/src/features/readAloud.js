@@ -25,11 +25,14 @@ export function createReadAloud({ getWords, getIndex, setIndex, getVoiceName, ge
   const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
   let active = false;
   let gen = 0; // bumped on stop/resync so stale utterance callbacks are ignored
+  let keepAlive = null; // periodic resume() — Chrome pauses speech when backgrounded/locked
 
-  function speakChunk() {
+  // start is the word index to speak from. It is threaded explicitly through the onend/onerror
+  // chain — NOT re-read from getIndex() — because getIndex() reads React state, which lags the
+  // setIndex() we just dispatched; re-reading it would restart the same chunk and speak it twice.
+  function speakChunk(start) {
     if (!active || !synth) return;
     const words = getWords();
-    const start = getIndex();
     if (!words.length || start >= words.length - 1) {
       stop();
       onEnd?.();
@@ -65,14 +68,16 @@ export function createReadAloud({ getWords, getIndex, setIndex, getVoiceName, ge
     };
     u.onend = () => {
       if (myGen !== gen || !active) return;
-      setIndex(Math.min(words.length - 1, end)); // step to the next chunk's first word
-      speakChunk();
+      const next = Math.min(words.length - 1, end); // first word of the next chunk
+      setIndex(next);
+      speakChunk(next);
     };
     u.onerror = (ev) => {
       if (myGen !== gen || !active) return;
       if (ev?.error === 'interrupted' || ev?.error === 'canceled') return;
-      setIndex(Math.min(words.length - 1, end));
-      speakChunk();
+      const next = Math.min(words.length - 1, end);
+      setIndex(next);
+      speakChunk(next);
     };
 
     try {
@@ -86,11 +91,17 @@ export function createReadAloud({ getWords, getIndex, setIndex, getVoiceName, ge
   function start() {
     if (!synth || active) return;
     active = true;
-    speakChunk();
+    // resume() is a no-op while actively speaking, but revives speech the OS/Chrome paused when the
+    // page was backgrounded — paired with the silent-audio keep-alive that stops the page freezing.
+    clearInterval(keepAlive);
+    keepAlive = setInterval(() => { try { if (active && synth.paused) synth.resume(); } catch { /* ignore */ } }, 5000);
+    speakChunk(getIndex()); // fresh read: start() runs post-render, so getIndex() is current here
   }
   function stop() {
     active = false;
     gen++;
+    clearInterval(keepAlive);
+    keepAlive = null;
     try {
       synth?.cancel();
     } catch {
@@ -106,7 +117,7 @@ export function createReadAloud({ getWords, getIndex, setIndex, getVoiceName, ge
     } catch {
       /* noop */
     }
-    speakChunk();
+    speakChunk(getIndex()); // resync fires after a manual jump committed — getIndex() is the new spot
   }
 
   return { start, stop, resync, isActive: () => active };
