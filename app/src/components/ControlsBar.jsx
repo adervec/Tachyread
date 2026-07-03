@@ -38,6 +38,30 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
   const lastContent = lastCountableWord(totalWords, skipRanges);
   const atEnd = totalWords > 0 && (idx >= lastContent || coverage >= 99.5);
 
+  // One nav button, so the desktop (single interleaved row) and mobile (transport + fine rows)
+  // layouts share button definitions instead of duplicating them.
+  const navBtn = (title, onClick, label) => (
+    <button className="ctrl-btn" title={title} onClick={onClick}>{label}</button>
+  );
+  // Scroll-to-read drives the pace itself, so auto-play is disabled and the button shows a scroll.
+  const scrollMode = !!state.global.scrollAdvances;
+  const playBtn = scrollMode ? (
+    <button className="play-btn scroll-disabled" disabled title="Auto-play is off in scroll-to-read mode — scroll the Lines pane to read">📜</button>
+  ) : (
+    <button className="play-btn" title="Play / Pause (Space)" onClick={onPlayPause}>{playing ? '❚❚' : '▶'}</button>
+  );
+  const B = {
+    restart: () => navBtn('Restart (Home)', onRestart, '|<'),
+    pageUp: () => navBtn('Page up — current line jumps to the top visible line (PgUp)', onPageUp, '⇞'),
+    prevPara: () => navBtn('Previous paragraph (Ctrl+Up)', onPrevPara, '⇈'),
+    prevLine: () => navBtn('Previous line (Up)', onPrevLine, '↑'),
+    prevWord: () => navBtn('Previous word (Left)', onPrevWord, '‹'),
+    nextWord: () => navBtn('Next word (Right)', onNextWord, '›'),
+    nextLine: () => navBtn('Next line (Down)', onNextLine, '↓'),
+    nextPara: () => navBtn('Next paragraph (Ctrl+Down)', onNextPara, '⇊'),
+    pageDown: () => navBtn('Page down — current line jumps to the bottom visible line (PgDn)', onPageDown, '⇟'),
+  };
+
   return (
     <div className={`controls-bar${isCompact ? ' compact' : ''}${moreOpen ? ' more-open' : ''}`}>
       <div className="progress-row">
@@ -102,30 +126,35 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
           </select>
         </div>
 
-        <div className="playback-buttons">
-          <button className="ctrl-btn pb-2nd" title="Restart (Home)" onClick={onRestart}>|&lt;</button>
-          <button className="ctrl-btn" title="Page up — current line jumps to the top visible line (PgUp)" onClick={onPageUp}>⇞</button>
-          <button className="ctrl-btn pb-2nd" title="Previous paragraph (Ctrl+Up)" onClick={onPrevPara}>⇈</button>
-          <button className="ctrl-btn" title="Previous line (Up)" onClick={onPrevLine}>↑</button>
-          <button className="ctrl-btn pb-2nd" title="Previous word (Left)" onClick={onPrevWord}>&lt;</button>
-          <button className="play-btn" title="Play / Pause (Space)" onClick={onPlayPause}>
-            {playing ? '❚❚' : '▶'}
-          </button>
-          <button className="ctrl-btn pb-2nd" title="Next word (Right)" onClick={onNextWord}>&gt;</button>
-          <button className="ctrl-btn" title="Next line (Down)" onClick={onNextLine}>↓</button>
-          <button className="ctrl-btn pb-2nd" title="Next paragraph (Ctrl+Down)" onClick={onNextPara}>⇊</button>
-          <button className="ctrl-btn" title="Page down — current line jumps to the bottom visible line (PgDn)" onClick={onPageDown}>⇟</button>
-        </div>
-
-        {isCompact && (
-          <button
-            className="ctrl-more"
-            aria-expanded={moreOpen}
-            onClick={() => setMoreOpen((o) => !o)}
-            title="Show / hide word & paragraph steps, mode toggles, and goal"
-          >
-            {moreOpen ? '⋯ Less' : '⋯ More'}
-          </button>
+        {isCompact ? (
+          // Mobile: a fixed transport bar (page/line + play, symmetric around play) with a chevron
+          // that expands the slide-in; the finer word/paragraph/restart steps appear as their own
+          // aligned row when expanded — so nothing spills into a ragged wrap.
+          <div className="playback-buttons compact-pb">
+            <div className="pb-transport">
+              {B.pageUp()}{B.prevLine()}{playBtn}{B.nextLine()}{B.pageDown()}
+              <button
+                className={`pb-toggle${moreOpen ? ' open' : ''}`}
+                aria-expanded={moreOpen}
+                aria-label={moreOpen ? 'Fewer controls' : 'More controls'}
+                title="More / fewer controls"
+                onClick={() => setMoreOpen((o) => !o)}
+              >
+                {moreOpen ? '▴' : '▾'}
+              </button>
+            </div>
+            {moreOpen && (
+              <div className="pb-fine">
+                {B.restart()}{B.prevPara()}{B.prevWord()}{B.nextWord()}{B.nextPara()}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="playback-buttons">
+            {B.restart()}{B.pageUp()}{B.prevPara()}{B.prevLine()}{B.prevWord()}
+            {playBtn}
+            {B.nextWord()}{B.nextLine()}{B.nextPara()}{B.pageDown()}
+          </div>
         )}
 
         <div className="mode-block">

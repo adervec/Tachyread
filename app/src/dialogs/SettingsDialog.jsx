@@ -367,6 +367,23 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           ))}
         </select>
       </Field>
+      <Field label="Mobile face transparency">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="range"
+            min={0.15}
+            max={1}
+            step={0.05}
+            value={s.faceOpacity ?? 0.9}
+            onChange={(e) => patch({ faceOpacity: Number(e.target.value) })}
+          />
+          <span style={{ fontSize: 12, color: 'var(--status-fg)' }}>{Math.round((s.faceOpacity ?? 0.9) * 100)}%</span>
+        </div>
+      </Field>
+      <p className="settings-note" style={{ margin: '2px 0 0' }}>
+        On phones the face floats as a draggable overlay — drag it anywhere over the page; this sets
+        how see-through it is.
+      </p>
 
       {/* Reading-pointer settings archived — the feature isn't useful right now. Re-enable by
           restoring this block and flipping POINTER_ENABLED in LinePane.jsx.

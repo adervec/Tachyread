@@ -34,6 +34,7 @@ export function defaultFileSettings() {
     rightPaneFontSize: 12,
     lineSpacing: 1.5, // Lines-pane line-height multiplier
     sourceChecks: {}, // ticked checkboxes in html/markdown source sections: { section: [box…] }
+    faceOpacity: 0.9, // transparency of the floating reader face on mobile (0.15–1)
     bionicFont: false,
     paragraphBreakSecs: 0,
     lineBreakPauseMs: 0,
@@ -233,6 +234,7 @@ export function defaultGlobalSettings() {
     handGestures: false,
     handCalib: null,
     handGestureSet: null,
+    mobileFacePos: null, // {x,y} of the draggable floating face on mobile (null = default corner)
     // Auto-minimize the controls dock while playing on compact screens, for more text room.
     autoMinimizeControls: false,
     // Pause non-TTS playback when the reading text scrolls off-screen (you can't read what you can't
