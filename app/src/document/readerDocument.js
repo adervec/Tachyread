@@ -211,6 +211,48 @@ export function getSentenceIndex(doc, wordIndex) {
   return doc.wordToSentence[i];
 }
 
+// Natural narration units for read-aloud / audiobook synthesis. Raw source lines are often hard-
+// wrapped mid-sentence (PDFs, extracted text), and synthesizing each short fragment on its own makes
+// the audio choppy (a break at every wrap). Coalesce consecutive non-blank lines into a chunk that
+// ends at a sentence boundary or a paragraph break, capped at CHUNK_MAX_WORDS so a block with no
+// sentence punctuation still streams. Each chunk is keyed for storage by its first line index, so
+// existing per-line clip keys and the checksum-scoped store keep working.
+const CHUNK_MAX_WORDS = 60; // ponytail: cap so a punctuation-less paragraph still chunks; raise if synth latency is fine
+export function audiobookChunks(doc) {
+  const lines = doc?.lines || [];
+  const words = doc?.words || [];
+  const chunks = [];
+  let li = 0;
+  while (li < lines.length) {
+    if (lines[li].isEmpty || !(lines[li].text || '').trim()) { li++; continue; }
+    const startLine = li;
+    let text = '';
+    let wordCount = 0;
+    let end = li;
+    for (; end < lines.length; end++) {
+      const l = lines[end];
+      if (l.isEmpty) break; // paragraph break
+      const t = (l.text || '').trim();
+      if (t) text += (text ? ' ' : '') + t;
+      if (l.endWordIndex >= 0 && l.startWordIndex >= 0) wordCount += l.endWordIndex - l.startWordIndex + 1;
+      const endsSentence = l.endWordIndex >= 0 && isSentenceEndWord(words[l.endWordIndex]);
+      const next = lines[end + 1];
+      const nextBreaks = !next || next.isEmpty || next.isParaStart;
+      if (endsSentence || nextBreaks || wordCount >= CHUNK_MAX_WORDS) { end++; break; }
+    }
+    const endLine = end - 1;
+    chunks.push({
+      startLine,
+      endLine,
+      startWordIndex: lines[startLine].startWordIndex,
+      endWordIndex: lines[endLine].endWordIndex,
+      text,
+    });
+    li = end;
+  }
+  return chunks;
+}
+
 export function getParagraphRange(doc, lineIndex) {
   let start = lineIndex;
   while (start > 0 && !doc.lines[start].isEmpty && !doc.lines[start].isParaStart) start--;

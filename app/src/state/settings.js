@@ -224,6 +224,9 @@ export function defaultGlobalSettings() {
     showPerfMeter: true,
     // Read-aloud auto-stop: pause speech after this many minutes of playback (0 = never).
     ttsAutoStopMin: 0,
+    // Read-aloud playback speed multiplier (0.5–2.0), applied to both the native voice and the
+    // offline Piper audio. Fine steps so you can nudge it slightly.
+    ttsSpeed: 1,
     // Offline neural voice (Piper). When on, read-aloud synthesizes real audio (plays with the
     // screen locked, unlike native TTS which Android suspends). offlineVoiceId '' = auto by language.
     offlineVoice: false,
@@ -241,6 +244,12 @@ export function defaultGlobalSettings() {
     handGestureSet: null,
     mobileFacePos: null, // {x,y} of the draggable floating face on mobile (null = default corner)
     mobileStatsPos: null, // {x,y} of the draggable floating stats popup on mobile
+    mobileGoalPos: null, // {x,y} of the draggable floating goal chip
+    mobileTimerPos: null, // {x,y} of the draggable floating timer chip
+    // Chip mode: on phones the face/stats/goal/timer always float as transparent draggable chips.
+    // This turns that same floating-chip layout on for desktop too (the dock face/stats move out to
+    // float), so the reading area stays clear.
+    chipMode: false,
     // Auto-minimize the controls dock while playing on compact screens, for more text room.
     autoMinimizeControls: false,
     // Pause non-TTS playback when the reading text scrolls off-screen (you can't read what you can't

@@ -6,6 +6,7 @@ import TocBar from './TocBar.jsx';
 import { goalFraction, computeGoalStatus } from '../engine/goals.js';
 import { MODES } from '../engine/readingMode.js';
 import { lastCountableWord } from '../document/toc.js';
+import { playButtonView } from '../features/playButtonMode.js';
 
 function formatTime(secs) {
   if (!isFinite(secs) || secs < 0) return '--:--:--';
@@ -43,12 +44,28 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
   const navBtn = (title, onClick, label) => (
     <button className="ctrl-btn" title={title} onClick={onClick}>{label}</button>
   );
-  // Scroll-to-read drives the pace itself, so auto-play is disabled and the button shows a scroll.
-  const scrollMode = !!state.global.scrollAdvances;
-  const playBtn = scrollMode ? (
-    <button className="play-btn scroll-disabled" disabled title="Auto-play is off in scroll-to-read mode — scroll the Lines pane to read">📜</button>
-  ) : (
-    <button className="play-btn" title="Play / Pause (Space)" onClick={onPlayPause}>{playing ? '❚❚' : '▶'}</button>
+  // The play button reflects the active reading modes, not just scroll-to-read: read-aloud swaps the
+  // glyph to a speaker (offline voice → headphones, since it survives a screen lock), and the title
+  // lists every engaged toggle.
+  const pv = playButtonView({
+    playing,
+    scrollMode: !!state.global.scrollAdvances,
+    readAloud,
+    offlineVoice: !!state.global.offlineVoice,
+    followMode: settings.ttsFollowMode || (settings.firstWordTts ? 'firstWord' : 'off'),
+    timerMin: state.global.ttsAutoStopMin || 0,
+    adapt: !!settings.adaptivePace,
+    voiceCmd: !!settings.audioCtrl,
+  });
+  const playBtn = (
+    <button
+      className={`play-btn${pv.cls ? ' ' + pv.cls : ''}`}
+      disabled={pv.disabled}
+      title={pv.title}
+      onClick={pv.disabled ? undefined : onPlayPause}
+    >
+      {pv.glyph}
+    </button>
   );
   const B = {
     restart: () => navBtn('Restart (Home)', onRestart, '|<'),
@@ -168,6 +185,24 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
               {readAloud ? 'On' : 'Off'}
             </button>
           </div>
+          {readAloud && (
+            <div className="mode-pair">
+              <span title="Read-aloud playback speed">SPEED</span>
+              <select
+                value={state.global.ttsSpeed ?? 1}
+                onChange={(e) => updateGlobal({ ttsSpeed: Number(e.target.value) })}
+                title="Read-aloud playback speed (applies to the native and offline voices). For finer steps use the slider in Audio → Audio Settings."
+              >
+                {/* Always include the current value so an off-grid speed set via the Audio Settings
+                    slider (e.g. 0.85) shows its real label instead of collapsing to the first option. */}
+                {[...new Set([0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.35, 1.5, 1.75, 2, state.global.ttsSpeed ?? 1])]
+                  .sort((a, b) => a - b)
+                  .map((v) => (
+                    <option key={v} value={v}>{v}×</option>
+                  ))}
+              </select>
+            </div>
+          )}
           <div className="mode-pair">
             <span title="Non-driving TTS that speaks as you read: the first word of each sentence (a progress marker), or the whole current line (usually cut off by the next line, since TTS lags fast reading)">FOLLOW</span>
             <select

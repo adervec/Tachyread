@@ -102,15 +102,24 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
           ))}
         </select>
       </Field>
-      <Field label="Rate (−5..+8)">
-        <input
-          type="number"
-          min={-5}
-          max={8}
-          value={s.annunciateRate}
-          onChange={(e) => patch({ annunciateRate: Number(e.target.value) })}
-        />
+      <Field label="Playback speed">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="range"
+            min={0.5}
+            max={2}
+            step={0.05}
+            value={global.ttsSpeed ?? 1}
+            onChange={(e) => onPatchGlobal({ ttsSpeed: Number(e.target.value) })}
+          />
+          <span style={{ fontSize: 12, color: 'var(--status-fg)', minWidth: 40 }}>{(global.ttsSpeed ?? 1).toFixed(2)}×</span>
+          <button type="button" onClick={() => onPatchGlobal({ ttsSpeed: 1 })} title="Reset to normal speed">1×</button>
+        </div>
       </Field>
+      <p className="settings-note" style={{ margin: '2px 0 0' }}>
+        Applies to both the built-in and the offline voice; also adjustable live from the
+        <strong> SPEED</strong> control in the controls bar while read-aloud is on.
+      </p>
       <Field label="Speak-along follow mode">
         <select
           value={s.ttsFollowMode || (s.firstWordTts ? 'firstWord' : 'off')}

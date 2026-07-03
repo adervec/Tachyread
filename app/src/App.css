@@ -1620,6 +1620,11 @@
   cursor: default;
   color: var(--status-fg);
 }
+/* Read-aloud: the play button carries a speaker/headphones glyph — accent it so the mode reads at a glance. */
+.play-btn.read-aloud, .play-btn-mini.read-aloud {
+  box-shadow: 0 0 0 2px var(--accent, #3a86ff) inset;
+  border-radius: 8px;
+}
 
 /* Draggable floating reader face (mobile): sits over the reading area, transparency from settings. */
 .floating-face {
@@ -1651,6 +1656,30 @@
 .floating-stats .dash-stats { gap: 4px; }
 .floating-stats .dash-num { font-size: 20px; }
 .floating-stats .dash-stat-hero .dash-num { font-size: 26px; }
+
+/* Generic draggable info chip (goal, timer): matches the floating-stats look. */
+.floating-chip {
+  position: fixed;
+  z-index: 138;
+  touch-action: none;
+  cursor: grab;
+  max-width: 60vw;
+  min-width: 120px;
+  padding: 7px 10px;
+  background: var(--menu-bg);
+  border: 1px solid var(--divider);
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  transition: opacity 150ms ease;
+  font-size: 13px;
+  color: var(--status-fg);
+}
+.floating-chip:active { cursor: grabbing; }
+.floating-chip .chip-label { font-size: 11px; letter-spacing: 0.02em; opacity: 0.85; margin-bottom: 2px; }
+.floating-chip .chip-status { font-variant-numeric: tabular-nums; }
+.floating-chip .chip-status + .chip-status { margin-top: 2px; }
+.floating-chip .chip-dim { opacity: 0.6; font-size: 11px; }
+.floating-chip .goal-bar { height: 5px; }
 .mode-block {
   display: flex;
   gap: 12px;

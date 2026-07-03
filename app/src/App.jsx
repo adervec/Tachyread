@@ -6,6 +6,8 @@ import RsvpPane from './components/RsvpPane.jsx';
 import DashboardPane from './components/DashboardPane.jsx';
 import FloatingFace from './components/FloatingFace.jsx';
 import FloatingStats from './components/FloatingStats.jsx';
+import FloatingGoal from './components/FloatingGoal.jsx';
+import FloatingTimer from './components/FloatingTimer.jsx';
 import SourcePane from './components/SourcePane.jsx';
 import LinePane from './components/LinePane.jsx';
 import ControlsBar from './components/ControlsBar.jsx';
@@ -38,7 +40,7 @@ import IndexPane from './components/IndexPane.jsx';
 import { buildProperNamesFromList } from './document/resourceWizard.js';
 import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
 import { createModeDetector } from './engine/readingMode.js';
-import { startMediaSession, updateMediaSession, stopMediaSession, armMediaKeepAlive, nudgeMediaKeepAlive } from './features/mediaSession.js';
+import { startMediaSession, updateMediaSession, stopMediaSession, armMediaKeepAlive, nudgeMediaKeepAlive, getSpeechAudio } from './features/mediaSession.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import AdaptiveProbe from './components/AdaptiveProbe.jsx';
 import { computeSurprisalWeights } from './engine/surprisal.js';
@@ -64,12 +66,13 @@ import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan, mergeSkipRanges, currentChapter } from './document/toc.js';
 import { defaultFileSettings, tabDefaultsFrom } from './state/settings.js';
-import { cancelSpeech, rateFromIndex, speak, setPreferredLanguage } from './features/tts.js';
+import { cancelSpeech, speak, setPreferredLanguage } from './features/tts.js';
 import { getLanguage } from './state/languages.js';
 import TypingPlanDialog from './dialogs/TypingPlanDialog.jsx';
 import SaveTabDialog from './dialogs/SaveTabDialog.jsx';
 import { createReadAloud } from './features/readAloud.js';
 import { createOfflineReadAloud } from './features/offlineReadAloud.js';
+import { playButtonView } from './features/playButtonMode.js';
 import { defaultVoiceForLang } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
@@ -118,6 +121,9 @@ function AppInner() {
   // until it hydrates, so nothing downstream touches activeTab.doc before it exists.
   const activeTab = rawActiveTab && !rawActiveTab.lazy ? rawActiveTab : null;
   const isCompact = useIsCompact();
+  // Chip mode: face/stats/goal/timer float as transparent draggable chips instead of sitting in the
+  // dock. Always on for compact screens; opt-in on desktop via state.global.chipMode.
+  const chips = isCompact || !!state.global.chipMode;
   const [mobileView, setMobileView] = useState('rsvp'); // compact-screen single reading view: 'rsvp' | 'lines'
   const [controlsCollapsed, setControlsCollapsed] = useState(false); // minimize the bottom dock for text room
   const [chromeHidden, setChromeHidden] = useState(false); // mobile: hide menu+tabs above the reader for text room
@@ -139,9 +145,13 @@ function AppInner() {
   const modeDetRef = useRef(null);
   if (!modeDetRef.current) modeDetRef.current = createModeDetector();
   const [readingMode, setReadingMode] = useState('idle');
-  // Draggable mobile face / stats positions (seeded from the last-saved spot; persisted on drop).
+  // Draggable floating-chip positions (seeded from the last-saved spot; persisted on drop).
   const [facePos, setFacePos] = useState(() => state.global.mobileFacePos || null);
   const [statsPos, setStatsPos] = useState(() => state.global.mobileStatsPos || null);
+  const [goalPos, setGoalPos] = useState(() => state.global.mobileGoalPos || null);
+  const [timerPos, setTimerPos] = useState(() => state.global.mobileTimerPos || null);
+  // Epoch-ms the read-aloud auto-stop fires (0 = none), so the timer chip can count down.
+  const [autoStopAt, setAutoStopAt] = useState(0);
   // Live scroll-mode flag for closures (Space keydown) that would otherwise read a stale value.
   const scrollAdvancesRef = useRef(state.global.scrollAdvances);
   scrollAdvancesRef.current = state.global.scrollAdvances;
@@ -224,6 +234,9 @@ function AppInner() {
   const readAloudRef = useRef(null);
   const readAloudModeRef = useRef(null); // false = native Web Speech, true = offline Piper
   const [ttsStatus, setTtsStatus] = useState('idle'); // offline synth state: idle | synth | playing | error
+  // Live read-aloud speed (0.5–2.0), read via a ref so the driver closures always see the latest.
+  const ttsSpeedRef = useRef(1);
+  ttsSpeedRef.current = Math.max(0.5, Math.min(2, state.global.ttsSpeed || 1));
   // Set when the user manually navigates during read-aloud, so speech resyncs to the new spot.
   // NOT set on read-aloud's own boundary advances — that distinction is what stops each sentence
   // from being cancelled and re-spoken (the "reads every sentence twice" bug).
@@ -401,7 +414,7 @@ function AppInner() {
             getIndex: () => activeTabRef.current?.settings.wordIndex || 0,
             setIndex: ttsSetIndex,
             getVoiceId: () => state.global.offlineVoiceId || defaultVoiceForLang(state.global.language || 'en'),
-            getRate: () => rateFromIndex(activeTabRef.current?.settings.annunciateRate || 0),
+            getRate: () => ttsSpeedRef.current,
             onEnd: () => setPlaying(false),
             onStatus: (s) => setTtsStatus(s),
           })
@@ -410,7 +423,7 @@ function AppInner() {
             getIndex: () => activeTabRef.current?.settings.wordIndex || 0,
             setIndex: ttsSetIndex,
             getVoiceName: () => activeTabRef.current?.settings.annunciateVoice,
-            getRate: () => rateFromIndex(activeTabRef.current?.settings.annunciateRate || 0),
+            getRate: () => ttsSpeedRef.current,
             onEnd: () => setPlaying(false),
           });
     }
@@ -444,18 +457,26 @@ function AppInner() {
     else if (ttsStatus === 'error') setStatus('Offline voice unavailable — download its model in Audio → Audio Settings.');
   }, [ttsStatus, state.global.offlineVoice]);
 
-  // Keep the lock-screen metadata current as reading moves between chapters (only when the
-  // chapter label actually changes — TTS advances the word index constantly).
-  const mediaChapterRef = useRef('');
+  // Keep the lock-screen metadata current as reading moves — refresh the track name when the whole-
+  // number percent (or chapter) changes, so it shows live progress without churning every word.
+  const mediaKeyRef = useRef('');
   useEffect(() => {
     if (!(playing && activeTab?.settings?.readAloud)) return;
     const meta = mediaMeta();
-    if (meta.artist !== mediaChapterRef.current) {
-      mediaChapterRef.current = meta.artist;
+    const key = `${meta.pct}|${meta.title}`;
+    if (key !== mediaKeyRef.current) {
+      mediaKeyRef.current = key;
       updateMediaSession(meta);
     }
     // eslint-disable-next-line
   }, [activeTab?.settings.wordIndex, playing, activeTab?.settings?.readAloud]);
+
+  // Live playback-speed change applies immediately to the currently-playing offline clip; native
+  // TTS picks up the new rate on its next (short) chunk.
+  useEffect(() => {
+    const a = getSpeechAudio();
+    if (a) a.playbackRate = ttsSpeedRef.current;
+  }, [state.global.ttsSpeed]);
 
   // Manual navigation while reading aloud → resync speech to the new position. Runs after the new
   // index has committed, but only when the move came from the user (flag set by stepWord/jumpWord),
@@ -544,7 +565,7 @@ function AppInner() {
     //   line      — the whole current line; cut off by the next line, since TTS lags fast reading
     const followMode = activeTab.settings.ttsFollowMode || (activeTab.settings.firstWordTts ? 'firstWord' : 'off');
     if (followMode !== 'off' && next > cur && !opts.nav && !activeTab.settings.readAloud) {
-      const voice = { voiceName: activeTab.settings.annunciateVoice, rate: rateFromIndex(activeTab.settings.annunciateRate || 0) };
+      const voice = { voiceName: activeTab.settings.annunciateVoice, rate: ttsSpeedRef.current };
       if (followMode === 'firstWord' && isSentenceStart(activeTab.doc, next) && !window.speechSynthesis?.speaking) {
         const w = (activeTab.doc.words[next] || '').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
         if (w) speak(w, voice);
@@ -876,15 +897,18 @@ function AppInner() {
   // being read (so the phone's media controls show where you are).
   function mediaMeta() {
     const tab = activeTabRef.current;
-    if (!tab) return { title: 'Reading', artist: '', album: 'Tachyread' };
-    const title = tab.doc?.fileName || 'Reading';
+    if (!tab) return { title: 'Reading', artist: '', album: 'Tachyread', pct: 0 };
+    const book = tab.doc?.fileName || 'Reading';
+    const total = tab.doc?.words?.length || 1;
+    const pct = Math.min(100, Math.round((tab.settings.wordIndex / total) * 100));
     let chapter = '';
     try {
       const entries = getTocEntries(tab);
       const ch = currentChapter(entries, tab.settings.wordIndex, tab.doc.words.length);
       if (ch?.title) chapter = ch.title;
     } catch { /* no toc */ }
-    return { title, artist: chapter, album: 'Tachyread — read-aloud' };
+    // The track name (title) leads with progress so the lock screen shows where you are.
+    return { title: `${pct}% · ${chapter || book}`, artist: book, album: 'Tachyread — read-aloud', pct };
   }
 
   // Discrete hand gestures → reader actions (each gesture is individually enabled in settings).
@@ -970,11 +994,13 @@ function AppInner() {
   // Handy for winding down to read-aloud without it running all night. Restarts on each Play.
   useEffect(() => {
     const mins = state.global.ttsAutoStopMin || 0;
-    if (!playing || mins <= 0) return undefined;
+    if (!playing || mins <= 0) { setAutoStopAt(0); return undefined; }
+    setAutoStopAt(Date.now() + mins * 60000);
     const id = setTimeout(() => {
       engineRef.current.pause();
       setPlaying(false);
       cancelSpeech();
+      setAutoStopAt(0);
       if (activeTabRef.current) flushReadState(activeTabRef.current);
       setStatus(`Auto-stopped after ${mins} min.`);
     }, mins * 60000);
@@ -1837,19 +1863,36 @@ function AppInner() {
         {controlsCollapsed ? (
           activeTab && (
             <div className="dock-mini">
-              {state.global.scrollAdvances ? (
-                <button className="play-btn-mini scroll-disabled" disabled title="Scroll-to-read is on — auto-play off">📜</button>
-              ) : (
-                <button className="play-btn-mini" title="Play / Pause (Space)" onClick={playPause}>{playing ? '❚❚' : '▶'}</button>
-              )}
+              {(() => {
+                const pv = playButtonView({
+                  playing,
+                  scrollMode: !!state.global.scrollAdvances,
+                  readAloud: !!activeTab.settings.readAloud,
+                  offlineVoice: !!state.global.offlineVoice,
+                  followMode: activeTab.settings.ttsFollowMode || (activeTab.settings.firstWordTts ? 'firstWord' : 'off'),
+                  timerMin: state.global.ttsAutoStopMin || 0,
+                  adapt: !!activeTab.settings.adaptivePace,
+                  voiceCmd: !!activeTab.settings.audioCtrl,
+                });
+                return (
+                  <button
+                    className={`play-btn-mini${pv.cls ? ' ' + pv.cls : ''}`}
+                    disabled={pv.disabled}
+                    title={pv.title}
+                    onClick={pv.disabled ? undefined : playPause}
+                  >
+                    {pv.glyph}
+                  </button>
+                );
+              })()}
               <span className="dock-mini-meta">{activeTab.settings.wordIndex + 1} / {activeTab.doc.words.length}</span>
             </div>
           )
         ) : (
         <div className="dock-row">
-        {/* Desktop only: faces and/or stats sit in the dock. On mobile they both float as separate
-            draggable popups (FloatingFace / FloatingStats), so the dock stays out of the way. */}
-        {!isCompact && activeTab && (activeTab.settings.showEyes || state.showStats) && (
+        {/* Dock faces/stats — unless chip mode is on (mobile always; desktop opt-in), where they
+            float as draggable transparent chips instead so the dock stays out of the way. */}
+        {!chips && activeTab && (activeTab.settings.showEyes || state.showStats) && (
           <div className="dock-dash">
             <DashboardPane tab={activeTab} dock showFaces={!!activeTab.settings.showEyes} showStats={state.showStats} />
           </div>
@@ -2169,9 +2212,10 @@ function AppInner() {
         </div>
       )}
 
-      {/* Mobile: the reader face and the stats each float as separate draggable, transparency-
-          adjustable popups. Faces are per-tab (showEyes); stats are the app-level Stats toggle. */}
-      {isCompact && activeTab && !!activeTab.settings.showEyes && (
+      {/* Chip mode: the face, stats, goal and timer each float as separate draggable, transparency-
+          adjustable chips (mobile always; desktop when chipMode is on). Faces are per-tab (showEyes);
+          stats follow the app-level Stats toggle; goal/timer show when they have something to say. */}
+      {chips && activeTab && !!activeTab.settings.showEyes && (
         <FloatingFace
           tab={activeTab}
           pos={facePos}
@@ -2179,12 +2223,29 @@ function AppInner() {
           onDrop={(p) => p && updateGlobal({ mobileFacePos: p })}
         />
       )}
-      {isCompact && activeTab && state.showStats && (
+      {chips && activeTab && state.showStats && (
         <FloatingStats
           tab={activeTab}
           pos={statsPos}
           onMove={setStatsPos}
           onDrop={(p) => p && updateGlobal({ mobileStatsPos: p })}
+        />
+      )}
+      {chips && activeTab && (
+        <FloatingGoal
+          tab={activeTab}
+          pos={goalPos}
+          onMove={setGoalPos}
+          onDrop={(p) => p && updateGlobal({ mobileGoalPos: p })}
+        />
+      )}
+      {chips && activeTab && (
+        <FloatingTimer
+          tab={activeTab}
+          pos={timerPos}
+          onMove={setTimerPos}
+          onDrop={(p) => p && updateGlobal({ mobileTimerPos: p })}
+          autoStopAt={autoStopAt}
         />
       )}
 

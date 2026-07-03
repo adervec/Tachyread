@@ -134,7 +134,7 @@ function MenuItem({ it, onPick, badges }) {
 
 
 export default function MenuBar({ onFileOpen, onAction }) {
-  const { state, dispatch, activeTab, patchSettings } = useApp();
+  const { state, dispatch, activeTab, patchSettings, updateGlobal } = useApp();
   const isCompact = useIsCompact();
   const themeName =
     activeTab?.settings?.themeName || (activeTab?.settings?.darkMode ? 'Dark' : 'Light');
@@ -290,6 +290,13 @@ export default function MenuBar({ onFileOpen, onAction }) {
         title="Toggle the reading-stats panel"
       >
         {state.showStats ? '☑ ' : '☐ '}Stats
+      </div>
+      <div
+        className={`menu-item ${state.global.chipMode ? 'open' : ''}`}
+        onClick={() => updateGlobal({ chipMode: !state.global.chipMode })}
+        title="Chip mode: float the face, stats, goal and timer as transparent draggable chips instead of docking them"
+      >
+        {state.global.chipMode ? '☑ ' : '☐ '}Chips
       </div>
       {activeTab?.doc?.source && (
         <div

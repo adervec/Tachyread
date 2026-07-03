@@ -250,7 +250,12 @@ export async function saveAudioClip(checksum, lineIndex, blob, durationMs, meta 
   const key = `${checksum}/${String(lineIndex).padStart(5, '0')}`;
   await db.put('audiobook', { blob, durationMs, createdAt: Date.now() }, key);
   let manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
-  manifest.lines[lineIndex] = { durationMs, createdAt: Date.now(), source: meta.source || 'mic', voiceId: meta.voiceId || null };
+  // spanEndLine: for a chunk clip covering several wrapped lines, the last line it narrates (so the
+  // player advances past the whole chunk). Null/absent for a single-line clip.
+  manifest.lines[lineIndex] = {
+    durationMs, createdAt: Date.now(), source: meta.source || 'mic', voiceId: meta.voiceId || null,
+    spanEndLine: meta.spanEndLine != null ? meta.spanEndLine : lineIndex,
+  };
   await db.put('audiobookManifest', manifest, checksum);
 }
 
@@ -272,6 +277,45 @@ export async function deleteAudioClip(checksum, lineIndex) {
 export async function getAudiobookManifest(checksum) {
   const db = await getDB();
   return (await db.get('audiobookManifest', checksum)) || { lines: {} };
+}
+
+// ── Audiobook transfer (one book's clips → a file → another device) ────────────────────────────
+// Deliberately separate from the cloud progress-sync (which stays progress-only): audiobook audio is
+// large binary, so it moves as an explicit file the user carries between devices. Clips are keyed by
+// the book's content checksum, so the same book (same text) lines them up automatically on import.
+// "Full or partial" falls out for free — it exports whatever clips exist (a half-generated book too).
+
+export async function exportAudiobook(checksum, fileName = '') {
+  if (!checksum) throw new Error('No book selected.');
+  const db = await getDB();
+  const manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
+  const clips = [];
+  for (const li of Object.keys(manifest.lines)) {
+    const clip = await getAudioClip(checksum, Number(li));
+    if (clip?.blob) clips.push({ li: Number(li), blob: await packValue(clip.blob), durationMs: clip.durationMs, createdAt: clip.createdAt });
+  }
+  return { app: 'tachyread-audiobook', version: 1, checksum, fileName, exportedAt: Date.now(), manifest, clips };
+}
+
+// Merge an audiobook bundle into this device's store. Keyed by the bundle's own checksum (so it lands
+// on the matching book whether or not it's the one currently open). Won't clobber a local mic
+// recording. Returns { imported, skipped, checksum }.
+export async function importAudiobook(bundle) {
+  if (!bundle || bundle.app !== 'tachyread-audiobook' || !bundle.checksum) throw new Error('Not a Tachyread audiobook file.');
+  const db = await getDB();
+  const { checksum } = bundle;
+  const manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
+  let imported = 0, skipped = 0;
+  for (const c of bundle.clips || []) {
+    const local = manifest.lines[c.li];
+    if (local && local.source === 'mic') { skipped++; continue; } // keep your own recordings
+    const key = `${checksum}/${String(c.li).padStart(5, '0')}`;
+    await db.put('audiobook', { blob: unpackValue(c.blob), durationMs: c.durationMs, createdAt: c.createdAt || Date.now() }, key);
+    manifest.lines[c.li] = bundle.manifest?.lines?.[c.li] || { durationMs: c.durationMs, createdAt: c.createdAt || Date.now(), source: 'tts', voiceId: null, spanEndLine: c.li };
+    imported++;
+  }
+  await db.put('audiobookManifest', manifest, checksum);
+  return { imported, skipped, checksum };
 }
 
 // Record count per object store — for the data-suite overview (cheap; no data read).
