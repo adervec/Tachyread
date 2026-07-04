@@ -228,6 +228,16 @@
   padding: 6px 14px;
   font-style: italic;
 }
+/* Dialog tabs — the popups-turned-tabs. Leftmost, accented, visually distinct from document tabs. */
+.tab-bar .tab.dialog-tab {
+  background: color-mix(in srgb, var(--toggle-active-bg) 12%, var(--menu-bg));
+  border-left: 3px solid var(--toggle-active-bg);
+}
+.tab-bar .tab.dialog-tab .name { font-weight: 600; }
+.tab-bar .tab.dialog-tab.active {
+  background: var(--pane-bg);
+  box-shadow: inset 0 -2px 0 0 var(--toggle-active-bg);
+}
 
 /* Content row (holds the incognito banner above the main area / landing). Occupies the single 1fr
    grid row so the banner doesn't disturb the app's fixed row layout. */
@@ -1962,6 +1972,22 @@
   flex-direction: column;
   position: relative;
 }
+/* Docked dialog tab: the same dialog markup, but the backdrop stops dimming/blocking and the box
+   parks against the top-right as a side panel so reading continues underneath. Below true modals. */
+.dialog-dock .dialog-backdrop {
+  background: none;
+  pointer-events: none;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 6px;
+  z-index: 4000;
+}
+.dialog-dock .dialog {
+  pointer-events: auto;
+  max-height: calc(100vh - 60px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  border-radius: 6px;
+}
 .dialog-title {
   padding: 10px 14px;
   background: var(--menu-bg);
@@ -2892,9 +2918,14 @@
 .lj-spacer { flex: 1; }
 
 .lj-list { display: flex; flex-direction: column; gap: 2px; max-height: 48vh; overflow-y: auto; }
-.lj-row { display: grid; grid-template-columns: 74px 1fr auto; gap: 8px; align-items: center; text-align: left; background: transparent; border: none; border-bottom: 1px solid var(--divider); padding: 6px 4px; cursor: pointer; color: inherit; font: inherit; }
+.lj-row { display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--divider); }
+.lj-row-hit { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: 74px 1fr auto; gap: 8px; align-items: center; text-align: left; background: transparent; border: none; padding: 6px 4px; cursor: pointer; color: inherit; font: inherit; }
 .lj-row:hover { background: color-mix(in srgb, var(--accent, #3a86ff) 6%, transparent); }
 .lj-row.on { background: color-mix(in srgb, var(--accent, #3a86ff) 12%, transparent); }
+.lj-row-acts { display: flex; gap: 1px; flex: 0 0 auto; padding-right: 2px; }
+.lj-row-acts button { background: transparent; border: none; cursor: pointer; font-size: 13px; line-height: 1; padding: 3px 4px; border-radius: 4px; filter: grayscale(1) opacity(0.55); }
+.lj-row-acts button:hover { filter: none; background: color-mix(in srgb, var(--accent, #3a86ff) 14%, transparent); }
+.lj-row-acts button.on { filter: none; background: color-mix(in srgb, var(--accent, #3a86ff) 22%, transparent); }
 .lj-row-main { display: flex; flex-direction: column; min-width: 0; }
 .lj-row-main b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lj-row-main em { color: var(--status-fg); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2902,7 +2933,9 @@
 .lj-status { font-size: 11px; white-space: nowrap; }
 .lj-status.lj-finished { color: #3fb950; }
 .lj-status.lj-reading { color: var(--accent, #3a86ff); }
+.lj-status.lj-queue { color: #d9a441; }
 .lj-status.lj-toread { color: var(--status-fg); }
+.lj-status.lj-abandoned { color: #b05555; }
 .lj-more { margin-top: 8px; }
 
 .lj-editor { background: var(--panel-bg, rgba(127,127,127,0.06)); border: 1px solid var(--accent, #3a86ff); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
@@ -2941,11 +2974,64 @@
 .lj-star { cursor: pointer; stroke: rgba(0,0,0,0.4); stroke-width: 0.5; }
 .lj-star.lj-finished { opacity: 1; filter: drop-shadow(0 0 3px currentColor); }
 .lj-star.lj-reading { opacity: 0.9; animation: lj-pulse 1.8s ease-in-out infinite; }
+.lj-star.lj-queue { opacity: 0.7; stroke: #d9a441; stroke-width: 1; }
 .lj-star.lj-toread { opacity: 0.32; }
+.lj-star.lj-abandoned { opacity: 0.28; stroke: #b05555; stroke-dasharray: 1 1.5; }
 .lj-star.sel { stroke: #fff; stroke-width: 2; }
 @keyframes lj-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 .lj-starcard { position: absolute; left: 10px; bottom: 10px; max-width: 60%; background: var(--menu-bg, #1b1c22); border: 1px solid var(--accent, #3a86ff); border-radius: 8px; padding: 8px 26px 8px 10px; font-size: 12px; }
 .lj-starcard .close-x { position: absolute; top: 2px; right: 4px; }
+
+/* Queue / on-deck */
+.lj-wpm { width: 64px; }
+.lj-queue-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.lj-queue-item { display: grid; grid-template-columns: 24px 1fr auto auto; gap: 8px; align-items: center; border-bottom: 1px solid var(--divider); padding: 5px 2px; }
+.lj-queue-rank { color: var(--status-fg); font-variant-numeric: tabular-nums; text-align: right; }
+.lj-queue-main { display: flex; flex-direction: column; min-width: 0; }
+.lj-queue-main b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lj-queue-main em { color: var(--status-fg); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lj-queue-est { color: var(--status-fg); font-size: 11px; white-space: nowrap; }
+.lj-queue-acts { display: flex; gap: 4px; }
+.lj-queue-acts button { font-size: 11px; padding: 3px 7px; }
+
+/* Timeline + replay */
+.lj-replay-card { display: flex; gap: 12px; align-items: stretch; margin: 6px 0; flex-wrap: wrap; }
+.lj-replay-now { flex: 0 0 190px; display: flex; flex-direction: column; gap: 2px; }
+.lj-replay-count { font-size: 30px; font-weight: 700; line-height: 1; color: var(--accent, #3a86ff); }
+.lj-replay-book { margin-top: 4px; display: flex; flex-direction: column; }
+.lj-replay-book b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lj-replay-book em { color: var(--status-fg); font-size: 11px; }
+.lj-growth { flex: 1 1 260px; min-width: 240px; height: 130px; background: var(--input-bg); border: 1px solid var(--divider); border-radius: 8px; }
+.lj-growth-line { fill: none; stroke: var(--accent, #3a86ff); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.lj-growth-dot { fill: var(--accent, #3a86ff); stroke: var(--pane-bg); stroke-width: 1.5; }
+.lj-replay-ctl { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.lj-replay-ctl input[type=range] { flex: 1; }
+.lj-heat { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.lj-heat-row { display: grid; grid-template-columns: 42px repeat(12, 1fr); gap: 2px; align-items: center; }
+.lj-heat-yr { font-size: 10px; color: var(--status-fg); font-variant-numeric: tabular-nums; }
+.lj-heat-mlabel { font-size: 9px; color: var(--status-fg); text-align: center; }
+.lj-heat-cell { aspect-ratio: 1; border-radius: 2px; min-height: 12px; }
+
+/* Analytics */
+.lj-bars, .lj-stack { display: flex; align-items: flex-end; gap: 6px; height: 120px; padding-top: 14px; }
+.lj-bar { flex: 1; min-width: 14px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.lj-bar-fill { width: 70%; min-height: 2px; background: var(--toggle-active-bg, #3a86ff); border-radius: 3px 3px 0 0; position: relative; display: flex; justify-content: center; }
+.lj-bar-fill i { position: absolute; top: -14px; font-size: 10px; font-style: normal; color: var(--status-fg); }
+.lj-bar em, .lj-stack-col em { font-size: 10px; color: var(--status-fg); margin-top: 4px; font-style: normal; }
+.lj-stack-col { flex: 1; min-width: 14px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.lj-stack-bar { width: 72%; min-height: 2px; display: flex; flex-direction: column-reverse; border-radius: 3px 3px 0 0; overflow: hidden; }
+.lj-stack-seg { min-height: 1px; }
+.lj-recgrid { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.lj-recrow { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr auto; gap: 8px; align-items: center; }
+.lj-rec-name b { font-size: 12px; } .lj-rec-name em { color: var(--status-fg); font-size: 11px; }
+.lj-rec-bar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; background: var(--divider); min-width: 40px; }
+.lj-rec-rate { font-size: 11px; color: var(--status-fg); text-align: right; font-variant-numeric: tabular-nums; }
+.lj-seg { min-width: 1px; }
+.lj-seg-finished { background: #3fb950; }
+.lj-seg-reading { background: var(--accent, #3a86ff); }
+.lj-seg-queue { background: #d9a441; }
+.lj-seg-toread { background: var(--status-fg); opacity: 0.5; }
+.lj-seg-abandoned { background: #b05555; }
 
 /* AI / Cowork */
 .lj-instr { width: 100%; background: var(--input-bg); color: var(--input-fg); border: 1px solid var(--input-border); border-radius: 4px; padding: 6px 8px; font: inherit; resize: vertical; margin: 6px 0; }

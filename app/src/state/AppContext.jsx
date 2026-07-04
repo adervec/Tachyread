@@ -54,7 +54,14 @@ const init = {
   tabs: [],
   activeTabId: null,
   appStatus: 'Ready.',
-  dialog: null, // {kind, props}
+  // Dialogs come in two flavours. MODAL_KINDS (legal gate, confirmations, transient step-wizards)
+  // stay as one blocking centered overlay in `modal`. Everything else opens as a dockable TAB in
+  // `panels` — many can be open at once, shown leftmost in the tab bar, one focused (`activePanelId`)
+  // as a non-blocking docked panel; null means all minimized (just reading).
+  modal: null,        // { kind, ...props } — blocking overlay, one at a time
+  panels: [],         // [{ id, kind, ...props }] — dialog tabs
+  activePanelId: null,
+  panelSeq: 0,        // monotonic id source for panels
   showRsvp: true,
   showLines: true,
   showToc: false,
@@ -67,6 +74,14 @@ const init = {
   incognito: false,
   incognitoSnap: null, // { tabId: wordIndex } captured on entry, restored on exit (true "nothing happened")
 };
+
+// Dialogs that stay blocking modals rather than becoming tabs: the legal gate, quick confirmations,
+// and step-wizards that act on a transient selection (leaving one half-done as a tab is worse than
+// a modal). Everything else the menus open becomes a dockable dialog tab.
+const MODAL_KINDS = new Set([
+  'disclaimer', 'finished', 'save-tab', 'find', 'goto',
+  'webcam-calib', 'hand-calib', 'grab', 'toc-wizard', 'resource-wizard',
+]);
 
 function reducer(state, action) {
   switch (action.type) {
@@ -92,7 +107,8 @@ function reducer(state, action) {
     case 'CLOSE_ALL_TABS':
       return { ...state, tabs: [], activeTabId: null };
     case 'SET_ACTIVE_TAB':
-      return { ...state, activeTabId: action.id };
+      // Going to read a document minimizes any focused dialog overlay (its tab stays in the strip).
+      return { ...state, activeTabId: action.id, activePanelId: null };
     case 'PATCH_TAB': {
       const tabs = state.tabs.map((t) =>
         t.id === action.id ? { ...t, ...action.patch } : t
@@ -109,10 +125,32 @@ function reducer(state, action) {
       return { ...state, appStatus: action.text };
     case 'SET_IMPORT':
       return { ...state, importing: action.payload };
-    case 'OPEN_DIALOG':
-      return { ...state, dialog: action.dialog };
-    case 'CLOSE_DIALOG':
-      return { ...state, dialog: null };
+    case 'OPEN_DIALOG': {
+      const d = action.dialog;
+      if (!d) return state;
+      if (MODAL_KINDS.has(d.kind)) return { ...state, modal: d };
+      // Dedupe: opening a kind that's already a tab just refocuses it (no second copy) and refreshes
+      // its props — so you can never get two Application Settings tabs.
+      const existing = state.panels.find((p) => p.kind === d.kind);
+      if (existing) {
+        return { ...state, activePanelId: existing.id,
+          panels: state.panels.map((p) => (p.id === existing.id ? { ...p, ...d } : p)) };
+      }
+      const id = state.panelSeq + 1;
+      return { ...state, panels: [...state.panels, { ...d, id }], activePanelId: id, panelSeq: id };
+    }
+    case 'CLOSE_DIALOG': {
+      // A dialog's own ×/Esc closes whatever is focused: a modal first, else the active panel tab.
+      if (state.modal) return { ...state, modal: null };
+      if (state.activePanelId == null) return state;
+      return { ...state, activePanelId: null,
+        panels: state.panels.filter((p) => p.id !== state.activePanelId) };
+    }
+    case 'SET_ACTIVE_PANEL':
+      return { ...state, activePanelId: action.id };
+    case 'CLOSE_PANEL':
+      return { ...state, panels: state.panels.filter((p) => p.id !== action.id),
+        activePanelId: state.activePanelId === action.id ? null : state.activePanelId };
     case 'TOGGLE_SHOW_RSVP':
       return { ...state, showRsvp: !state.showRsvp };
     case 'TOGGLE_LINES':
@@ -541,6 +579,11 @@ export function AppProvider({ children }) {
 
   const openDialog = useCallback((dialog) => dispatch({ type: 'OPEN_DIALOG', dialog }), []);
   const closeDialog = useCallback(() => dispatch({ type: 'CLOSE_DIALOG' }), []);
+  const setActivePanel = useCallback((id) => {
+    // Clicking the already-focused tab minimizes it (back to reading); otherwise focus it.
+    dispatch({ type: 'SET_ACTIVE_PANEL', id: stateRef.current.activePanelId === id ? null : id });
+  }, []);
+  const closePanel = useCallback((id) => dispatch({ type: 'CLOSE_PANEL', id }), []);
 
   const updateGlobal = useCallback(async (patch) => {
     const g = { ...stateRef.current.global, ...patch };
@@ -569,6 +612,8 @@ export function AppProvider({ children }) {
     setStatus,
     openDialog,
     closeDialog,
+    setActivePanel,
+    closePanel,
     updateGlobal,
     flushReadState,
   };

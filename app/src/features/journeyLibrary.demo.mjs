@@ -1,6 +1,6 @@
 // Self-check for journeyLibrary.js — run: node app/src/features/journeyLibrary.demo.mjs
 import assert from 'node:assert';
-import { deriveId, parseDifficulty, pubYear, readStatus, normalizeSeed, filterBooks, sortBooks, libraryStats, exportJourneyMarkdown } from './journeyLibrary.js';
+import { deriveId, parseDifficulty, pubYear, readStatus, setReadStatus, recommender, normalizeSeed, filterBooks, sortBooks, libraryStats, exportJourneyMarkdown } from './journeyLibrary.js';
 
 // id: ISBN wins; else author|title; stable across re-derive.
 assert.equal(deriveId({ isbn: '978-0-14-044913-6', title: 'X', author: 'Y' }), 'isbn:9780140449136');
@@ -15,6 +15,20 @@ assert.equal(pubYear({ pubDate: 'March 1866' }), 1866);
 assert.equal(readStatus({ completion: true }), 'finished');
 assert.equal(readStatus({ inProgress: true }), 'reading');
 assert.equal(readStatus({ completion: false }), 'toread');
+assert.equal(readStatus({ shelf: 'queue' }), 'queue');
+assert.equal(readStatus({ shelf: 'abandoned' }), 'abandoned');
+assert.equal(readStatus({ inProgress: true, shelf: 'abandoned' }), 'abandoned'); // abandon wins over reading
+
+// setReadStatus clears conflicting fields on transition
+assert.equal(setReadStatus({ inProgress: true }, 'abandoned').inProgress, false);
+assert.equal(setReadStatus({ inProgress: true }, 'abandoned').shelf, 'abandoned');
+assert.equal(setReadStatus({ shelf: 'queue' }, 'reading').shelf, null);
+assert.equal(setReadStatus({ completion: true, shelf: 'queue' }, 'queue').completion, false);
+assert.equal(setReadStatus({}, 'finished', '2025-01-01').finishTime, '2025-01-01');
+
+// recommender: missing → Claude (the seed's implicit source); explicit recBy wins
+assert.equal(recommender({}), 'Claude');
+assert.equal(recommender({ recBy: 'Sam' }), 'Sam');
 
 const raw = {
   meta: { note: 'sample' },
@@ -51,6 +65,13 @@ assert.equal(st.reading, 1);
 assert.equal(st.words, 300000);
 assert.equal(st.byDifficulty[5], 1);
 assert.equal(st.recentFinishes[0].title, 'The Trial');
+assert.equal(st.byRecommender.Claude, 4); // seed has no recBy → all Claude
+
+// queue + abandoned flow through stats and filters
+const shelved = books.map((b, i) => (i === 3 ? setReadStatus(b, 'queue') : b));
+assert.equal(libraryStats(shelved).queue, 1);
+assert.equal(filterBooks(shelved, { readState: 'queue' }).length, 1);
+assert.equal(filterBooks([{ recBy: 'Sam' }, {}], { recBy: 'Sam' }).length, 1);
 
 const md = exportJourneyMarkdown(books, { title: 'Test' });
 assert.ok(md.includes('## Finished (2)'));
