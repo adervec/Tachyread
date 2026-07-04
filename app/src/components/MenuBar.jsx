@@ -163,15 +163,17 @@ export default function MenuBar({ onFileOpen, onAction }) {
   function chooseFile() {
     const input = document.createElement('input');
     input.type = 'file';
+    input.multiple = true; // select several at once → each opens as its own tab
     input.accept = '.txt,.md,.csv,.log';
-    input.onchange = () => input.files?.[0] && onFileOpen(input.files[0]);
+    input.onchange = () => input.files?.length && onFileOpen(input.files);
     input.click();
   }
   function chooseDoc() {
     const input = document.createElement('input');
     input.type = 'file';
+    input.multiple = true;
     input.accept = '.docx,.pdf,.epub,.txt,.md,.markdown,.html,.htm';
-    input.onchange = () => input.files?.[0] && onFileOpen(input.files[0]);
+    input.onchange = () => input.files?.length && onFileOpen(input.files);
     input.click();
   }
 

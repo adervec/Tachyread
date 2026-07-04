@@ -465,7 +465,7 @@ export function AppProvider({ children }) {
         type: 'SET_IMPORT',
         payload: {
           fileName: file.name,
-          done: true,
+          complete: true, // NOT `done` — parsers report page/section progress as { done: n, total },
           words: doc.words.length,
           lines: doc.lines.length,
           tocCount: exactToc ? doc.tocEntries.length : 0,
@@ -480,6 +480,30 @@ export function AppProvider({ children }) {
       dispatch({ type: 'SET_STATUS', text: `Failed to open ${file.name}: ${e.message}` });
     }
   }, [openDoc]);
+
+  // Open one or many files. A single file keeps the full import wizard (structure summary + suggested
+  // processing). Multiple files open as their own tabs behind one combined progress bar — no per-file
+  // summary card to click through — then activate the first opened tab.
+  const openFiles = useCallback(async (fileList) => {
+    const files = (fileList instanceof File ? [fileList] : [...(fileList || [])]).filter(Boolean);
+    if (files.length === 0) return;
+    if (files.length === 1) { await openFile(files[0]); return; }
+    let firstTab = null, opened = 0;
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const prog = (p) => dispatch({ type: 'SET_IMPORT', payload: { fileName: f.name, phase: `${i + 1}/${files.length} · ${(p && p.phase) || f.name}`, done: i, total: files.length } });
+      prog(null);
+      try {
+        const doc = await parseFile(f, prog);
+        const tab = await openDoc(doc, { silent: true });
+        if (!firstTab) firstTab = tab;
+        opened++;
+      } catch (e) { console.error(e); }
+    }
+    dispatch({ type: 'SET_IMPORT', payload: null });
+    if (firstTab) dispatch({ type: 'SET_ACTIVE_TAB', id: firstTab.id });
+    dispatch({ type: 'SET_STATUS', text: `Opened ${opened} of ${files.length} document${files.length === 1 ? '' : 's'}.` });
+  }, [openFile, openDoc]);
 
   const openClipboard = useCallback(async () => {
     try {
@@ -533,6 +557,7 @@ export function AppProvider({ children }) {
     activeTab,
     dispatch,
     openFile,
+    openFiles,
     openClipboard,
     openDoc,
     hydrateTab,
