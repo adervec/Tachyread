@@ -16,11 +16,27 @@ const CLAP_CMDS = [
   { say: '👏 👏 👏', does: '← previous word' },
 ];
 
-export default function AudioChat({ log, scope, mode = 'Both' }) {
+export default function AudioChat({ log, scope, mode = 'Both', pos, onMove, onDrop, onClose }) {
   const endRef = useRef(null);
   const canvasRef = useRef(null);
+  const elRef = useRef(null);
+  const drag = useRef(null);
   const [showLegend, setShowLegend] = useState(false);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [log]);
+
+  // Draggable by its header (like the floating chips); clamped on-screen; position persisted by App.
+  function onDown(e) {
+    if (e.target.closest('button')) return; // let header buttons work
+    const r = elRef.current.getBoundingClientRect();
+    drag.current = { dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, h: r.height };
+    elRef.current.setPointerCapture?.(e.pointerId);
+  }
+  function onPointerMove(e) {
+    const d = drag.current; if (!d) return;
+    onMove?.({ x: Math.max(4, Math.min(window.innerWidth - d.w - 4, e.clientX - d.dx)), y: Math.max(48, Math.min(window.innerHeight - d.h - 4, e.clientY - d.dy)) });
+  }
+  function onUp(e) { if (drag.current) { drag.current = null; elRef.current?.releasePointerCapture?.(e.pointerId); onDrop?.(pos); } }
+  const posStyle = pos ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : undefined;
 
   // Oscilloscope: draw the live time-domain waveform from the mic analyser.
   useEffect(() => {
@@ -52,10 +68,11 @@ export default function AudioChat({ log, scope, mode = 'Both' }) {
   const clapOn = mode === 'Claps' || mode === 'Both';
 
   return (
-    <div className="audio-chat" role="log" aria-live="polite">
-      <div className="audio-chat-head">
+    <div ref={elRef} className="audio-chat" role="log" aria-live="polite" style={posStyle}>
+      <div className="audio-chat-head" onPointerDown={onDown} onPointerMove={onPointerMove} onPointerUp={onUp} onPointerCancel={onUp} title="Drag to move">
         🎧 Audio commands
         <button className={`ac-help${showLegend ? ' on' : ''}`} title={showLegend ? 'Back to what was heard' : 'Show all commands'} onClick={() => setShowLegend((v) => !v)}>{showLegend ? '☰' : '?'}</button>
+        <button className="ac-close" title="Close — turns voice commands off" onClick={onClose}>×</button>
       </div>
       {scope && <canvas ref={canvasRef} className="audio-scope" width={236} height={38} />}
       {showLegend ? (

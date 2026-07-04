@@ -251,7 +251,7 @@ function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, li
   );
 }
 
-function WordMenu({ menu, onClose, onJumpWord }) {
+function WordMenu({ menu, onClose, onJumpWord, onAddNote }) {
   if (!menu) return null;
   const w = menu.word;
   const enc = encodeURIComponent(w);
@@ -260,6 +260,7 @@ function WordMenu({ menu, onClose, onJumpWord }) {
     onClose();
   };
   const items = [
+    { label: '📝 Add note here', fn: () => { onAddNote?.(menu.start >= 0 ? menu.start : 0); onClose(); } },
     { label: `Copy “${w}”`, fn: () => { navigator.clipboard?.writeText(w).catch(() => {}); onClose(); } },
     { label: 'Translate (Google)', fn: () => open(`https://translate.google.com/?sl=auto&tl=en&text=${enc}&op=translate`) },
     { label: 'Dictionary (Merriam-Webster)', fn: () => open(`https://www.merriam-webster.com/dictionary/${enc}`) },
@@ -298,7 +299,7 @@ function revealBoundary(doc, idx, mode) {
   return Infinity;
 }
 
-export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { line: -1, token: 0 }, visibleRef, onVisible, compact = false, scrollRead = false, recenterKey = 0 }) {
+export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { line: -1, token: 0 }, visibleRef, onVisible, compact = false, scrollRead = false, recenterKey = 0, onAddNote }) {
   const { doc, settings } = tab;
   const paneVisRef = useReportVisibility(onVisible || (() => {}));
   const idx = settings.wordIndex;
@@ -626,7 +627,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
           />
         </div>
       )}
-      <WordMenu menu={menu} onClose={() => setMenu(null)} onJumpWord={onJumpWord} />
+      <WordMenu menu={menu} onClose={() => setMenu(null)} onJumpWord={onJumpWord} onAddNote={onAddNote} />
     </div>
   );
 }

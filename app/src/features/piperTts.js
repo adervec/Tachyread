@@ -63,3 +63,15 @@ export async function downloadVoice(voiceId, onProgress) {
 export async function isVoiceDownloaded(voiceId) {
   try { const tts = await lib(); return (await tts.stored()).includes(voiceId); } catch { return false; }
 }
+
+// Voice ids already downloaded to this device (for the audiobook manager's voice picker).
+export async function installedVoices() {
+  try { const tts = await lib(); return await tts.stored(); } catch { return []; }
+}
+
+// A friendly label for a Piper voice id (curated English names, else a prettified id).
+export function voiceLabel(id) {
+  if (!id) return 'unknown voice';
+  const e = ENGLISH_VOICES.find((v) => v.id === id);
+  return e ? e.label : id.replace(/_/g, ' ').replace(/-/g, ' · ');
+}

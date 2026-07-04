@@ -27,6 +27,7 @@ import StatisticsDialog from './dialogs/StatisticsDialog.jsx';
 import HistoryDialog from './dialogs/HistoryDialog.jsx';
 import ProperNamesDialog from './dialogs/ProperNamesDialog.jsx';
 import AudiobookDialog from './dialogs/AudiobookDialog.jsx';
+import NotesDialog from './dialogs/NotesDialog.jsx';
 import FootnoteOverlay from './dialogs/FootnoteOverlay.jsx';
 import TtsPopupDialog from './dialogs/TtsPopupDialog.jsx';
 import FaceLibraryDialog from './dialogs/FaceLibraryDialog.jsx';
@@ -62,8 +63,9 @@ import AttentionDialog from './dialogs/AttentionDialog.jsx';
 import AmbientDialog from './dialogs/AmbientDialog.jsx';
 import DataDialog from './dialogs/DataDialog.jsx';
 import BookGroupsDialog from './dialogs/BookGroupsDialog.jsx';
+import LiteraryJourneyDialog from './dialogs/LiteraryJourneyDialog.jsx';
 import ComfortMonitor from './components/ComfortMonitor.jsx';
-import { getLineIndex, getParagraphRange, detectProperNames } from './document/readerDocument.js';
+import { getLineIndex, getParagraphRange, detectProperNames, audiobookChunks } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan, mergeSkipRanges, currentChapter } from './document/toc.js';
 import { defaultFileSettings, tabDefaultsFrom } from './state/settings.js';
 import { cancelSpeech, speak, setPreferredLanguage } from './features/tts.js';
@@ -73,11 +75,11 @@ import SaveTabDialog from './dialogs/SaveTabDialog.jsx';
 import { createReadAloud } from './features/readAloud.js';
 import { createOfflineReadAloud } from './features/offlineReadAloud.js';
 import { playButtonView } from './features/playButtonMode.js';
-import { defaultVoiceForLang } from './features/piperTts.js';
+import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips } from './state/storage.js';
 import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
 import { startMicScope, micScopeSupported } from './features/micScope.js';
@@ -127,7 +129,9 @@ function AppInner() {
   const chips = isCompact || !!state.global.chipMode;
   const [mobileView, setMobileView] = useState('rsvp'); // compact-screen single reading view: 'rsvp' | 'lines'
   const [recenterKey, setRecenterKey] = useState(0); // bump to snap the Lines pane back to the current word
+  const [audioChatPos, setAudioChatPos] = useState(() => state.global.audioChatPos || null); // draggable audio-command chip
   const [controlsCollapsed, setControlsCollapsed] = useState(false); // minimize the bottom dock for text room
+  const [moreOpen, setMoreOpen] = useState(false); // mobile: show the finer controls row (toggle lives in the dock grip bar)
   const [chromeHidden, setChromeHidden] = useState(false); // mobile: hide menu+tabs above the reader for text room
   const touchRef = useRef(null); // swipe-gesture start point
   const engineRef = useRef(null);
@@ -237,7 +241,8 @@ function AppInner() {
   activeTabRef.current = activeTab;
   const readAloudRef = useRef(null);
   const readAloudModeRef = useRef(null); // false = native Web Speech, true = offline Piper
-  const [ttsStatus, setTtsStatus] = useState('idle'); // offline synth state: idle | synth | playing | error
+  const [ttsStatus, setTtsStatus] = useState('idle'); // offline read-aloud state: idle | playing | native | error
+  const [abCoverage, setAbCoverage] = useState(null); // { pct, generated, total } audiobook coverage of the active doc
   // Live read-aloud speed (0.5–2.0), read via a ref so the driver closures always see the latest.
   const ttsSpeedRef = useRef(1);
   ttsSpeedRef.current = Math.max(0.5, Math.min(2, state.global.ttsSpeed || 1));
@@ -417,7 +422,7 @@ function AppInner() {
             getDoc: () => activeTabRef.current?.doc,
             getIndex: () => activeTabRef.current?.settings.wordIndex || 0,
             setIndex: ttsSetIndex,
-            getVoiceId: () => state.global.offlineVoiceId || defaultVoiceForLang(state.global.language || 'en'),
+            getVoiceName: () => activeTabRef.current?.settings.annunciateVoice, // native fallback voice
             getRate: () => ttsSpeedRef.current,
             onEnd: () => setPlaying(false),
             onStatus: (s) => setTtsStatus(s),
@@ -453,13 +458,25 @@ function AppInner() {
     // eslint-disable-next-line
   }, [playing, activeTab?.settings?.readAloud, activeTab?.id, state.global.offlineVoice]);
 
-  // Surface offline-voice synthesis state (the on-device model has a short delay before the first
-  // line of each fresh position — prefetch hides it after that).
   useEffect(() => {
-    if (!state.global.offlineVoice) return;
-    if (ttsStatus === 'synth') setStatus('🗣 Preparing the offline voice…');
-    else if (ttsStatus === 'error') setStatus('Offline voice unavailable — download its model in Audio → Audio Settings.');
+    if (state.global.offlineVoice && ttsStatus === 'error') setStatus('Offline voice unavailable — download its model in Audio → Audio Settings.');
   }, [ttsStatus, state.global.offlineVoice]);
+
+  // Audiobook coverage of the active doc while read-aloud is on — for the status badge (nudges you to
+  // pre-generate more in the manager for lock-screen playback). Static during a run (no auto-synth).
+  useEffect(() => {
+    const on = playing && !!activeTab?.settings?.readAloud && !!activeTab?.doc?.contentChecksum;
+    if (!on) { setAbCoverage(null); return undefined; }
+    let alive = true;
+    (async () => {
+      const cks = audiobookChunks(activeTab.doc);
+      const manifest = await getAudiobookManifest(activeTab.doc.contentChecksum);
+      if (!alive) return;
+      const g = cks.filter((c) => entryClips(manifest.lines[c.startLine]).length).length;
+      setAbCoverage({ pct: cks.length ? Math.round((g / cks.length) * 100) : 0, generated: g, total: cks.length });
+    })();
+    return () => { alive = false; };
+  }, [playing, activeTab?.settings?.readAloud, activeTab?.id]);
 
   // Keep the lock-screen metadata current as reading moves — refresh the track name when the whole-
   // number percent (or chapter) changes, so it shows live progress without churning every word.
@@ -1248,6 +1265,9 @@ function AppInner() {
       } else if (ctrl && shift && (e.key === 'A' || e.key === 'a')) {
         e.preventDefault();
         if (activeTab) openDialog({ kind: 'audiobook' });
+      } else if (ctrl && shift && (e.key === 'N' || e.key === 'n')) {
+        e.preventDefault();
+        if (activeTab) openDialog({ kind: 'notes' });
       } else if (ctrl && shift && (e.key === 'T' || e.key === 't')) {
         e.preventDefault();
         if (activeTab) openDialog({ kind: 'tts-popup' });
@@ -1601,6 +1621,7 @@ function AppInner() {
     if (action === 'help') return openDialog({ kind: 'help' });
     if (action === 'data') return openDialog({ kind: 'data' });
     if (action === 'book-groups') return openDialog({ kind: 'book-groups' });
+    if (action === 'literary-journey') return openDialog({ kind: 'literary-journey' });
     if (action === 'def-settings') return openDialog({ kind: 'def-settings' });
     if (action === 'tab-settings' && activeTab) return openDialog({ kind: 'tab-settings' });
     if (action === 'reset-tab' && activeTab) {
@@ -1617,6 +1638,7 @@ function AppInner() {
     if (action === 'index-wizard' && activeTab) return openDialog({ kind: 'resource-wizard', resourceKind: 'index' });
     if (action === 'notes-wizard' && activeTab) return openDialog({ kind: 'resource-wizard', resourceKind: 'notes' });
     if (action === 'audiobook' && activeTab) return openDialog({ kind: 'audiobook' });
+    if (action === 'notes' && activeTab) return openDialog({ kind: 'notes' });
     if (action === 'footnote' && activeTab) return setShowFootnote((s) => !s);
     if (action === 'typing' && activeTab) {
       patchSettings(activeTab.id, {
@@ -1770,6 +1792,7 @@ function AppInner() {
           compact={isCompact}
           scrollRead={state.global.scrollAdvances}
           recenterKey={recenterKey}
+          onAddNote={(wi) => { jumpWord(wi); openDialog({ kind: 'notes' }); }}
         />
       ),
     });
@@ -1923,15 +1946,30 @@ function AppInner() {
       )}
       </div>
       <div className={`controls-dock${controlsCollapsed ? ' collapsed' : ''}`}>
-        <button
-          className="dock-handle"
-          onClick={() => setControlsCollapsed((c) => !c)}
-          title={controlsCollapsed ? 'Show controls' : 'Minimize controls — more room for text'}
-          aria-label={controlsCollapsed ? 'Show controls' : 'Minimize controls'}
-        >
-          <span className="dock-grip" />
-          <span className="dock-handle-label">{controlsCollapsed ? '⌃ controls' : '⌄'}</span>
-        </button>
+        <div className="dock-handle-bar">
+          <button
+            className="dock-handle"
+            onClick={() => setControlsCollapsed((c) => !c)}
+            title={controlsCollapsed ? 'Show controls' : 'Minimize controls — more room for text'}
+            aria-label={controlsCollapsed ? 'Show controls' : 'Minimize controls'}
+          >
+            <span className="dock-grip" />
+            <span className="dock-handle-label">{controlsCollapsed ? '⌃ controls' : '⌄'}</span>
+          </button>
+          {/* The "more/fewer controls" toggle lives here, in the bar that expands the dock — not inside
+              the controls pane. Only meaningful on compact screens with the dock expanded. */}
+          {isCompact && !controlsCollapsed && (
+            <button
+              className={`dock-more${moreOpen ? ' open' : ''}`}
+              onClick={() => setMoreOpen((o) => !o)}
+              aria-expanded={moreOpen}
+              aria-label={moreOpen ? 'Fewer controls' : 'More controls'}
+              title="More / fewer controls"
+            >
+              {moreOpen ? '▴ less' : '▾ more'}
+            </button>
+          )}
+        </div>
         {controlsCollapsed ? (
           activeTab && (
             <div className="dock-mini">
@@ -1982,13 +2020,16 @@ function AppInner() {
             audioCtrl={!!activeTab.settings.audioCtrl}
             readAloud={!!activeTab.settings.readAloud}
             onToggleFocus={toggleFocusMode}
-            onToggleReadAloud={() =>
+            onToggleReadAloud={() => {
+              const turningOn = !activeTab.settings.readAloud;
               patchSettings(activeTab.id, {
-                readAloud: !activeTab.settings.readAloud,
+                readAloud: turningOn,
                 typing: { ...activeTab.settings.typing, enabled: false },
                 speaking: { ...activeTab.settings.speaking, enabled: false },
-              })
-            }
+              });
+              // Read-aloud and scroll-to-read are mutually exclusive (scroll drives the pace itself).
+              if (turningOn && state.global.scrollAdvances) updateGlobal({ scrollAdvances: false });
+            }}
             onPlayPause={playPause}
             onPrevWord={() => nav('prevWord')}
             onNextWord={() => nav('nextWord')}
@@ -2004,6 +2045,7 @@ function AppInner() {
             goalKills={goalKills}
             onTocIcon={onTocIcon}
             onJumpToCurrent={jumpToCurrent}
+            moreOpen={moreOpen}
           />
         ) : (
           <div className="controls-bar" style={{ opacity: 0.5 }}>
@@ -2016,6 +2058,13 @@ function AppInner() {
       <div className="app-status">
         {state.global.showPerfMeter && <PerfMonitor />}
         <span className="app-status-text">{state.appStatus}</span>
+        {playing && !!activeTab?.settings?.readAloud && (
+          <span className="webcam-badge wb-watching" title="Read-aloud voice + how much of this book is pre-generated as an audiobook. Pre-generate more in Audio → Audiobook Manager for lock-screen playback (ungenerated parts use the light native voice).">
+            🗣 {state.global.offlineVoice ? voiceLabel(state.global.offlineVoiceId || defaultVoiceForLang(state.global.language || 'en')).split(' · ')[0] : (activeTab.settings.annunciateVoice || 'browser voice')}
+            {abCoverage ? ` · 📚 ${abCoverage.pct}%` : ''}
+            {ttsStatus === 'native' ? ' · native' : ''}
+          </span>
+        )}
         {camOn && webcamState !== 'off' && (
           <button className={`webcam-badge wb-${webcamState}`} title={state.global.webcamPreview ? 'Webcam — frames are analysed on your device and never leave it' : 'Show the camera popup'} onClick={() => updateGlobal({ webcamPreview: true })}>
             📷 {WEBCAM_LABEL[webcamState] || webcamState}
@@ -2121,6 +2170,9 @@ function AppInner() {
         <StatisticsDialog tab={activeTab} onClose={closeDialog} />
       )}
       {dialog?.kind === 'history' && <HistoryDialog onClose={closeDialog} />}
+      {dialog?.kind === 'literary-journey' && (
+        <LiteraryJourneyDialog global={state.global} onPatch={(p) => updateGlobal(p)} onClose={closeDialog} />
+      )}
       {dialog?.kind === 'proper-names' && activeTab && (
         <ProperNamesDialog
           tab={activeTab}
@@ -2131,6 +2183,9 @@ function AppInner() {
       )}
       {dialog?.kind === 'audiobook' && activeTab && (
         <AudiobookDialog tab={activeTab} onClose={closeDialog} />
+      )}
+      {dialog?.kind === 'notes' && activeTab && (
+        <NotesDialog tab={activeTab} onJumpWord={(wi) => jumpWord(wi)} onClose={closeDialog} />
       )}
       {dialog?.kind === 'tts-popup' && activeTab && (
         <TtsPopupDialog tab={activeTab} onClose={closeDialog} />
@@ -2257,8 +2312,19 @@ function AppInner() {
         </div>
       )}
 
-      {/* Live audio-command panel: oscilloscope + transcript + a legend of every command. */}
-      {!!activeTab?.settings?.audioCtrl && <AudioChat log={audioLog} scope={micScope} mode={state.global.audioCtrlMode || 'Both'} />}
+      {/* Live audio-command panel: oscilloscope + transcript + a legend of every command. Draggable;
+          × turns voice commands off. */}
+      {!!activeTab?.settings?.audioCtrl && (
+        <AudioChat
+          log={audioLog}
+          scope={micScope}
+          mode={state.global.audioCtrlMode || 'Both'}
+          pos={audioChatPos}
+          onMove={setAudioChatPos}
+          onDrop={(p) => p && updateGlobal({ audioChatPos: p })}
+          onClose={() => patchSettings(activeTab.id, { audioCtrl: false })}
+        />
+      )}
 
       {/* Camera popup: live self-view + event log + on-video overlay + a legend of every event. Shown
           while a front-camera feature is on (never on mobile). − minimizes; × turns the camera off. */}

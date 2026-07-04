@@ -19,6 +19,10 @@ export const BACKUP_FILE_NAME = 'tachyread-backup.json';
 // Cloud sync carries reading PROGRESS only (see storage.exportProgressData) — a separate, smaller
 // file from the full local backup, so a Drive/Dropbox sync folder never holds your file bodies.
 export const PROGRESS_FILE_NAME = 'tachyread-progress.json';
+// The Literary Journey tracker (the user's ~5 MB book library + edits) rides its OWN file, not the
+// 5-second progress bundle — it's large and mostly static, so it syncs on explicit action / a long
+// interval instead of every few seconds while reading.
+export const LIBRARY_FILE_NAME = 'tachyread-library.json';
 
 async function ensureDirPermission(handle, mode = 'readwrite') {
   if (!handle) return false;

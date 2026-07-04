@@ -31,6 +31,7 @@ const MENUS = {
   ],
   // What's on screen right now.
   view: [
+    { label: 'Notes & Annotations...', shortcut: 'Ctrl+Shift+N', action: 'notes' },
     { label: 'Show / Hide Lines Pane', action: 'toggle-lines' },
     { label: 'Proper Names Index...', shortcut: 'Ctrl+I', action: 'proper-names' },
     { label: 'Preview Footnote', shortcut: 'Ctrl+Shift+F', action: 'footnote' },
@@ -53,6 +54,7 @@ const MENUS = {
     { label: 'Regression Report...', action: 'regressions' },
     { label: 'Attention Check...', action: 'attention' },
     { label: 'Reading History...', shortcut: 'Ctrl+H', action: 'history' },
+    { label: 'Literary Journey (Reading Tracker)...', action: 'literary-journey' },
   ],
   // Document-resource generators.
   tools: [
