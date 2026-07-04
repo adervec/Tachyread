@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { useIsCompact } from '../state/device.js';
 import Trendline from './Trendline.jsx';
@@ -16,13 +16,12 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent }) {
+export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, moreOpen = false }) {
   const { patchSettings, state, updateGlobal } = useApp();
   const isCompact = useIsCompact();
-  // On phones the full playback row (10 nav buttons + speed unit + 4 mode toggles + goal) wraps into
-  // a tall stack that eats the reader. Collapse the secondary controls behind a "More" disclosure so
-  // the default bar is just the essentials (WPM, page/line stepping, play). Desktop is unchanged.
-  const [moreOpen, setMoreOpen] = useState(false);
+  // On phones the full playback row (10 nav buttons + speed unit + 4 mode toggles + goal) wraps into a
+  // tall stack that eats the reader. The finer steps are behind a "More" disclosure whose toggle lives
+  // in the dock's grip bar (App.jsx) — this component just renders the extra row when `moreOpen`.
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
   const totalWords = doc.words.length;
@@ -151,15 +150,6 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
           <div className="playback-buttons compact-pb">
             <div className="pb-transport">
               {B.pageUp()}{B.prevLine()}{playBtn}{B.nextLine()}{B.pageDown()}
-              <button
-                className={`pb-toggle${moreOpen ? ' open' : ''}`}
-                aria-expanded={moreOpen}
-                aria-label={moreOpen ? 'Fewer controls' : 'More controls'}
-                title="More / fewer controls"
-                onClick={() => setMoreOpen((o) => !o)}
-              >
-                {moreOpen ? '▴' : '▾'}
-              </button>
             </div>
             {moreOpen && (
               <div className="pb-fine">
@@ -242,7 +232,12 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             <span title="Scroll-to-read (Lines pane): scroll the text normally and whatever passes the top edge counts as read — your reading position follows the topmost visible line.">SCROLL</span>
             <button
               className={state.global.scrollAdvances ? 'toggle-on' : ''}
-              onClick={() => updateGlobal({ scrollAdvances: !state.global.scrollAdvances })}
+              onClick={() => {
+                const turningOn = !state.global.scrollAdvances;
+                updateGlobal({ scrollAdvances: turningOn });
+                // Scroll-to-read and read-aloud are mutually exclusive.
+                if (turningOn && tab.settings.readAloud) patchSettings(tab.id, { readAloud: false });
+              }}
               title="Scroll-to-read: scroll the Lines pane; text that leaves the top counts as read"
             >
               {state.global.scrollAdvances ? 'On' : 'Off'}

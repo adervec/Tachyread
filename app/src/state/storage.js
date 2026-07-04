@@ -5,7 +5,7 @@ import { openDB } from 'idb';
 import { defaultGlobalSettings, defaultFileSettings, tabDefaultsFrom, syncableGlobalSettings } from './settings.js';
 
 const DB_NAME = 'Tachyread';
-const DB_VERSION = 8;
+const DB_VERSION = 10;
 
 let _dbPromise = null;
 
@@ -60,6 +60,20 @@ function getDB() {
         // File System Access handles (e.g. the chosen sync folder). Structured-cloneable but NOT
         // JSON, so this store is deliberately kept OUT of export/import. key string → handle.
         db.createObjectStore('fsHandles');
+      }
+      if (!db.objectStoreNames.contains('notes')) {
+        // Per-document notes / annotations. key: checksum → { notes: [{ id, wordIndex, text,
+        // color, createdAt, updatedAt, deleted }] }. Soft-deleted (tombstone) so deletes sync.
+        db.createObjectStore('notes');
+      }
+      if (!db.objectStoreNames.contains('library')) {
+        // The Literary Journey reading tracker (the user's own ~3.5k-book library, imported —
+        // NOT bundled). Out-of-line string keys, one record each so cross-device merges are per
+        // item: `book:<id>` → book + {updatedAt, deleted}; `refs:authors|genres|subgenres` and
+        // `meta` → reference singletons; `binding` → {map:{checksum→bookId}}; `ai` → AI outputs +
+        // the cowork instruction. Deliberately kept OUT of ALL_STORES (it syncs as its own Drive
+        // file, like audiobook audio) so a 5 MB library never bloats the local backup.
+        db.createObjectStore('library');
       }
     },
   });
@@ -243,40 +257,309 @@ export async function clearFocusSessions() {
   await db.clear('focusSessions');
 }
 
-// Audiobook clips. `source` marks how the clip was made: 'mic' (recorded voice) or 'tts' (Piper);
-// `voiceId` records which Piper voice, so a re-generate can tell whether a clip is up to date.
-export async function saveAudioClip(checksum, lineIndex, blob, durationMs, meta = {}) {
+// Audiobook clips — MULTIPLE per chunk, ordered by priority so the reader plays the top one and you
+// can keep alternates. `source`: 'mic' (recorded voice, always outranks TTS) or 'tts' (Piper, with a
+// `voiceId`). Blobs live in the `audiobook` store keyed by `${checksum}/${line}/${clipId}`; per-clip
+// metadata (source/voice/time/duration/size) lives in the manifest's ordered `clips` array so the
+// manager can list clips without reading the audio. Legacy single-clip books (blob at the un-suffixed
+// key, scalar meta on the manifest entry) are read transparently as a one-element list.
+const padLine = (n) => String(n).padStart(5, '0');
+const legacyBlobKey = (cs, line) => `${cs}/${padLine(line)}`;
+const clipBlobKey = (cs, line, id) => (id === 'legacy' ? legacyBlobKey(cs, line) : `${cs}/${padLine(line)}/${id}`);
+// Manifest line entry → ordered clip-metadata list (mic clips forced ahead of TTS, else insertion order).
+export function entryClips(entry) {
+  if (!entry) return [];
+  let clips;
+  if (Array.isArray(entry.clips)) clips = entry.clips;
+  else if (entry.durationMs != null || entry.source || entry.voiceId) {
+    clips = [{ id: 'legacy', source: entry.source || 'tts', voiceId: entry.voiceId || null, createdAt: entry.createdAt || 0, durationMs: entry.durationMs || 0, sizeBytes: entry.sizeBytes || 0 }];
+  } else clips = [];
+  return clips
+    .map((c, i) => [c, i])
+    .sort((a, b) => (a[0].source === 'mic' ? 0 : 1) - (b[0].source === 'mic' ? 0 : 1) || a[1] - b[1])
+    .map((x) => x[0]);
+}
+
+// Add a clip for a chunk (does NOT replace existing ones). Returns the new clip id.
+export async function addAudioClip(checksum, line, blob, meta = {}) {
   const db = await getDB();
-  const key = `${checksum}/${String(lineIndex).padStart(5, '0')}`;
-  await db.put('audiobook', { blob, durationMs, createdAt: Date.now() }, key);
-  let manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
-  // spanEndLine: for a chunk clip covering several wrapped lines, the last line it narrates (so the
-  // player advances past the whole chunk). Null/absent for a single-line clip.
-  manifest.lines[lineIndex] = {
-    durationMs, createdAt: Date.now(), source: meta.source || 'mic', voiceId: meta.voiceId || null,
-    spanEndLine: meta.spanEndLine != null ? meta.spanEndLine : lineIndex,
-  };
+  const source = meta.source || 'tts';
+  const id = `${source}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const now = Date.now();
+  await db.put('audiobook', { blob, durationMs: meta.durationMs || 0, createdAt: now, source, voiceId: meta.voiceId || null, sizeBytes: blob.size }, clipBlobKey(checksum, line, id));
+  const manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
+  const entry = manifest.lines[line] || {};
+  const clips = entryClips(entry);
+  clips.unshift({ id, source, voiceId: meta.voiceId || null, createdAt: now, durationMs: meta.durationMs || 0, sizeBytes: blob.size });
+  entry.clips = entryClips({ clips });
+  entry.spanEndLine = meta.spanEndLine != null ? meta.spanEndLine : (entry.spanEndLine != null ? entry.spanEndLine : line);
+  // shed any legacy scalar meta now that we track a clips[] array
+  delete entry.durationMs; delete entry.source; delete entry.voiceId; delete entry.createdAt;
+  manifest.lines[line] = entry;
+  await db.put('audiobookManifest', manifest, checksum);
+  return id;
+}
+
+// Back-compat shim (old callers pass durationMs positionally). Adds a clip.
+export async function saveAudioClip(checksum, line, blob, durationMs, meta = {}) {
+  return addAudioClip(checksum, line, blob, { ...meta, durationMs });
+}
+
+// The active (highest-priority) clip blob for a chunk — what the reader plays.
+export async function getAudioClip(checksum, line) {
+  const db = await getDB();
+  const manifest = await db.get('audiobookManifest', checksum);
+  const clips = entryClips(manifest?.lines?.[line]);
+  if (!clips.length) return await db.get('audiobook', legacyBlobKey(checksum, line));
+  return await db.get('audiobook', clipBlobKey(checksum, line, clips[0].id));
+}
+
+export async function getAudioClipById(checksum, line, id) {
+  const db = await getDB();
+  return await db.get('audiobook', clipBlobKey(checksum, line, id));
+}
+
+// Delete one clip. Removes the chunk from the manifest if it was the last.
+export async function deleteAudioClipById(checksum, line, id) {
+  const db = await getDB();
+  await db.delete('audiobook', clipBlobKey(checksum, line, id));
+  const manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
+  const entry = manifest.lines[line];
+  if (!entry) return;
+  const clips = entryClips(entry).filter((c) => c.id !== id);
+  if (clips.length) manifest.lines[line] = { ...entry, clips, durationMs: undefined, source: undefined, voiceId: undefined, createdAt: undefined };
+  else delete manifest.lines[line];
   await db.put('audiobookManifest', manifest, checksum);
 }
 
-export async function getAudioClip(checksum, lineIndex) {
+// Delete every clip for a chunk.
+export async function deleteAudioChunk(checksum, line) {
   const db = await getDB();
-  const key = `${checksum}/${String(lineIndex).padStart(5, '0')}`;
-  return await db.get('audiobook', key);
+  const manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
+  for (const c of entryClips(manifest.lines[line])) await db.delete('audiobook', clipBlobKey(checksum, line, c.id));
+  delete manifest.lines[line];
+  await db.put('audiobookManifest', manifest, checksum);
 }
 
-export async function deleteAudioClip(checksum, lineIndex) {
+// Set the priority order of a chunk's clips (mic clips stay ahead of TTS regardless).
+export async function reorderAudioClips(checksum, line, orderedIds) {
   const db = await getDB();
-  const key = `${checksum}/${String(lineIndex).padStart(5, '0')}`;
-  await db.delete('audiobook', key);
   const manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
-  delete manifest.lines[lineIndex];
+  const entry = manifest.lines[line];
+  if (!entry) return;
+  const byId = new Map(entryClips(entry).map((c) => [c.id, c]));
+  const ordered = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+  manifest.lines[line] = { ...entry, clips: entryClips({ clips: ordered }) };
   await db.put('audiobookManifest', manifest, checksum);
 }
 
 export async function getAudiobookManifest(checksum) {
   const db = await getDB();
   return (await db.get('audiobookManifest', checksum)) || { lines: {} };
+}
+
+// Total bytes of a book's audio clips (for the manager's storage readout).
+export async function audiobookSize(checksum) {
+  const manifest = await getAudiobookManifest(checksum);
+  let bytes = 0, clips = 0;
+  for (const line of Object.keys(manifest.lines)) {
+    for (const c of entryClips(manifest.lines[line])) { bytes += c.sizeBytes || 0; clips++; }
+  }
+  return { bytes, clips, chunks: Object.keys(manifest.lines).length };
+}
+
+// ── Notes / annotations ─────────────────────────────────────────────────────────────────────
+// Per-document, keyed by content checksum so the same book shares notes across devices. Each note is
+// optionally anchored to a wordIndex (null = a general note on the whole document). Deletes are
+// tombstones ({ deleted: true }) so they propagate through the union / last-write-wins cloud merge.
+export async function getNotes(checksum, includeDeleted = false) {
+  if (!checksum) return [];
+  const db = await getDB();
+  const rec = (await db.get('notes', checksum)) || { notes: [] };
+  const list = rec.notes || [];
+  return includeDeleted ? list : list.filter((n) => !n.deleted);
+}
+
+export async function saveNote(checksum, note) {
+  if (!checksum) return null;
+  const db = await getDB();
+  const rec = (await db.get('notes', checksum)) || { notes: [] };
+  const now = Date.now();
+  const id = note.id || `n_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const idx = rec.notes.findIndex((n) => n.id === id);
+  const merged = {
+    id, wordIndex: note.wordIndex ?? null, text: note.text || '', color: note.color || null,
+    createdAt: idx >= 0 ? rec.notes[idx].createdAt : now, updatedAt: now, deleted: !!note.deleted,
+  };
+  if (idx >= 0) rec.notes[idx] = merged; else rec.notes.push(merged);
+  await db.put('notes', rec, checksum);
+  return merged;
+}
+
+export async function deleteNote(checksum, id) {
+  const db = await getDB();
+  const rec = (await db.get('notes', checksum)) || { notes: [] };
+  const i = rec.notes.findIndex((n) => n.id === id);
+  if (i >= 0) { rec.notes[i] = { ...rec.notes[i], deleted: true, updatedAt: Date.now() }; await db.put('notes', rec, checksum); }
+}
+
+// ── Literary Journey library (the reading tracker) ───────────────────────────────────────────────
+// One record per key in the `library` store. Books are keyed `book:<id>` with a soft-delete tombstone
+// so removals propagate through the same union / last-write-wins merge the cloud file uses. Reference
+// data (authors/genres/subgenres/meta) are LWW singletons; `binding` links app documents (by content
+// checksum) to tracker book ids; `ai` holds AI-generated recs/analysis/tree + the cowork instruction.
+async function libraryCursor(fn) {
+  const db = await getDB();
+  let cursor = await db.transaction('library').store.openCursor();
+  while (cursor) { fn(cursor.key, cursor.value); cursor = await cursor.continue(); }
+}
+
+export async function getLibraryBooks(includeDeleted = false) {
+  const out = [];
+  await libraryCursor((key, val) => {
+    if (typeof key === 'string' && key.startsWith('book:') && (includeDeleted || !val.deleted)) out.push(val);
+  });
+  return out;
+}
+
+export async function saveLibraryBook(book) {
+  if (!book?.id) return null;
+  const db = await getDB();
+  const rec = { ...book, updatedAt: Date.now(), deleted: !!book.deleted };
+  try { await db.put('library', rec, `book:${book.id}`); } catch { /* quota — skip */ }
+  return rec;
+}
+
+export async function deleteLibraryBook(id) {
+  const db = await getDB();
+  const rec = await db.get('library', `book:${id}`);
+  if (rec) await db.put('library', { ...rec, deleted: true, updatedAt: Date.now() }, `book:${id}`);
+}
+
+export async function getLibraryRef(kind) {
+  const db = await getDB();
+  return (await db.get('library', `refs:${kind}`))?.data || null;
+}
+export async function saveLibraryRef(kind, data) {
+  const db = await getDB();
+  await db.put('library', { data, updatedAt: Date.now() }, `refs:${kind}`);
+}
+
+export async function getBinding() {
+  const db = await getDB();
+  return (await db.get('library', 'binding'))?.map || {};
+}
+export async function setBinding(checksum, bookId) {
+  if (!checksum) return;
+  const db = await getDB();
+  const rec = (await db.get('library', 'binding')) || { map: {} };
+  if (bookId) rec.map[checksum] = bookId; else delete rec.map[checksum];
+  rec.updatedAt = Date.now();
+  await db.put('library', rec, 'binding');
+  return rec.map;
+}
+
+export async function getJourneyAi() {
+  const db = await getDB();
+  return (await db.get('library', 'ai')) || null;
+}
+export async function saveJourneyAi(ai) {
+  const db = await getDB();
+  await db.put('library', { ...ai, updatedAt: Date.now() }, 'ai');
+}
+
+// Rough on-disk footprint + live book count for the storage-details readout (cheap cursor walk).
+export async function librarySize() {
+  let bytes = 0, books = 0;
+  await libraryCursor((key, val) => {
+    bytes += (typeof key === 'string' ? key.length : 0);
+    try { bytes += JSON.stringify(val).length; } catch { /* skip */ }
+    if (typeof key === 'string' && key.startsWith('book:') && !val.deleted) books++;
+  });
+  return { books, bytes };
+}
+
+export async function clearLibrary() {
+  const db = await getDB();
+  await db.clear('library');
+}
+
+// A versioned bundle of the whole tracker. Defaults (full: tombstones + refs + ai + binding) feed the
+// cloud Drive file; a filtered user export passes its own `books` and can drop deleted/ai/binding.
+export async function exportLibraryData(opts = {}) {
+  const { includeDeleted = true, includeAi = true, includeBinding = true, books = null } = opts;
+  const db = await getDB();
+  let bookList = books;
+  if (!bookList) {
+    bookList = [];
+    await libraryCursor((key, val) => {
+      if (typeof key === 'string' && key.startsWith('book:') && (includeDeleted || !val.deleted)) bookList.push(val);
+    });
+  }
+  return {
+    protocol: 'tachyread-journey', protocolVersion: 1, kind: 'library', generatedAt: Date.now(),
+    meta: (await db.get('library', 'meta'))?.data || null,
+    books: bookList,
+    authors: (await db.get('library', 'refs:authors'))?.data || null,
+    genres: (await db.get('library', 'refs:genres'))?.data || null,
+    subgenres: (await db.get('library', 'refs:subgenres'))?.data || null,
+    ai: includeAi ? (await db.get('library', 'ai')) || null : null,
+    binding: includeBinding ? (await db.get('library', 'binding'))?.map || null : null,
+  };
+}
+
+// Merge a tracker bundle (from a file or the Drive sync) into the store. Books union by id + LWW by
+// updatedAt (tombstones win a delete); refs/meta/ai LWW; binding unions. The dialog normalizes a raw
+// library.json into this envelope shape first (deriveId), so here we only require a books[] with ids.
+export async function importLibraryData(bundle, opts = {}) {
+  const { mode = 'merge' } = opts;
+  if (!bundle || !Array.isArray(bundle.books)) throw new Error('Not a Tachyread library file.');
+  const db = await getDB();
+  const tx = db.transaction('library', 'readwrite');
+  const store = tx.store;
+  if (mode === 'replace') {
+    let cur = await store.openCursor();
+    while (cur) {
+      if (typeof cur.key === 'string' && (cur.key.startsWith('book:') || cur.key.startsWith('refs:') || cur.key === 'meta')) await cur.delete();
+      cur = await cur.continue();
+    }
+  }
+  let added = 0, merged = 0;
+  for (const b of bundle.books) {
+    if (!b?.id) continue;
+    const key = `book:${b.id}`;
+    const existing = await store.get(key);
+    const incoming = { ...b, updatedAt: b.updatedAt || Date.now(), deleted: !!b.deleted };
+    if (!existing) { await store.put(incoming, key); added++; }
+    else if ((incoming.updatedAt || 0) >= (existing.updatedAt || 0)) { await store.put(incoming, key); merged++; }
+  }
+  const stamp = bundle.generatedAt || Date.now();
+  for (const [k, val] of [['meta', bundle.meta], ['refs:authors', bundle.authors], ['refs:genres', bundle.genres], ['refs:subgenres', bundle.subgenres]]) {
+    if (val == null) continue;
+    const existing = await store.get(k);
+    if (!existing || stamp >= (existing.updatedAt || 0)) await store.put({ data: val, updatedAt: stamp }, k);
+  }
+  if (bundle.ai) {
+    const existing = await store.get('ai');
+    if (!existing || (bundle.ai.updatedAt || 0) >= (existing.updatedAt || 0)) await store.put(bundle.ai, 'ai');
+  }
+  if (bundle.binding) {
+    const existing = (await store.get('binding')) || { map: {} };
+    await store.put({ map: { ...existing.map, ...bundle.binding }, updatedAt: Date.now() }, 'binding');
+  }
+  await tx.done;
+  return { added, merged, total: bundle.books.length };
+}
+
+// Wipe every clip + the manifest for one book (the manager's confirmation-guarded "delete all audio").
+export async function clearAudiobook(checksum) {
+  const db = await getDB();
+  const manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
+  for (const line of Object.keys(manifest.lines)) {
+    for (const c of entryClips(manifest.lines[line])) await db.delete('audiobook', clipBlobKey(checksum, Number(line), c.id));
+    await db.delete('audiobook', legacyBlobKey(checksum, Number(line))); // any stray legacy blob
+  }
+  await db.delete('audiobookManifest', checksum);
 }
 
 // ── Audiobook transfer (one book's clips → a file → another device) ────────────────────────────
@@ -291,10 +574,13 @@ export async function exportAudiobook(checksum, fileName = '') {
   const manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
   const clips = [];
   for (const li of Object.keys(manifest.lines)) {
-    const clip = await getAudioClip(checksum, Number(li));
-    if (clip?.blob) clips.push({ li: Number(li), blob: await packValue(clip.blob), durationMs: clip.durationMs, createdAt: clip.createdAt });
+    const line = Number(li);
+    for (const meta of entryClips(manifest.lines[li])) {
+      const rec = await db.get('audiobook', clipBlobKey(checksum, line, meta.id));
+      if (rec?.blob) clips.push({ li: line, id: meta.id, source: meta.source, voiceId: meta.voiceId, createdAt: meta.createdAt, durationMs: meta.durationMs, sizeBytes: meta.sizeBytes, blob: await packValue(rec.blob) });
+    }
   }
-  return { app: 'tachyread-audiobook', version: 1, checksum, fileName, exportedAt: Date.now(), manifest, clips };
+  return { app: 'tachyread-audiobook', version: 2, checksum, fileName, exportedAt: Date.now(), manifest, clips };
 }
 
 // Merge an audiobook bundle into this device's store. Keyed by the bundle's own checksum (so it lands
@@ -307,11 +593,17 @@ export async function importAudiobook(bundle) {
   const manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
   let imported = 0, skipped = 0;
   for (const c of bundle.clips || []) {
-    const local = manifest.lines[c.li];
-    if (local && local.source === 'mic') { skipped++; continue; } // keep your own recordings
-    const key = `${checksum}/${String(c.li).padStart(5, '0')}`;
-    await db.put('audiobook', { blob: unpackValue(c.blob), durationMs: c.durationMs, createdAt: c.createdAt || Date.now() }, key);
-    manifest.lines[c.li] = bundle.manifest?.lines?.[c.li] || { durationMs: c.durationMs, createdAt: c.createdAt || Date.now(), source: 'tts', voiceId: null, spanEndLine: c.li };
+    const line = c.li;
+    const entry = manifest.lines[line] || {};
+    const existing = entryClips(entry);
+    const id = c.id || `tts_import_${Math.random().toString(36).slice(2, 9)}`;
+    if (existing.some((e) => e.id === id)) { skipped++; continue; } // already have this exact clip
+    const now = c.createdAt || Date.now();
+    await db.put('audiobook', { blob: unpackValue(c.blob), durationMs: c.durationMs || 0, createdAt: now, source: c.source || 'tts', voiceId: c.voiceId || null, sizeBytes: c.sizeBytes || 0 }, clipBlobKey(checksum, line, id));
+    entry.clips = entryClips({ clips: [...existing, { id, source: c.source || 'tts', voiceId: c.voiceId || null, createdAt: now, durationMs: c.durationMs || 0, sizeBytes: c.sizeBytes || 0 }] });
+    entry.spanEndLine = entry.spanEndLine != null ? entry.spanEndLine : line;
+    delete entry.durationMs; delete entry.source; delete entry.voiceId; delete entry.createdAt;
+    manifest.lines[line] = entry;
     imported++;
   }
   await db.put('audiobookManifest', manifest, checksum);
@@ -364,7 +656,7 @@ export async function exportDatabase() {
 const ALL_STORES = [
   ['files', true], ['global', false], ['audiobook', false], ['audiobookManifest', false],
   ['readstate', false], ['grabbed', true], ['docs', true], ['grabSessions', true], ['typingRuns', true],
-  ['focusSessions', true],
+  ['focusSessions', true], ['notes', false],
 ];
 
 function bufToB64(buf) {
@@ -545,7 +837,7 @@ export async function exportProgressData() {
   const nameByChecksum = new Map((g.recentFiles || []).map((r) => [r.checksum, r.name]));
   const out = {
     app: 'tachyread-progress', version: 2, exportedAt: Date.now(),
-    device: g.deviceName || '', readstate: {}, files: {}, grabMarkers: {}, audiobookMarkers: {}, bookGroups: g.bookGroups || [],
+    device: g.deviceName || '', readstate: {}, files: {}, grabMarkers: {}, audiobookMarkers: {}, notes: {}, bookGroups: g.bookGroups || [],
     // Settings half of the sync (added in v2): the syncable application settings (prefs + Default Tab
     // Settings) and per-file tab settings, each with a last-write-wins timestamp.
     global: { settings: syncableGlobalSettings(g), updatedAt: g.settingsUpdatedAt || 0 },
@@ -556,6 +848,13 @@ export async function exportProgressData() {
   for (let i = 0; i < rsKeys.length; i++) {
     const v = rsVals[i] || {};
     out.readstate[rsKeys[i]] = { maskB64: v.maskB64 || '', wpmB64: v.wpmB64 || '', lifetimeActiveMs: v.lifetimeActiveMs || 0, daily: v.daily || [], paraTsB64: v.paraTsB64 || '' };
+  }
+  // Notes / annotations — the whole list (tombstones included) so deletes sync too.
+  const noteKeys = await db.getAllKeys('notes');
+  const noteVals = await db.getAll('notes');
+  for (let i = 0; i < noteKeys.length; i++) {
+    const list = noteVals[i]?.notes || [];
+    if (list.length) out.notes[noteKeys[i]] = list;
   }
   for (const f of await db.getAll('files')) {
     if (!f?.checksum) continue;
@@ -576,11 +875,12 @@ export async function exportProgressData() {
   const abVals = await db.getAll('audiobookManifest');
   for (let i = 0; i < abKeys.length; i++) {
     const lines = abVals[i]?.lines || {};
-    const entries = Object.values(lines);
-    if (!entries.length) continue;
+    const chunkKeys = Object.keys(lines);
+    if (!chunkKeys.length) continue;
     let mic = 0, tts = 0, updatedAt = 0;
-    for (const e of entries) { if (e.source === 'mic') mic++; else tts++; updatedAt = Math.max(updatedAt, e.createdAt || 0); }
-    out.audiobookMarkers[abKeys[i]] = { chunks: entries.length, mic, tts, updatedAt, device: g.deviceName || '', name: nameByChecksum.get(abKeys[i]) || '' };
+    // Count by each chunk's ACTIVE (top-priority) clip so the remote comparison stays chunk-based.
+    for (const k of chunkKeys) { const top = entryClips(lines[k])[0]; if (!top) continue; if (top.source === 'mic') mic++; else tts++; updatedAt = Math.max(updatedAt, top.createdAt || 0); }
+    out.audiobookMarkers[abKeys[i]] = { chunks: chunkKeys.length, mic, tts, updatedAt, device: g.deviceName || '', name: nameByChecksum.get(abKeys[i]) || '' };
   }
   return out;
 }
@@ -600,6 +900,19 @@ export async function importProgressData(bundle) {
       daily: mergeDaily(cur.daily, inc.daily),
       paraTsB64: cur.paraTsB64 || inc.paraTsB64 || '',
     }, checksum);
+    await tx.done;
+    merged++;
+  }
+  // Notes / annotations — union by note id, last-write-wins by updatedAt (a tombstone wins if newer).
+  for (const [checksum, incList] of Object.entries(bundle.notes || {})) {
+    const tx = db.transaction('notes', 'readwrite');
+    const cur = (await tx.store.get(checksum))?.notes || [];
+    const byId = new Map(cur.map((n) => [n.id, n]));
+    for (const n of incList || []) {
+      const prev = byId.get(n.id);
+      if (!prev || (n.updatedAt || 0) >= (prev.updatedAt || 0)) byId.set(n.id, n);
+    }
+    await tx.store.put({ notes: [...byId.values()] }, checksum);
     await tx.done;
     merged++;
   }

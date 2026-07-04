@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { resetGlobalToDefaults } from '../state/settings.js';
 import { LANGUAGES } from '../state/languages.js';
+import { ANTHROPIC_MODELS } from '../features/anthropic.js';
 
 // General application settings ONLY. Everything domain-specific lives on its own page under the
 // Settings / Typing / Audio menus: Camera & Gestures, Comfort & Breaks, Font Manager (incl. the
@@ -131,6 +132,27 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
           Pause fast reading if the text scrolls off-screen (read-aloud keeps going)
         </label>
       </Field>
+
+      <div className="field-section">AI (Notes suite — optional)</div>
+      <Field label="Anthropic API key">
+        <input
+          type="password"
+          value={g.anthropicKey || ''}
+          onChange={(e) => patch({ anthropicKey: e.target.value.trim() })}
+          placeholder="sk-ant-… (from console.anthropic.com)"
+          style={{ width: '100%' }}
+        />
+      </Field>
+      <Field label="Model">
+        <select value={g.anthropicModel || 'claude-sonnet-5'} onChange={(e) => patch({ anthropicModel: e.target.value })}>
+          {ANTHROPIC_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select>
+      </Field>
+      <p className="settings-note">
+        Enables <strong>Summarize / Analyze / Discuss</strong> in <strong>View → Notes &amp; Annotations</strong>.
+        The key is stored only on this device and is never synced; text you send (document excerpts + your
+        notes) goes to Anthropic and spends your own API credits.
+      </p>
 
       <div className="field-section">Table of contents</div>
       <p className="settings-note">

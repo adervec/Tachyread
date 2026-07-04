@@ -151,7 +151,7 @@ export function countOffDefaultSettings(settings, defaults) {
 // restores every preference to its default but preserves these so a reset never destroys the
 // user's library, history, saved work, sync setup, or their separate Default Tab Settings.
 export const GLOBAL_DATA_KEYS = new Set([
-  'recentFiles', 'ocrTemplates', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans',
+  'recentFiles', 'ocrTemplates', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey',
   'readingList', 'drillBestSpan', 'bestFlowWpm', 'bestDictationWpm', 'webcamCalib', 'sync',
   'deviceName', 'fileDefaults', 'ambient',
 ]);
@@ -238,6 +238,15 @@ export function defaultGlobalSettings() {
     // screen locked, unlike native TTS which Android suspends). offlineVoiceId '' = auto by language.
     offlineVoice: false,
     offlineVoiceId: '',
+    // ElevenLabs cloud TTS (optional audiobook-generation backend). Key stays on this device (a
+    // secret — kept out of cloud sync); model + last-used voice remembered for the manager.
+    elevenLabsKey: '',
+    elevenModel: 'eleven_multilingual_v2',
+    elevenVoiceId: '',
+    // Anthropic API (optional AI in the Notes suite — summary, analysis, discussion). Key stays on
+    // this device (a secret — kept out of cloud sync); model remembered.
+    anthropicKey: '',
+    anthropicModel: 'claude-sonnet-5',
     // On a typing run's end, show a grade + final statement and play a grade-matched sound.
     typingEndFanfare: true,
     // Touch gesture navigation (off by default — it can interfere with text selection/scroll):
@@ -253,6 +262,7 @@ export function defaultGlobalSettings() {
     mobileStatsPos: null, // {x,y} of the draggable floating stats popup on mobile
     mobileGoalPos: null, // {x,y} of the draggable floating goal chip
     mobileTimerPos: null, // {x,y} of the draggable floating timer chip
+    audioChatPos: null, // {x,y} of the draggable audio-command chip
     // Chip mode: on phones the face/stats/goal/timer always float as transparent draggable chips.
     // This turns that same floating-chip layout on for desktop too (the dock face/stats move out to
     // float), so the reading area stays clear.

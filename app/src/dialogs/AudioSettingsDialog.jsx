@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useVoices } from '../features/tts.js';
 import { ENGLISH_VOICES, defaultVoiceForLang, downloadVoice, isVoiceDownloaded, piperSupported } from '../features/piperTts.js';
+import { elevenVoices, ELEVEN_MODELS } from '../features/elevenLabs.js';
 
 // Audio settings, reachable from the Audio menu: the read-aloud voice + rate (per tab), the
 // speak-along follow mode, and the global auto-stop timer. Ambient sound keeps its own dialog.
@@ -20,6 +21,15 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
   function patch(p) {
     setS({ ...s, ...p });
     onPatch(p);
+  }
+
+  // ElevenLabs cloud voice: verify the key by fetching the account's voices.
+  const [elStatus, setElStatus] = useState(''); // '', 'checking', 'ok', or an error string
+  const [elCount, setElCount] = useState(0);
+  async function verifyEleven() {
+    setElStatus('checking'); setElCount(0);
+    try { const vs = await elevenVoices(global.elevenLabsKey); setElCount(vs.length); setElStatus('ok'); }
+    catch (e) { setElStatus(e?.message || 'Failed'); }
   }
 
   // Offline (Piper) voice: which voice, whether its model is downloaded, download progress.
@@ -91,6 +101,36 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
           )}
         </>
       )}
+
+      <div className="field-section">ElevenLabs (cloud voice — optional)</div>
+      <Field label="API key">
+        <input
+          type="password"
+          value={global.elevenLabsKey || ''}
+          onChange={(e) => { onPatchGlobal({ elevenLabsKey: e.target.value.trim() }); setElStatus(''); }}
+          placeholder="sk_… (from your ElevenLabs account)"
+          style={{ width: '100%' }}
+        />
+      </Field>
+      <Field label="Model">
+        <select value={global.elevenModel || 'eleven_multilingual_v2'} onChange={(e) => onPatchGlobal({ elevenModel: e.target.value })}>
+          {ELEVEN_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select>
+      </Field>
+      <div className="data-row">
+        <button onClick={verifyEleven} disabled={!global.elevenLabsKey || elStatus === 'checking'}>
+          {elStatus === 'checking' ? 'Checking…' : 'Verify key & list voices'}
+        </button>
+        {elStatus === 'ok' && <span className="settings-note" style={{ margin: 0, color: '#2e9d4f' }}>✓ Connected — {elCount} voice(s). Pick one in the Audiobook Manager.</span>}
+        {elStatus && elStatus !== 'checking' && elStatus !== 'ok' && <span className="settings-note" style={{ margin: 0, color: '#c0392b' }}>{elStatus}</span>}
+      </div>
+      <p className="settings-note">
+        Optional, higher-quality voices for <strong>generating an audiobook</strong> (Audio → Audiobook Manager).
+        Unlike the offline voice, this <strong>sends the text to ElevenLabs’ servers</strong> and spends your own
+        API key + quota. The key is stored only on this device and is never synced. Generated clips are cached
+        and then play offline like any other.
+      </p>
+
       <div className="field-section">Read aloud (built-in voice)</div>
       <Field label={`Voice (${voices.length} available)`}>
         <select value={s.annunciateVoice || ''} onChange={(e) => patch({ annunciateVoice: e.target.value })}>
