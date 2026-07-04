@@ -545,7 +545,7 @@ export async function exportProgressData() {
   const nameByChecksum = new Map((g.recentFiles || []).map((r) => [r.checksum, r.name]));
   const out = {
     app: 'tachyread-progress', version: 2, exportedAt: Date.now(),
-    device: g.deviceName || '', readstate: {}, files: {}, grabMarkers: {}, bookGroups: g.bookGroups || [],
+    device: g.deviceName || '', readstate: {}, files: {}, grabMarkers: {}, audiobookMarkers: {}, bookGroups: g.bookGroups || [],
     // Settings half of the sync (added in v2): the syncable application settings (prefs + Default Tab
     // Settings) and per-file tab settings, each with a last-write-wins timestamp.
     global: { settings: syncableGlobalSettings(g), updatedAt: g.settingsUpdatedAt || 0 },
@@ -568,6 +568,19 @@ export async function exportProgressData() {
   for (const gr of await db.getAll('grabbed')) {
     if (!gr?.checksum) continue;
     out.grabMarkers[gr.checksum] = { name: gr.name || 'Grab', createdAt: gr.createdAt || 0, pageCount: gr.segments?.length || 0, device: g.deviceName || '' };
+  }
+  // Audiobook markers: a lightweight note that this device has generated/recorded narration for a
+  // book (how many chunks, mic vs Piper, when) — NOT the audio itself (that moves as an explicit
+  // file). Lets another device see "an audiobook exists over there" and prompt to import it.
+  const abKeys = await db.getAllKeys('audiobookManifest');
+  const abVals = await db.getAll('audiobookManifest');
+  for (let i = 0; i < abKeys.length; i++) {
+    const lines = abVals[i]?.lines || {};
+    const entries = Object.values(lines);
+    if (!entries.length) continue;
+    let mic = 0, tts = 0, updatedAt = 0;
+    for (const e of entries) { if (e.source === 'mic') mic++; else tts++; updatedAt = Math.max(updatedAt, e.createdAt || 0); }
+    out.audiobookMarkers[abKeys[i]] = { chunks: entries.length, mic, tts, updatedAt, device: g.deviceName || '', name: nameByChecksum.get(abKeys[i]) || '' };
   }
   return out;
 }
@@ -638,6 +651,18 @@ export async function importProgressData(bundle) {
     if (!prev || (inc.createdAt || 0) >= (prev.createdAt || 0)) remoteMap.set(checksum, { checksum, name: inc.name, createdAt: inc.createdAt || 0, pageCount: inc.pageCount || 0, device: inc.device || bundle.device || '', seenAt: Date.now() });
   }
   g.remoteGrabs = [...remoteMap.values()];
+  // Remote audiobook markers: track, per book, the most-complete narration that exists on ANY other
+  // device (so the Audiobook Manager can prompt an import when it's more than we have locally). We
+  // compare to the local clip count at display time, so a book we've fully generated here shows no
+  // prompt even though our own marker synced out.
+  const remoteAb = new Map((g.remoteAudiobooks || []).map((r) => [r.checksum, r]));
+  for (const [checksum, inc] of Object.entries(bundle.audiobookMarkers || {})) {
+    const prev = remoteAb.get(checksum);
+    if (!prev || (inc.chunks || 0) >= (prev.chunks || 0)) {
+      remoteAb.set(checksum, { checksum, chunks: inc.chunks || 0, mic: inc.mic || 0, tts: inc.tts || 0, updatedAt: inc.updatedAt || 0, device: inc.device || bundle.device || '', name: inc.name || prev?.name || '', seenAt: Date.now() });
+    }
+  }
+  g.remoteAudiobooks = [...remoteAb.values()];
   g.bookGroups = mergeBookGroups(g.bookGroups, bundle.bookGroups);
   await db.put('global', g, 'settings');
   return { merged };

@@ -147,7 +147,7 @@ export function countOffDefaultSettings(settings, defaults) {
 // restores every preference to its default but preserves these so a reset never destroys the
 // user's library, history, saved work, sync setup, or their separate Default Tab Settings.
 export const GLOBAL_DATA_KEYS = new Set([
-  'recentFiles', 'ocrTemplates', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'typingPlans',
+  'recentFiles', 'ocrTemplates', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans',
   'readingList', 'drillBestSpan', 'bestFlowWpm', 'bestDictationWpm', 'webcamCalib', 'sync',
   'deviceName', 'fileDefaults', 'ambient',
 ]);
@@ -209,6 +209,9 @@ export function defaultGlobalSettings() {
     // Grabs that exist on OTHER devices (markers only — no images/text travel via sync).
     // { checksum, name, createdAt, pageCount, device, seenAt }
     remoteGrabs: [],
+    // Audiobooks that exist on OTHER devices (markers only — the audio travels as an explicit file,
+    // not via sync). { checksum, chunks, mic, tts, updatedAt, device, name, seenAt }
+    remoteAudiobooks: [],
     // Saved typing plans (ordered workouts). { id, name, steps:[{ id, mode, runMode, runLimit, sets, description }] }
     typingPlans: [],
     // Reading list / literary journey scaffolding: per-book shelf overrides keyed by checksum
