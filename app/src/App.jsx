@@ -80,15 +80,16 @@ import { recordClip } from './features/audioRecorder.js';
 import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession } from './state/storage.js';
 import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
+import { startMicScope, micScopeSupported } from './features/micScope.js';
 import { playLineClick } from './features/clickSound.js';
 import { createMetronome } from './features/metronome.js';
 import { saveTextToFile, saveBlobToFile } from './features/fileSystem.js';
 import { buildTabPdf } from './features/exportPdf.js';
 import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
-import { createGestureMonitor, DEFAULT_HAND_CALIB, DEFAULT_GESTURES } from './features/handGestures.js';
+import { createGestureMonitor, DEFAULT_HAND_CALIB, DEFAULT_GESTURES, GESTURE_INFO } from './features/handGestures.js';
 import HandCalibrationDialog from './dialogs/HandCalibrationDialog.jsx';
-import WebcamPreview from './components/WebcamPreview.jsx';
+import CameraPanel from './components/CameraPanel.jsx';
 import WebcamCalibrationDialog from './dialogs/WebcamCalibrationDialog.jsx';
 import { createAlarm } from './features/alarm.js';
 
@@ -125,6 +126,7 @@ function AppInner() {
   // dock. Always on for compact screens; opt-in on desktop via state.global.chipMode.
   const chips = isCompact || !!state.global.chipMode;
   const [mobileView, setMobileView] = useState('rsvp'); // compact-screen single reading view: 'rsvp' | 'lines'
+  const [recenterKey, setRecenterKey] = useState(0); // bump to snap the Lines pane back to the current word
   const [controlsCollapsed, setControlsCollapsed] = useState(false); // minimize the bottom dock for text room
   const [chromeHidden, setChromeHidden] = useState(false); // mobile: hide menu+tabs above the reader for text room
   const touchRef = useRef(null); // swipe-gesture start point
@@ -228,6 +230,8 @@ function AppInner() {
   const audioRecRef = useRef({ rec: null, lineIndex: -1 });
   const audioCtrlRef = useRef(null);
   const clapRef = useRef(null);
+  const micScopeRef = useRef(null);
+  const [micScope, setMicScope] = useState(null); // live mic analyser for the oscilloscope (or null)
   // Read-aloud (integrated TTS) plumbing.
   const activeTabRef = useRef(null);
   activeTabRef.current = activeTab;
@@ -714,7 +718,14 @@ function AppInner() {
   pauseTextHiddenRef.current = state.global.pauseWhenTextHidden;
   const [webcamState, setWebcamState] = useState('off');
   const [webcamStream, setWebcamStream] = useState(null);
+  const [gestureStream, setGestureStream] = useState(null); // hand-gesture camera stream (for the popup)
   const webcamRef = useRef(null);
+  // Camera event log for the popup — recent detected events (away/back, doze, gestures, …).
+  const [cameraLog, setCameraLog] = useState([]);
+  const cameraLogId = useRef(0);
+  const pushCameraLog = useCallback((e) => {
+    setCameraLog((l) => [...l.slice(-49), { id: ++cameraLogId.current, time: new Date().toLocaleTimeString(), ...e }]);
+  }, []);
 
   const evalBlock = useCallback(() => {
     const tab = activeTabRef.current;
@@ -775,8 +786,12 @@ function AppInner() {
     setAwayAlarmActive(false);
     alarmDismissedRef.current = true; // suppress until attention returns
   }, []);
-  const camOn = state.global.webcamAttention || state.global.webcamDoze || state.global.webcamAwayAlarm
+  // Front-camera attention/gesture features are disabled on mobile (battery/CPU, and small screens
+  // rarely face the user squarely) — only OCR/Grab (which uses the rear/document camera) runs there.
+  const camGuardsOn = state.global.webcamAttention || state.global.webcamDoze || state.global.webcamAwayAlarm
     || state.global.webcamDistanceNudge || state.global.webcamFocusStats;
+  const camOn = !isCompact && camGuardsOn;
+  const handGesturesOn = !isCompact && !!state.global.handGestures;
   useEffect(() => {
     if (!camOn) {
       webcamRef.current?.stop();
@@ -804,12 +819,14 @@ function AppInner() {
           if (f.attentive) f.watchedMs += now - f.lastTs; else f.awayMs += now - f.lastTs;
           f.lastTs = now;
           if (!attentive) f.distractions += 1;
+          if (f.attentive !== attentive) pushCameraLog(attentive ? { icon: '👀', text: 'Back — watching', kind: 'ok' } : { icon: '🙈', text: 'Looked away', kind: 'warn' });
           f.attentive = attentive;
         }
       },
       onDoze: (dozing) => {
         // doze → stop read-aloud (it's otherwise exempt from the guards). No auto-resume: if you
         // nodded off, it just stops, like the wind-down timer.
+        if (dozing) pushCameraLog({ icon: '💤', text: 'Drowsy — eyes shut', kind: 'warn' });
         if (dozing && webcamDozeRef.current && playingRef.current && activeTabRef.current?.settings.readAloud) {
           engineRef.current.pause();
           setPlaying(false);
@@ -833,6 +850,7 @@ function AppInner() {
       },
       onProximity: (close) => {
         setTooClose(distanceNudgeRef.current ? close : false);
+        if (close) pushCameraLog({ icon: '↔', text: 'Too close to the screen', kind: 'warn' });
       },
     });
     webcamRef.current = mon;
@@ -933,11 +951,12 @@ function AppInner() {
   const handRef = useRef(null);
   const handVelRef = useRef(0);
   useEffect(() => {
-    if (!state.global.handGestures) {
+    if (!handGesturesOn) {
       handRef.current?.stop();
       handRef.current = null;
       handVelRef.current = 0;
       setHandState('off');
+      setGestureStream(null);
       return undefined;
     }
     const mon = createGestureMonitor({
@@ -945,7 +964,12 @@ function AppInner() {
       gestures: state.global.handGestureSet || DEFAULT_GESTURES,
       intervalMs: deviceKind() === 'Mobile' ? 150 : 100,
       onState: setHandState,
-      onGesture: (kind) => handleGestureRef.current?.(kind),
+      onStream: (s) => setGestureStream(s),
+      onGesture: (kind) => {
+        handleGestureRef.current?.(kind);
+        const info = GESTURE_INFO[kind];
+        pushCameraLog({ icon: info?.icon || '🖐', text: info?.label || kind, kind: 'gesture' });
+      },
       onHand: ({ present, v }) => {
         setHandState(!present ? 'watching' : v < 0 ? 'scroll-up' : v > 0 ? 'scroll-down' : 'hand');
       },
@@ -953,6 +977,7 @@ function AppInner() {
       onWave: () => {
         playPauseRef.current?.();
         setStatus('🖐 Wave — play/pause.');
+        pushCameraLog({ icon: '👋', text: 'Wave → play/pause', kind: 'gesture' });
       },
     });
     handRef.current = mon;
@@ -979,9 +1004,16 @@ function AppInner() {
       handRef.current = null;
       handVelRef.current = 0;
       setHandState('off');
+      setGestureStream(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.global.handGestures]);
+  }, [handGesturesOn]);
+  // Clear the camera event log once no camera feature is running.
+  useEffect(() => { if (!camOn && !handGesturesOn) setCameraLog([]); }, [camOn, handGesturesOn]);
+  // Turn off every front-camera feature at once (the popup's × does this).
+  const turnOffCamera = useCallback(() => {
+    updateGlobal({ webcamAttention: false, webcamDoze: false, webcamAwayAlarm: false, webcamDistanceNudge: false, webcamFocusStats: false, handGestures: false });
+  }, [updateGlobal]);
   // Calibration / gesture toggles saved while running → apply live without restarting the camera.
   useEffect(() => {
     handRef.current?.setCalib(state.global.handCalib || DEFAULT_HAND_CALIB);
@@ -1355,8 +1387,13 @@ function AppInner() {
         try { clapRef.current.stop(); } catch { /* ignore */ }
         clapRef.current = null;
       }
+      if (micScopeRef.current) { try { micScopeRef.current.stop(); } catch { /* ignore */ } micScopeRef.current = null; setMicScope(null); }
       setAudioLog([]); // ephemeral transcript — clear when listening stops
       return;
+    }
+    // Oscilloscope: a live waveform of the incoming mic audio while listening.
+    if (micScopeSupported()) {
+      startMicScope().then((s) => { micScopeRef.current = s; setMicScope(s); }).catch(() => {});
     }
     const CMD_LABEL = { play: '▶ play', pause: '❚❚ pause', next: '→ next word', back: '← prev word' };
     const mode = state.global.audioCtrlMode || 'Both';
@@ -1389,6 +1426,7 @@ function AppInner() {
       audioCtrlRef.current = null;
       if (clapRef.current) try { clapRef.current.stop(); } catch { /* ignore */ }
       clapRef.current = null;
+      if (micScopeRef.current) { try { micScopeRef.current.stop(); } catch { /* ignore */ } micScopeRef.current = null; setMicScope(null); }
     };
     // eslint-disable-next-line
   }, [activeTab?.id, activeTab?.settings.audioCtrl, state.global.audioCtrlMode]);
@@ -1618,6 +1656,20 @@ function AppInner() {
   const auxOpen = isCompact && (state.showToc || (state.showSource && !!activeTab?.doc?.source) || state.showIndex);
   const panesFull = linesLocked || auxOpen;
 
+  // Mobile reading-view switch: show exactly one of ToC / Index (or neither → back to the reader).
+  const showAuxOnly = (which) => {
+    if (which !== 'toc' && state.showToc) dispatch({ type: 'TOGGLE_TOC' });
+    if (which !== 'index' && state.showIndex) dispatch({ type: 'TOGGLE_INDEX' });
+    if (state.showSource) dispatch({ type: 'TOGGLE_SOURCE' });
+    if (which === 'toc' && !state.showToc) dispatch({ type: 'TOGGLE_TOC' });
+    if (which === 'index' && !state.showIndex) dispatch({ type: 'TOGGLE_INDEX' });
+  };
+  // "Jump to current word": close any aux pane so a reader shows, then snap it to the current line.
+  const jumpToCurrent = () => {
+    if (auxOpen) { showAuxOnly(null); setMobileView('lines'); }
+    setRecenterKey((k) => k + 1);
+  };
+
   // Maximise the text on a phone. The Lines view is for immersive (often thumb-scrolled) reading, so
   // tuck the top chrome AND minimise the controls dock to their handles whenever it's showing — the
   // lines pane then fills the screen. The Fast Reader view does the same only while playing, and only
@@ -1717,12 +1769,13 @@ function AppInner() {
           onVisible={onLinesVisible}
           compact={isCompact}
           scrollRead={state.global.scrollAdvances}
+          recenterKey={recenterKey}
         />
       ),
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showStats, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances]);
+  }, [activeTab, state.showToc, state.showStats, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances, recenterKey]);
 
   const dialog = state.dialog;
 
@@ -1759,47 +1812,65 @@ function AppInner() {
       {activeTab ? (
         <div className="main-wrap">
           <ChapterHeading tab={activeTab} onJumpWord={jumpWord} />
-          {isCompact && !auxOpen && (
+          {isCompact && (
             <div className="reading-view-switch" role="tablist" aria-label="Reading view">
               {!hideWord && (
+                <button
+                  role="tab"
+                  aria-selected={!auxOpen && mobileView === 'rsvp'}
+                  className={!auxOpen && mobileView === 'rsvp' ? 'on' : ''}
+                  onClick={() => { showAuxOnly(null); setMobileView('rsvp'); }}
+                >
+                  ⚡ Fast
+                </button>
+              )}
+              <button
+                role="tab"
+                aria-selected={!auxOpen && mobileView === 'lines'}
+                className={!auxOpen && mobileView === 'lines' ? 'on' : ''}
+                onClick={() => { showAuxOnly(null); setMobileView('lines'); }}
+              >
+                ☰ Lines
+              </button>
+              <button
+                role="tab"
+                aria-selected={state.showToc}
+                className={state.showToc ? 'on' : ''}
+                onClick={() => showAuxOnly(state.showToc ? null : 'toc')}
+              >
+                📖 ToC
+              </button>
+              <button
+                role="tab"
+                aria-selected={state.showIndex}
+                className={state.showIndex ? 'on' : ''}
+                onClick={() => showAuxOnly(state.showIndex ? null : 'index')}
+              >
+                🔎 Index
+              </button>
+              {!auxOpen && (
                 <>
+                  {/* Rotate JUST the reader box (not the menus/controls) by a quarter-turn. */}
                   <button
-                    role="tab"
-                    aria-selected={mobileView === 'rsvp'}
-                    className={mobileView === 'rsvp' ? 'on' : ''}
-                    onClick={() => setMobileView('rsvp')}
+                    className={`rv-rotate${readerRotation ? ' on' : ''}`}
+                    title="Rotate the reader 90° (mobile only)"
+                    aria-label={`Rotate reader (currently ${readerRotation}°)`}
+                    onClick={() => updateGlobal({ readerRotation: ((state.global.readerRotation || 0) + 90) % 360 })}
                   >
-                    ⚡ Fast Reader
+                    ⟳{readerRotation ? ` ${readerRotation}°` : ''}
                   </button>
+                  {/* Lock the whole app to portrait — ignore the phone's physical auto-rotate. */}
                   <button
-                    role="tab"
-                    aria-selected={mobileView === 'lines'}
-                    className={mobileView === 'lines' ? 'on' : ''}
-                    onClick={() => setMobileView('lines')}
+                    className={`rv-rotate${lockPortrait ? ' on' : ''}`}
+                    title={lockPortrait ? 'Portrait locked — the app ignores the phone’s auto-rotate. Tap to allow landscape.' : 'Tap to lock portrait (ignore the phone’s auto-rotate)'}
+                    aria-label="Lock portrait orientation"
+                    aria-pressed={lockPortrait}
+                    onClick={() => updateGlobal({ lockPortrait: !lockPortrait })}
                   >
-                    ☰ Lines
+                    {lockPortrait ? '🔒' : '🔓'}
                   </button>
                 </>
               )}
-              {/* Rotate JUST the reader box (not the menus/controls) by a quarter-turn. */}
-              <button
-                className={`rv-rotate${readerRotation ? ' on' : ''}`}
-                title="Rotate the reader 90° (mobile only)"
-                aria-label={`Rotate reader (currently ${readerRotation}°)`}
-                onClick={() => updateGlobal({ readerRotation: ((state.global.readerRotation || 0) + 90) % 360 })}
-              >
-                ⟳{readerRotation ? ` ${readerRotation}°` : ''}
-              </button>
-              {/* Lock the whole app to portrait — ignore the phone's physical auto-rotate. */}
-              <button
-                className={`rv-rotate${lockPortrait ? ' on' : ''}`}
-                title={lockPortrait ? 'Portrait locked — the app ignores the phone’s auto-rotate. Tap to allow landscape.' : 'Tap to lock portrait (ignore the phone’s auto-rotate)'}
-                aria-label="Lock portrait orientation"
-                aria-pressed={lockPortrait}
-                onClick={() => updateGlobal({ lockPortrait: !lockPortrait })}
-              >
-                {lockPortrait ? '🔒' : '🔓'}
-              </button>
             </div>
           )}
           <div className={`main-area${panesFull ? ' panes-full' : ''}`} {...gestureHandlers}>
@@ -1886,6 +1957,7 @@ function AppInner() {
                   </button>
                 );
               })()}
+              <button className="dock-mini-jump" title="Jump to the current word" aria-label="Jump to current word" onClick={jumpToCurrent}>⌖</button>
               <span className="dock-mini-meta">{activeTab.settings.wordIndex + 1} / {activeTab.doc.words.length}</span>
             </div>
           )
@@ -1931,6 +2003,7 @@ function AppInner() {
             onGoalComplete={onGoalComplete}
             goalKills={goalKills}
             onTocIcon={onTocIcon}
+            onJumpToCurrent={jumpToCurrent}
           />
         ) : (
           <div className="controls-bar" style={{ opacity: 0.5 }}>
@@ -1944,14 +2017,14 @@ function AppInner() {
         {state.global.showPerfMeter && <PerfMonitor />}
         <span className="app-status-text">{state.appStatus}</span>
         {camOn && webcamState !== 'off' && (
-          <span className={`webcam-badge wb-${webcamState}`} title="Webcam — frames are analysed on your device and never leave it">
+          <button className={`webcam-badge wb-${webcamState}`} title={state.global.webcamPreview ? 'Webcam — frames are analysed on your device and never leave it' : 'Show the camera popup'} onClick={() => updateGlobal({ webcamPreview: true })}>
             📷 {WEBCAM_LABEL[webcamState] || webcamState}
-          </span>
+          </button>
         )}
-        {state.global.handGestures && handState !== 'off' && (
-          <span className={`webcam-badge wb-${handState.startsWith('scroll') || handState === 'hand' ? 'watching' : handState}`} title="Hand gestures — open palm above/below rest scrolls (farther = faster), a wave toggles play/pause. Frames stay on your device.">
+        {handGesturesOn && handState !== 'off' && (
+          <button className={`webcam-badge wb-${handState.startsWith('scroll') || handState === 'hand' ? 'watching' : handState}`} title={state.global.webcamPreview ? 'Hand gestures — open palm above/below rest scrolls (farther = faster), a wave toggles play/pause. Frames stay on your device.' : 'Show the camera popup'} onClick={() => updateGlobal({ webcamPreview: true })}>
             🖐 {HAND_LABEL[handState] || handState}
-          </span>
+          </button>
         )}
       </div>
 
@@ -2031,6 +2104,7 @@ function AppInner() {
           onPatch={(p) => updateGlobal(p)}
           onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
           onCalibrateHand={() => openDialog({ kind: 'hand-calib' })}
+          isCompact={isCompact}
           onClose={closeDialog}
         />
       )}
@@ -2183,17 +2257,28 @@ function AppInner() {
         </div>
       )}
 
-      {/* Live audio-command transcript (sanity check). Ephemeral; only while listening. */}
-      {!!activeTab?.settings?.audioCtrl && <AudioChat log={audioLog} />}
+      {/* Live audio-command panel: oscilloscope + transcript + a legend of every command. */}
+      {!!activeTab?.settings?.audioCtrl && <AudioChat log={audioLog} scope={micScope} mode={state.global.audioCtrlMode || 'Both'} />}
 
-      {/* Small webcam self-view while a guard is on — confirm framing; nothing leaves the device. */}
-      {camOn && state.global.webcamPreview && webcamStream && (
-        <WebcamPreview
-          stream={webcamStream}
-          state={webcamState}
+      {/* Camera popup: live self-view + event log + on-video overlay + a legend of every event. Shown
+          while a front-camera feature is on (never on mobile). − minimizes; × turns the camera off. */}
+      {(camOn || handGesturesOn) && state.global.webcamPreview && (webcamStream || gestureStream) && (
+        <CameraPanel
+          stream={webcamStream || gestureStream}
+          camState={camOn ? webcamState : 'watching'}
+          handState={handState}
+          log={cameraLog}
+          features={{
+            attention: !!state.global.webcamAttention, doze: !!state.global.webcamDoze,
+            awayAlarm: !!state.global.webcamAwayAlarm, distanceNudge: !!state.global.webcamDistanceNudge,
+            focusStats: !!state.global.webcamFocusStats, handGestures: handGesturesOn,
+            gestures: { ...DEFAULT_GESTURES, ...(state.global.handGestureSet || {}) },
+          }}
           canCalibrate={!!webcamRef.current?.eyesAvailable?.()}
           onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
-          onHide={() => updateGlobal({ webcamPreview: false })}
+          onCalibrateHand={() => openDialog({ kind: 'hand-calib' })}
+          onMinimize={() => updateGlobal({ webcamPreview: false })}
+          onClose={turnOffCamera}
         />
       )}
 

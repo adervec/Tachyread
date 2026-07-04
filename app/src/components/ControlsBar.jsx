@@ -16,7 +16,7 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus }) {
+export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent }) {
   const { patchSettings, state, updateGlobal } = useApp();
   const isCompact = useIsCompact();
   // On phones the full playback row (10 nav buttons + speed unit + 4 mode toggles + goal) wraps into
@@ -86,6 +86,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
         <div className="progress-meta">
           {idx + 1} / {totalWords}
         </div>
+        <button className="jump-current-btn" title="Jump to the current word — scroll the Lines pane back to where you're reading" aria-label="Jump to current word" onClick={onJumpToCurrent}>⌖</button>
         <div className="progress-meta" title={skipRanges.length ? 'Percent of the countable book read (flagged front/back matter excluded)' : 'Percent of the book actually read'}>📖 {coverage.toFixed(1)}%{skipRanges.length ? '*' : ''}</div>
         <div className="progress-meta" title="Estimated time remaining at your measured pace">⏱ {formatTime(secs)}</div>
         <div

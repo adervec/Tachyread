@@ -14,7 +14,7 @@ function Field({ label, children }) {
   );
 }
 
-export default function CameraSettingsDialog({ global, onPatch, onCalibrate, onCalibrateHand, onClose }) {
+export default function CameraSettingsDialog({ global, onPatch, onCalibrate, onCalibrateHand, isCompact = false, onClose }) {
   const [g, setG] = useState(global);
   function patch(p) {
     setG({ ...g, ...p });
@@ -23,6 +23,13 @@ export default function CameraSettingsDialog({ global, onPatch, onCalibrate, onC
 
   return (
     <Dialog title="Camera & Gestures" onClose={onClose} width={560} buttons={<button onClick={onClose}>Close</button>}>
+      {isCompact && (
+        <p className="settings-note" style={{ marginTop: 0, color: 'var(--ox-bright, #b0413e)' }}>
+          📵 Front-camera features (attention, doze, alarms, posture, hand gestures) are <strong>off on mobile</strong> —
+          they’re battery/CPU-heavy and a phone rarely faces you squarely. <strong>OCR / Grab</strong> (rear/document
+          camera) still works. These settings apply when you open the same account on a desktop.
+        </p>
+      )}
       <div className="field-section">Attention guards (experimental)</div>
       <Field label="Webcam attention">
         <label className="inline-check">
