@@ -41,11 +41,37 @@ export function finishMs(b) {
   return Number.isNaN(t) ? null : t;
 }
 
+// Reading lifecycle. `completion`/`inProgress` are the original sources of truth (finished/reading);
+// `shelf` is the newer explicit slot for the two states they can't express: 'queue' (shortlisted /
+// on-deck, pulled out of the vast to-read pile) and 'abandoned' (started-then-dropped, i.e. DNF /
+// reshelved). Anything with none of these is a plain 'toread' recommendation.
 export function readStatus(b) {
   if (b?.completion === true) return 'finished';
+  if (b?.shelf === 'abandoned') return 'abandoned';
   if (b?.inProgress) return 'reading';
+  if (b?.shelf === 'queue') return 'queue';
   return 'toread';
 }
+
+export const READ_STATUSES = ['reading', 'queue', 'toread', 'finished', 'abandoned'];
+export const STATUS_LABEL = { finished: '✅ Finished', reading: '📖 Reading', queue: '📋 On deck', toread: '· To read', abandoned: '✕ Abandoned' };
+
+// Pure status setter — clears the fields a status doesn't own so transitions never leave a book in two
+// states at once (e.g. abandoning something you were reading clears inProgress). `today` is injected
+// so this stays free of Date; the caller stamps a finish date when none is given.
+export function setReadStatus(b, status, today = null) {
+  const base = { ...b, completion: false, inProgress: false, shelf: null };
+  if (status === 'finished') return { ...base, completion: true, finishTime: b.finishTime || today || undefined };
+  if (status === 'reading') return { ...base, inProgress: true };
+  if (status === 'queue') return { ...base, shelf: 'queue' };
+  if (status === 'abandoned') return { ...base, shelf: 'abandoned' };
+  return base; // toread
+}
+
+// Who recommended this book. The seed library.json is entirely Claude's picks and carries no attribution,
+// so a missing recBy reads as 'Claude'; books the user adds set recBy explicitly (the editor defaults it).
+export const DEFAULT_RECOMMENDER = 'Claude';
+export function recommender(b) { return (b?.recBy && String(b.recBy).trim()) || DEFAULT_RECOMMENDER; }
 
 export function bookRating(b) {
   return Number(b?.rating) || Number(b?.stars) || 0;
@@ -79,7 +105,7 @@ export function distinctValues(books, field) {
 // readState: all | finished | reading | toread(=unread) · fnf: all|F|NF · difficulty: array of levels
 // (empty = any) · recMin: recScore floor · genre: exact | all · search: title/author/series substring.
 export function filterBooks(books, f = {}) {
-  const { readState = 'all', fnf = 'all', difficulty = [], recMin = 0, genre = 'all', search = '' } = f;
+  const { readState = 'all', fnf = 'all', difficulty = [], recMin = 0, genre = 'all', search = '', recBy = 'all' } = f;
   const q = search.trim().toLowerCase();
   const diffSet = difficulty && difficulty.length ? new Set(difficulty.map(Number)) : null;
   return books.filter((b) => {
@@ -91,6 +117,7 @@ export function filterBooks(books, f = {}) {
     if (diffSet && !diffSet.has(Number(b.difficultyLevel))) return false;
     if (recMin && !(Number(b.recScore) >= recMin)) return false;
     if (genre !== 'all' && (b.genre || '') !== genre) return false;
+    if (recBy !== 'all' && recommender(b) !== recBy) return false;
     if (q && !`${b.title || ''} ${b.author || ''} ${b.series || ''}`.toLowerCase().includes(q)) return false;
     return true;
   });
@@ -111,11 +138,12 @@ export function sortBooks(books, key = 'rec') {
 
 export function libraryStats(books) {
   const st = {
-    total: books.length, finished: 0, reading: 0, toread: 0, fiction: 0, nonfiction: 0,
-    words: 0, pages: 0, byDifficulty: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, byGenre: {}, recentFinishes: [],
+    total: books.length, finished: 0, reading: 0, queue: 0, toread: 0, abandoned: 0, fiction: 0, nonfiction: 0,
+    words: 0, pages: 0, byDifficulty: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, byGenre: {}, byRecommender: {}, recentFinishes: [],
   };
   for (const b of books) {
     st[readStatus(b)]++;
+    st.byRecommender[recommender(b)] = (st.byRecommender[recommender(b)] || 0) + 1;
     if (b.fnf === 'F') st.fiction++; else if (b.fnf === 'NF') st.nonfiction++;
     if (readStatus(b) === 'finished') {
       st.words += Number(b.words) || 0;
@@ -135,13 +163,13 @@ export function libraryStats(books) {
 // doubles as something to paste into a Claude chat or keep as a record. Respects whatever `books` it's
 // handed (i.e. already filtered by the caller).
 export function exportJourneyMarkdown(books, { title = 'Reading Journey' } = {}) {
-  const groups = { finished: [], reading: [], toread: [] };
+  const groups = { finished: [], reading: [], queue: [], toread: [], abandoned: [] };
   for (const b of books) groups[readStatus(b)].push(b);
   const out = [`# ${title} — ${books.length} books`, ''];
   const date = (b) => { const ms = finishMs(b); return ms ? new Date(ms).toISOString().slice(0, 10) : ''; };
   const stars = (b) => { const r = bookRating(b); return r > 0 ? ' — ' + '★'.repeat(Math.round(r)) : ''; };
-  const label = { finished: 'Finished', reading: 'Reading', toread: 'To read' };
-  for (const g of ['finished', 'reading', 'toread']) {
+  const label = { finished: 'Finished', reading: 'Reading', queue: 'On deck', toread: 'To read', abandoned: 'Abandoned' };
+  for (const g of ['finished', 'reading', 'queue', 'toread', 'abandoned']) {
     const list = sortBooks(groups[g], g === 'finished' ? 'finished' : 'title');
     if (!list.length) continue;
     out.push(`## ${label[g]} (${list.length})`, '');

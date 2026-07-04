@@ -1800,7 +1800,11 @@ function AppInner() {
     // eslint-disable-next-line
   }, [activeTab, state.showToc, state.showStats, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances, recenterKey]);
 
-  const dialog = state.dialog;
+  // One derived `dialog` drives the whole render block below: a blocking modal wins, otherwise the
+  // focused dialog tab. When it's a panel (no modal), `dialogDocked` restyles it from a centered
+  // overlay into a non-blocking docked side panel — the tab's content, essentially.
+  const dialog = state.modal || state.panels.find((p) => p.id === state.activePanelId) || null;
+  const dialogDocked = !state.modal && !!dialog;
 
   return (
     <div
@@ -2077,7 +2081,9 @@ function AppInner() {
         )}
       </div>
 
-      {/* Dialogs */}
+      {/* Dialogs — a docked (tab) panel gets the `dialog-dock` wrapper so CSS turns the centered
+          modal into a non-blocking side panel; blocking modals render centered as before. */}
+      <div className={dialogDocked ? 'dialog-dock' : undefined}>
       {dialog?.kind === 'find' && activeTab && (
         <FindDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
       )}
@@ -2271,6 +2277,7 @@ function AppInner() {
           onClose={closeDialog}
         />
       )}
+      </div>
 
       {dragOver && <div className="drop-overlay">Drop file to open</div>}
 

@@ -12,8 +12,12 @@ import {
 } from '../features/journeyAi.js';
 import {
   normalizeSeed, filterBooks, sortBooks, libraryStats, exportJourneyMarkdown,
-  readStatus, distinctValues, pubYear, finishMs, deriveId, bookRating,
+  readStatus, setReadStatus, recommender, READ_STATUSES, STATUS_LABEL,
+  distinctValues, pubYear, finishMs, deriveId, bookRating,
 } from '../features/journeyLibrary.js';
+import {
+  cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, queueWithEstimates, estHours,
+} from '../features/journeyAnalytics.js';
 import { normTitle } from '../document/tocWizard.js';
 import { getSyncProvider } from '../features/sync/syncProviders.js';
 import { syncLibraryWithProvider, backupLibraryToProvider } from '../features/sync/syncManager.js';
@@ -32,18 +36,12 @@ function download(name, text, mime = 'application/json') {
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-// Map the Library editor's status pill back onto the book's completion/inProgress fields.
-function applyStatus(book, status, finishTime) {
-  if (status === 'finished') return { ...book, completion: true, inProgress: false, finishTime: finishTime || book.finishTime || todayISO() };
-  if (status === 'reading') return { ...book, completion: false, inProgress: true };
-  return { ...book, completion: false, inProgress: false };
-}
+// Map the Library editor's status pill back onto the book's completion/inProgress/shelf fields.
+const applyStatus = (book, status) => setReadStatus(book, status, todayISO());
 
 function Stat({ v, l, sub }) {
   return <div className="rh-stat"><b className="rh-stat-v">{v}</b><span className="rh-stat-l">{l}</span>{sub && <em className="rh-stat-sub">{sub}</em>}</div>;
 }
-
-const STATUS_LABEL = { finished: '✅ Finished', reading: '📖 Reading', toread: '· To read' };
 
 export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
   const [books, setBooks] = useState(null);
@@ -65,7 +63,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
   const providerOk = provider && provider.supported() && provider.available(sync) === true;
 
   // Library view controls
-  const [flt, setFlt] = useState({ readState: 'all', fnf: 'all', difficulty: [], recMin: 0, genre: 'all', search: '' });
+  const [flt, setFlt] = useState({ readState: 'all', fnf: 'all', difficulty: [], recMin: 0, genre: 'all', search: '', recBy: 'all' });
   const [sort, setSort] = useState('rec');
   const [limit, setLimit] = useState(60);
   const [selected, setSelected] = useState(null);
@@ -138,6 +136,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
 
   const stats = useMemo(() => (books ? libraryStats(books) : null), [books]);
   const genreOptions = useMemo(() => (books ? distinctValues(books, 'genre') : []), [books]);
+  const recOptions = useMemo(() => (books ? [...new Set(books.map(recommender))].sort((a, b) => a.localeCompare(b)) : []), [books]);
   const filtered = useMemo(() => (books ? sortBooks(filterBooks(books, flt), sort) : []), [books, flt, sort]);
   const shown = filtered.slice(0, limit);
   const selBook = useMemo(() => books?.find((b) => b.id === selected) || null, [books, selected]);
@@ -171,6 +170,8 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
   }
 
   async function saveBook(patch) { await saveLibraryBook(patch); await reload(); }
+  // One-tap reshelving (queue / start reading / abandon / finish / back to to-read) from any list row.
+  async function shelve(book, status) { await saveLibraryBook(setReadStatus(book, status, todayISO())); await reload(); }
   async function removeBook(id) {
     if (!window.confirm('Remove this book from your tracker?')) return;
     await deleteLibraryBook(id); setSelected(null); await reload();
@@ -181,9 +182,13 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
   }
 
   const empty = books && books.length === 0;
+  const queueCount = useMemo(() => (books ? books.filter((b) => readStatus(b) === 'queue').length : 0), [books]);
   const TABS = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'library', label: `Library${books ? ` (${books.length})` : ''}` },
+    { id: 'queue', label: `Queue${queueCount ? ` (${queueCount})` : ''}` },
+    { id: 'timeline', label: 'Timeline' },
+    { id: 'analytics', label: 'Analytics' },
     { id: 'authors', label: 'Authors' },
     { id: 'genres', label: 'Genres' },
     { id: 'archetype', label: 'Archetype' },
@@ -208,11 +213,11 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
             <div className="lj-dash">
               <div className="rh-stat-grid">
                 <Stat v={stats.total} l="books" />
-                <Stat v={stats.finished} l="finished" sub={`${stats.reading} reading · ${stats.toread} to read`} />
+                <Stat v={stats.finished} l="finished" sub={`${stats.reading} reading${stats.abandoned ? ` · ${stats.abandoned} abandoned` : ''}`} />
+                <Stat v={stats.queue} l="on deck" sub={`${stats.toread.toLocaleString()} to read`} />
                 <Stat v={stats.fiction} l="fiction" sub={`${stats.nonfiction} non-fiction`} />
                 <Stat v={stats.words ? (stats.words / 1e6).toFixed(1) + 'M' : '0'} l="words read" />
                 <Stat v={stats.pages ? stats.pages.toLocaleString() : '0'} l="pages read" />
-                <Stat v={Object.keys(stats.byGenre).length} l="genres" />
               </div>
 
               <div className="rh-section-h">Difficulty of finished books</div>
@@ -245,13 +250,16 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
               <div className="lj-toolbar">
                 <input className="lj-search" placeholder="Search title / author / series…" value={flt.search} onChange={(e) => { setFlt({ ...flt, search: e.target.value }); setLimit(60); }} />
                 <select value={flt.readState} onChange={(e) => setFlt({ ...flt, readState: e.target.value })}>
-                  <option value="all">All statuses</option><option value="finished">Finished</option><option value="reading">Reading</option><option value="toread">To read</option>
+                  <option value="all">All statuses</option><option value="finished">Finished</option><option value="reading">Reading</option><option value="queue">On deck</option><option value="toread">To read</option><option value="abandoned">Abandoned</option>
                 </select>
                 <select value={flt.fnf} onChange={(e) => setFlt({ ...flt, fnf: e.target.value })}>
                   <option value="all">Fiction + NF</option><option value="F">Fiction</option><option value="NF">Non-fiction</option>
                 </select>
                 <select value={flt.genre} onChange={(e) => setFlt({ ...flt, genre: e.target.value })}>
                   <option value="all">All genres</option>{genreOptions.map((g) => <option key={g} value={g}>{g}</option>)}
+                </select>
+                <select value={flt.recBy} onChange={(e) => setFlt({ ...flt, recBy: e.target.value })} title="Recommended by">
+                  <option value="all">Any recommender</option>{recOptions.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
                 <select value={flt.recMin} onChange={(e) => setFlt({ ...flt, recMin: Number(e.target.value) })}>
                   <option value={0}>Any rec</option><option value={9}>Rec 9+</option><option value={8}>Rec 8+</option>
@@ -278,11 +286,19 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
                 {shown.map((b) => {
                   const st = readStatus(b);
                   return (
-                    <button key={b.id} className={`lj-row${selected === b.id ? ' on' : ''}`} onClick={() => { setSelected(selected === b.id ? null : b.id); setAdding(false); }}>
-                      <span className={`lj-status lj-${st}`}>{STATUS_LABEL[st].split(' ')[0]}</span>
-                      <span className="lj-row-main"><b>{b.title}</b><em>{b.author}{b.series ? ` · ${b.series}${b.seriesNum ? ' #' + b.seriesNum : ''}` : ''}</em></span>
-                      <span className="lj-row-meta">{b.genre || ''}{b.difficultyLevel ? ` · D${b.difficultyLevel}` : ''}{b.recScore ? ` · ★${b.recScore}` : ''}{pubYear(b) ? ` · ${pubYear(b)}` : ''}</span>
-                    </button>
+                    <div key={b.id} className={`lj-row${selected === b.id ? ' on' : ''}`}>
+                      <button className="lj-row-hit" onClick={() => { setSelected(selected === b.id ? null : b.id); setAdding(false); }}>
+                        <span className={`lj-status lj-${st}`}>{STATUS_LABEL[st].split(' ')[0]}</span>
+                        <span className="lj-row-main"><b>{b.title}</b><em>{b.author}{b.series ? ` · ${b.series}${b.seriesNum ? ' #' + b.seriesNum : ''}` : ''}</em></span>
+                        <span className="lj-row-meta">{b.genre || ''}{b.difficultyLevel ? ` · D${b.difficultyLevel}` : ''}{b.recScore ? ` · ★${b.recScore}` : ''}{pubYear(b) ? ` · ${pubYear(b)}` : ''}{recommender(b) !== 'Claude' ? ` · ✦${recommender(b)}` : ''}</span>
+                      </button>
+                      <span className="lj-row-acts">
+                        <button title="On deck (queue)" className={st === 'queue' ? 'on' : ''} onClick={() => shelve(b, st === 'queue' ? 'toread' : 'queue')}>📋</button>
+                        <button title="Reading" className={st === 'reading' ? 'on' : ''} onClick={() => shelve(b, 'reading')}>📖</button>
+                        <button title="Finished" className={st === 'finished' ? 'on' : ''} onClick={() => shelve(b, 'finished')}>✅</button>
+                        <button title="Abandon" className={st === 'abandoned' ? 'on' : ''} onClick={() => shelve(b, st === 'abandoned' ? 'toread' : 'abandoned')}>✕</button>
+                      </span>
+                    </div>
                   );
                 })}
               </div>
@@ -290,6 +306,9 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
             </div>
           )}
 
+          {tab === 'queue' && <QueueView books={books} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
+          {tab === 'timeline' && <TimelineView books={books} />}
+          {tab === 'analytics' && <AnalyticsView books={books} />}
           {tab === 'authors' && <RefList kind="author" items={refs.authors} books={books} />}
           {tab === 'genres' && <RefList kind="genre" items={refs.genres} subitems={refs.subgenres} books={books} />}
           {tab === 'archetype' && <ArchetypeView books={books} />}
@@ -362,8 +381,9 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, onBind, o
         <label>Genre<input value={b.genre || ''} onChange={(e) => set({ genre: e.target.value })} /></label>
         <label>Subgenre<input value={b.subgenre || ''} onChange={(e) => set({ subgenre: e.target.value })} /></label>
         <label>Fiction?<select value={b.fnf || ''} onChange={(e) => set({ fnf: e.target.value })}><option value="F">Fiction</option><option value="NF">Non-fiction</option></select></label>
-        <label>Status<select value={status} onChange={(e) => setB(applyStatus(b, e.target.value))}><option value="toread">To read</option><option value="reading">Reading</option><option value="finished">Finished</option></select></label>
+        <label>Status<select value={status} onChange={(e) => setB(applyStatus(b, e.target.value))}><option value="toread">To read</option><option value="queue">On deck</option><option value="reading">Reading</option><option value="finished">Finished</option><option value="abandoned">Abandoned</option></select></label>
         <label>Finished<input type="date" value={(finishMs(b) ? new Date(finishMs(b)).toISOString().slice(0, 10) : '')} onChange={(e) => set({ finishTime: e.target.value })} /></label>
+        <label>Rec. by<input value={b.recBy || ''} placeholder="Claude" onChange={(e) => set({ recBy: e.target.value })} /></label>
         <label>Rating<input type="number" min="0" max="5" value={bookRating(b) || ''} onChange={(e) => set({ rating: Number(e.target.value) })} /></label>
         <label>Difficulty<input type="number" min="1" max="5" value={b.difficultyLevel || ''} onChange={(e) => set({ difficultyLevel: Number(e.target.value) })} /></label>
         <label>Rec score<input type="number" min="0" max="10" value={b.recScore || ''} onChange={(e) => set({ recScore: Number(e.target.value) })} /></label>
@@ -531,7 +551,7 @@ function ConstellationView({ books, ai }) {
     <div className="lj-constellation">
       <div className="lj-toolbar">
         <select value={genre} onChange={(e) => setGenre(e.target.value)}><option value="all">All genres</option>{layout.genres.map((g) => <option key={g} value={g}>{g}</option>)}</select>
-        <select value={status} onChange={(e) => setStatus(e.target.value)}><option value="all">All statuses</option><option value="finished">Finished</option><option value="reading">Reading</option><option value="toread">To read</option></select>
+        <select value={status} onChange={(e) => setStatus(e.target.value)}><option value="all">All statuses</option><option value="finished">Finished</option><option value="reading">Reading</option><option value="queue">On deck</option><option value="toread">To read</option><option value="abandoned">Abandoned</option></select>
         <span className="lj-spacer" />
         <button title="Zoom in" onClick={() => zoom(0.8)}>＋</button>
         <button title="Zoom out" onClick={() => zoom(1.25)}>－</button>
@@ -551,6 +571,190 @@ function ConstellationView({ books, ai }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Queue / shortlist view ───────────────────────────────────────────────────────────────────────
+// The on-deck list (books shelved 'queue') with time estimates, plus a compact browser to pull books
+// out of the vast to-read recommendation pile into the queue. Reshelving is one tap.
+function QueueView({ books, onShelve, onOpen }) {
+  const [wpm, setWpm] = useState(250);
+  const [q, setQ] = useState('');
+  const [recBy, setRecBy] = useState('all');
+  const queue = useMemo(() => queueWithEstimates(books, wpm), [books, wpm]);
+  const recs = useMemo(() => sortBooks(filterBooks(books, { readState: 'toread', search: q, recBy }), 'rec').slice(0, 30), [books, q, recBy]);
+  const recOptions = useMemo(() => [...new Set(books.map(recommender))].sort((a, b) => a.localeCompare(b)), [books]);
+
+  return (
+    <div className="lj-queue">
+      <div className="rh-section-h">On deck ({queue.count})</div>
+      <div className="lj-inline">
+        <span className="settings-note">≈ {queue.totalHours} h total at</span>
+        <input type="number" className="lj-wpm" min="100" max="800" step="10" value={wpm} onChange={(e) => setWpm(Number(e.target.value) || 250)} />
+        <span className="settings-note">wpm</span>
+      </div>
+      {queue.count === 0 ? <p className="settings-note">Nothing queued yet. Pull books from your recommendations below, or tap 📋 on any Library row.</p> : (
+        <ol className="lj-queue-list">
+          {queue.items.map(({ book: b, hours }, i) => (
+            <li key={b.id} className="lj-queue-item">
+              <span className="lj-queue-rank">{i + 1}</span>
+              <span className="lj-queue-main"><b>{b.title}</b><em>{b.author}{b.genre ? ` · ${b.genre}` : ''}{b.recScore ? ` · ★${b.recScore}` : ''}{recommender(b) !== 'Claude' ? ` · ✦${recommender(b)}` : ''}</em></span>
+              <span className="lj-queue-est">{hours != null ? `~${hours} h` : '—'}</span>
+              <span className="lj-queue-acts">
+                <button onClick={() => onShelve(b, 'reading')}>Start</button>
+                <button title="Remove from queue" onClick={() => onShelve(b, 'toread')}>✕</button>
+                <button title="Open in Library" onClick={() => onOpen(b.id)}>↗</button>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      <div className="rh-section-h">Add from recommendations</div>
+      <div className="lj-toolbar">
+        <input className="lj-search" placeholder="Search to-read…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select value={recBy} onChange={(e) => setRecBy(e.target.value)}><option value="all">Any recommender</option>{recOptions.map((r) => <option key={r} value={r}>{r}</option>)}</select>
+        <span className="settings-note">top {recs.length} unread by rec score</span>
+      </div>
+      <div className="lj-list">
+        {recs.map((b) => (
+          <div key={b.id} className="lj-row">
+            <button className="lj-row-hit" onClick={() => onShelve(b, 'queue')} title="Add to queue">
+              <span className="lj-status lj-toread">＋</span>
+              <span className="lj-row-main"><b>{b.title}</b><em>{b.author}{recommender(b) !== 'Claude' ? ` · ✦${recommender(b)}` : ''}</em></span>
+              <span className="lj-row-meta">{b.genre || ''}{b.difficultyLevel ? ` · D${b.difficultyLevel}` : ''}{b.recScore ? ` · ★${b.recScore}` : ''}{estHours(b, wpm) != null ? ` · ~${estHours(b, wpm)}h` : ''}</span>
+            </button>
+            <span className="lj-row-acts"><button title="Add to queue" onClick={() => onShelve(b, 'queue')}>📋</button></span>
+          </div>
+        ))}
+        {recs.length === 0 && <p className="settings-note">No matching to-read books.</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Timeline + replay view ───────────────────────────────────────────────────────────────────────
+// Past→present: an animated replay that walks chronologically through the finishes (growth curve +
+// the book being "read" at each step) plus a month heatmap. Pure geometry over cumulativeFinishes.
+function TimelineView({ books }) {
+  const cum = useMemo(() => cumulativeFinishes(books), [books]);
+  const hm = useMemo(() => finishHeatmap(books), [books]);
+  const [idx, setIdx] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => { setIdx(cum.length); setPlaying(false); }, [cum.length]); // default to present
+  useEffect(() => {
+    if (!playing) return undefined;
+    if (idx >= cum.length) { setPlaying(false); return undefined; }
+    const t = setInterval(() => setIdx((i) => Math.min(cum.length, i + 1)), 250);
+    return () => clearInterval(t);
+  }, [playing, idx, cum.length]);
+
+  if (cum.length === 0) return <p className="settings-note">No dated finishes yet — add finish dates to your finished books to build the timeline.</p>;
+
+  const pos = Math.min(cum.length, Math.max(1, idx));
+  const shown = cum.slice(0, pos);
+  const cur = cum[pos - 1];
+  const W = 640, H = 150, pad = 6;
+  const t0 = cum[0].t, span = Math.max(1, cum[cum.length - 1].t - t0), maxN = cum[cum.length - 1].n;
+  const px = (t) => pad + ((t - t0) / span) * (W - 2 * pad);
+  const py = (n) => H - pad - (n / maxN) * (H - 2 * pad);
+  const path = shown.map((r, i) => `${i === 0 ? 'M' : 'L'}${px(r.t).toFixed(1)},${py(r.n).toFixed(1)}`).join(' ');
+  const play = () => { if (idx >= cum.length) setIdx(0); setPlaying((p) => !p); };
+  const MON = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+
+  return (
+    <div className="lj-timeline">
+      <div className="rh-section-h">Reading replay</div>
+      <div className="lj-replay-card">
+        <div className="lj-replay-now">
+          <span className="lj-replay-count">{cur.n}</span>
+          <span className="settings-note">books finished by {cur.date}</span>
+          <div className="lj-replay-book"><b>{cur.title}</b><em>{cur.author} · {cur.genre}</em></div>
+          <div className="settings-note">{(cur.words / 1e6).toFixed(2)}M words · {cur.pages.toLocaleString()} pages cumulatively</div>
+        </div>
+        <svg className="lj-growth" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+          <path className="lj-growth-line" d={path} />
+          <circle className="lj-growth-dot" cx={px(cur.t)} cy={py(cur.n)} r="4" />
+        </svg>
+      </div>
+      <div className="lj-replay-ctl">
+        <button onClick={play}>{playing ? '⏸ Pause' : (idx >= cum.length ? '↻ Replay' : '▶ Play')}</button>
+        <input type="range" min="1" max={cum.length} value={pos} onChange={(e) => { setPlaying(false); setIdx(Number(e.target.value)); }} />
+        <span className="settings-note">{pos} / {cum.length}</span>
+      </div>
+
+      <div className="rh-section-h">Finishes by month</div>
+      <div className="lj-heat">
+        <div className="lj-heat-row lj-heat-head"><span className="lj-heat-yr" />{MON.map((m, i) => <span key={i} className="lj-heat-mlabel">{m}</span>)}</div>
+        {hm.years.map((y) => (
+          <div key={y} className="lj-heat-row">
+            <span className="lj-heat-yr">{y}</span>
+            {hm.cells[y].map((c, mi) => {
+              const lvl = hm.max ? c / hm.max : 0;
+              return <span key={mi} className="lj-heat-cell" title={`${y}-${String(mi + 1).padStart(2, '0')}: ${c} finished`} style={{ background: c ? `color-mix(in srgb, var(--toggle-active-bg) ${Math.round(20 + lvl * 80)}%, transparent)` : 'var(--divider)' }} />;
+            })}
+          </div>
+        ))}
+      </div>
+      <p className="settings-note">{hm.total} dated finishes across {hm.years.length} year{hm.years.length === 1 ? '' : 's'}.</p>
+    </div>
+  );
+}
+
+// ── Analytics view ───────────────────────────────────────────────────────────────────────────────
+function AnalyticsView({ books }) {
+  const pace = useMemo(() => paceByYear(books), [books]);
+  const gt = useMemo(() => genreTrend(books, 6), [books]);
+  const rb = useMemo(() => recommenderBreakdown(books), [books]);
+  if (pace.length === 0 && rb.length <= 1) return <p className="settings-note">Not much to chart yet — mark some books finished (with dates) and attribute a few recommendations.</p>;
+  const maxBooks = Math.max(1, ...pace.map((p) => p.books));
+  const maxGT = Math.max(1, ...gt.rows.map((r) => r.total));
+  const maxRec = Math.max(1, ...rb.map((r) => r.total));
+  return (
+    <div className="lj-analytics">
+      <div className="rh-section-h">Pace by year</div>
+      {pace.length === 0 ? <p className="settings-note">No dated finishes.</p> : (
+        <div className="lj-bars">
+          {pace.map((p) => (
+            <div key={p.year} className="lj-bar" title={`${p.year}: ${p.books} books · ${p.pages.toLocaleString()} pages${p.avgDifficulty ? ` · avg difficulty ${p.avgDifficulty}` : ''}${p.avgRating ? ` · avg ★${p.avgRating}` : ''}`}>
+              <span className="lj-bar-fill" style={{ height: `${(p.books / maxBooks) * 100}%` }}><i>{p.books}</i></span>
+              <em>{String(p.year).slice(2)}</em>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="rh-section-h">Genre mix over time</div>
+      {gt.rows.length === 0 ? <p className="settings-note">No dated finishes.</p> : (
+        <>
+          <div className="lj-stack">
+            {gt.rows.map((r) => (
+              <div key={r.year} className="lj-stack-col" title={`${r.year}: ${r.total} books`}>
+                <div className="lj-stack-bar" style={{ height: `${(r.total / maxGT) * 100}%` }}>
+                  {gt.genres.map((g) => (r.counts[g] ? <span key={g} className="lj-stack-seg" style={{ flex: r.counts[g], background: genreHue(g) }} title={`${g}: ${r.counts[g]}`} /> : null))}
+                </div>
+                <em>{String(r.year).slice(2)}</em>
+              </div>
+            ))}
+          </div>
+          <div className="lj-legend">{gt.genres.map((g) => <span key={g} className="lj-legend-item"><i style={{ background: genreHue(g) }} />{g}</span>)}</div>
+        </>
+      )}
+
+      <div className="rh-section-h">Recommenders</div>
+      <div className="lj-recgrid">
+        {rb.map((r) => (
+          <div key={r.name} className="lj-recrow">
+            <span className="lj-rec-name"><b>{r.name}</b> <em>{r.total} book{r.total === 1 ? '' : 's'}</em></span>
+            <span className="lj-rec-bar" style={{ width: `${(r.total / maxRec) * 100}%` }}>
+              {['finished', 'reading', 'queue', 'toread', 'abandoned'].map((k) => (r[k] ? <i key={k} className={`lj-seg lj-seg-${k}`} style={{ flex: r[k] }} title={`${r[k]} ${k}`} /> : null))}
+            </span>
+            <span className="lj-rec-rate">{r.finishRate != null ? `${r.finishRate}%` : '—'}</span>
+          </div>
+        ))}
+      </div>
+      <p className="settings-note">Bars are sized by pile; segments show finished/reading/on-deck/to-read/abandoned. Finish rate is over resolved (finished + abandoned). Unattributed seed picks count as “Claude”.</p>
     </div>
   );
 }
