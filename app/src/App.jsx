@@ -116,7 +116,7 @@ function isSentenceStart(doc, i) {
 }
 
 function AppInner() {
-  const { state, activeTab: rawActiveTab, hydrateTab, openFile, openClipboard, setStatus, patchSettings, patchTab, openDialog, closeDialog, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
+  const { state, activeTab: rawActiveTab, hydrateTab, openFiles, openClipboard, setStatus, patchSettings, patchTab, openDialog, closeDialog, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
   // A lazy (restored, not-yet-loaded) tab has no parsed document — treat it as "no active reader"
   // until it hydrates, so nothing downstream touches activeTab.doc before it exists.
   const activeTab = rawActiveTab && !rawActiveTab.lazy ? rawActiveTab : null;
@@ -1237,8 +1237,9 @@ function AppInner() {
   function triggerOpen(accept) {
     const input = document.createElement('input');
     input.type = 'file';
+    input.multiple = true;
     input.accept = accept;
-    input.onchange = () => input.files?.[0] && openFile(input.files[0]);
+    input.onchange = () => input.files?.length && openFiles(input.files);
     input.click();
   }
 
@@ -1254,8 +1255,8 @@ function AppInner() {
     function onDrop(e) {
       e.preventDefault();
       setDragOver(false);
-      const file = e.dataTransfer?.files?.[0];
-      if (file) openFile(file);
+      const files = e.dataTransfer?.files;
+      if (files && files.length) openFiles(files);
     }
     document.addEventListener('dragover', onDragOver);
     document.addEventListener('dragleave', onDragLeave);
@@ -1265,7 +1266,7 @@ function AppInner() {
       document.removeEventListener('dragleave', onDragLeave);
       document.removeEventListener('drop', onDrop);
     };
-  }, [openFile]);
+  }, [openFiles]);
 
   // Speaking minigame: webkitSpeechRecognition
   useEffect(() => {
@@ -1732,7 +1733,7 @@ function AppInner() {
     >
       <header className={`app-chrome${isCompact && chromeHidden ? ' collapsed' : ''}`}>
         <div className="chrome-body">
-          <MenuBar onFileOpen={openFile} onAction={handleMenuAction} />
+          <MenuBar onFileOpen={openFiles} onAction={handleMenuAction} />
           <TabBar />
         </div>
         {isCompact && (

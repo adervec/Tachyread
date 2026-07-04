@@ -6,7 +6,10 @@ import Dialog from './Dialog.jsx';
 export default function ImportDialog({ imp, onClose, onAction }) {
   if (!imp) return null;
 
-  if (!imp.done) {
+  // `complete` is the "import finished, show the summary" flag; `done`/`total` are the live progress
+  // counts a parser streams (PDF pages, EPUB sections). They're distinct — a numeric `done` must NOT
+  // be read as completion, or a mid-parse progress tick would render the summary before it's ready.
+  if (!imp.complete) {
     const frac = imp.total ? Math.min(1, (imp.done || 0) / imp.total) : null;
     return (
       <Dialog title={`Importing ${imp.fileName}`} onClose={() => {}} width={460} dismissable={false}>
@@ -30,7 +33,7 @@ export default function ImportDialog({ imp, onClose, onAction }) {
       buttons={<button className="toggle-on" onClick={onClose}>▶ Start reading</button>}
     >
       <ul className="imp-summary">
-        <li>✓ {imp.words.toLocaleString()} words · {imp.lines.toLocaleString()} lines</li>
+        <li>✓ {(imp.words ?? 0).toLocaleString()} words · {(imp.lines ?? 0).toLocaleString()} lines</li>
         <li>{imp.hasSource ? `✓ Original source view available (${imp.sections} section${imp.sections === 1 ? '' : 's'}, synced to your position)` : '· No original-layout view for this format (plain text)'}</li>
         <li>{tocLine}</li>
       </ul>

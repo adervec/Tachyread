@@ -123,8 +123,12 @@ async function parseEpub(file, onProgress) {
 // nothing to the word stream — formatting and hidden tagging can't leak into the reader.
 
 // Elements that are chrome/machinery, not prose. Checkboxes are kept — task-list ticks are
-// content (the Source view makes them tickable).
-const SKIP_SEL = 'script,style,noscript,template,iframe,object,embed,canvas,svg,nav,button,select,input:not([type="checkbox"]),textarea,link,meta,title,[hidden],[aria-hidden="true"]';
+// content (the Source view makes them tickable). Templates are handled separately (their content is
+// spliced in), so they're NOT skipped here. Dialogs/menus/toolbars and their ARIA roles are chrome.
+const SKIP_SEL = 'script,style,noscript,iframe,object,embed,canvas,svg,nav,button,select,'
+  + 'input:not([type="checkbox"]),textarea,link,meta,title,dialog,'
+  + '[role="dialog"],[role="menu"],[role="menubar"],[role="toolbar"],[role="tablist"],[role="search"],'
+  + '[contenteditable],[hidden],[aria-hidden="true"]';
 // Elements whose boundaries are line breaks when flattening to text.
 const BLOCK_RX = /^(P|DIV|SECTION|ARTICLE|MAIN|ASIDE|HEADER|FOOTER|UL|OL|LI|TABLE|THEAD|TBODY|TFOOT|TR|BLOCKQUOTE|PRE|FIGURE|FIGCAPTION|DL|DT|DD|DETAILS|SUMMARY|H[1-6]|HR|ADDRESS)$/;
 
@@ -181,28 +185,83 @@ function domToText(root, onHeading) {
   return { text: out.replace(/\n{3,}/g, '\n\n').trim(), headings: null };
 }
 
-// Parse an HTML string into { texts, htmls, toc }: sections split at top-level h1/h2 boundaries
-// (chapter-like source sync), each with reading-order text and sanitized HTML.
+// The reading region of a page: the real prose, not the site chrome around it. Many self-contained
+// "reader" HTML files wrap the whole book in <main> (or a run of <article>/<section> chapters) and
+// surround it with a fixed header, a table-of-contents drawer (<nav>), footers, a TTS panel and
+// settings overlays — all of which would otherwise pour into the word stream. Prefer <main>; else a
+// wrapper of the article/section chapters; else the body.
+// Text an element holds, counting the (inert) content of any <template> inside it — since those get
+// spliced in. Lets us tell a real <main> from an empty <main> placeholder that a page fills via JS
+// (some readers ship <main></main> and inject the chapters, which live as siblings in the static file).
+function richTextLen(el) {
+  let t = el.textContent || '';
+  for (const tpl of el.querySelectorAll('template')) t += tpl.content ? (tpl.content.textContent || '') : '';
+  return t.trim().length;
+}
+function pickContentRoot(dom) {
+  const main = dom.querySelector('main');
+  if (main && richTextLen(main) > 200) return main;
+  // No <main>, or an empty <main> placeholder → gather the top-level article/section chapters
+  // (skip ones nested inside another). This catches readers whose chapters sit as body siblings.
+  const chapters = [...dom.querySelectorAll('article, section')]
+    .filter((el) => !el.parentElement || !el.parentElement.closest('article, section'));
+  if (chapters.length >= 2) {
+    const wrap = dom.createElement('div');
+    for (const el of chapters) wrap.appendChild(el.cloneNode(true));
+    return wrap;
+  }
+  return dom.body;
+}
+
+// Splice each <template>'s inert content into the DOM where the template sits, so section text that a
+// page renders client-side from templates is recovered too (DOMParser doesn't run scripts). Empty
+// templates are dropped.
+function expandTemplates(root) {
+  for (const t of [...root.querySelectorAll('template')]) {
+    const frag = t.content && t.content.cloneNode(true);
+    if (frag && (frag.textContent || '').trim()) t.replaceWith(frag);
+    else t.remove();
+  }
+}
+
+// Parse an HTML string into { texts, htmls, toc }: sections split at chapter boundaries
+// (article/section elements or top-level h1/h2), each with reading-order text and sanitized HTML.
 function htmlToSections(htmlString) {
   const dom = new DOMParser().parseFromString(htmlString, 'text/html');
-  // Keep the document's own CSS (its "theme") for the Source view before stripping — inline
-  // <style> only; external stylesheets are never fetched.
+  // Keep the document's own CSS (its "theme") for the Source view — inline <style> only; external
+  // stylesheets are never fetched.
   const styles = [...dom.querySelectorAll('style')].map((s) => s.textContent || '').join('\n');
-  dom.querySelectorAll(SKIP_SEL).forEach((el) => el.remove());
-  const body = dom.body;
 
-  // Group top-level children into sections; a top-level h1/h2 (or a wrapper starting with one)
-  // begins a new section. A page with no such structure stays a single section.
+  const root = pickContentRoot(dom);
+  expandTemplates(root);
+  // A collapsed <details> is hidden until expanded — keep only its <summary> label, drop the body,
+  // so author notes / spoilers folded away by default don't leak into the reading text.
+  for (const d of [...root.querySelectorAll('details:not([open])')]) {
+    for (const c of [...d.childNodes]) if (!(c.nodeType === 1 && c.tagName === 'SUMMARY')) c.remove();
+  }
+  // Control rows: a small block built around a button/control (e.g. a "HOLD TO MARK READ" affordance)
+  // is chrome, not prose — drop the wrapper so its instruction label doesn't leak. Task-list
+  // checkboxes are excluded so their item text survives.
+  for (const ctrl of [...root.querySelectorAll('button, select, textarea, input:not([type="checkbox"])')]) {
+    const p = ctrl.parentElement;
+    if (!p || p === root) continue;
+    if ((p.textContent || '').trim().split(/\s+/).filter(Boolean).length <= 6) p.remove();
+  }
+  root.querySelectorAll(SKIP_SEL).forEach((el) => el.remove());
+
+  // Group children into sections; an <article>/<section>, a top-level h1/h2, or a wrapper starting
+  // with one begins a new section. A region with no such structure stays a single section.
   const sections = [];
   let cur = [];
-  for (const child of [...body.children]) {
-    const startsChapter = /^H[12]$/.test(child.tagName)
+  for (const child of [...root.children]) {
+    const t = child.tagName;
+    const startsChapter = /^(ARTICLE|SECTION)$/.test(t) || /^H[12]$/.test(t)
       || (child.firstElementChild && /^H[12]$/.test(child.firstElementChild.tagName) && child.children.length > 1);
     if (startsChapter && cur.length) { sections.push(cur); cur = []; }
     cur.push(child);
   }
   if (cur.length) sections.push(cur);
-  if (!sections.length) sections.push([body]);
+  if (!sections.length) sections.push([root]);
 
   const texts = [];
   const htmls = [];

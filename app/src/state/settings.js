@@ -59,6 +59,10 @@ export function defaultFileSettings() {
     goal: null,
     typing: {
       enabled: false, mode: 'passage', caseSensitive: false, stripPunctuation: true,
+      // Auto-bypass characters a standard QWERTY keyboard can't type (bullets, ¶, curly quotes, em-
+      // dashes, ellipses…): decorative tokens are skipped and typographic look-alikes are accepted,
+      // with no penalty. On by default so book passages are actually typeable.
+      bypassNonQwerty: true,
       perWordTimeoutMs: 0, runMode: 'seconds', runLimit: 60, soundVolume: 0.4,
       // Countdown tick in timed runs (accelerates in the final seconds).
       tickClock: false,

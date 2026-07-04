@@ -42,6 +42,14 @@ export default function TypingSettingsDialog({ settings, onPatch, global, onPatc
           onChange={(e) => patchTyping({ stripPunctuation: e.target.checked })}
         />
       </Field>
+      <Field label="Auto-bypass non-QWERTY characters">
+        <input
+          type="checkbox"
+          checked={t.bypassNonQwerty !== false}
+          onChange={(e) => patchTyping({ bypassNonQwerty: e.target.checked })}
+          title="Skip characters a standard keyboard can't type (•, ¶, curly quotes, em-dashes, …) with no penalty"
+        />
+      </Field>
       <Field label="Per-word timeout (ms, 0 = off)">
         <input
           type="number"

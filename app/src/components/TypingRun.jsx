@@ -3,6 +3,7 @@ import { playLineSound, playTick, TYPING_SOUNDS } from '../features/clickSound.j
 import { getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import { deviceKind } from '../state/device.js';
 import { buildPassage, TYPING_MODES, TYPING_MODE_BY_ID } from '../engine/typingModes.js';
+import { prepToken, isExotic } from '../engine/typingText.js';
 import { letterGrade, playGradeSound, GRADE_STATEMENTS } from '../features/gradeChime.js';
 import { createReadAloud } from '../features/readAloud.js';
 import { rateFromIndex } from '../features/tts.js';
@@ -20,6 +21,7 @@ const DEFAULT_SOUNDS = {
 function sameChar(a, b, caseSensitive) {
   return caseSensitive ? a === b : a?.toLowerCase() === b?.toLowerCase();
 }
+
 
 // Net-WPM tiers from the Typing Speed Field Guide.
 function netTier(net) {
@@ -68,15 +70,33 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
   // Reading position captured once, when typing opened. Discard returns here.
   const startIndex = useRef(settings.wordIndex);
+  // Source-doc index of the last committed word — for exact forward continuation / "count as read"
+  // when bypassed symbol tokens make the passage shorter than the doc span it covers.
+  const lastGiRef = useRef(null);
   // Typing game mode: 'passage' (from the book) is the Monkeytype baseline; the rest are
   // Mavis-Beacon-style drills generated independently of the document. `seed` varies drills on reattempt.
   const [gameMode, setGameMode] = useState(cfg.mode || 'passage');
   const [seed, setSeed] = useState(0);
   const isDocMode = (TYPING_MODE_BY_ID[gameMode]?.kind || 'doc') === 'doc';
-  const passage = useMemo(
-    () => buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: PASSAGE_MAX, seed }),
-    [doc, gameMode, seed]
-  );
+  // Auto-bypass characters a QWERTY keyboard can't make (default on): normalize typographic look-
+  // alikes and drop purely-decorative tokens so the drill never asks you to type a "•" or a "¶".
+  const bypassSym = cfg.bypassNonQwerty !== false;
+  // Prepared passage: `prepared` entries are { text, gi } where gi is the source-doc word index (for
+  // line/sentence cues and forward continuation), with bypassed tokens filtered out; `passage` is the
+  // text-only array the run/render use. Built in one memo so the two stay in lockstep.
+  const { prepared, passage } = useMemo(() => {
+    const raw = buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: PASSAGE_MAX, seed });
+    const base = isDocMode ? startIndex.current : 0;
+    const prep = [];
+    for (let i = 0; i < raw.length; i++) {
+      if (!bypassSym) { prep.push({ text: raw[i], gi: base + i }); continue; }
+      const { text, skip } = prepToken(raw[i]);
+      if (!skip) prep.push({ text, gi: base + i });
+    }
+    return { prepared: prep, passage: prep.map((p) => p.text) };
+  }, [doc, gameMode, seed, bypassSym, isDocMode]);
+  // A typed char matches its target when it's equal (case rule) or the target is exotic (auto-accepted).
+  const charOk = (typedCh, targetCh) => (bypassSym && isExotic(targetCh)) || sameChar(typedCh, targetCh, caseSensitive);
 
   // Which passage indices end a line / sentence / paragraph — for the "segment complete, no errors"
   // cues. Only doc-backed modes (the passage runs consecutive document words from startIndex) map to
@@ -84,18 +104,17 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // ponytail: assumes the passage is consecutive doc words; off by a boundary at most if a mode reorders.
   const segEnds = useMemo(() => {
     if (!isDocMode) return null;
-    const base = startIndex.current;
     const lineOf = (gi) => getLineIndex(doc, gi);
     const paraOf = (gi) => getParagraphRange(doc, lineOf(gi)).startLine;
     const line = [], sent = [], para = [];
-    for (let i = 0; i < passage.length; i++) {
-      const gi = base + i, gj = base + i + 1, last = i === passage.length - 1;
+    for (let i = 0; i < prepared.length; i++) {
+      const gi = prepared[i].gi, gj = prepared[i + 1]?.gi ?? gi + 1, last = i === prepared.length - 1;
       line[i] = last || lineOf(gi) !== lineOf(gj);
       sent[i] = last || doc.wordToSentence?.[gi] !== doc.wordToSentence?.[gj];
       para[i] = last || paraOf(gi) !== paraOf(gj);
     }
     return { line, sent, para };
-  }, [doc, isDocMode, passage]);
+  }, [doc, isDocMode, prepared]);
   const seg = useRef({ line: true, sent: true, para: true }); // stays true while the current segment is error-free
 
   const [mode, setMode] = useState(cfg.runMode || 'seconds'); // 'seconds' | 'words' | 'endless'
@@ -301,13 +320,18 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // Run starts on an explicit "Start" (or a done-screen "Onward/Reattempt") with a Ready·Set·Go.
   // Focus the input synchronously inside the originating tap so the mobile keyboard opens during the
   // count and is ready the instant we hit "Go!".
-  function beginCountdown() {
+  // Clear all per-run state back to the start of the passage.
+  function resetRunState() {
     clearCount();
     stopRace(); setVoicePos(-1); voiceRef.current = 0; caughtRef.current = false; racedRef.current = false;
     setPos(0); setBuf(''); setResults([]); setSummary(null); setTrend([]);
-    stats.current = freshStats(); wordErrors.current = 0;
+    stats.current = freshStats(); wordErrors.current = 0; lastGiRef.current = null;
     seg.current = { line: true, sent: true, para: true };
     if (linesRef.current) linesRef.current.style.transform = 'translateY(0)';
+  }
+
+  function beginCountdown() {
+    resetRunState();
     setPhase('countdown');
     setCount('Ready');
     focus();
@@ -318,31 +342,32 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     ];
   }
 
-  useEffect(() => () => { clearCount(); racerRef.current?.stop(); }, []); // clear timers / silence voice on unmount
-
-  function reattempt() {
-    stopRace(); setVoicePos(-1); voiceRef.current = 0; caughtRef.current = false; racedRef.current = false;
-    setPos(0);
-    setBuf('');
-    setResults([]);
-    setSummary(null);
-    setTrend([]);
-    setSeed((s) => s + 1); // fresh drill text (no-op for the document passage mode)
-    stats.current = freshStats();
-    wordErrors.current = 0;
-    if (linesRef.current) linesRef.current.style.transform = 'translateY(0)';
+  // Stage a run without starting it: reset and show the passage idle. It begins on the first
+  // keystroke (or ▶ Start) — so Onward / Reattempt don't jump straight into a countdown.
+  function stageRun() {
+    resetRunState();
     setPhase('idle');
-    // Refocus the hidden input *within* this tap so the next run accepts keys (and the mobile
-    // keyboard reopens) — a programmatic re-focus outside the gesture wouldn't.
     focus();
   }
 
-  // Start a fresh run beginning where the just-finished run stopped (passage mode walks forward
-  // through the book). Drill modes have no position, so this is just a fresh run with new text.
+  useEffect(() => () => { clearCount(); racerRef.current?.stop(); }, []); // clear timers / silence voice on unmount
+
+  // Fresh drill text (no-op for the document passage mode), staged not started — used on mode change.
+  function reattempt() {
+    setSeed((s) => s + 1);
+    stageRun();
+  }
+
+  // Advance to the passage beginning where the just-finished run stopped (passage mode walks forward
+  // through the book; drills get fresh text), then stage it — the user starts it when ready.
   function nextRun() {
-    if (isDocMode) startIndex.current = Math.min(doc.words.length, startIndex.current + stats.current.words);
+    // Resume at the doc word after the last one committed (exact even with bypassed symbol tokens).
+    if (isDocMode) {
+      const next = lastGiRef.current != null ? lastGiRef.current + 1 : startIndex.current + stats.current.words;
+      startIndex.current = Math.min(doc.words.length, next);
+    }
     setSeed((s) => s + 1); // force passage rebuild (doc: from the new startIndex; drill: fresh text)
-    beginCountdown();
+    stageRun();
   }
 
   function commitWord(typed = buf) {
@@ -350,7 +375,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     // One-word mode gates advancement on an exact match (case rule applied). A wrong word stays put:
     // clear the buffer and let them retype. A mistyped-then-fixed word still matches, so it advances.
     if (oneWord) {
-      const exact = typed.length === target.length && [...typed].every((c, j) => sameChar(c, target[j], caseSensitive));
+      const exact = typed.length === target.length && [...typed].every((c, j) => charOk(c, target[j]));
       if (!exact) { ping(sounds.wordError); wordErrors.current = 0; setBuf(''); return; }
       wordErrors.current = 0; // matched exactly → counts as perfect even if chars were corrected
     }
@@ -368,6 +393,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       if (segEnds.para[pos]) { if (seg.current.para) ping(sounds.paragraphPerfect); seg.current.para = true; }
     }
     wordErrors.current = 0;
+    lastGiRef.current = prepared[pos]?.gi ?? lastGiRef.current;
     setResults((r) => [...r, { typed, perfect }]);
     setBuf('');
     const nextPos = pos + 1;
@@ -383,7 +409,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     for (let p = fromLen; p < str.length; p++) {
       const ch = target[p];
       s.chars += 1;
-      if (ch !== undefined && sameChar(str[p], ch, caseSensitive)) {
+      if (ch !== undefined && charOk(str[p], ch)) {
         s.correct += 1;
         ping(sounds.charCorrect);
       } else {
@@ -572,7 +598,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               for (let j = 0; j < len; j++) {
                 const cls = j >= w.length ? 'trc extra'
                   : j >= typed.length ? 'trc missed'
-                    : sameChar(typed[j], w[j], caseSensitive) ? 'trc correct' : 'trc wrong';
+                    : charOk(typed[j], w[j]) ? 'trc correct' : 'trc wrong';
                 chars.push(<span key={j} className={cls}>{j >= w.length ? typed[j] : w[j]}</span>);
               }
               return <span key={i} className={`trw ${r && !r.perfect ? 'imperfect' : 'done'}${vc}`}>{chars} </span>;
@@ -588,7 +614,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               const typed = j < shownBuf.length;
               const cls = !typed ? 'trc pending'
                 : j >= w.length ? 'trc extra'
-                  : sameChar(shownBuf[j], w[j], caseSensitive) ? 'trc correct' : 'trc wrong';
+                  : charOk(shownBuf[j], w[j]) ? 'trc correct' : 'trc wrong';
               chars.push(<span key={j} className={cls}>{j >= w.length ? shownBuf[j] : w[j]}</span>);
             }
             if (shownBuf.length >= len) chars.push(<span key="ce" className="trc caret-anchor" />);
@@ -628,9 +654,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                 {moreAhead && (
                   <button className="toggle-on" onClick={nextRun} title="New run starting where this one ended">Onward →</button>
                 )}
-                <button className={moreAhead ? '' : 'toggle-on'} onClick={beginCountdown} title="Re-type the exact same passage">↻ Reattempt</button>
+                <button className={moreAhead ? '' : 'toggle-on'} onClick={stageRun} title="Re-type the exact same passage (starts when you type)">↻ Reattempt</button>
                 {isDocMode && (
-                  <button onClick={() => onExitContinue?.(startIndex.current + stats.current.words)}>Continue (count as read)</button>
+                  <button onClick={() => onExitContinue?.(lastGiRef.current != null ? lastGiRef.current + 1 : startIndex.current + stats.current.words)}>Continue (count as read)</button>
                 )}
                 <button onClick={onExitDiscard}>{isDocMode ? 'Discard' : 'Exit'}</button>
               </>
