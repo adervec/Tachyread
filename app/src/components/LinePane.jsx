@@ -298,7 +298,7 @@ function revealBoundary(doc, idx, mode) {
   return Infinity;
 }
 
-export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { line: -1, token: 0 }, visibleRef, onVisible, compact = false, scrollRead = false }) {
+export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { line: -1, token: 0 }, visibleRef, onVisible, compact = false, scrollRead = false, recenterKey = 0 }) {
   const { doc, settings } = tab;
   const paneVisRef = useReportVisibility(onVisible || (() => {}));
   const idx = settings.wordIndex;
@@ -404,6 +404,15 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     if (!api?.scrollToRow) return;
     api.scrollToRow({ index: currentLine, align: 'center' });
   }, [currentLine, settings.centerOnCurrent, split, listRef, scrollRead]);
+
+  // "Jump to current word": recenter on demand (bumped by a control), regardless of centerOnCurrent
+  // or scroll-to-read — so you can always snap back to where you're reading.
+  useEffect(() => {
+    if (!recenterKey || split) return;
+    const api = listRef.current;
+    api?.scrollToRow?.({ index: currentLine, align: 'center' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recenterKey]);
 
   // Scroll-to-read: the list scrolls normally and whatever passes the TOP edge counts as read — the
   // reading position follows the word at the top edge (forward only), which credits the spanned words.
