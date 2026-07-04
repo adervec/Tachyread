@@ -136,16 +136,42 @@ export default function AudiobookDialog({ tab, onClose }) {
     setBusy(false);
   }
 
-  const clipCount = Object.keys(manifest.lines).length;
+  const clipEntries = Object.values(manifest.lines);
+  const clipCount = clipEntries.length;
+  const micCount = clipEntries.filter((e) => e.source === 'mic').length;
+  const ttsCount = clipCount - micCount;
   const totalChunks = chunks.length;
+  const pct = totalChunks ? Math.round((clipCount / totalChunks) * 100) : 0;
+  const fullyGenerated = clipCount >= totalChunks && totalChunks > 0;
+  // A more-complete audiobook synced as a marker from another device → prompt to import its file.
+  const remote = (state.global.remoteAudiobooks || []).find((r) => r.checksum === checksum);
+  const remoteHasMore = remote && remote.chunks > clipCount;
 
   return (
     <Dialog title="Audiobook Manager" onClose={onClose} width={720}>
       <p className="settings-note" style={{ marginTop: 0 }}>
         Narration per <strong>sentence</strong> (wrapped lines are joined so the audio isn't choppy). Use the neural{' '}
         <strong>Piper</strong> voice to pre-generate the whole book (then listening keeps playing with the screen
-        locked), or record your own voice — recordings always take precedence. {clipCount}/{totalChunks} chunks have audio · voice: <code>{voiceId}</code>
+        locked), or record your own voice — recordings always take precedence.
       </p>
+      <div className="ab-coverage">
+        {fullyGenerated
+          ? <span className="ab-cov-done">✓ Fully generated — {totalChunks} chunk(s)</span>
+          : <span><strong>{clipCount}</strong> / {totalChunks} chunk(s) have audio <strong>({pct}%)</strong></span>}
+        {clipCount > 0 && <span className="ab-cov-src"> · 🤖 {ttsCount} Piper · 🎤 {micCount} recorded</span>}
+        <span className="settings-note" style={{ margin: 0 }}> · voice: <code>{voiceId}</code></span>
+        <div className="imp-bar ab-cov-bar" title={`${pct}% generated`}><div className="imp-fill" style={{ width: `${pct}%` }} /></div>
+      </div>
+
+      {remoteHasMore && (
+        <div className="ab-remote">
+          🔊 A more complete audiobook — <strong>{remote.chunks} chunk(s)</strong>
+          {remote.mic ? ` (🤖 ${remote.tts} Piper · 🎤 ${remote.mic} recorded)` : ''} — was generated
+          {remote.device ? <> on <strong>{remote.device}</strong></> : ' on another device'}
+          {remote.updatedAt ? ` (${new Date(remote.updatedAt).toLocaleDateString()})` : ''}.
+          Export it there and <strong>Import audiobook…</strong> here to skip regenerating.
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {piperSupported() ? (

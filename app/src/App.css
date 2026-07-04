@@ -1680,6 +1680,21 @@
 .floating-chip .chip-status + .chip-status { margin-top: 2px; }
 .floating-chip .chip-dim { opacity: 0.6; font-size: 11px; }
 .floating-chip .goal-bar { height: 5px; }
+
+/* Audiobook Manager: coverage readout + the "generated on another device" import prompt. */
+.ab-coverage { margin: 0 0 10px; font-size: 13px; color: var(--fg); }
+.ab-coverage .ab-cov-done { color: #2e9d4f; font-weight: 600; }
+.ab-coverage .ab-cov-src { color: var(--status-fg); }
+.ab-coverage .ab-cov-bar { height: 6px; max-width: 320px; margin-top: 6px; }
+.ab-remote {
+  margin: 0 0 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--accent, #3a86ff);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent, #3a86ff) 10%, transparent);
+  font-size: 13px;
+  line-height: 1.45;
+}
 .mode-block {
   display: flex;
   gap: 12px;
