@@ -24,10 +24,10 @@ export function defaultFileSettings() {
     showPercentSeparators: false,
     altSentenceColors: false, // mildly alternate the colour of consecutive unread sentences
     textAlignment: 'Left',
-    blurLinesBefore: 0,
-    blurLinesAfter: 0,
-    obscureMode: 'blur', // how obscured before/after lines look: blur | hide | redact | illegible
-    blurGradient: 100,   // blur strength (%): ramps outward from the clear current line to the window edge
+    blurLinesBefore: 0,  // READABLE lines above the current one; >0 → the 100 lines beyond are obscured
+    blurLinesAfter: 0,   // READABLE lines below the current one; >0 → the 100 lines beyond are obscured
+    obscureMode: 'blur', // how the obscured band looks: blur | hide | redact | illegible | translate
+    blurGradient: 100,   // blur strength (%): ramps to full over the band's first few lines
     currentLineFontSizeBoost: 0,
     scrollReadPoint: 0,  // scroll-to-read "assume read" line, 0 (top of readable band) .. 1 (bottom)
     hideRsvpPane: false,

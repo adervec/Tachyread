@@ -13,6 +13,8 @@ import { getCachedTranslation, putCachedTranslation } from '../state/storage.js'
 // its Settings section in dialogs/SettingsDialog.jsx.
 const POINTER_ENABLED = false;
 const MAX_BLUR_PX = 5; // "fully blurred" — text at this blur is unreadable (feeds the blur gradient)
+const OBSCURE_GUARD_LINES = 100; // obscured band beyond the readable window; clear again past it (peeking + perf)
+const BLUR_RAMP_LINES = 3; // blur reaches full strength this many lines into the guard band
 
 function stripPunct(w) {
   return w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
@@ -103,26 +105,32 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
   const isHead = headLevel >= 0;
   const headCenter = isHead && headingPack && headingPack !== 'terminal' && headingPack !== 'retro';
 
-  // Obscure the reading window before/after the current line to discourage excessive backtrack /
-  // read-ahead. The current line is the clear "eye of the storm"; for BLUR the effect ramps OUTWARD
-  // (lightest next to the eye, heaviest at the window edge — `blurGradient` scales the strength) and
-  // lines beyond the window stay clear. Other modes (hide / redact / illegible) obscure the whole
-  // window uniformly. Any obscured line also counts as not-readable for scroll-to-read.
-  const before = dsettings.blurLinesBefore || 0;
-  const after = dsettings.blurLinesAfter || 0;
+  // Focus window: `blurLinesBefore/After` are the READABLE window — that many lines around the
+  // current one stay clear ("the eye of the storm"). Past the window, the next OBSCURE_GUARD_LINES
+  // are obscured (stops accidental backtrack/read-ahead); beyond THAT everything is clear again, so
+  // deliberate far peeking works and off-screen lines cost nothing. Blur ramps to full strength over
+  // the first few band lines (`blurGradient` scales it); the other modes obscure the band uniformly.
+  // Any obscured line also counts as not-readable for scroll-to-read.
+  const before = dsettings.blurLinesBefore || 0; // readable lines above (0 = no obscuring above)
+  const after = dsettings.blurLinesAfter || 0;   // readable lines below (0 = no obscuring below)
   const obsMode = dsettings.obscureMode || 'blur';
   const translated = ctx.translations ? ctx.translations.get(index) : undefined; // string | null(failed) | undefined
   let blur = 0;
   let obscureCls = '';
   let showTranslated = false; // obscure-translate: replace the words with their translation
   if (!isCurrent) {
-    let d = 0, w = 0;
-    if (before && index < ctx.currentLine && ctx.currentLine - index <= before) { d = ctx.currentLine - index; w = before; }
-    else if (after && index > ctx.currentLine && index - ctx.currentLine <= after) { d = index - ctx.currentLine; w = after; }
+    let d = 0; // distance INTO the obscured guard band (0 = not in it)
+    if (before && index < ctx.currentLine) {
+      const dist = ctx.currentLine - index;
+      if (dist > before && dist <= before + OBSCURE_GUARD_LINES) d = dist - before;
+    } else if (after && index > ctx.currentLine) {
+      const dist = index - ctx.currentLine;
+      if (dist > after && dist <= after + OBSCURE_GUARD_LINES) d = dist - after;
+    }
     if (d > 0) {
       if (obsMode === 'blur') {
         const strength = Math.max(0, Math.min(1, (dsettings.blurGradient ?? 100) / 100));
-        blur = MAX_BLUR_PX * strength * (d / Math.max(1, w)); // 0 at the eye → strongest at the edge
+        blur = MAX_BLUR_PX * strength * Math.min(1, d / BLUR_RAMP_LINES); // quick ramp, then full
       } else if (obsMode === 'translate') {
         // Hide the line behind its translation. Until (or unless) one arrives, blur stands in so the
         // original is never flashed at the reader.
@@ -220,8 +228,9 @@ function lineRowEqual(p, n) {
   if (nCur && pc.currentWordIndex !== nc.currentWordIndex) return false; // word highlight moved within this line
   if ((i < pc.currentLine) !== (i < nc.currentLine)) return false;       // crossed the cursor → read-status flips
   if ((i >= pc.paraStart && i <= pc.paraEnd) !== (i >= nc.paraStart && i <= nc.paraEnd)) return false; // paragraph highlight
-  if (pc.currentLine !== nc.currentLine) {                  // blur amount changes within the blur window
-    const w = Math.max(n.dsettings.blurLinesBefore || 0, n.dsettings.blurLinesAfter || 0);
+  if (pc.currentLine !== nc.currentLine) {                  // obscuring shifts with the current line
+    const b = n.dsettings.blurLinesBefore || 0, a = n.dsettings.blurLinesAfter || 0;
+    const w = Math.max(b > 0 ? b + OBSCURE_GUARD_LINES : 0, a > 0 ? a + OBSCURE_GUARD_LINES : 0);
     if (w > 0 && (Math.abs(i - pc.currentLine) <= w || Math.abs(i - nc.currentLine) <= w)) return false;
   }
   return true;
@@ -501,19 +510,24 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   const parallelOn = !!settings.parallelTranslation;
   const translateObscure = settings.obscureMode === 'translate' && ((settings.blurLinesBefore || 0) > 0 || (settings.blurLinesAfter || 0) > 0);
   const trEnabled = (parallelOn || translateObscure) && translateConfigured(trCfg);
-  const [visRange, setVisRange] = useState([0, 40]); // rendered-row range (tracked only while parallel is on)
+  const [visRange, setVisRange] = useState([0, 40]); // rendered-row range (tracked while translation needs it)
   const trackVisRef = useRef(false);
-  trackVisRef.current = parallelOn && trEnabled && !split;
+  trackVisRef.current = (parallelOn || translateObscure) && trEnabled && !split;
   const neededLines = useMemo(() => {
     if (!trEnabled) return [];
     const out = new Set();
+    const lo = split ? Math.max(0, currentLine - 12) : Math.max(0, visRange[0]);
+    const hi = Math.min(doc.lines.length - 1, split ? currentLine + 30 : visRange[1]);
     if (translateObscure) {
+      // Only the ON-SCREEN slice of the 100-line guard bands — off-screen lines translate if scrolled to.
       const b = settings.blurLinesBefore || 0, a = settings.blurLinesAfter || 0;
-      for (let li = currentLine - b; li <= currentLine + a; li++) if (li >= 0 && li < doc.lines.length && li !== currentLine) out.add(li);
+      for (let li = lo; li <= hi && out.size < 80; li++) {
+        if (li === currentLine) continue;
+        const dB = currentLine - li, dA = li - currentLine;
+        if ((b > 0 && dB > b && dB <= b + OBSCURE_GUARD_LINES) || (a > 0 && dA > a && dA <= a + OBSCURE_GUARD_LINES)) out.add(li);
+      }
     }
     if (parallelOn) {
-      const lo = split ? Math.max(0, currentLine - 12) : Math.max(0, visRange[0]);
-      const hi = Math.min(doc.lines.length - 1, split ? currentLine + 30 : visRange[1]);
       for (let li = lo; li <= hi && out.size < 80; li++) out.add(li);
     }
     return [...out].filter((li) => { const l = doc.lines[li]; return l && !l.isEmpty && l.text.trim(); });
@@ -591,8 +605,9 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
         const li = Number(row.getAttribute('data-line'));
         const rr = row.getBoundingClientRect();
         if (rr.bottom <= viewTop || rr.top >= viewBottom) continue;
-        const blurredBefore = before > 0 && li < curLine && curLine - li <= before;
-        const blurredAfter = after > 0 && li > curLine && li - curLine <= after;
+        // Obscured = past the readable window but within the guard band (see LineRowImpl).
+        const blurredBefore = before > 0 && li < curLine && (curLine - li) > before && (curLine - li) <= before + OBSCURE_GUARD_LINES;
+        const blurredAfter = after > 0 && li > curLine && (li - curLine) > after && (li - curLine) <= after + OBSCURE_GUARD_LINES;
         const hidden = revealAt != null && li >= revealAt;
         if (blurredBefore) rTop = Math.max(rTop, Math.min(viewBottom, rr.bottom));
         if (blurredAfter || hidden) rBottom = Math.min(rBottom, Math.max(viewTop, rr.top));
