@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AppProvider, useApp } from './state/AppContext.jsx';
 import MenuBar from './components/MenuBar.jsx';
 import TabBar from './components/TabBar.jsx';
@@ -230,6 +231,7 @@ function AppInner() {
   // Filled by the Lines pane: page(dir) → the top/bottom currently-visible line index (excluding
   // blurred / unrevealed lines). Drives the PgUp/PgDn buttons + keys.
   const linesVisibleRef = useRef(null);
+  const dialogSlotRef = useRef(null); // mount point (inside .content-area) a docked dialog tab portals into
   const recognizerRef = useRef(null);
   const audioRecRef = useRef({ rec: null, lineIndex: -1 });
   const audioCtrlRef = useRef(null);
@@ -1836,7 +1838,7 @@ function AppInner() {
           <button className="incog-off" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}>Turn off</button>
         </div>
       )}
-      {activeTab ? (
+      {!dialogDocked && (activeTab ? (
         <div className="main-wrap">
           <ChapterHeading tab={activeTab} onJumpWord={jumpWord} />
           {isCompact && (
@@ -1947,7 +1949,9 @@ function AppInner() {
           {state.tabs.length > 0 && <p>Or pick one of your {state.tabs.length} open tab(s) above.</p>}
           <p className="hint">Shortcuts: Space play, ←→ word, ↑↓ line, Ctrl+↑↓ paragraph, Home restart, Ctrl+F find</p>
         </div>
-      )}
+      ))}
+      {/* A docked dialog tab portals its content in here, filling the tab's page (controls stay below). */}
+      <div className="dialog-slot" ref={dialogSlotRef} />
       </div>
       <div className={`controls-dock${controlsCollapsed ? ' collapsed' : ''}`}>
         <div className="dock-handle-bar">
@@ -2081,9 +2085,10 @@ function AppInner() {
         )}
       </div>
 
-      {/* Dialogs — a docked (tab) panel gets the `dialog-dock` wrapper so CSS turns the centered
-          modal into a non-blocking side panel; blocking modals render centered as before. */}
-      <div className={dialogDocked ? 'dialog-dock' : undefined}>
+      {/* Dialogs. A docked (tab) panel portals into the .dialog-slot inside .content-area so it fills
+          the tab's page; a blocking modal renders here as a centered full-screen overlay. */}
+      {dialog && (() => {
+        const inner = (<>
       {dialog?.kind === 'find' && activeTab && (
         <FindDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
       )}
@@ -2128,13 +2133,6 @@ function AppInner() {
         />
       )}
       {dialog?.kind === 'help' && <HelpDialog onClose={closeDialog} />}
-      {state.importing && (
-        <ImportDialog
-          imp={state.importing}
-          onClose={() => dispatch({ type: 'SET_IMPORT', payload: null })}
-          onAction={handleMenuAction}
-        />
-      )}
       {dialog?.kind === 'def-settings' && (
         <SettingsDialog
           settings={state.global.fileDefaults}
@@ -2277,7 +2275,21 @@ function AppInner() {
           onClose={closeDialog}
         />
       )}
-      </div>
+        </>);
+        // Docked tab → portal into the content-area slot (fills the page). Modal → inline overlay.
+        if (dialogDocked) return dialogSlotRef.current ? createPortal(<div className="dialog-dock">{inner}</div>, dialogSlotRef.current) : null;
+        return inner;
+      })()}
+
+      {/* Import prompt is driven by state.importing (file drop / open), independent of the dialog
+          tabs — always a centered modal, never portaled into a tab. */}
+      {state.importing && (
+        <ImportDialog
+          imp={state.importing}
+          onClose={() => dispatch({ type: 'SET_IMPORT', payload: null })}
+          onAction={handleMenuAction}
+        />
+      )}
 
       {dragOver && <div className="drop-overlay">Drop file to open</div>}
 

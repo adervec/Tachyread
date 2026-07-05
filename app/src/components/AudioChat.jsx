@@ -26,16 +26,19 @@ export default function AudioChat({ log, scope, mode = 'Both', pos, onMove, onDr
 
   // Draggable by its header (like the floating chips); clamped on-screen; position persisted by App.
   function onDown(e) {
-    if (e.target.closest('button')) return; // let header buttons work
+    if (e.target.closest('button')) return; // let header buttons (help / close) work — no drag
     const r = elRef.current.getBoundingClientRect();
     drag.current = { dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, h: r.height };
-    elRef.current.setPointerCapture?.(e.pointerId);
+    // Capture on the header (the element that owns these handlers), NOT the whole chat: capturing a
+    // parent would retarget move/up away from this handler, so onUp never fires and the chip sticks
+    // to the pointer — dragging on mere hover and blocking the × button.
+    e.currentTarget.setPointerCapture?.(e.pointerId);
   }
   function onPointerMove(e) {
     const d = drag.current; if (!d) return;
     onMove?.({ x: Math.max(4, Math.min(window.innerWidth - d.w - 4, e.clientX - d.dx)), y: Math.max(48, Math.min(window.innerHeight - d.h - 4, e.clientY - d.dy)) });
   }
-  function onUp(e) { if (drag.current) { drag.current = null; elRef.current?.releasePointerCapture?.(e.pointerId); onDrop?.(pos); } }
+  function onUp(e) { if (drag.current) { drag.current = null; e.currentTarget?.releasePointerCapture?.(e.pointerId); onDrop?.(pos); } }
   const posStyle = pos ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : undefined;
 
   // Oscilloscope: draw the live time-domain waveform from the mic analyser.
