@@ -3,7 +3,7 @@ import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import {
   exportAllData, exportSummary, importAllData,
-  storeCounts, clearStore, wipeAllData,
+  storeCounts, clearStore, wipeAllData, getAppLog, clearAppLog,
 } from '../state/storage.js';
 import { saveBlobToFile, pickFile, readFileText } from '../features/fileSystem.js';
 import { SYNC_PROVIDERS, getSyncProvider, driveOriginAllowed, getDriveProfile } from '../features/sync/syncProviders.js';
@@ -31,6 +31,7 @@ const TABS = [
   { id: 'backup', label: 'Backup & restore' },
   { id: 'cloud', label: 'Cloud sync' },
   { id: 'maintenance', label: 'Maintenance' },
+  { id: 'log', label: 'Diagnostic log' },
 ];
 
 // Data management suite — storage overview, full backup/restore, cloud progress-sync, and
@@ -47,6 +48,8 @@ export default function DataDialog({ onClose }) {
   const [importText, setImportText] = useState('');
   const [pending, setPending] = useState(null); // staged import summary awaiting confirm
   const [wipeArm, setWipeArm] = useState(false);
+  const [logEntries, setLogEntries] = useState(null);
+  useEffect(() => { if (tab === 'log') getAppLog().then((l) => setLogEntries([...l].reverse())); }, [tab]);
 
   const sync = { provider: 'localFolder', driveClientId: '', lastSync: 0, autoBackupMinutes: 30, ...(state.global.sync || {}) };
   function patchSync(p) { updateGlobal({ sync: { ...sync, ...p } }); }
@@ -336,6 +339,38 @@ export default function DataDialog({ onClose }) {
                 <button onClick={() => setWipeArm(false)} disabled={busy}>Cancel</button>
               </>
             )}
+          </div>
+        </>
+      )}
+
+      {tab === 'log' && (
+        <>
+          <div className="field-section">Diagnostic log</div>
+          <p className="settings-note">
+            A local, capped record of errors and notable events (audiobook generation failures,
+            translation errors, …) — the place to look when something “fails for unclear reasons”.
+            Never leaves this device.
+          </p>
+          <div className="data-row">
+            <button
+              disabled={!logEntries?.length}
+              onClick={async () => {
+                const txt = [...(logEntries || [])].reverse().map((e) => `${new Date(e.ts).toISOString()} [${e.tag}] ${e.message}`).join('\n');
+                await saveBlobToFile(new Blob([txt], { type: 'text/plain' }), 'tachyread-log.txt', [{ description: 'Log', accept: { 'text/plain': ['.txt'] } }]);
+              }}
+            >⬇ Download .txt</button>
+            <button className="grab-trash" disabled={!logEntries?.length} onClick={async () => { await clearAppLog(); setLogEntries([]); }}>🗑 Clear log</button>
+            <span className="settings-note" style={{ margin: 0 }}>{logEntries ? `${logEntries.length} entr${logEntries.length === 1 ? 'y' : 'ies'} (newest first, capped at 500)` : 'Loading…'}</span>
+          </div>
+          <div className="app-log">
+            {(logEntries || []).map((e, i) => (
+              <div key={i} className="app-log-row">
+                <span className="app-log-ts">{new Date(e.ts).toLocaleString()}</span>
+                <span className={`app-log-tag tag-${e.tag}`}>{e.tag}</span>
+                <span className="app-log-msg">{e.message}</span>
+              </div>
+            ))}
+            {logEntries && logEntries.length === 0 && <p className="settings-note">Log is empty — nothing has gone wrong lately. 🎉</p>}
           </div>
         </>
       )}

@@ -7,7 +7,7 @@ import Pointer from './Pointer.jsx';
 import { useReportVisibility } from '../state/useReportVisibility.js';
 import { useApp } from '../state/AppContext.jsx';
 import { translateText, translateConfigured, cacheKey } from '../features/translateService.js';
-import { getCachedTranslation, putCachedTranslation } from '../state/storage.js';
+import { getCachedTranslation, putCachedTranslation, appendAppLog } from '../state/storage.js';
 
 // Reading-pointer feature archived for now (not useful). Flip to true to restore it, and uncomment
 // its Settings section in dialogs/SettingsDialog.jsx.
@@ -150,6 +150,17 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
     filter: blur ? `blur(${blur}px)` : undefined,
     fontSize: isCurrent && boost ? `calc(1em + ${boost}px)` : undefined,
   };
+  // Justify: when a source line WRAPS onto extra visual lines, justify the last visual line too
+  // (text-align-last) so both use the full width — but only for wrapped rows, so a genuinely short
+  // line isn't stretched absurdly. ponytail: DOM-only class toggle in a ref (no state, no re-render);
+  // re-evaluated whenever the row re-renders, which covers font/width/alignment changes closely enough.
+  const wantJustifyWrap = textStyle.textAlign === 'justify' && !line.isEmpty;
+  const justifyWrapRef = (el) => {
+    if (!el) return;
+    if (!wantJustifyWrap) { el.classList.remove('tx-wrapped'); return; }
+    const lh = parseFloat(getComputedStyle(el).lineHeight);
+    el.classList.toggle('tx-wrapped', Number.isFinite(lh) && lh > 0 && el.scrollHeight > lh * 1.6);
+  };
 
   // Mildly alternate the colour of still-unread sentences so consecutive ones are easy to tell apart
   // (odd sentences get a subtle accent tint). Only the unread band — read/current lines keep their look.
@@ -178,7 +189,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
     >
       <div className="num">{line.lineNumber}</div>
       <div className="accent" />
-      <div className={`text${obscureCls}${parallel ? ' parallel' : ''}`} style={textStyle}>
+      <div ref={justifyWrapRef} className={`text${obscureCls}${parallel ? ' parallel' : ''}`} style={textStyle}>
         {pointerBefore && pointer}
         {line.isEmpty ? (
           <span style={{ opacity: 0.4 }}>·</span>
@@ -364,8 +375,9 @@ function useLineTranslations(doc, needed, cfg, enabled) {
           let t = await getCachedTranslation(key);
           if (t == null) { t = await translateText(cfg, text); putCachedTranslation(key, t); }
           if (alive) setMap((m) => new Map(m).set(li, t));
-        } catch {
+        } catch (e) {
           if (alive) setMap((m) => new Map(m).set(li, null)); // failed — marked, not retried in a loop
+          appendAppLog('translate', `line ${li + 1} (${cfg.translateProvider} → ${cfg.translateTarget}): ${e?.message || e}`);
         } finally { pendingRef.current.delete(li); }
       }
     })();

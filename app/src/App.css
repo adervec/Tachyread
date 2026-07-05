@@ -1304,6 +1304,16 @@
 .line-row .text.parallel .pl-col { min-width: 0; }
 .line-row .text.parallel .pl-trans { color: color-mix(in srgb, var(--line-unread-fg) 78%, var(--toggle-active-bg)); }
 .pl-wait { opacity: 0.45; font-size: 0.9em; }
+/* Justify: a wrapped source line (class toggled in LineRowImpl) justifies its LAST visual line too,
+   so both wrapped lines use the full width. Unwrapped lines keep the normal ragged last line. */
+.line-row .text.tx-wrapped { text-align-last: justify; }
+
+/* Diagnostic log (Data Management → Diagnostic log) */
+.app-log { max-height: 52vh; overflow: auto; border: 1px solid var(--divider); border-radius: 6px; margin-top: 8px; font-size: 12px; }
+.app-log-row { display: flex; gap: 8px; align-items: baseline; padding: 4px 8px; border-bottom: 1px solid var(--divider); }
+.app-log-ts { flex: 0 0 auto; color: var(--status-fg); font-variant-numeric: tabular-nums; font-size: 11px; }
+.app-log-tag { flex: 0 0 auto; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 0 6px; border-radius: 8px; background: color-mix(in srgb, var(--toggle-active-bg) 18%, transparent); color: var(--menu-fg); }
+.app-log-msg { min-width: 0; overflow-wrap: anywhere; }
 .line-row.status-Read .text { color: var(--line-read-fg); font-weight: bold; }
 .line-row.status-SessionRead .text { color: var(--session-read-fg); font-weight: bold; }
 .line-row.status-NavSessionRead .text { color: var(--nav-session-read-fg); font-weight: bold; }
