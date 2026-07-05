@@ -7,7 +7,7 @@ import {
   audiobookSize, clearAudiobook, exportAudiobook, importAudiobook, appendAppLog,
 } from '../state/storage.js';
 import { recordClip } from '../features/audioRecorder.js';
-import { synthToBlob, defaultVoiceForLang, piperSupported, installedVoices, voiceLabel } from '../features/piperTts.js';
+import { defaultVoiceForLang, piperSupported, installedVoices, voiceLabel, createPiperEngine } from '../features/piperTts.js';
 import { elevenVoices, elevenSynth, elevenConfigured } from '../features/elevenLabs.js';
 import { audiobookChunks } from '../document/readerDocument.js';
 import { getTocEntries } from '../document/toc.js';
@@ -180,26 +180,37 @@ export default function AudiobookDialog({ tab, onClose }) {
     setMsg('');
     let ok = 0, consecutive = 0;
     const errors = [];
-    const synth = (c) => (isEl ? elevenSynth(c.text.trim(), voiceId.slice(3), key, { modelId }) : synthToBlob(c.text.trim(), voiceId));
-    for (let i = 0; i < job.targets.length; i++) {
-      if (abort.current) break;
-      const c = job.targets[i];
-      try {
-        let blob;
-        try { blob = await synth(c); }
-        catch { await new Promise((r) => setTimeout(r, 1000)); blob = await synth(c); } // one retry
-        await addAudioClip(checksum, c.startLine, blob, { source: 'tts', voiceId, durationMs: estMs(blob), spanEndLine: c.endLine });
-        ok++; consecutive = 0;
-      } catch (e) {
-        errors.push(e?.message || String(e));
-        console.warn(`Audiobook: chunk @ line ${c.startLine + 1} failed:`, e);
-        appendAppLog('audiobook', `chunk @ line ${c.startLine + 1} (${labelVoice(voiceId)}): ${e?.message || e}`);
-        consecutive++;
+    // Piper runs in a recycled worker: the ONNX WASM heap only grows, so long runs died around
+    // chunk ~50 with "Can't create a session / failed to allocate a buffer". Recycling the worker
+    // every batch (and before any retry) frees the heap; OPFS keeps the voice cached.
+    const PIPER_BATCH = 16;
+    const engine = isEl ? null : createPiperEngine();
+    const synth = (c) => (isEl ? elevenSynth(c.text.trim(), voiceId.slice(3), key, { modelId }) : engine.synth(c.text.trim(), voiceId));
+    try {
+      for (let i = 0; i < job.targets.length; i++) {
+        if (abort.current) break;
+        const c = job.targets[i];
+        try {
+          let blob;
+          try { blob = await synth(c); }
+          catch { // one retry — with a fresh engine for Piper, after a pause for cloud rate limits
+            if (engine) engine.recycle(); else await new Promise((r) => setTimeout(r, 1000));
+            blob = await synth(c);
+          }
+          await addAudioClip(checksum, c.startLine, blob, { source: 'tts', voiceId, durationMs: estMs(blob), spanEndLine: c.endLine });
+          ok++; consecutive = 0;
+          if (engine && ok % PIPER_BATCH === 0) engine.recycle(); // fresh heap for the next batch
+        } catch (e) {
+          errors.push(e?.message || String(e));
+          console.warn(`Audiobook: chunk @ line ${c.startLine + 1} failed:`, e);
+          appendAppLog('audiobook', `chunk @ line ${c.startLine + 1} (${labelVoice(voiceId)}): ${e?.message || e}`);
+          consecutive++;
+        }
+        setGen({ done: i + 1, total: job.targets.length });
+        if ((i & 7) === 0) await refresh();
+        if (consecutive >= CONSEC_ABORT) break;
       }
-      setGen({ done: i + 1, total: job.targets.length });
-      if ((i & 7) === 0) await refresh();
-      if (consecutive >= CONSEC_ABORT) break;
-    }
+    } finally { engine?.dispose(); }
     setGen(null); refresh();
     const reasons = [...new Set(errors)].slice(0, 2).join(' · ');
     if (!errors.length) setMsg(abort.current ? `■ Stopped — ${ok} of ${job.targets.length} chunk(s) generated.` : `✓ Generated ${ok} chunk(s) with ${labelVoice(voiceId)}.`);

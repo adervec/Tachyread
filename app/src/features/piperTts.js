@@ -47,6 +47,48 @@ export async function synthToBlob(text, voiceId) {
   return tts.predict({ text: text.trim(), voiceId });
 }
 
+// Worker-backed synth engine for BATCH generation (the audiobook manager). synth() one chunk at a
+// time; recycle() terminates the worker — freeing the whole ONNX WASM heap, which otherwise only
+// grows until "Can't create a session / failed to allocate a buffer" — and the next synth spawns a
+// fresh one. Falls back to main-thread predict if the worker can't run vits-web in this browser.
+export function createPiperEngine() {
+  let worker = null;
+  let seq = 0;
+  let fallback = false;
+  const pending = new Map();
+  function spawn() {
+    worker = new Worker(new URL('./piperWorker.js', import.meta.url), { type: 'module' });
+    worker.onmessage = (e) => {
+      const p = pending.get(e.data?.id);
+      if (!p) return;
+      pending.delete(e.data.id);
+      if (e.data.ok) p.resolve(e.data.blob); else p.reject(new Error(e.data.error));
+    };
+    worker.onerror = () => {
+      fallback = true; // worker path unusable here → subsequent synths run on the main thread
+      for (const p of pending.values()) p.reject(new Error('Piper worker failed to start.'));
+      pending.clear();
+      try { worker.terminate(); } catch { /* already dead */ }
+      worker = null;
+    };
+  }
+  async function synth(text, voiceId) {
+    if (fallback) return synthToBlob(text, voiceId);
+    if (!worker) spawn();
+    return new Promise((resolve, reject) => {
+      const id = ++seq;
+      pending.set(id, { resolve, reject });
+      worker.postMessage({ id, text, voiceId });
+    });
+  }
+  function recycle() {
+    if (worker) { try { worker.terminate(); } catch { /* ignore */ } worker = null; }
+    for (const p of pending.values()) p.reject(new Error('Piper engine recycled.'));
+    pending.clear();
+  }
+  return { synth, recycle, dispose: recycle };
+}
+
 // Synthesize text → a WAV object URL (caller revokes it). Downloads the model on first use.
 export async function synthToUrl(text, voiceId) {
   return URL.createObjectURL(await synthToBlob(text, voiceId));
