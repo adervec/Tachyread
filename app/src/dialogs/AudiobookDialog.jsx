@@ -12,6 +12,7 @@ import { elevenVoices, elevenSynth, elevenConfigured } from '../features/elevenL
 import { audiobookChunks } from '../document/readerDocument.js';
 import { getTocEntries } from '../document/toc.js';
 import { saveBlobToFile, pickFile, readFileText } from '../features/fileSystem.js';
+import AudiobookExportWizard from './AudiobookExportWizard.jsx';
 
 // Rough clip duration from the blob: mp3 (~128 kbps, ElevenLabs) vs 16-bit 22.05 kHz WAV (Piper).
 const estMs = (blob) => (/mpe?g|mp3/i.test(blob.type)
@@ -81,6 +82,7 @@ export default function AudiobookDialog({ tab, onClose }) {
   const [fullText, setFullText] = useState(null); // chunk whose full text is shown
   const [size, setSize] = useState({ bytes: 0, clips: 0, chunks: 0 });
   const [wipeArm, setWipeArm] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const [playingKey, setPlayingKey] = useState(''); // `${line}` or `${line}:${clipId}` currently playing
   const playRef = useRef(null); // { audio, url, key }
 
@@ -265,8 +267,9 @@ export default function AudiobookDialog({ tab, onClose }) {
       ) : <p className="settings-note">Offline Piper voice isn’t available in this browser. Add an ElevenLabs key in Audio Settings to generate in the cloud instead.</p>}
 
       <div className="ab-genbar">
-        <button onClick={doExport} disabled={busy || !size.clips} title="Save this book's clips to a file for another device">⬆ Export…</button>
-        <button onClick={doImport} disabled={busy} title="Load an exported audiobook file">⬇ Import…</button>
+        <button className="toggle-on" onClick={() => setShowExport(true)} disabled={!totalCovered} title="Save the generated narration as standalone audio tracks (WAV/MP3 + playlist) to play on your phone">🎧 Export as audiobook…</button>
+        <button onClick={doExport} disabled={busy || !size.clips} title="Save this book's clips as a Tachyread transfer file for another device">⬆ Transfer file…</button>
+        <button onClick={doImport} disabled={busy} title="Load an exported Tachyread audiobook transfer file">⬇ Import…</button>
       </div>
       {msg && <p className="settings-note" style={{ marginTop: 0 }}>{msg}</p>}
 
@@ -393,6 +396,16 @@ export default function AudiobookDialog({ tab, onClose }) {
           </Dialog>
         );
       })()}
+
+      {showExport && (
+        <AudiobookExportWizard
+          checksum={checksum}
+          fileName={tab.doc.fileName}
+          sections={sections}
+          manifest={manifest}
+          onClose={() => setShowExport(false)}
+        />
+      )}
     </Dialog>
   );
 }

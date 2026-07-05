@@ -22,10 +22,13 @@ export function defaultFileSettings() {
     doubleTimeSpecialWordsMultiplier: 1.0,
     longWordThreshold: 9,
     showPercentSeparators: false,
+    altSentenceColors: false, // mildly alternate the colour of consecutive unread sentences
     textAlignment: 'Left',
     blurLinesBefore: 0,
     blurLinesAfter: 0,
+    blurGradient: 100,   // blur ramp strength (%): 100 = first blurred line fully blurred; lower ramps up
     currentLineFontSizeBoost: 0,
+    scrollReadPoint: 0,  // scroll-to-read "assume read" line, 0 (top of readable band) .. 1 (bottom)
     hideRsvpPane: false,
     contextWordCount: 0,
     contextWordsBefore: 0,
@@ -58,11 +61,11 @@ export function defaultFileSettings() {
     metronome: { enabled: false, volume: 0.25, subdivision: 1, accentEvery: 0 }, // rhythmic auditory pace cue at the current WPM
     goal: null,
     typing: {
-      enabled: false, mode: 'passage', caseSensitive: false, stripPunctuation: true,
-      // Auto-bypass characters a standard QWERTY keyboard can't type (bullets, ¶, curly quotes, em-
-      // dashes, ellipses…): decorative tokens are skipped and typographic look-alikes are accepted,
-      // with no penalty. On by default so book passages are actually typeable.
-      bypassNonQwerty: true,
+      enabled: false, mode: 'passage', caseSensitive: false,
+      // Text transforms so the drill shows exactly what you type. lowercase / noSpecial are opt-in;
+      // bypassNonQwerty (on) converts or removes characters a standard QWERTY keyboard can't reach
+      // (bullets, ¶, curly quotes, em-dashes, accents…) so book passages are actually typeable.
+      lowercase: false, noSpecial: false, bypassNonQwerty: true,
       perWordTimeoutMs: 0, runMode: 'seconds', runLimit: 60, soundVolume: 0.4,
       // Countdown tick in timed runs (accelerates in the final seconds).
       tickClock: false,

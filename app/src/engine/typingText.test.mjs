@@ -1,7 +1,7 @@
 // ponytail: the non-QWERTY bypass must (a) normalize typographic look-alikes to keyboard chars,
 // (b) flag purely-decorative tokens to skip, (c) keep real words (incl. accented), (d) mark exotic
 // target chars as auto-accept. Run: node src/engine/typingText.test.mjs
-import { normalizeTypography, prepToken, isExotic } from './typingText.js';
+import { normalizeTypography, prepToken, isExotic, toKeyboard, transformToken } from './typingText.js';
 import assert from 'node:assert';
 
 // Typographic look-alikes → what the keyboard types.
@@ -28,4 +28,19 @@ assert.equal(isExotic('•'), true, 'bullet is exotic');
 assert.equal(isExotic('a'), false, 'ascii letter not exotic');
 assert.equal(isExotic('-'), false, 'ascii hyphen not exotic');
 
-console.log('ok — typography normalized, decorative tokens skipped, real words kept, exotic auto-accept');
+// toKeyboard: accents transliterate to base ASCII (WYSIWYG); decorative/exotic chars drop.
+assert.equal(toKeyboard('café'), 'cafe', 'accent → base letter');
+assert.equal(toKeyboard('naïve résumé'), 'naive resume');
+assert.equal(toKeyboard('“a—b…”'), '"a-b..."', 'look-alikes normalized');
+assert.equal(toKeyboard('•★☃'), '', 'decorative / exotic symbols dropped');
+
+// transformToken: bypass / noSpecial / lowercase, composable — the text shown IS the text to type.
+assert.equal(transformToken('Café,', { bypassNonQwerty: true }).text, 'Cafe,', 'bypass strips the accent, keeps punctuation');
+assert.equal(transformToken("Don't!", { noSpecial: true }).text, 'Dont', 'no-special drops punctuation');
+assert.equal(transformToken('Hello, World!', { lowercase: true }).text, 'hello, world!', 'lowercase');
+assert.equal(transformToken('Café,', { bypassNonQwerty: true, noSpecial: true, lowercase: true }).text, 'cafe', 'all three compose');
+assert.equal(transformToken('42%', { noSpecial: true }).text, '42', 'symbols stripped, digits kept');
+assert.equal(transformToken('•', { noSpecial: true }).skip, true, 'pure decoration still skipped');
+assert.equal(prepToken('café').text, 'cafe', 'prepToken (bypass only) transliterates');
+
+console.log('ok — transforms compose, accents transliterate, decorative tokens skipped, WYSIWYG');

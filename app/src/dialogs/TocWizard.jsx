@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { getLineIndex } from '../document/readerDocument.js';
 import { autoDetectToc, isMatterTitle, sectionSpan } from '../document/toc.js';
-import { detectTocRegion, parsePrintedToc, buildFromPrintedToc, finalizeEntries } from '../document/tocWizard.js';
+import { detectTocRegion, parsePrintedToc, buildFromParsed, finalizeEntries, joinRegion, autoSplitSquashed, parseManualToc } from '../document/tocWizard.js';
+import { findInDoc } from '../document/findText.js';
+import FindResults from '../components/FindResults.jsx';
 
 // Robust TOC-generation wizard. Three paths, with the printed-Contents path as the headline feature:
 // the user points at the book's own printed table of contents, and we use it to locate each heading
@@ -20,22 +22,19 @@ export default function TocWizard({ tab, onApply, onClose }) {
   const [skipContents, setSkipContents] = useState(true); // exclude the printed contents pages from completion %
   const [findFor, setFindFor] = useState(null); // entry index whose line we're searching for
   const [findQuery, setFindQuery] = useState('');
+  const [manualText, setManualText] = useState(null); // guided split for a squashed one-line ToC (null = off)
 
-  // In-wizard Find: lines whose text contains the query — to locate the real start of an entry.
-  const searchResults = useMemo(() => {
-    const q = (findQuery || '').trim().toLowerCase();
-    if (findFor == null || q.length < 2) return [];
-    const out = [];
-    for (let li = 0; li < doc.lines.length && out.length < 80; li++) {
-      const ln = doc.lines[li];
-      if (!ln || ln.isEmpty || ln.startWordIndex < 0) continue;
-      if (ln.text.toLowerCase().includes(q)) out.push({ li, text: ln.text.trim() });
-    }
-    return out;
-  }, [doc, findQuery, findFor]);
+  // In-wizard Find (rich): locate the real start of an entry, with the same info columns + context peek
+  // as the Find dialog — but no jump/peek/goal buttons (a ✓ assigns the line to the entry instead).
+  const wizHits = useMemo(
+    () => (findFor != null && findQuery.trim().length >= 2 ? findInDoc(doc, findQuery, { max: 80 }) : []),
+    [doc, findQuery, findFor],
+  );
 
-  // Parse preview of the chosen region (which lines become entries).
-  const parsed = useMemo(() => parsePrintedToc(doc, start, end), [doc, start, end]);
+  // Parse preview of the chosen region — from the guided manual split when active, else line-per-entry.
+  const parsedAuto = useMemo(() => parsePrintedToc(doc, start, end), [doc, start, end]);
+  const parsedManual = useMemo(() => (manualText != null ? parseManualToc(manualText) : null), [manualText]);
+  const parsed = parsedManual ?? parsedAuto;
   const entrySrcLines = useMemo(() => {
     const m = new Map();
     for (const p of parsed) m.set(p.srcLine, p);
@@ -58,9 +57,12 @@ export default function TocWizard({ tab, onApply, onClose }) {
     setStep('review');
   }
   function buildFromRegion() {
-    setCandidates(buildFromPrintedToc(doc, start, end).map((c) => ({ ...c, skip: isMatterTitle(c.title) })));
+    setCandidates(buildFromParsed(doc, parsed, end + 1).map((c) => ({ ...c, skip: isMatterTitle(c.title) })));
     setStep('review');
   }
+  // Enter guided manual-split mode: join the region to one blob and auto-suggest a per-entry split the
+  // user can then hand-edit. Turn it off to go back to the automatic line-per-entry parse.
+  function startManualSplit() { setManualText(autoSplitSquashed(joinRegion(doc, start, end))); }
   const setSkip = (i, v) => setCandidates((cs) => cs.map((c, k) => (k === i ? { ...c, skip: v } : c)));
 
   const matchedCount = candidates.filter((c) => c.matched && Number.isFinite(c.wordIndex)).length;
@@ -157,25 +159,50 @@ export default function TocWizard({ tab, onApply, onClose }) {
             <label>Start line <input type="number" min={1} max={doc.lines.length} value={start + 1} onChange={(e) => setStart(Math.max(0, (Number(e.target.value) || 1) - 1))} /></label>
             <label>End line <input type="number" min={1} max={doc.lines.length} value={end + 1} onChange={(e) => setEnd(Math.max(0, (Number(e.target.value) || 1) - 1))} /></label>
             <button onClick={autoDetectRegion}>↻ Auto-detect</button>
+            {manualText == null
+              ? <button onClick={startManualSplit} title="Use this when the whole contents sit on one wrapped line and nothing was found">✂ One line? Split manually</button>
+              : <button onClick={() => setManualText(null)}>↺ Back to auto</button>}
             <span className="tw-parse-count">{parsed.length} entr{parsed.length === 1 ? 'y' : 'ies'} found</span>
           </div>
-          <div className="tw-preview">
-            {Array.from({ length: Math.min(220, Math.max(0, end - start + 1)) }, (_, k) => start + k).map((li) => {
-              const line = doc.lines[li];
-              if (!line) return null;
-              const ent = entrySrcLines.get(li);
-              return (
-                <div key={li} className={`tw-pl${ent ? ' entry' : ''}${line.isEmpty ? ' blank' : ''}`}>
-                  <span className="tw-pl-n">{li + 1}</span>
-                  {ent ? (
-                    <span className="tw-pl-t"><b style={{ marginLeft: (ent.indent || 0) }}>{ent.title}</b>{ent.page != null && <span className="tw-pl-pg"> · p.{ent.page}</span>}</span>
-                  ) : (
-                    <span className="tw-pl-t tw-pl-skip">{line.isEmpty ? '·' : line.text.trim() || '·'}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          {manualText == null && parsedAuto.length < 2 && (
+            <p className="settings-note tw-squash-hint">
+              Only {parsedAuto.length} entr{parsedAuto.length === 1 ? 'y' : 'ies'} found — if this book’s contents are squashed onto one line,
+              click <b>✂ One line? Split manually</b> and break them apart yourself.
+            </p>
+          )}
+          {manualText != null ? (
+            <div className="tw-manual">
+              <p className="settings-note">
+                One entry per line — edit the split below (add or remove line breaks until each contents
+                entry is on its own line). A trailing page number after each title is read automatically.
+                {' '}<button className="link-btn" onClick={startManualSplit}>↻ Re-suggest split</button>
+              </p>
+              <textarea className="tw-manual-text" rows={10} value={manualText} onChange={(e) => setManualText(e.target.value)} spellCheck={false} />
+              <div className="tw-manual-preview">
+                {parsed.length} entr{parsed.length === 1 ? 'y' : 'ies'}:{' '}
+                {parsed.slice(0, 14).map((p, i) => <span key={i} className="tw-manual-chip">{p.title}{p.page != null ? ` · p.${p.page}` : ''}</span>)}
+                {parsed.length > 14 ? ' …' : ''}
+              </div>
+            </div>
+          ) : (
+            <div className="tw-preview">
+              {Array.from({ length: Math.min(220, Math.max(0, end - start + 1)) }, (_, k) => start + k).map((li) => {
+                const line = doc.lines[li];
+                if (!line) return null;
+                const ent = entrySrcLines.get(li);
+                return (
+                  <div key={li} className={`tw-pl${ent ? ' entry' : ''}${line.isEmpty ? ' blank' : ''}`}>
+                    <span className="tw-pl-n">{li + 1}</span>
+                    {ent ? (
+                      <span className="tw-pl-t"><b style={{ marginLeft: (ent.indent || 0) }}>{ent.title}</b>{ent.page != null && <span className="tw-pl-pg"> · p.{ent.page}</span>}</span>
+                    ) : (
+                      <span className="tw-pl-t tw-pl-skip">{line.isEmpty ? '·' : line.text.trim() || '·'}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -211,13 +238,15 @@ export default function TocWizard({ tab, onApply, onClose }) {
                 placeholder="Search the document text…"
               />
               <div className="tw-find-results">
-                {searchResults.map((r) => (
-                  <div key={r.li} className="tw-find-hit" onClick={() => { assignLine(findFor, r.li + 1); setFindFor(null); }} title={`Use line ${r.li + 1}`}>
-                    <span className="tw-find-ln">{r.li + 1}</span>
-                    <span className="tw-find-tx">{r.text}</span>
-                  </div>
-                ))}
-                {findQuery.trim().length >= 2 && searchResults.length === 0 && <div className="settings-note" style={{ padding: '4px 8px' }}>No lines match “{findQuery.trim()}”.</div>}
+                <FindResults
+                  doc={doc}
+                  results={wizHits}
+                  query={findQuery}
+                  showSection={false}
+                  showRead={false}
+                  actions={[{ icon: '✓ use', title: 'Use this line as the entry’s start', cls: 'find-use', onClick: (r) => { assignLine(findFor, r.lineIndex + 1); setFindFor(null); } }]}
+                />
+                {findQuery.trim().length >= 2 && wizHits.length === 0 && <div className="settings-note" style={{ padding: '4px 8px' }}>No lines match “{findQuery.trim()}”.</div>}
               </div>
             </div>
           )}

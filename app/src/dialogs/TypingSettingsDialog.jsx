@@ -35,19 +35,28 @@ export default function TypingSettingsDialog({ settings, onPatch, global, onPatc
           onChange={(e) => patchTyping({ caseSensitive: e.target.checked })}
         />
       </Field>
-      <Field label="Strip punctuation">
+      <div className="field-section">Transform the text</div>
+      <p className="settings-note" style={{ margin: '2px 0 6px' }}>
+        Change the drill text so you always type <strong>exactly what you see</strong> — also toggleable
+        on the typing screen.
+      </p>
+      <Field label="All lowercase">
+        <input type="checkbox" checked={!!t.lowercase} onChange={(e) => patchTyping({ lowercase: e.target.checked })} />
+      </Field>
+      <Field label="No special characters">
         <input
           type="checkbox"
-          checked={t.stripPunctuation ?? true}
-          onChange={(e) => patchTyping({ stripPunctuation: e.target.checked })}
+          checked={!!t.noSpecial}
+          onChange={(e) => patchTyping({ noSpecial: e.target.checked })}
+          title="Strip punctuation & symbols — type letters, numbers and spaces only"
         />
       </Field>
-      <Field label="Auto-bypass non-QWERTY characters">
+      <Field label="Remove non-typeable characters">
         <input
           type="checkbox"
           checked={t.bypassNonQwerty !== false}
           onChange={(e) => patchTyping({ bypassNonQwerty: e.target.checked })}
-          title="Skip characters a standard keyboard can't type (•, ¶, curly quotes, em-dashes, …) with no penalty"
+          title="Characters a standard keyboard can't reach (•, ¶, curly quotes, em-dashes, accents…) are converted to the nearest key or removed — so you never see a character you can't type."
         />
       </Field>
       <Field label="Per-word timeout (ms, 0 = off)">

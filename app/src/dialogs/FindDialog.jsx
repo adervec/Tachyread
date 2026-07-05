@@ -1,60 +1,38 @@
 import { useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { getTocEntries } from '../document/toc.js';
+import { findInDoc } from '../document/findText.js';
+import FindResults from '../components/FindResults.jsx';
 
-export default function FindDialog({ tab, onJumpWord, onClose }) {
+export default function FindDialog({ tab, onJumpWord, onPeek, onSetGoal, onClose }) {
   const [q, setQ] = useState('');
   const [caseSens, setCaseSens] = useState(false);
+  const { doc, settings } = tab;
+  const tocEntries = useMemo(() => getTocEntries(tab) || [], [tab]);
+  const results = useMemo(
+    () => findInDoc(doc, q, { caseSensitive: caseSens, tocEntries, readFrontier: settings.wordIndex || 0 }),
+    [doc, q, caseSens, tocEntries, settings.wordIndex],
+  );
 
-  const results = useMemo(() => {
-    if (!q) return [];
-    const out = [];
-    const re = new RegExp(escape(q), caseSens ? 'g' : 'gi');
-    for (let li = 0; li < tab.doc.lines.length; li++) {
-      const txt = tab.doc.lines[li].text;
-      if (re.test(txt)) {
-        out.push({ lineIndex: li, text: txt, wordIndex: tab.doc.lines[li].startWordIndex });
-        re.lastIndex = 0;
-      }
-      if (out.length > 500) break;
-    }
-    return out;
-  }, [q, caseSens, tab.doc]);
-
-  function escape(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
+  // Same actions as the Contents page: jump here, peek (keep your place), or set reaching it as a goal.
+  const actions = [
+    { icon: '▶', title: 'Jump here (move reading position)', onClick: (r) => { if (r.wordIndex >= 0) onJumpWord(r.wordIndex); onClose(); } },
+    { icon: '👁', title: 'Peek — scroll it into view, keep your position', onClick: (r) => onPeek?.(r.lineIndex) },
+    { icon: '🎯', title: 'Set reaching this point as your reading goal', onClick: (r) => onSetGoal?.(r.wordIndex, `Find: “${q}”`) },
+  ];
 
   return (
-    <Dialog title="Find" onClose={onClose} width={520}>
-      <div className="field-row">
-        <label>Search</label>
+    <Dialog title="Find" onClose={onClose} width={760}>
+      <div className="find-bar">
         <input
-          autoFocus
-          type="text"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Type to search…"
+          autoFocus type="text" className="find-input" value={q}
+          onChange={(e) => setQ(e.target.value)} placeholder="Search the document…"
         />
+        <label className="inline-check"><input type="checkbox" checked={caseSens} onChange={(e) => setCaseSens(e.target.checked)} /> Case</label>
+        <span className="settings-note" style={{ margin: 0 }}>{results.length} match{results.length === 1 ? '' : 'es'}</span>
       </div>
-      <div className="field-row">
-        <label>Case sensitive</label>
-        <input type="checkbox" checked={caseSens} onChange={(e) => setCaseSens(e.target.checked)} />
-      </div>
-      <div>{results.length} matches</div>
-      <div className="find-results">
-        {results.map((r) => (
-          <div
-            key={r.lineIndex}
-            className="hit"
-            onClick={() => {
-              if (r.wordIndex >= 0) onJumpWord(r.wordIndex);
-              onClose();
-            }}
-          >
-            <strong>Line {r.lineIndex + 1}:</strong> {r.text.slice(0, 160)}
-          </div>
-        ))}
-      </div>
+      {q && results.length === 0 && <p className="settings-note">No matches for “{q}”.</p>}
+      <FindResults doc={doc} results={results} query={q} actions={actions} />
     </Dialog>
   );
 }

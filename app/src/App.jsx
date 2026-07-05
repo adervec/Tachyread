@@ -120,7 +120,7 @@ function isSentenceStart(doc, i) {
 }
 
 function AppInner() {
-  const { state, activeTab: rawActiveTab, hydrateTab, openFiles, openClipboard, setStatus, patchSettings, patchTab, openDialog, closeDialog, setActiveTab, setActivePanel, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
+  const { state, activeTab: rawActiveTab, hydrateTab, openFiles, openClipboard, openRecent, setStatus, patchSettings, patchTab, openDialog, closeDialog, setActiveTab, setActivePanel, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
   // A lazy (restored, not-yet-loaded) tab has no parsed document — treat it as "no active reader"
   // until it hydrates, so nothing downstream touches activeTab.doc before it exists.
   const activeTab = rawActiveTab && !rawActiveTab.lazy ? rawActiveTab : null;
@@ -1557,6 +1557,7 @@ function AppInner() {
   }
 
   function handleMenuAction(action) {
+    if (action.startsWith('open-recent:')) return openRecent(action.slice(12));
     if (action === 'sync-now') return doSyncNow();
     if (action === 'save-tab' && activeTab) return doSaveTab();
     if (action === 'open-clip') return openClipboard();
@@ -2126,7 +2127,13 @@ function AppInner() {
       {dialog && (() => {
         const inner = (<>
       {dialog?.kind === 'find' && activeTab && (
-        <FindDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
+        <FindDialog
+          tab={activeTab}
+          onJumpWord={jumpWord}
+          onPeek={(li) => peekToLine(li)}
+          onSetGoal={(wi, label) => { const cur = activeTab.settings.wordIndex || 0; setSectionGoal(Math.min(cur, wi), Math.max(cur, wi) + 1, label); }}
+          onClose={closeDialog}
+        />
       )}
       {dialog?.kind === 'goto' && activeTab && (
         <GoToLineDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />

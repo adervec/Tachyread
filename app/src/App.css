@@ -113,15 +113,21 @@
 }
 .menu-burger.open { background: var(--menu-highlight); }
 .menu-theme-compact { font-size: 12px; margin-right: 8px; max-width: 42vw; }
+/* Dim the page behind the open mobile menu so the drawer clearly reads as a separate surface
+   (fixes it blending into light-theme whitespace). Tap it to close. */
+.menu-scrim { position: fixed; inset: 0; z-index: 999; background: rgba(0, 0, 0, 0.42); }
 .menu-drawer {
   position: absolute;
   top: 100%;
   left: 0;
   right: 0;
   z-index: 1000;
-  background: var(--menu-bg);
-  border-bottom: 1px solid var(--input-border);
-  box-shadow: var(--shadow);
+  /* A tinted, elevated surface distinct from both the menu bar and the page behind it. */
+  background: color-mix(in srgb, var(--menu-bg) 86%, var(--menu-fg) 14%);
+  border: 1px solid var(--input-border);
+  border-top: 2px solid var(--toggle-active-bg);
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
   max-height: 72vh;
   overflow-y: auto;
   padding: 4px 0 8px;
@@ -150,6 +156,12 @@
   top: 0;
   background: var(--menu-bg);
 }
+/* Open-recent list under the File menu (desktop dropdown + mobile drawer). */
+.menu-sub-head { padding: 6px 14px 2px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--status-fg); }
+.menu-recent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+.menu-recent-empty { color: var(--status-fg); font-style: italic; cursor: default; }
+.menu-dropdown .separator { height: 1px; background: var(--divider); margin: 4px 0; }
+
 /* Two-level mobile menu: category rows drill into a submenu, with a back header. */
 .menu-cat { font-weight: 600; }
 .menu-cat-caret { color: var(--status-fg); font-size: 18px; }
@@ -192,6 +204,10 @@
   background: var(--pane-bg);
   font-weight: 600;
 }
+/* Drag-to-reorder document tabs. */
+.tab-bar .tab[draggable="true"] { cursor: grab; }
+.tab-bar .tab[draggable="true"]:active { cursor: grabbing; }
+.tab-bar .tab.drop-target { box-shadow: inset 3px 0 0 var(--toggle-active-bg); }
 /* Not-yet-loaded (restored) tab: muted until tapped to load. */
 .tab-bar .tab.lazy .name { opacity: 0.6; font-style: italic; }
 .tab-bar .tab.lazy::before {
@@ -1262,6 +1278,9 @@
   color: var(--line-unread-fg);
   word-wrap: break-word;
 }
+/* Alternate unread-sentence colour: odd sentences get a mild accent tint so consecutive sentences
+   are easy to tell apart. Only affects still-unread lines (the .alt-sent class is set for those). */
+.line-row.alt-sent .text { color: color-mix(in srgb, var(--line-unread-fg) 74%, var(--toggle-active-bg)); }
 .line-row.status-Read .text { color: var(--line-read-fg); font-weight: bold; }
 .line-row.status-SessionRead .text { color: var(--session-read-fg); font-weight: bold; }
 .line-row.status-NavSessionRead .text { color: var(--nav-session-read-fg); font-weight: bold; }
@@ -1758,6 +1777,14 @@
   line-height: 1.45;
 }
 /* Audiobook Manager — voice/generate bar, ToC-grouped sections, per-chunk rows, clip cards. */
+/* Audiobook export wizard tracklist */
+.abx-list { max-height: 46vh; overflow: auto; border: 1px solid var(--divider); border-radius: 8px; margin-top: 6px; }
+.abx-list table { width: 100%; margin: 0; }
+.abx-list td { padding: 4px 8px; vertical-align: middle; }
+.abx-num { font-variant-numeric: tabular-nums; color: var(--status-fg); width: 1%; white-space: nowrap; }
+.abx-title { overflow: hidden; text-overflow: ellipsis; }
+.abx-meta { color: var(--status-fg); font-size: 11px; white-space: nowrap; width: 1%; text-align: right; }
+
 .ab-genbar { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
 .ab-genbar label { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--status-fg); }
 .ab-genbar select { max-width: 220px; }
@@ -2071,6 +2098,14 @@
   margin-bottom: 6px;
 }
 .field-row label { color: var(--menu-fg); font-size: 12px; }
+/* Click a setting's label to reveal a one-line explanation (a ⓘ marks the ones that have one). */
+.field-row label.has-hint { cursor: help; }
+.field-hint-mark { margin-left: 4px; color: var(--status-fg); font-size: 11px; }
+.field-row .field-hint {
+  grid-column: 1 / -1; font-size: 11px; color: var(--menu-fg); line-height: 1.45;
+  background: color-mix(in srgb, var(--menu-fg) 6%, transparent);
+  border-left: 2px solid var(--toggle-active-bg); border-radius: 4px; padding: 5px 8px; margin: 2px 0 4px;
+}
 .field-section {
   border-top: 1px solid var(--divider);
   margin-top: 12px;
@@ -2085,8 +2120,17 @@
    isn't wasted. `columns: 300px` = as many ~300px columns as fit; a phone gets exactly one. */
 .dlg-cols { columns: 300px; column-gap: 34px; }
 .dlg-cols > * { break-inside: avoid; }
-.dlg-cols .field-section { break-after: avoid; margin-top: 16px; }
-.dlg-cols > .field-section:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
+/* Section headers as filled, accented bars so each group stands out in the multi-column settings; the
+   accent tint cycles per section (a --sec-hue set inline by the Section component). Rows under a
+   section get a faint zebra tint so adjacent settings are easy to tell apart. */
+.dlg-cols .field-section {
+  break-after: avoid; margin: 16px 0 6px; padding: 5px 9px; border: 0;
+  border-left: 3px solid hsl(var(--sec-hue, 230) 70% 60%); border-radius: 5px;
+  background: hsl(var(--sec-hue, 230) 70% 60% / 0.14);
+  color: var(--menu-fg);
+}
+.dlg-cols > .field-section:first-child { margin-top: 0; }
+.dlg-cols .field-row:nth-of-type(even) { background: color-mix(in srgb, var(--menu-fg) 4%, transparent); border-radius: 4px; }
 .dlg-cols .field-row { grid-template-columns: minmax(90px, 1fr) minmax(0, auto); column-gap: 10px; }
 .dlg-cols .field-row > div { min-width: 0; }
 .dlg-cols .field-row input[type="text"], .dlg-cols .field-row input[type="number"], .dlg-cols .field-row select { max-width: 100%; box-sizing: border-box; }
@@ -2706,21 +2750,42 @@
 @media (max-width: 860px), (pointer: coarse) and (max-height: 860px) { .rh-detail-2col { grid-template-columns: 1fr; } }
 
 /* Find dialog matches */
-.find-results {
-  max-height: 240px;
-  overflow-y: auto;
-  border: 1px solid var(--divider);
-  margin-top: 6px;
+/* Find dialog + ToC-wizard locate tool: a results table with info columns + inline context peek. */
+.find-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.find-bar .find-input { flex: 1; box-sizing: border-box; font-size: 14px; padding: 6px 9px; }
+.find-table-wrap { max-height: 56vh; overflow: auto; border: 1px solid var(--divider); border-radius: 6px; }
+.find-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.find-table thead th {
+  position: sticky; top: 0; z-index: 1; text-align: left; padding: 5px 8px; font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.5px; color: var(--status-fg);
+  background: var(--menu-bg); border-bottom: 1px solid var(--divider); white-space: nowrap;
 }
-.find-results .hit {
-  padding: 4px 8px;
-  cursor: pointer;
-  border-bottom: 1px solid var(--divider);
-  font-family: Consolas, monospace;
-  font-size: 11px;
-}
-.find-results .hit:hover { background: var(--menu-highlight); }
-.find-results .hit mark { background: var(--toggle-active-bg); color: var(--toggle-active-fg); }
+.find-table .find-th-text { width: 100%; }
+.find-row td { padding: 4px 8px; border-bottom: 1px solid var(--divider); vertical-align: baseline; }
+.find-row:hover { background: color-mix(in srgb, var(--toggle-active-bg) 8%, transparent); }
+.find-row.read { opacity: 0.62; }
+.find-row.exp { background: color-mix(in srgb, var(--toggle-active-bg) 12%, transparent); }
+.find-num { font-variant-numeric: tabular-nums; color: var(--status-fg); white-space: nowrap; text-align: right; }
+.find-sec { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--status-fg); }
+.find-read { color: #3fb950; text-align: center; }
+.find-text { cursor: pointer; }
+.find-text mark { background: var(--toggle-active-bg); color: var(--toggle-active-fg); border-radius: 2px; }
+.find-acts { white-space: nowrap; text-align: right; }
+.find-acts button { padding: 1px 6px; font-size: 12px; }
+.find-acts button.find-use { font-size: 11px; }
+.find-ctx-row td { padding: 0 8px 6px; }
+.find-ctx { background: var(--input-bg); border-left: 2px solid var(--toggle-active-bg); border-radius: 4px; padding: 5px 8px; font-size: 12px; }
+.find-ctx-line { display: flex; gap: 8px; line-height: 1.5; }
+.find-ctx-line.match { font-weight: 600; }
+.find-ctx-ln { flex: 0 0 40px; text-align: right; font-variant-numeric: tabular-nums; color: var(--line-number-fg); }
+.find-ctx-tx mark { background: var(--toggle-active-bg); color: var(--toggle-active-fg); border-radius: 2px; }
+
+/* ToC wizard: guided manual split for a squashed one-line contents list. */
+.tw-squash-hint { border-left: 3px solid var(--toggle-active-bg); padding-left: 8px; }
+.tw-manual { margin-top: 6px; }
+.tw-manual-text { width: 100%; box-sizing: border-box; font: 13px/1.5 Consolas, monospace; padding: 8px; resize: vertical; }
+.tw-manual-preview { margin-top: 6px; font-size: 11px; color: var(--status-fg); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tw-manual-chip { background: var(--menu-highlight); border-radius: 10px; padding: 1px 8px; white-space: nowrap; }
 
 /* Drag-drop hint */
 .drop-overlay {
