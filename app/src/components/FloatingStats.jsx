@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import ReadingStats from './ReadingStats.jsx';
 
 // Mobile: the reading stats as a floating, draggable popup with adjustable transparency — like the
@@ -9,9 +9,10 @@ export default function FloatingStats({ tab, pos, onMove, onDrop }) {
   const opacity = Math.max(0.2, Math.min(1, settings.statsOpacity ?? 0.92));
   const elRef = useRef(null);
   const drag = useRef(null);
+  const [min, setMin] = useState(false);
 
   function onDown(e) {
-    // Ignore drags that start on interactive text selection; the whole popup is the handle here.
+    if (e.target.closest('button')) return; // minimize/expand button — not a drag
     const r = elRef.current.getBoundingClientRect();
     drag.current = { dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, h: r.height };
     elRef.current.setPointerCapture?.(e.pointerId);
@@ -33,7 +34,7 @@ export default function FloatingStats({ tab, pos, onMove, onDrop }) {
   return (
     <div
       ref={elRef}
-      className="floating-stats"
+      className={`floating-stats${min ? ' chip-min' : ''}`}
       style={{ left, top, opacity }}
       onPointerDown={onDown}
       onPointerMove={onPointerMove}
@@ -41,7 +42,17 @@ export default function FloatingStats({ tab, pos, onMove, onDrop }) {
       onPointerCancel={onUp}
       title="Drag to move · transparency in Tab Settings"
     >
-      <ReadingStats tab={tab} />
+      {min ? (
+        <>
+          <span className="chip-stub-icon">📊</span>
+          <button className="chip-mini-btn" title="Expand" onClick={() => setMin(false)}>+</button>
+        </>
+      ) : (
+        <>
+          <button className="chip-mini-btn" title="Minimize" onClick={() => setMin(true)}>–</button>
+          <ReadingStats tab={tab} />
+        </>
+      )}
     </div>
   );
 }

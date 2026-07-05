@@ -206,6 +206,7 @@
   white-space: nowrap;
   margin-right: 8px;
 }
+.tab-bar .tab .name .tab-grp-mark { font-size: 9px; vertical-align: super; margin-left: 1px; color: var(--toggle-active-bg); font-weight: 700; }
 .tab-bar .tab .close {
   border: none;
   background: transparent;
@@ -729,6 +730,17 @@
 .bg-master-tag { font-weight: 400; color: #f5b301; font-size: 11px; }
 .bg-pick { max-height: 220px; overflow: auto; border: 1px solid var(--divider); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
 .bg-pick-row { cursor: pointer; }
+/* Open-now flag + Trackyread cross-links + edition match rating */
+.bg-open { border: 1px solid var(--divider); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
+.bg-open-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.bg-open-dot { color: #3fb950; font-size: 10px; }
+.bg-open-grp { font-size: 11px; color: var(--status-fg); white-space: nowrap; }
+.bg-tracker { font-size: 11px; padding: 1px 6px; white-space: nowrap; }
+.bg-match { font-size: 11px; white-space: nowrap; padding: 0 6px; border-radius: 6px; }
+.bg-match-strong { color: #3fb950; }
+.bg-match-good { color: #d9a441; }
+.bg-match-weak { color: #e0803a; }
+.bg-match-poor { color: #d05555; }
 .remote-grab { display: flex; align-items: center; gap: 8px; padding: 4px 6px; opacity: 0.85; }
 .remote-grab .rg-dev { color: var(--accent, #5b8def); font-size: 11px; }
 
@@ -872,6 +884,19 @@
 .help-section { margin-bottom: 14px; }
 .help-section h3 { margin: 0 0 4px; font-size: 14px; }
 .help-section p { margin: 0 0 6px; font-size: 12.5px; line-height: 1.5; color: var(--menu-fg); }
+
+/* Keyboard guide: grouped shortcut columns with <kbd> keycaps. */
+.help-keymap { columns: 260px; column-gap: 26px; }
+.help-keygroup { break-inside: avoid; margin-bottom: 12px; }
+.help-keygroup-name { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--status-fg); margin-bottom: 4px; }
+.help-keyrow { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; font-size: 12.5px; }
+.help-keys { flex: 0 0 auto; white-space: nowrap; }
+.help-keydesc { color: var(--menu-fg); }
+.help-keys kbd {
+  font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--menu-bg); border: 1px solid var(--input-border); border-bottom-width: 2px;
+  border-radius: 4px; padding: 1px 5px; margin-right: 2px; color: var(--menu-fg); white-space: nowrap;
+}
 
 /* Reading-mode chip (controls bar): how the app currently classifies your reading */
 .reading-mode { white-space: nowrap; }
@@ -1694,6 +1719,24 @@
   color: var(--status-fg);
 }
 .floating-chip:active { cursor: grabbing; }
+
+/* Minimize control shared by all floating chips (goal / timer / face / stats). − collapses the chip
+   to a small draggable stub (its icon); + restores it. The chips are position:fixed, so the absolute
+   button anchors to the chip itself. */
+.chip-mini-btn {
+  position: absolute; top: 1px; right: 3px;
+  background: transparent; border: none; color: var(--status-fg);
+  cursor: pointer; font-size: 13px; line-height: 1; padding: 1px 4px; opacity: 0.5; z-index: 1;
+}
+.chip-mini-btn:hover { opacity: 1; }
+.chip-stub-icon { font-size: 17px; line-height: 1; display: inline-block; }
+.floating-chip.chip-min, .floating-face.chip-min, .floating-stats.chip-min {
+  min-width: 0; width: auto; max-width: none; padding: 4px 7px;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.chip-min .chip-mini-btn { position: static; opacity: 0.75; }
+.audio-chat.chip-min { min-width: 0; width: auto; }
+
 .floating-chip .chip-label { font-size: 11px; letter-spacing: 0.02em; opacity: 0.85; margin-bottom: 2px; }
 .floating-chip .chip-status { font-variant-numeric: tabular-nums; }
 .floating-chip .chip-status + .chip-status { margin-top: 2px; }
@@ -2038,6 +2081,16 @@
   text-transform: uppercase;
   letter-spacing: 1px;
 }
+/* Settings dialogs now fill the tab page — flow their fields into responsive columns so the width
+   isn't wasted. `columns: 300px` = as many ~300px columns as fit; a phone gets exactly one. */
+.dlg-cols { columns: 300px; column-gap: 34px; }
+.dlg-cols > * { break-inside: avoid; }
+.dlg-cols .field-section { break-after: avoid; margin-top: 16px; }
+.dlg-cols > .field-section:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
+.dlg-cols .field-row { grid-template-columns: minmax(90px, 1fr) minmax(0, auto); column-gap: 10px; }
+.dlg-cols .field-row > div { min-width: 0; }
+.dlg-cols .field-row input[type="text"], .dlg-cols .field-row input[type="number"], .dlg-cols .field-row select { max-width: 100%; box-sizing: border-box; }
+
 .checkbox-group { display: flex; flex-wrap: wrap; gap: 6px; }
 .checkbox-pill {
   display: inline-flex;
@@ -2978,8 +3031,20 @@
 .lj-star.lj-abandoned { opacity: 0.28; stroke: #b05555; stroke-dasharray: 1 1.5; }
 .lj-star.sel { stroke: #fff; stroke-width: 2; }
 @keyframes lj-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
-.lj-starcard { position: absolute; left: 10px; bottom: 10px; max-width: 60%; background: var(--menu-bg, #1b1c22); border: 1px solid var(--accent, #3a86ff); border-radius: 8px; padding: 8px 26px 8px 10px; font-size: 12px; }
+.lj-starcard { position: absolute; left: 10px; bottom: 10px; max-width: 62%; max-height: 74%; overflow: auto; background: var(--menu-bg, #1b1c22); border: 1px solid var(--accent, #3a86ff); border-radius: 8px; padding: 8px 26px 8px 10px; font-size: 12px; }
 .lj-starcard .close-x { position: absolute; top: 2px; right: 4px; }
+.lj-star-label { fill: var(--menu-fg); paint-order: stroke; stroke: rgba(0, 0, 0, 0.55); stroke-width: 0.5px; pointer-events: none; opacity: 0.92; }
+.lj-edge-legend { position: absolute; top: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 3px 10px; max-width: 55%; justify-content: flex-end; background: color-mix(in srgb, var(--menu-bg) 82%, transparent); border-radius: 6px; padding: 4px 7px; font-size: 10px; }
+.lj-starcard-desc { font-size: 11px; color: var(--status-fg); margin-top: 4px; line-height: 1.4; }
+.lj-starcard-links { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.lj-starcard-links a { font-size: 11px; color: var(--accent, #3a86ff); text-decoration: none; border: 1px solid var(--divider); border-radius: 6px; padding: 1px 7px; }
+.lj-starcard-links a:hover { text-decoration: underline; }
+.lj-starcard-neighbors { margin-top: 2px; }
+.lj-neighbor { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer; padding: 2px 0; }
+.lj-neighbor i { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
+.lj-neighbor span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lj-neighbor em { color: var(--status-fg); font-size: 10px; white-space: nowrap; }
+.lj-neighbor:hover span { text-decoration: underline; }
 
 /* Queue / on-deck */
 .lj-wpm { width: 64px; }

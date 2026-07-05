@@ -7,7 +7,7 @@ import {
 } from '../state/storage.js';
 import { askClaude, anthropicConfigured } from '../features/anthropic.js';
 import {
-  getInstruction, LIGHT_INSTRUCTION, HEAVY_PLACEHOLDER, buildDataset, buildDigest,
+  getInstruction, LIGHT_INSTRUCTION, HEAVY_PLACEHOLDER, KNOWLEDGE_GRAPH_INSTRUCTION, buildDataset, buildDigest,
   buildCoworkRequest, buildApiMessages, parseAiOutput, applyAiOutput, contentHash,
 } from '../features/journeyAi.js';
 import {
@@ -19,6 +19,7 @@ import {
   cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, queueWithEstimates, estHours,
 } from '../features/journeyAnalytics.js';
 import { normTitle } from '../document/tocWizard.js';
+import { groupForChecksum } from '../features/bookGroups.js';
 import { getSyncProvider } from '../features/sync/syncProviders.js';
 import { syncLibraryWithProvider, backupLibraryToProvider } from '../features/sync/syncManager.js';
 import { AXES, READER_ARCHETYPES, readerProfile, matchArchetype, currentArchetype, archetypeTrend } from '../features/readerArchetype.js';
@@ -158,13 +159,13 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
   }
 
   async function exportFull(kind) {
-    if (kind === 'md') { download('reading-journey.md', exportJourneyMarkdown(books, { title: 'Reading Journey' }), 'text/markdown'); return; }
+    if (kind === 'md') { download('trackyread.md', exportJourneyMarkdown(books, { title: 'Trackyread' }), 'text/markdown'); return; }
     const bundle = await exportLibraryData();
     download('tachyread-library.json', JSON.stringify(bundle));
   }
 
   async function exportView(kind) {
-    if (kind === 'md') { download('reading-journey-filtered.md', exportJourneyMarkdown(filtered, { title: 'Reading Journey (filtered)' }), 'text/markdown'); return; }
+    if (kind === 'md') { download('trackyread-filtered.md', exportJourneyMarkdown(filtered, { title: 'Trackyread (filtered)' }), 'text/markdown'); return; }
     const bundle = await exportLibraryData({ books: filtered, includeDeleted: false, includeBinding: false, includeAi: false });
     download('tachyread-library-filtered.json', JSON.stringify(bundle));
   }
@@ -198,7 +199,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
   ];
 
   return (
-    <Dialog title="Literary Journey" onClose={handleClose} width={880} buttons={<button onClick={handleClose}>Close</button>}>
+    <Dialog title="Trackyread" onClose={handleClose} width={880} buttons={<button onClick={handleClose}>Close</button>}>
       {!books && <p>Loading…</p>}
       {books && (
         <>
@@ -280,7 +281,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
               </div>
 
               {adding && <BookEditor book={{ id: '', title: '', author: '', genre: '', fnf: 'F', type: 'long' }} isNew onCancel={() => setAdding(false)} onSave={async (b) => { await saveBook({ ...b, id: deriveId(b) }); setAdding(false); }} />}
-              {selBook && <BookEditor book={selBook} docMeta={docMeta} bindMap={bindMap} onBind={bind} onCancel={() => setSelected(null)} onSave={saveBook} onDelete={() => removeBook(selBook.id)} />}
+              {selBook && <BookEditor book={selBook} docMeta={docMeta} bindMap={bindMap} groups={global?.bookGroups} onBind={bind} onCancel={() => setSelected(null)} onSave={saveBook} onDelete={() => removeBook(selBook.id)} />}
 
               <div className="lj-list">
                 {shown.map((b) => {
@@ -366,12 +367,13 @@ function suggestDoc(book, docMeta) {
 }
 
 // Inline add/edit card for one book.
-function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, onBind, onSave, onCancel, onDelete }) {
+function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, groups = [], onBind, onSave, onCancel, onDelete }) {
   const [b, setB] = useState(book);
   useEffect(() => { setB(book); }, [book]);
   const status = readStatus(b);
   const set = (p) => setB({ ...b, ...p });
   const currentLink = !isNew && Object.entries(bindMap || {}).find(([, id]) => id === b.id)?.[0];
+  const linkedGroup = currentLink ? groupForChecksum(groups, currentLink) : null;
   const suggested = !isNew && !currentLink ? suggestDoc(b, docMeta) : null;
   return (
     <div className="lj-editor">
@@ -400,6 +402,7 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, onBind, o
             </select>
           </label>
           {suggested && <button className="link-btn" onClick={() => onBind(suggested.checksum, b.id)}>Link “{suggested.fileName}”?</button>}
+          {linkedGroup && <span className="settings-note">📚 Also in book group <b>{linkedGroup.name}</b> (Settings → Book Groups).</span>}
           <span className="settings-note">Linking auto-marks this book finished when you complete that document.</span>
         </div>
       )}
@@ -529,18 +532,50 @@ function genreHue(g) {
 }
 const FULL_VIEW = { x: -CONSTELLATION_R - 40, y: -CONSTELLATION_R - 40, w: (CONSTELLATION_R + 40) * 2, h: (CONSTELLATION_R + 40) * 2 };
 
+// Typed relatedness links — a real knowledge graph. Colours + labels per relationship kind; the AI
+// heavy "knowledge graph" task returns treeMeta.edges as [idA, idB, kind]. Unknown kinds fall back to
+// a neutral "related".
+const EDGE_KINDS = {
+  influence: { color: '#c9a227', label: 'influence' },
+  prereq: { color: '#3a86ff', label: 'prerequisite' },
+  series: { color: '#06d6a0', label: 'series' },
+  'same-author': { color: '#b5651d', label: 'same author' },
+  theme: { color: '#7209b7', label: 'shared theme' },
+  contrast: { color: '#ef476f', label: 'contrast / rebuttal' },
+  responds: { color: '#2a9d8f', label: 'responds to' },
+  link: { color: '#8d99ae', label: 'related' },
+};
+const edgeColor = (k) => (EDGE_KINDS[k] || EDGE_KINDS.link).color;
+const BOOK_LINKS = [['isbnUrl', 'Find'], ['goodreadsUrl', 'Goodreads'], ['wikipediaUrl', 'Wikipedia'], ['platformUrl', 'Read']];
+
 function ConstellationView({ books, ai }) {
   const [genre, setGenre] = useState('all');
   const [status, setStatus] = useState('all');
   const [view, setView] = useState(FULL_VIEW);
   const [sel, setSel] = useState(null);
   const drag = useRef(null);
+  const movedRef = useRef(false); // distinguishes a pan from a click (a pan must NOT select a star)
   const layout = useMemo(() => constellationLayout(books, ai?.treeMeta), [books, ai]);
+  const booksById = useMemo(() => Object.fromEntries(books.map((b) => [b.id, b])), [books]);
+  const nodeById = useMemo(() => Object.fromEntries(layout.nodes.map((n) => [n.id, n])), [layout]);
   const shown = layout.nodes.filter((n) => (genre === 'all' || n.genre === genre) && (status === 'all' || n.status === status));
+  const edgeKinds = useMemo(() => [...new Set(layout.edges.map((e) => e.kind))], [layout]);
 
-  function onDown(e) { drag.current = { x: e.clientX, y: e.clientY, view }; e.currentTarget.setPointerCapture?.(e.pointerId); }
+  // Labels come in as you zoom: titles once you're past ~1.5×, authors too when deep in.
+  const showTitles = view.w < CONSTELLATION_R * 1.3;
+  const showAuthors = view.w < CONSTELLATION_R * 0.6;
+  const labelSize = view.w / 46; // in viewBox units → roughly constant on screen across zoom levels
+
+  const selBook = sel ? booksById[sel.id] : null;
+  const neighbors = sel ? layout.edges.filter((e) => e.a === sel.id || e.b === sel.id).map((e) => ({ node: nodeById[e.a === sel.id ? e.b : e.a], kind: e.kind })).filter((x) => x.node) : [];
+
+  // No pointer capture on purpose: capturing the SVG would retarget the click off the star and break
+  // click-to-select (the SVG fills the area and onPointerLeave ends a stray drag). `movedRef` tells a
+  // click from a pan so panning onto a star doesn't open its card.
+  function onDown(e) { drag.current = { x: e.clientX, y: e.clientY, view }; movedRef.current = false; }
   function onMove(e) {
     if (!drag.current) return;
+    movedRef.current = true;
     const scale = view.w / (e.currentTarget.clientWidth || 1);
     setView({ ...drag.current.view, x: drag.current.view.x - (e.clientX - drag.current.x) * scale, y: drag.current.view.y - (e.clientY - drag.current.y) * scale });
   }
@@ -557,17 +592,47 @@ function ConstellationView({ books, ai }) {
         <button title="Zoom out" onClick={() => zoom(1.25)}>－</button>
         <button onClick={() => setView(FULL_VIEW)}>Reset</button>
       </div>
-      <p className="settings-note">{shown.length} of {layout.nodes.length} books · size = rec score · distance from centre = difficulty · brightness = read status{ai?.treeMeta?.edges?.length ? ` · ${ai.treeMeta.edges.length} AI lineage links` : ''}. Drag to pan, scroll to zoom.</p>
+      <p className="settings-note">{shown.length} of {layout.nodes.length} books · size = rec score · distance from centre = difficulty · brightness = read status{layout.edges.length ? ` · ${layout.edges.length} knowledge-graph links` : ' · no links yet (build the knowledge graph from AI / Cowork)'}. Drag to pan, scroll to zoom, click a star for details.</p>
       <div className="lj-sky-wrap">
         <svg className="lj-sky" viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp} onWheel={(e) => zoom(e.deltaY > 0 ? 1.1 : 0.9)}>
-          {layout.edges.map((e, i) => <line key={i} className="lj-edge" x1={e.ax} y1={e.ay} x2={e.bx} y2={e.by} />)}
-          {shown.map((n) => <circle key={n.id} className={`lj-star lj-${n.status}${sel?.id === n.id ? ' sel' : ''}`} cx={n.x} cy={n.y} r={n.r} style={{ fill: genreHue(n.genre) }} onClick={() => setSel(n)} />)}
+          {layout.edges.map((e, i) => {
+            const on = sel && (e.a === sel.id || e.b === sel.id);
+            return <line key={i} className={`lj-edge${on ? ' lj-edge-on' : ''}`} x1={e.ax} y1={e.ay} x2={e.bx} y2={e.by} stroke={edgeColor(e.kind)} strokeWidth={(on ? 2.2 : 1) * (view.w / FULL_VIEW.w)} opacity={sel ? (on ? 0.95 : 0.15) : 0.5} />;
+          })}
+          {shown.map((n) => <circle key={n.id} data-id={n.id} className={`lj-star lj-${n.status}${sel?.id === n.id ? ' sel' : ''}`} cx={n.x} cy={n.y} r={n.r} style={{ fill: genreHue(n.genre) }} onClick={() => { if (!movedRef.current) setSel(n); }} />)}
+          {showTitles && shown.map((n) => (
+            <text key={`t-${n.id}`} className="lj-star-label" x={n.x + n.r + labelSize * 0.35} y={n.y + labelSize * 0.34} fontSize={labelSize}>
+              {n.title}{showAuthors && n.author ? ` · ${n.author}` : ''}
+            </text>
+          ))}
         </svg>
+        {edgeKinds.length > 0 && (
+          <div className="lj-edge-legend">{edgeKinds.map((k) => <span key={k} className="lj-legend-item"><i style={{ background: edgeColor(k) }} />{(EDGE_KINDS[k] || EDGE_KINDS.link).label}</span>)}</div>
+        )}
         {sel && (
           <div className="lj-starcard">
             <button className="close-x" onClick={() => setSel(null)}>×</button>
             <b>{sel.title}</b><br /><em>{sel.author}</em>
-            <div className="settings-note">{sel.genre} · difficulty {sel.difficulty || '—'} · rec {sel.recScore || '—'} · {sel.status}</div>
+            <div className="settings-note">{sel.genre}{selBook?.series ? ` · ${selBook.series}${selBook.seriesNum ? ' #' + selBook.seriesNum : ''}` : ''} · difficulty {sel.difficulty || '—'} · rec {sel.recScore || '—'} · {STATUS_LABEL[sel.status] || sel.status}</div>
+            {selBook && (
+              <div className="settings-note">{[selBook.pages ? `${selBook.pages} pp` : '', pubYear(selBook) ? pubYear(selBook) : '', recommender(selBook) !== 'Claude' ? `✦ ${recommender(selBook)}` : ''].filter(Boolean).join(' · ')}</div>
+            )}
+            {selBook?.description && <div className="lj-starcard-desc">{selBook.description}</div>}
+            {selBook && (
+              <div className="lj-starcard-links">
+                {BOOK_LINKS.map(([k, label]) => selBook[k] ? <a key={k} href={selBook[k]} target="_blank" rel="noreferrer">{label}</a> : null)}
+              </div>
+            )}
+            {neighbors.length > 0 && (
+              <div className="lj-starcard-neighbors">
+                <div className="rh-section-h" style={{ marginTop: 6 }}>Connected</div>
+                {neighbors.slice(0, 8).map(({ node, kind }, i) => (
+                  <button key={i} className="lj-neighbor" onClick={() => setSel(node)}>
+                    <i style={{ background: edgeColor(kind) }} /> <span>{node.title}</span> <em>{(EDGE_KINDS[kind] || EDGE_KINDS.link).label}</em>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -862,8 +927,13 @@ function AiView({ books, ai, global, onReload }) {
       </div>
       {mode === 'heavy' ? (
         <>
-          <textarea className="lj-instr" rows={4} value={text} onChange={(e) => setText(e.target.value)} />
-          <div className="lj-inline"><button onClick={() => saveInstruction('heavy', text)}>Save instruction</button><span className="settings-note">Resets to Light automatically once a heavy result is applied.</span></div>
+          <div className="lj-inline">
+            <span className="settings-note">Presets:</span>
+            <button onClick={() => { setText(HEAVY_PLACEHOLDER); saveInstruction('heavy', HEAVY_PLACEHOLDER); }}>🌳 Tech tree</button>
+            <button onClick={() => { setText(KNOWLEDGE_GRAPH_INSTRUCTION); saveInstruction('heavy', KNOWLEDGE_GRAPH_INSTRUCTION); }}>🕸 Knowledge graph</button>
+          </div>
+          <textarea className="lj-instr" rows={5} value={text} onChange={(e) => setText(e.target.value)} />
+          <div className="lj-inline"><button onClick={() => saveInstruction('heavy', text)}>Save instruction</button><span className="settings-note">Full tech-tree / knowledge-graph rebuilds go through the cowork folder (the whole library). Resets to Light once applied.</span></div>
         </>
       ) : <p className="settings-note">{LIGHT_INSTRUCTION}</p>}
 

@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Face from './Face.jsx';
 
 // Mobile: the reader face(s) as a floating, draggable overlay with adjustable transparency —
@@ -23,8 +23,10 @@ export default function FloatingFace({ tab, pos, onMove, onDrop }) {
 
   const elRef = useRef(null);
   const drag = useRef(null);
+  const [min, setMin] = useState(false);
 
   function onDown(e) {
+    if (e.target.closest('button')) return; // minimize/expand button — not a drag
     const r = elRef.current.getBoundingClientRect();
     drag.current = { dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, h: r.height };
     elRef.current.setPointerCapture?.(e.pointerId);
@@ -47,7 +49,7 @@ export default function FloatingFace({ tab, pos, onMove, onDrop }) {
   return (
     <div
       ref={elRef}
-      className="floating-face"
+      className={`floating-face${min ? ' chip-min' : ''}`}
       style={{ left, top, opacity }}
       onPointerDown={onDown}
       onPointerMove={onPointerMove}
@@ -55,11 +57,21 @@ export default function FloatingFace({ tab, pos, onMove, onDrop }) {
       onPointerCancel={onUp}
       title="Drag to move · transparency in Tab Settings → Animated faces"
     >
-      <div className="rsvp-faces">
-        {Array.from({ length: count }, (_, i) => (
-          <Face key={i} wpm={wpm} lineProgress={lineProgress} faceStyle={styles[i] || 'Man'} artStyle={settings.artStyle || 'Cartoon'} size={62} />
-        ))}
-      </div>
+      {min ? (
+        <>
+          <span className="chip-stub-icon">🙂</span>
+          <button className="chip-mini-btn" title="Expand" onClick={() => setMin(false)}>+</button>
+        </>
+      ) : (
+        <>
+          <button className="chip-mini-btn" title="Minimize" onClick={() => setMin(true)}>–</button>
+          <div className="rsvp-faces">
+            {Array.from({ length: count }, (_, i) => (
+              <Face key={i} wpm={wpm} lineProgress={lineProgress} faceStyle={styles[i] || 'Man'} artStyle={settings.artStyle || 'Cartoon'} size={62} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

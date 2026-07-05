@@ -163,7 +163,11 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
       <Field label="Speak-along follow mode">
         <select
           value={s.ttsFollowMode || (s.firstWordTts ? 'firstWord' : 'off')}
-          onChange={(e) => patch({ ttsFollowMode: e.target.value })}
+          onChange={(e) => {
+            const v = e.target.value;
+            // Speak-along follow is mutually exclusive with full read-aloud TTS.
+            patch({ ttsFollowMode: v, firstWordTts: false, ...(v !== 'off' && s.readAloud ? { readAloud: false } : {}) });
+          }}
         >
           <option value="off">Off</option>
           <option value="firstWord">First word of each sentence</option>
