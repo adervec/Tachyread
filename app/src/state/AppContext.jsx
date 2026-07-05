@@ -213,6 +213,9 @@ export function AppProvider({ children }) {
   useEffect(() => {
     (async () => {
       const g = await loadGlobal();
+      // Scroll-to-read never survives a restart: booting with it on silently credits whatever the
+      // restored scroll position passes (phantom "read" text). It's an explicitly-armed mode.
+      g.scrollAdvances = false;
       dispatch({ type: 'SET_GLOBAL', global: g });
     })();
   }, []);
@@ -330,7 +333,9 @@ export function AppProvider({ children }) {
       const g = stateRef.current.global;
       const recentFiles = [{ name: doc.fileName, checksum: doc.contentChecksum, lastOpened: Date.now() },
         ...(g.recentFiles || []).filter((r) => r.checksum !== doc.contentChecksum)].slice(0, 20);
-      const ng = { ...g, recentFiles };
+      // Opening a file also disarms scroll-to-read (like a fresh boot) — the initial scroll/restore
+      // of a newly opened document must never count as reading.
+      const ng = { ...g, recentFiles, scrollAdvances: false };
       dispatch({ type: 'SET_GLOBAL', global: ng });
       saveGlobal(ng).catch(() => {});
     }

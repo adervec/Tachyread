@@ -1,5 +1,26 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReadingStats from './ReadingStats.jsx';
+import { getSpark, sparkBuckets, sparkPoints, SPARK_MAX_WPM } from '../features/wpmSpark.js';
+
+// Normalized WPM sparkline for the stats chip: 15s-averaged WPM over the trailing 8 minutes on a
+// fixed 0–1400 scale (samples recorded by ReadingStats; refreshed here every few seconds).
+function WpmSparkline({ tabId }) {
+  const [buckets, setBuckets] = useState(() => sparkBuckets(getSpark(tabId)));
+  useEffect(() => {
+    const id = setInterval(() => setBuckets(sparkBuckets(getSpark(tabId))), 3000);
+    return () => clearInterval(id);
+  }, [tabId]);
+  const W = 128, H = 28;
+  return (
+    <div className="chip-spark" title={`15s-averaged WPM over the last 8 minutes (scale 0–${SPARK_MAX_WPM})`}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        <line className="chip-spark-mid" x1="0" y1={H / 2} x2={W} y2={H / 2} />
+        <polyline className="chip-spark-line" points={sparkPoints(buckets, W, H)} />
+      </svg>
+      <div className="chip-spark-axis"><span>8m</span><span>0–{SPARK_MAX_WPM}</span><span>now</span></div>
+    </div>
+  );
+}
 
 // Mobile: the reading stats as a floating, draggable popup with adjustable transparency — like the
 // floating face, but for the numbers. Position is passed in (persisted by App); opacity is a
@@ -51,6 +72,7 @@ export default function FloatingStats({ tab, pos, onMove, onDrop }) {
         <>
           <button className="chip-mini-btn" title="Minimize" onClick={() => setMin(true)}>–</button>
           <ReadingStats tab={tab} />
+          <WpmSparkline tabId={tab.id} />
         </>
       )}
     </div>

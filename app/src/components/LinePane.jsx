@@ -510,7 +510,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   const split = !!settings.linePaneSplit;
 
   // ── translation (translate obscure mode + side-by-side parallel view) ──────────────────────────
-  const { state: appState } = useApp();
+  const { state: appState, updateGlobal, setStatus } = useApp();
   const gt = appState.global;
   const trCfg = useMemo(() => ({
     translateProvider: gt.translateProvider || 'mymemory',
@@ -581,6 +581,30 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   const jumpRef = useRef(onJumpWord);
   useEffect(() => { idxRef.current = idx; jumpRef.current = onJumpWord; });
 
+  // Guarded scroll-read crediting, shared by the rows-rendered and scroll paths:
+  //  • a PEEK scrolls the list without reading — never credit while one is active;
+  //  • a scroll faster than any human reading (>120 words inside 2s ≈ 3600 WPM) is navigation, not
+  //    reading: switch scroll-to-read OFF and credit nothing (the fling included).
+  const peekActiveRef = useRef(false);
+  peekActiveRef.current = (peek?.line ?? -1) >= 0;
+  const speedWin = useRef([]); // rolling {t, w} of recent frontier advances
+  const creditRef = useRef(null);
+  creditRef.current = (f) => {
+    if (f == null || f <= idxRef.current) return;
+    if (peekActiveRef.current) return;
+    const now = Date.now();
+    const win = speedWin.current;
+    win.push({ t: now, w: f - idxRef.current });
+    while (win.length && win[0].t < now - 2000) win.shift();
+    if (win.reduce((s, x) => s + x.w, 0) > 120) {
+      speedWin.current = [];
+      updateGlobal({ scrollAdvances: false });
+      setStatus('📜 Scroll-to-read switched itself off — that scroll was faster than any reading. Nothing was marked read.');
+      return;
+    }
+    jumpRef.current(f, { read: true, src: 'scroll' });
+  };
+
   // onRowsRendered is the reliable line-granular signal; a scroll listener refines it to word-level
   // within the straddling line. Both advance the frontier forward only.
   function onRowsRendered({ startIndex, stopIndex }) {
@@ -591,7 +615,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     }
     if (!scrollRead) return;
     const ln = doc.lines[startIndex];
-    if (ln && ln.startWordIndex > idxRef.current) jumpRef.current(ln.startWordIndex, { read: true, src: 'scroll' });
+    if (ln && ln.startWordIndex > idxRef.current) creditRef.current(ln.startWordIndex);
   }
   useEffect(() => {
     if (split || !scrollRead) return undefined;
@@ -644,8 +668,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
-        const f = frontierWord();
-        if (f != null && f > idxRef.current) jumpRef.current(f, { read: true, src: 'scroll' });
+        creditRef.current(frontierWord());
       });
     };
     scroller.addEventListener('scroll', onScroll, { passive: true });

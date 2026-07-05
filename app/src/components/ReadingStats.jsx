@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { recordSpark } from '../features/wpmSpark.js';
 
 function fmtDuration(ms) {
   const s = Math.floor((ms || 0) / 1000);
@@ -17,9 +18,14 @@ export default function ReadingStats({ tab }) {
   const idx = settings.wordIndex;
   const [, setNow] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setNow((n) => n + 1), 1000);
+    const id = setInterval(() => {
+      setNow((n) => n + 1);
+      // Feed the WPM sparkline (stats chip): one cumulative new-words sample per second, kept at
+      // module level so history survives the chip being toggled while any stats view is mounted.
+      if (tab.tracker) recordSpark(tab.id, tab.tracker.sessionNewWords || 0);
+    }, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [tab]);
 
   const recent = tracker ? tracker.recentWpm() : 0;
   const sessionWpm = tracker ? tracker.sessionWpm() : 0;
