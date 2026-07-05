@@ -636,6 +636,18 @@
 .tw-rev-row.unmatched { background: rgba(217,131,36,0.10); }
 .tw-rev-status { flex: 0 0 16px; text-align: center; color: #2e9d4f; font-weight: 700; }
 .tw-rev-row.unmatched .tw-rev-status { color: #d98324; }
+/* Explicit level badge (clearer than indent alone) + out-of-sequence warning. */
+.tw-rev-lvl-badge {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700;
+  padding: 1px 5px; border-radius: 9px; white-space: nowrap; color: hsl(var(--lvl-hue, 220) 55% 32%);
+  background: hsl(var(--lvl-hue, 220) 70% 60% / 0.20); border: 1px solid hsl(var(--lvl-hue, 220) 60% 55% / 0.5);
+}
+.tw-rev-lvl-badge i { font-style: normal; opacity: 0.8; }
+.tw-rev-row.out-of-seq { background: rgba(208,85,85,0.12); }
+.tw-rev-row.out-of-seq .tw-rev-status { color: #d05555; }
+.tw-rev-pos.bad { color: #d05555; font-weight: 700; }
+.tw-seq-warn { color: #d05555; font-weight: 600; }
+.tw-autoloc { font-size: 12px; padding: 3px 9px; }
 .tw-rev-indent { flex: 0 0 auto; }
 .tw-rev-lvl { border: 1px solid var(--divider); background: transparent; cursor: pointer; font-size: 11px; padding: 0 5px; border-radius: 3px; }
 .tw-rev-lvl:disabled { opacity: 0.35; cursor: default; }
@@ -1281,6 +1293,11 @@
 /* Alternate unread-sentence colour: odd sentences get a mild accent tint so consecutive sentences
    are easy to tell apart. Only affects still-unread lines (the .alt-sent class is set for those). */
 .line-row.alt-sent .text { color: color-mix(in srgb, var(--line-unread-fg) 74%, var(--toggle-active-bg)); }
+/* Obscure modes for the before/after reading window (blur is a filter set inline; these are the rest).
+   Layout is preserved so the line still takes its space — only the words become unreadable. */
+.line-row .text.obscure-hide { color: transparent; }
+.line-row .text.obscure-redact { color: transparent; background: var(--line-unread-fg); border-radius: 2px; opacity: 0.82; }
+.line-row .text.obscure-illegible { -webkit-text-security: disc; text-security: disc; }
 .line-row.status-Read .text { color: var(--line-read-fg); font-weight: bold; }
 .line-row.status-SessionRead .text { color: var(--session-read-fg); font-weight: bold; }
 .line-row.status-NavSessionRead .text { color: var(--nav-session-read-fg); font-weight: bold; }
@@ -2768,6 +2785,9 @@
 .find-num { font-variant-numeric: tabular-nums; color: var(--status-fg); white-space: nowrap; text-align: right; }
 .find-sec { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--status-fg); }
 .find-read { color: #3fb950; text-align: center; }
+.find-seq { text-align: center; color: #3fb950; }
+.find-row.out-of-seq { opacity: 0.62; }
+.find-row.out-of-seq .find-seq { color: #d0803a; }
 .find-text { cursor: pointer; }
 .find-text mark { background: var(--toggle-active-bg); color: var(--toggle-active-fg); border-radius: 2px; }
 .find-acts { white-space: nowrap; text-align: right; }

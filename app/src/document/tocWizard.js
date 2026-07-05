@@ -176,6 +176,60 @@ export function parseManualToc(text) {
   return out;
 }
 
+// Indices of candidates whose located position is OUT OF SEQUENCE — a printed TOC is monotonic, so a
+// matched entry whose word index isn't strictly between its nearest matched neighbours is suspect
+// (usually a mis-match). Pure; used to warning-flag rows and to bound auto-location.
+export function outOfSequence(candidates) {
+  const wi = candidates.map((c) => (c.matched && Number.isFinite(c.wordIndex) ? c.wordIndex : null));
+  const bad = new Set();
+  for (let a = 0; a < wi.length; a++) {
+    if (wi[a] == null) continue;
+    let prev = null; for (let k = a - 1; k >= 0; k--) if (wi[k] != null) { prev = wi[k]; break; }
+    let next = null; for (let k = a + 1; k < wi.length; k++) if (wi[k] != null) { next = wi[k]; break; }
+    if ((prev != null && wi[a] <= prev) || (next != null && wi[a] >= next)) bad.add(a);
+  }
+  return bad;
+}
+
+// The in-sequence word-index window for the entry at `index`: (lo, hi) exclusive, bounded by its
+// nearest matched neighbours above and below. A candidate line at word w is in sequence iff lo<w<hi.
+export function seqWindow(candidates, index) {
+  let lo = -1, hi = Infinity;
+  for (let k = index - 1; k >= 0; k--) { const c = candidates[k]; if (c?.matched && Number.isFinite(c.wordIndex)) { lo = c.wordIndex; break; } }
+  for (let k = index + 1; k < candidates.length; k++) { const c = candidates[k]; if (c?.matched && Number.isFinite(c.wordIndex)) { hi = c.wordIndex; break; } }
+  return { lo, hi };
+}
+
+// Auto-locate every still-unmatched entry: walk the list in order and, for each, grab the best body
+// line that matches its title AND falls inside its in-sequence window (so a fill never breaks order).
+export function autoLocateRemaining(doc, candidates) {
+  const bodyLines = [];
+  for (let li = 0; li < doc.lines.length; li++) {
+    const ln = doc.lines[li];
+    if (!ln || ln.isEmpty || ln.startWordIndex < 0) continue;
+    const t = ln.text.trim();
+    if (!t || t.length > 100) continue;
+    bodyLines.push({ li, norm: normTitle(t), wi: ln.startWordIndex });
+  }
+  const out = candidates.map((c) => ({ ...c }));
+  for (let i = 0; i < out.length; i++) {
+    const c = out[i];
+    if (c.matched && Number.isFinite(c.wordIndex)) continue;
+    const target = normTitle(c.title);
+    if (!target) continue;
+    const { lo, hi } = seqWindow(out, i);
+    const minScore = target.split(' ').length <= 2 ? 0.8 : 0.5;
+    let best = null, bestScore = minScore;
+    for (const bl of bodyLines) {
+      if (bl.wi <= lo || bl.wi >= hi) continue;   // keep it in sequence
+      const sc = matchScore(bl.norm, target);
+      if (sc >= bestScore) { bestScore = sc; best = bl; }
+    }
+    if (best) out[i] = { ...c, wordIndex: best.wi, matched: true, score: bestScore, bodyLine: best.li };
+  }
+  return out;
+}
+
 // Turn reviewed candidates into final, stored TOC entries: keep matched ones, sort by position,
 // shift the shallowest level to 0.
 export function finalizeEntries(candidates) {
