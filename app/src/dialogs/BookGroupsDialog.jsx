@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
-import { allFiles, allGrabbed } from '../state/storage.js';
-import { makeGroup, percentOf, masterOf } from '../features/bookGroups.js';
+import { allFiles, allGrabbed, getBinding, getLibraryBooks } from '../state/storage.js';
+import { makeGroup, percentOf, masterOf, groupForChecksum, matchRating, matchLabel } from '../features/bookGroups.js';
 
 // Group/ungroup files as the SAME book so reading progress syncs across them as a percentage.
 // See features/bookGroups.js for the rationale (editions differ → share position, not the mask).
 export default function BookGroupsDialog({ onClose }) {
-  const { state, updateGlobal } = useApp();
+  const { state, updateGlobal, openDialog } = useApp();
   const groups = state.global.bookGroups || [];
   const [files, setFiles] = useState([]); // FileSettings rows {checksum, totalWords, wordIndex}
   const [nameMap, setNameMap] = useState({});
+  const [bindMap, setBindMap] = useState({}); // checksum → Trackyread book id
+  const [trackerBooks, setTrackerBooks] = useState([]);
   const [sel, setSel] = useState(() => new Set());
   const [newName, setNewName] = useState('');
   const [msg, setMsg] = useState('');
@@ -24,14 +26,25 @@ export default function BookGroupsDialog({ onClose }) {
       for (const g of await allGrabbed().catch(() => [])) if (g.checksum && !map[g.checksum]) map[g.checksum] = g.name;
       for (const t of state.tabs) if (t.doc?.contentChecksum && !map[t.doc.contentChecksum]) map[t.doc.contentChecksum] = t.doc.fileName;
       setNameMap(map);
+      setBindMap(await getBinding().catch(() => ({})));
+      setTrackerBooks(await getLibraryBooks().catch(() => []));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const recByChecksum = useMemo(() => Object.fromEntries(files.map((f) => [f.checksum, f])), [files]);
   const groupedSet = useMemo(() => new Set(groups.flatMap((g) => g.members || [])), [groups]);
+  const bookById = useMemo(() => Object.fromEntries(trackerBooks.map((b) => [b.id, b])), [trackerBooks]);
+  const openSet = useMemo(() => new Set(state.tabs.map((t) => t.doc?.contentChecksum).filter(Boolean)), [state.tabs]);
   const nameOf = (cs) => nameMap[cs] || `${cs.slice(0, 8)}…`;
   const pctLabel = (cs) => (recByChecksum[cs]?.totalWords ? `${Math.round(percentOf(recByChecksum[cs]) * 100)}%` : 'not opened here');
+  // The Trackyread book this file is linked to (via the tracker's doc-binding), if any.
+  const trackerFor = (cs) => { const id = bindMap[cs]; return id ? bookById[id] : null; };
+  const TrackerLink = ({ cs }) => {
+    const b = trackerFor(cs);
+    if (!b) return null;
+    return <button className="link-btn bg-tracker" title="Open this book in Trackyread" onClick={() => openDialog({ kind: 'literary-journey' })}>📖 {b.title || 'Trackyread'}</button>;
+  };
 
   function toggle(cs) {
     setSel((s) => { const n = new Set(s); if (n.has(cs)) n.delete(cs); else n.add(cs); return n; });
@@ -85,6 +98,26 @@ export default function BookGroupsDialog({ onClose }) {
       </p>
       {msg && <p className="settings-note">{msg}</p>}
 
+      {openSet.size > 0 && (
+        <>
+          <div className="field-section">Open now</div>
+          <div className="bg-open">
+            {[...openSet].map((cs) => {
+              const grp = groupForChecksum(groups, cs);
+              return (
+                <div key={cs} className="bg-open-row">
+                  <span className="bg-open-dot" title="Currently open">●</span>
+                  <span className="bg-member-name" title={cs}>{nameOf(cs)}</span>
+                  <span className="settings-note" style={{ margin: 0 }}>{pctLabel(cs)}</span>
+                  {grp && <span className="bg-open-grp" title="Part of a book group">📚 {grp.name || 'grouped'}</span>}
+                  <TrackerLink cs={cs} />
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
       {groups.length > 0 && <div className="field-section">Your book groups</div>}
       {groups.map((g) => {
         const master = masterOf(g);
@@ -102,8 +135,13 @@ export default function BookGroupsDialog({ onClose }) {
                     <input type="radio" name={`master-${g.id}`} checked={isMaster} onChange={() => setMaster(g.id, cs)} />
                     <span className="bg-star">{isMaster ? '★' : '☆'}</span>
                   </label>
-                  <span className="bg-member-name" title={cs}>{nameOf(cs)}{isMaster && <span className="bg-master-tag"> · master</span>}</span>
+                  <span className="bg-member-name" title={cs}>{nameOf(cs)}{isMaster && <span className="bg-master-tag"> · master</span>}{openSet.has(cs) && <span className="bg-open-dot" title="Currently open"> ●</span>}</span>
                   <span className="settings-note" style={{ margin: 0 }}>{pctLabel(cs)}</span>
+                  {!isMaster && (() => {
+                    const r = matchRating(recByChecksum[master], recByChecksum[cs], nameOf(master), nameOf(cs));
+                    return <span className={`bg-match bg-match-${matchLabel(r)}`} title="How well this edition matches the master (word-count agreement + filename similarity)">{r}% match</span>;
+                  })()}
+                  <TrackerLink cs={cs} />
                   <button onClick={() => removeMember(g.id, cs)} title="Remove from this book">×</button>
                 </div>
               );

@@ -23,6 +23,23 @@ export function bestGroupPercent(thisPercent, siblingRecs) {
   return best;
 }
 
+// How good a match a member file is to the group's master — a sanity check that two files grouped as
+// one book really are the same book. Blends word-count agreement (the direct signal) with filename
+// token overlap. Returns 0–100. Pure; see bookGroups.demo.mjs.
+export function matchRating(a, b, nameA = '', nameB = '') {
+  const wA = a?.totalWords || 0, wB = b?.totalWords || 0;
+  const wordSim = wA && wB ? 1 - Math.min(1, Math.abs(wA - wB) / Math.max(wA, wB)) : 0.5;
+  const tok = (s) => new Set(String(s || '').toLowerCase().replace(/\.[a-z0-9]+$/, '').split(/[^a-z0-9]+/).filter((w) => w.length > 2));
+  const ta = tok(nameA), tb = tok(nameB);
+  let inter = 0; for (const w of ta) if (tb.has(w)) inter++;
+  const union = new Set([...ta, ...tb]).size || 1;
+  const nameSim = inter / union;
+  return Math.round((0.6 * wordSim + 0.4 * nameSim) * 100);
+}
+export function matchLabel(score) {
+  return score >= 80 ? 'strong' : score >= 55 ? 'good' : score >= 30 ? 'weak' : 'poor';
+}
+
 const uid = () => Math.random().toString(36).slice(2);
 
 // The group's master (canonical) copy — the edition that represents the book. Falls back to the

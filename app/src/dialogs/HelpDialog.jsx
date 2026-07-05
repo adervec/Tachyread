@@ -100,21 +100,57 @@ const SECTIONS = [
   },
   {
     id: 'keys', title: '⌨ Keyboard shortcuts',
-    body: [
-      'Space play/pause · ← → word · ↑ ↓ line · Ctrl+↑↓ paragraph · PgUp/PgDn page · Home restart',
-      'Ctrl+O open TXT · Ctrl+D open document · Ctrl+B clipboard · Ctrl+Shift+G grab (OCR)',
-      'Ctrl+F find · Ctrl+G go to line · Ctrl+T statistics · Ctrl+H history · Ctrl+I proper names',
-      'Ctrl+Shift+A audiobook · Ctrl+Shift+T TTS reader · Ctrl+Shift+F footnote · F1 this help · Esc close dialogs',
+    intro: 'The whole app is keyboard-operable (only chip-dragging needs the mouse). The reading keys (single letters, digits, arrows, +/−) work while you\'re reading — with no dialog tab focused and the focus not on a button or field. Ctrl-combos, Esc and F1 work anywhere.',
+    groups: [
+      { name: 'Reading & playback', keys: [
+        ['Space', 'Play / pause'],
+        ['← →', 'Previous / next word'],
+        ['↑ ↓', 'Previous / next line'],
+        ['Ctrl+↑ ↓', 'Previous / next paragraph'],
+        ['PgUp PgDn', 'Page up / down'],
+        ['Home', 'Restart from the top'],
+        ['− +', 'Reading speed −/+ 25 WPM'],
+        ['j', 'Jump to the current word'],
+      ] },
+      { name: 'Toggle panes', keys: [
+        ['1', 'Fast Reader'], ['2', 'Lines'], ['3', 'Table of Contents'],
+        ['4', 'Stats'], ['5', 'Index'], ['6', 'Faces'],
+      ] },
+      { name: 'Toggle modes', keys: [
+        ['a', 'Read-aloud (TTS)'], ['s', 'Scroll-to-read'], ['v', 'Voice commands'],
+        ['f', 'Focus mode'], ['i', 'Incognito reading'],
+      ] },
+      { name: 'Tabs & dialogs', keys: [
+        ['Ctrl+PgUp PgDn', 'Previous / next tab'],
+        ['Esc', 'Close footnote, else the focused dialog tab'],
+        ['Ctrl+F', 'Find'], ['Ctrl+G', 'Go to line'],
+        ['Ctrl+T', 'Statistics'], ['Ctrl+H', 'Reading history'], ['Ctrl+I', 'Proper names'],
+        ['Ctrl+,', 'Tab settings'],
+        ['Ctrl+Shift+A', 'Audiobook manager'], ['Ctrl+Shift+N', 'Notes & annotations'],
+        ['Ctrl+Shift+T', 'Text-to-Speech reader'], ['Ctrl+Shift+F', 'Preview footnote'],
+        ['F1', 'This help'],
+      ] },
+      { name: 'Files', keys: [
+        ['Ctrl+O', 'Open TXT'], ['Ctrl+D', 'Open document (PDF/EPUB/DOCX/…)'],
+        ['Ctrl+B', 'Open from clipboard'], ['Ctrl+Shift+G', 'Grab text (OCR)'],
+      ] },
     ],
   },
 ];
+
+// Flatten a keys section into searchable text so "wpm", "incognito", etc. still match.
+function sectionText(s) {
+  const base = `${s.title} ${(s.body || []).join(' ')} ${s.intro || ''}`;
+  const keys = (s.groups || []).map((g) => `${g.name} ${g.keys.map((k) => k.join(' ')).join(' ')}`).join(' ');
+  return `${base} ${keys}`.toLowerCase();
+}
 
 export default function HelpDialog({ onClose }) {
   const [query, setQuery] = useState('');
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return SECTIONS;
-    return SECTIONS.filter((s) => s.title.toLowerCase().includes(q) || s.body.some((b) => b.toLowerCase().includes(q)));
+    return SECTIONS.filter((s) => sectionText(s).includes(q));
   }, [query]);
 
   return (
@@ -132,7 +168,23 @@ export default function HelpDialog({ onClose }) {
         {shown.map((s) => (
           <section key={s.id} className="help-section">
             <h3>{s.title}</h3>
-            {s.body.map((p, i) => <p key={i}>{p}</p>)}
+            {s.intro && <p>{s.intro}</p>}
+            {(s.body || []).map((p, i) => <p key={i}>{p}</p>)}
+            {s.groups && (
+              <div className="help-keymap">
+                {s.groups.map((g) => (
+                  <div key={g.name} className="help-keygroup">
+                    <div className="help-keygroup-name">{g.name}</div>
+                    {g.keys.map(([combo, desc]) => (
+                      <div key={combo} className="help-keyrow">
+                        <span className="help-keys">{combo.split(' ').map((c, j) => <kbd key={j}>{c}</kbd>)}</span>
+                        <span className="help-keydesc">{desc}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         ))}
         {!shown.length && <p className="settings-note">No matches — try a shorter term.</p>}

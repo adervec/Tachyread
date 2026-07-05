@@ -54,7 +54,7 @@ const MENUS = {
     { label: 'Regression Report...', action: 'regressions' },
     { label: 'Attention Check...', action: 'attention' },
     { label: 'Reading History...', shortcut: 'Ctrl+H', action: 'history' },
-    { label: 'Literary Journey (Reading Tracker)...', action: 'literary-journey' },
+    { label: 'Trackyread (Reading Tracker)...', action: 'literary-journey' },
   ],
   // Document-resource generators.
   tools: [

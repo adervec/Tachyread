@@ -54,6 +54,7 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         <strong> Settings → Tab Settings</strong>.
       </p>
 
+      <div className="dlg-cols">
       <div className="field-section">Language</div>
       <Field label="Document language">
         <select
@@ -176,6 +177,7 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
             />
           </label>
         ))}
+      </div>
       </div>
     </Dialog>
   );

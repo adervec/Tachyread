@@ -17,6 +17,14 @@ export const HEAVY_PLACEHOLDER =
   'rebuild the constellation tech tree: return treeMeta.pos (x,y in -500..500 per book id) and ' +
   'treeMeta.edges ([idA, idB, "influence"|"prereq"|"series"]) for lineage between books.';
 
+// A distinct heavy task: build the constellation into a real knowledge graph of TYPED relationships.
+export const KNOWLEDGE_GRAPH_INSTRUCTION =
+  'KNOWLEDGE GRAPH (heavy). Rebuild the constellation as a knowledge graph. Return treeMeta.pos (x,y in ' +
+  '-500..500 per book id) AND treeMeta.edges as [idA, idB, kind], where kind ∈ "influence" | "prereq" | ' +
+  '"series" | "same-author" | "theme" | "contrast" | "responds". Add an edge only for a real, specific ' +
+  'relationship between two books that are actually in the library; aim for 1–4 edges per book. Do NOT ' +
+  'change titles/authors/ids or the reading/completion state.';
+
 export function getInstruction(ai) {
   return ai?.instruction || { mode: 'light', text: LIGHT_INSTRUCTION, updatedAt: 0 };
 }
@@ -45,13 +53,13 @@ export function buildDataset(books, { light = true } = {}) {
 }
 
 const SCHEMA_LIGHT = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?,"notes"?}] }';
-const SCHEMA_HEAVY = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?}], "treeMeta": {"pos": {"<id>": {"x","y"}}, "edges": [["<idA>","<idB>","influence"]]} }';
+const SCHEMA_HEAVY = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?}], "treeMeta": {"pos": {"<id>": {"x","y"}}, "edges": [["<idA>","<idB>","influence|prereq|series|same-author|theme|contrast|responds"]]} }';
 
 // Human-readable Markdown for pasting into any Claude chat (also written as the cowork instructions).
 export function buildDigest(dataset, instruction) {
   const heavy = instruction.mode === 'heavy';
   return [
-    '# Tachyread — Literary Journey cowork request',
+    '# Trackyread — reading-tracker cowork request',
     `Task (${instruction.mode}): ${instruction.text}`,
     '',
     '## Reply with ONE ```json block, no prose, using the exact ids below:',

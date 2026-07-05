@@ -198,8 +198,12 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             <span title="Non-driving TTS that speaks as you read: the first word of each sentence (a progress marker), or the whole current line (usually cut off by the next line, since TTS lags fast reading)">FOLLOW</span>
             <select
               value={settings.ttsFollowMode || (settings.firstWordTts ? 'firstWord' : 'off')}
-              onChange={(e) => patchSettings(tab.id, { ttsFollowMode: e.target.value })}
-              title="Speak-along TTS while reading (does not drive the pace)"
+              onChange={(e) => {
+                const v = e.target.value;
+                // Speak-along FOLLOW is mutually exclusive with full read-aloud TTS.
+                patchSettings(tab.id, { ttsFollowMode: v, firstWordTts: false, ...(v !== 'off' && settings.readAloud ? { readAloud: false } : {}) });
+              }}
+              title="Speak-along TTS while reading (does not drive the pace); off while full read-aloud TTS is on"
             >
               <option value="off">Off</option>
               <option value="firstWord">First word</option>

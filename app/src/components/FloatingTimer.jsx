@@ -36,6 +36,7 @@ export default function FloatingTimer({ tab, pos, onMove, onDrop, autoStopAt = 0
       opacity={settings.statsOpacity ?? 0.92}
       className="floating-timer"
       defaultPos={defaultPos}
+      stub="⏱"
       title="Timer · drag to move · transparency in Tab Settings"
     >
       <div className="chip-status">⏱ {fmt(etaSecs)} <span className="chip-dim">left at pace</span></div>

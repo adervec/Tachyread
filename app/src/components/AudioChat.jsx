@@ -22,6 +22,7 @@ export default function AudioChat({ log, scope, mode = 'Both', pos, onMove, onDr
   const elRef = useRef(null);
   const drag = useRef(null);
   const [showLegend, setShowLegend] = useState(false);
+  const [min, setMin] = useState(false);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [log]);
 
   // Draggable by its header (like the floating chips); clamped on-screen; position persisted by App.
@@ -71,14 +72,15 @@ export default function AudioChat({ log, scope, mode = 'Both', pos, onMove, onDr
   const clapOn = mode === 'Claps' || mode === 'Both';
 
   return (
-    <div ref={elRef} className="audio-chat" role="log" aria-live="polite" style={posStyle}>
+    <div ref={elRef} className={`audio-chat${min ? ' chip-min' : ''}`} role="log" aria-live="polite" style={posStyle}>
       <div className="audio-chat-head" onPointerDown={onDown} onPointerMove={onPointerMove} onPointerUp={onUp} onPointerCancel={onUp} title="Drag to move">
         🎧 Audio commands
-        <button className={`ac-help${showLegend ? ' on' : ''}`} title={showLegend ? 'Back to what was heard' : 'Show all commands'} onClick={() => setShowLegend((v) => !v)}>{showLegend ? '☰' : '?'}</button>
+        {!min && <button className={`ac-help${showLegend ? ' on' : ''}`} title={showLegend ? 'Back to what was heard' : 'Show all commands'} onClick={() => setShowLegend((v) => !v)}>{showLegend ? '☰' : '?'}</button>}
+        <button className="ac-help" title={min ? 'Expand' : 'Minimize'} onClick={() => setMin((v) => !v)}>{min ? '+' : '–'}</button>
         <button className="ac-close" title="Close — turns voice commands off" onClick={onClose}>×</button>
       </div>
-      {scope && <canvas ref={canvasRef} className="audio-scope" width={236} height={38} />}
-      {showLegend ? (
+      {!min && scope && <canvas ref={canvasRef} className="audio-scope" width={236} height={38} />}
+      {!min && (showLegend ? (
         <div className="audio-legend">
           <div className={`al-group${voiceOn ? ' on' : ' off'}`}>
             <div className="al-title">🗣 Voice {voiceOn ? '· active' : '· off'}</div>
@@ -101,7 +103,7 @@ export default function AudioChat({ log, scope, mode = 'Both', pos, onMove, onDr
           ))}
           <div ref={endRef} />
         </div>
-      )}
+      ))}
     </div>
   );
 }

@@ -21,6 +21,7 @@ export default function FloatingGoal({ tab, pos, onMove, onDrop }) {
       opacity={opacity}
       className="floating-goal"
       defaultPos={defaultPos}
+      stub="🏁"
       title="Active goal · drag to move · transparency in Tab Settings"
     >
       <div className="chip-label">🏁 {goal.type.replace(/^(Absolute|Relative)/, '$1 ')}</div>

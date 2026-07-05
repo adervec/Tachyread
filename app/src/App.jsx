@@ -120,7 +120,7 @@ function isSentenceStart(doc, i) {
 }
 
 function AppInner() {
-  const { state, activeTab: rawActiveTab, hydrateTab, openFiles, openClipboard, setStatus, patchSettings, patchTab, openDialog, closeDialog, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
+  const { state, activeTab: rawActiveTab, hydrateTab, openFiles, openClipboard, setStatus, patchSettings, patchTab, openDialog, closeDialog, setActiveTab, setActivePanel, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
   // A lazy (restored, not-yet-loaded) tab has no parsed document — treat it as "no active reader"
   // until it hydrates, so nothing downstream touches activeTab.doc before it exists.
   const activeTab = rawActiveTab && !rawActiveTab.lazy ? rawActiveTab : null;
@@ -232,6 +232,7 @@ function AppInner() {
   // blurred / unrevealed lines). Drives the PgUp/PgDn buttons + keys.
   const linesVisibleRef = useRef(null);
   const dialogSlotRef = useRef(null); // mount point (inside .content-area) a docked dialog tab portals into
+  const kbdRef = useRef({}); // latest context for the mount-once global key handler (refreshed each render)
   const recognizerRef = useRef(null);
   const audioRecRef = useRef({ rec: null, lineIndex: -1 });
   const audioCtrlRef = useRef(null);
@@ -1200,93 +1201,77 @@ function AppInner() {
     cancelSpeech();
   }
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts. Bound once; all live values come from kbdRef (refreshed each render). Layered:
+  // Esc (works even in fields) → nothing else in a field → global Ctrl/F1 combos → reading-surface keys
+  // (only when no dialog tab is focused and focus isn't on a control). See the Help → Keyboard guide.
   useEffect(() => {
     function onKey(e) {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-        // Allow Esc to close footnote even from inputs
-        if (e.key === 'Escape' && showFootnote) {
-          setShowFootnote(false);
-        }
-        return;
-      }
+      const t = e.target;
+      const k = kbdRef.current;
       const ctrl = e.ctrlKey || e.metaKey;
       const shift = e.shiftKey;
-      if (e.key === ' ' || e.code === 'Space') {
-        e.preventDefault();
-        playPause();
-      } else if (e.key === 'ArrowLeft' && !ctrl) {
-        nav('prevWord');
-      } else if (e.key === 'ArrowRight' && !ctrl) {
-        nav('nextWord');
-      } else if (e.key === 'ArrowUp' && !ctrl) {
-        nav('prevLine');
-      } else if (e.key === 'ArrowDown' && !ctrl) {
-        nav('nextLine');
-      } else if (e.key === 'ArrowUp' && ctrl) {
-        e.preventDefault();
-        nav('prevPara');
-      } else if (e.key === 'ArrowDown' && ctrl) {
-        e.preventDefault();
-        nav('nextPara');
-      } else if (e.key === 'PageUp') {
-        e.preventDefault();
-        pageLines(-1);
-      } else if (e.key === 'PageDown') {
-        e.preventDefault();
-        pageLines(1);
-      } else if (e.key === 'Home') {
-        nav('restart');
-      } else if (ctrl && !shift && (e.key === 'o' || e.key === 'O')) {
-        e.preventDefault();
-        triggerOpen('.txt,.md,.csv,.log');
-      } else if (ctrl && !shift && (e.key === 'd' || e.key === 'D')) {
-        e.preventDefault();
-        triggerOpen('.docx,.pdf,.epub,.txt,.md,.markdown,.html,.htm');
-      } else if (ctrl && !shift && (e.key === 'b' || e.key === 'B')) {
-        e.preventDefault();
-        openClipboard();
-      } else if (ctrl && !shift && (e.key === 'f' || e.key === 'F')) {
-        e.preventDefault();
-        if (activeTab) openDialog({ kind: 'find' });
-      } else if (ctrl && !shift && (e.key === 'g' || e.key === 'G')) {
-        e.preventDefault();
-        if (activeTab) openDialog({ kind: 'goto' });
-      } else if (ctrl && !shift && (e.key === 't' || e.key === 'T')) {
-        e.preventDefault();
-        openDialog({ kind: 'stats' });
-      } else if (ctrl && !shift && (e.key === 'h' || e.key === 'H')) {
-        e.preventDefault();
-        openDialog({ kind: 'history' });
-      } else if (ctrl && !shift && (e.key === 'i' || e.key === 'I')) {
-        e.preventDefault();
-        if (activeTab) openDialog({ kind: 'proper-names' });
-      } else if (ctrl && shift && (e.key === 'F' || e.key === 'f')) {
-        e.preventDefault();
-        if (activeTab) setShowFootnote((s) => !s);
-      } else if (ctrl && shift && (e.key === 'A' || e.key === 'a')) {
-        e.preventDefault();
-        if (activeTab) openDialog({ kind: 'audiobook' });
-      } else if (ctrl && shift && (e.key === 'N' || e.key === 'n')) {
-        e.preventDefault();
-        if (activeTab) openDialog({ kind: 'notes' });
-      } else if (ctrl && shift && (e.key === 'T' || e.key === 't')) {
-        e.preventDefault();
-        if (activeTab) openDialog({ kind: 'tts-popup' });
-      } else if (ctrl && shift && (e.key === 'G' || e.key === 'g')) {
-        e.preventDefault();
-        openDialog({ kind: 'grab' });
-      } else if (e.key === 'F1') {
-        e.preventDefault();
-        openDialog({ kind: 'help' });
-      } else if (e.key === 'Escape') {
-        if (showFootnote) setShowFootnote(false);
+      const key = (e.key || '').toLowerCase();
+      const inField = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable;
+      const inDialog = !!(k.state.modal || k.state.panels.some((p) => p.id === k.state.activePanelId));
+
+      // Escape works from anywhere: close a footnote, else the focused dialog tab.
+      if (e.key === 'Escape') {
+        if (k.showFootnote) { k.setShowFootnote(false); return; }
+        if (inDialog) { k.closeDialog(); }
+        return;
       }
+      if (inField) return; // never hijack keys while typing into a field
+
+      // ── Global (work with or without a dialog open) ────────────────────────────
+      if (e.key === 'F1') { e.preventDefault(); k.openDialog({ kind: 'help' }); return; }
+      if (ctrl && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); k.cycleTabs(e.key === 'PageUp' ? -1 : 1); return; }
+      if (ctrl && !shift) {
+        if (key === 'o') { e.preventDefault(); k.triggerOpen('.txt,.md,.csv,.log'); return; }
+        if (key === 'd') { e.preventDefault(); k.triggerOpen('.docx,.pdf,.epub,.txt,.md,.markdown,.html,.htm'); return; }
+        if (key === 'b') { e.preventDefault(); k.openClipboard(); return; }
+        if (key === 'f') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'find' }); return; }
+        if (key === 'g') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'goto' }); return; }
+        if (key === 't') { e.preventDefault(); k.openDialog({ kind: 'stats' }); return; }
+        if (key === 'h') { e.preventDefault(); k.openDialog({ kind: 'history' }); return; }
+        if (key === 'i') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'proper-names' }); return; }
+        if (key === ',') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'tab-settings' }); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); if (!inDialog) k.nav('prevPara'); return; }
+        if (e.key === 'ArrowDown') { e.preventDefault(); if (!inDialog) k.nav('nextPara'); return; }
+      }
+      if (ctrl && shift) {
+        if (key === 'f') { e.preventDefault(); if (k.activeTab) k.setShowFootnote((s) => !s); return; }
+        if (key === 'a') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'audiobook' }); return; }
+        if (key === 'n') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'notes' }); return; }
+        if (key === 't') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'tts-popup' }); return; }
+        if (key === 'g') { e.preventDefault(); k.openDialog({ kind: 'grab' }); return; }
+      }
+      if (ctrl) return; // any other Ctrl/Cmd combo is the browser's
+
+      // ── Reading surface (only while actually reading — no dialog tab, focus not on a control) ─────
+      if (inDialog) return;
+      const onControl = !!(t.closest && t.closest('button, a[href], [role="button"]'));
+      if (e.key === ' ' || e.code === 'Space') { if (onControl) return; e.preventDefault(); k.playPause(); return; }
+      if (onControl) return; // let a focused control keep its own keys
+      if (e.key === 'ArrowLeft') { k.nav('prevWord'); return; }
+      if (e.key === 'ArrowRight') { k.nav('nextWord'); return; }
+      if (e.key === 'ArrowUp') { k.nav('prevLine'); return; }
+      if (e.key === 'ArrowDown') { k.nav('nextLine'); return; }
+      if (e.key === 'PageUp') { e.preventDefault(); k.pageLines(-1); return; }
+      if (e.key === 'PageDown') { e.preventDefault(); k.pageLines(1); return; }
+      if (e.key === 'Home') { k.nav('restart'); return; }
+      if (e.key === '-' || e.key === '_') { k.adjustWpm(-25); return; }
+      if (e.key === '=' || e.key === '+') { k.adjustWpm(25); return; }
+      if (e.key >= '1' && e.key <= '6') { k.togglePane(Number(e.key)); return; }
+      if (key === 'j') { k.jumpToCurrent(); return; }
+      if (key === 'a') { k.toggleReadAloud(); return; }
+      if (key === 's') { k.toggleScrollRead(); return; }
+      if (key === 'v') { k.toggleAudioCtrl(); return; }
+      if (key === 'f') { k.toggleFocusMode(); return; }
+      if (key === 'i') { k.dispatch({ type: 'TOGGLE_INCOGNITO' }); return; }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line
-  }, [activeTab, playing, showFootnote]);
+  }, []);
 
   function triggerOpen(accept) {
     const input = document.createElement('input');
@@ -1694,6 +1679,66 @@ function AppInner() {
     setRecenterKey((k) => k + 1);
   };
 
+  // ── Mode helpers (shared by the controls bar and keyboard shortcuts). Full read-aloud TTS drives the
+  // position, so it's mutually exclusive with the speak-along FOLLOW modes AND with voice commands (and
+  // with scroll-to-read, which paces itself): turning read-aloud on clears those; turning FOLLOW or
+  // VOICE on clears read-aloud.
+  function setReadAloud(on) {
+    if (!activeTab) return;
+    patchSettings(activeTab.id, {
+      readAloud: on,
+      ...(on ? {
+        ttsFollowMode: 'off', firstWordTts: false, audioCtrl: false,
+        typing: { ...activeTab.settings.typing, enabled: false },
+        speaking: { ...activeTab.settings.speaking, enabled: false },
+      } : {}),
+    });
+    if (on && state.global.scrollAdvances) updateGlobal({ scrollAdvances: false });
+  }
+  function toggleReadAloud() { if (activeTab) setReadAloud(!activeTab.settings.readAloud); }
+  function setAudioCtrl(on) {
+    if (!activeTab) return;
+    patchSettings(activeTab.id, { audioCtrl: on, ...(on ? { readAloud: false } : {}) });
+  }
+  function toggleAudioCtrl() { if (activeTab) setAudioCtrl(!activeTab.settings.audioCtrl); }
+  function toggleScrollRead() {
+    const on = !state.global.scrollAdvances;
+    updateGlobal({ scrollAdvances: on });
+    if (on && activeTab?.settings.readAloud) setReadAloud(false);
+  }
+  function adjustWpm(delta) {
+    if (!activeTab) return;
+    const cur = Number(activeTab.settings.wpm) || 300;
+    patchSettings(activeTab.id, { wpm: Math.max(50, Math.min(2000, cur + delta)) });
+  }
+  // Cycle focus across the whole tab strip (dialog tabs first, then document tabs) — Ctrl+PageUp/Down.
+  function cycleTabs(dir) {
+    const all = [...state.panels.map((p) => ({ kind: 'panel', id: p.id })), ...state.tabs.map((t) => ({ kind: 'doc', id: t.id }))];
+    if (all.length < 2) return;
+    let i = state.activePanelId != null
+      ? all.findIndex((x) => x.kind === 'panel' && x.id === state.activePanelId)
+      : all.findIndex((x) => x.kind === 'doc' && x.id === state.activeTabId);
+    if (i < 0) i = 0;
+    const next = all[(i + dir + all.length) % all.length];
+    if (next.kind === 'panel') setActivePanel(next.id); else setActiveTab(next.id);
+  }
+  // Toggle a reading pane by its number-key (1 Fast Reader · 2 Lines · 3 ToC · 4 Stats · 5 Index · 6 Faces).
+  function togglePane(n) {
+    if (n === 1) dispatch({ type: 'TOGGLE_SHOW_RSVP' });
+    else if (n === 2) dispatch({ type: 'TOGGLE_LINES' });
+    else if (n === 3) dispatch({ type: 'TOGGLE_TOC' });
+    else if (n === 4) dispatch({ type: 'TOGGLE_STATS' });
+    else if (n === 5) dispatch({ type: 'TOGGLE_INDEX' });
+    else if (n === 6 && activeTab) patchSettings(activeTab.id, { showEyes: !activeTab.settings.showEyes });
+  }
+
+  // Refresh the key handler's live context every render (handler is bound once, reads from this ref).
+  kbdRef.current = {
+    activeTab, state, showFootnote, playPause, nav, pageLines, jumpToCurrent, triggerOpen,
+    openClipboard, openDialog, closeDialog, setShowFootnote, toggleFocusMode, dispatch,
+    toggleReadAloud, toggleAudioCtrl, toggleScrollRead, adjustWpm, cycleTabs, togglePane,
+  };
+
   // Maximise the text on a phone. The Lines view is for immersive (often thumb-scrolled) reading, so
   // tuck the top chrome AND minimise the controls dock to their handles whenever it's showing — the
   // lines pane then fills the screen. The Fast Reader view does the same only while playing, and only
@@ -2028,16 +2073,7 @@ function AppInner() {
             audioCtrl={!!activeTab.settings.audioCtrl}
             readAloud={!!activeTab.settings.readAloud}
             onToggleFocus={toggleFocusMode}
-            onToggleReadAloud={() => {
-              const turningOn = !activeTab.settings.readAloud;
-              patchSettings(activeTab.id, {
-                readAloud: turningOn,
-                typing: { ...activeTab.settings.typing, enabled: false },
-                speaking: { ...activeTab.settings.speaking, enabled: false },
-              });
-              // Read-aloud and scroll-to-read are mutually exclusive (scroll drives the pace itself).
-              if (turningOn && state.global.scrollAdvances) updateGlobal({ scrollAdvances: false });
-            }}
+            onToggleReadAloud={toggleReadAloud}
             onPlayPause={playPause}
             onPrevWord={() => nav('prevWord')}
             onNextWord={() => nav('nextWord')}
@@ -2048,7 +2084,7 @@ function AppInner() {
             onPageUp={() => pageLines(-1)}
             onPageDown={() => pageLines(1)}
             onRestart={() => nav('restart')}
-            onToggleAudioCtrl={() => patchSettings(activeTab.id, { audioCtrl: !activeTab.settings.audioCtrl })}
+            onToggleAudioCtrl={toggleAudioCtrl}
             onGoalComplete={onGoalComplete}
             goalKills={goalKills}
             onTocIcon={onTocIcon}

@@ -121,6 +121,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           <span>Restore the original out-of-the-box defaults for new tabs.</span>
         </p>
       )}
+      <div className="dlg-cols">
       <Section>Fast Reader</Section>
       <Field label="Context words before">
         <input
@@ -591,6 +592,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ speaking: { ...s.speaking, perWordTimeoutMs: Number(e.target.value) } })}
         />
       </Field>
+      </div>
     </Dialog>
   );
 }
