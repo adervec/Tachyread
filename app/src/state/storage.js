@@ -100,6 +100,31 @@ export async function saveReadState(checksum, state) {
   await db.put('readstate', state, checksum);
 }
 
+// ── Diagnostic log — a small, capped, clearable local event log (errors + notable events), so
+// "it failed for unclear reasons" has somewhere to look. Stored under the `global` store (no schema
+// bump); writes are serialized through a chain so concurrent appends can't clobber each other.
+let _logChain = Promise.resolve();
+export function appendAppLog(tag, message) {
+  _logChain = _logChain
+    .then(async () => {
+      const db = await getDB();
+      const arr = (await db.get('global', 'appLog')) || [];
+      arr.push({ ts: Date.now(), tag, message: String(message ?? '').slice(0, 600) });
+      while (arr.length > 500) arr.shift();
+      await db.put('global', arr, 'appLog');
+    })
+    .catch(() => { /* logging must never throw */ });
+  return _logChain;
+}
+export async function getAppLog() {
+  const db = await getDB();
+  return (await db.get('global', 'appLog')) || [];
+}
+export async function clearAppLog() {
+  const db = await getDB();
+  await db.delete('global', 'appLog');
+}
+
 // Translation cache (see the `translations` store note above).
 export async function getCachedTranslation(key) {
   const db = await getDB();

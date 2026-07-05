@@ -4,7 +4,7 @@ import { useApp } from '../state/AppContext.jsx';
 import {
   getAudiobookManifest, getAudioClip, getAudioClipById, entryClips,
   addAudioClip, deleteAudioClipById, deleteAudioChunk, reorderAudioClips,
-  audiobookSize, clearAudiobook, exportAudiobook, importAudiobook,
+  audiobookSize, clearAudiobook, exportAudiobook, importAudiobook, appendAppLog,
 } from '../state/storage.js';
 import { recordClip } from '../features/audioRecorder.js';
 import { synthToBlob, defaultVoiceForLang, piperSupported, installedVoices, voiceLabel } from '../features/piperTts.js';
@@ -164,6 +164,12 @@ export default function AudiobookDialog({ tab, onClose }) {
     const words = targets.reduce((n, c) => n + (c.text || '').split(/\s+/).filter(Boolean).length, 0);
     setConfirmJob({ kind, targets, sections: secHit, words });
   }
+  // Generation loop. Every failure's reason is kept and surfaced (nothing is swallowed), each chunk
+  // gets ONE retry after a short pause (rides out a transient rate-limit), and a run that keeps
+  // failing aborts early after 6 failures in a row — no point grinding (and spending quota) through
+  // 200 chunks once the voice/key/quota is dead. A final status message ALWAYS appears, so even a
+  // single-chunk Gen reports what happened.
+  const CONSEC_ABORT = 6;
   async function runJob() {
     const job = confirmJob; setConfirmJob(null);
     if (!job) return;
@@ -171,19 +177,35 @@ export default function AudiobookDialog({ tab, onClose }) {
     const isEl = voiceId.startsWith('el:');
     const key = state.global.elevenLabsKey, modelId = state.global.elevenModel || 'eleven_multilingual_v2';
     setGen({ done: 0, total: job.targets.length });
-    let failed = 0;
+    setMsg('');
+    let ok = 0, consecutive = 0;
+    const errors = [];
+    const synth = (c) => (isEl ? elevenSynth(c.text.trim(), voiceId.slice(3), key, { modelId }) : synthToBlob(c.text.trim(), voiceId));
     for (let i = 0; i < job.targets.length; i++) {
       if (abort.current) break;
+      const c = job.targets[i];
       try {
-        const c = job.targets[i];
-        const blob = isEl ? await elevenSynth(c.text.trim(), voiceId.slice(3), key, { modelId }) : await synthToBlob(c.text.trim(), voiceId);
+        let blob;
+        try { blob = await synth(c); }
+        catch { await new Promise((r) => setTimeout(r, 1000)); blob = await synth(c); } // one retry
         await addAudioClip(checksum, c.startLine, blob, { source: 'tts', voiceId, durationMs: estMs(blob), spanEndLine: c.endLine });
-      } catch (e) { failed++; if (isEl && failed === 1) setMsg('ElevenLabs error: ' + (e?.message || e)); }
+        ok++; consecutive = 0;
+      } catch (e) {
+        errors.push(e?.message || String(e));
+        console.warn(`Audiobook: chunk @ line ${c.startLine + 1} failed:`, e);
+        appendAppLog('audiobook', `chunk @ line ${c.startLine + 1} (${labelVoice(voiceId)}): ${e?.message || e}`);
+        consecutive++;
+      }
       setGen({ done: i + 1, total: job.targets.length });
       if ((i & 7) === 0) await refresh();
+      if (consecutive >= CONSEC_ABORT) break;
     }
     setGen(null); refresh();
-    if (failed) setMsg((m) => m || `${failed} chunk(s) failed to generate.`);
+    const reasons = [...new Set(errors)].slice(0, 2).join(' · ');
+    if (!errors.length) setMsg(abort.current ? `■ Stopped — ${ok} of ${job.targets.length} chunk(s) generated.` : `✓ Generated ${ok} chunk(s) with ${labelVoice(voiceId)}.`);
+    else if (consecutive >= CONSEC_ABORT) setMsg(`⚠ Stopped after ${CONSEC_ABORT} failures in a row (${ok} generated, ${errors.length} failed): ${reasons}. See Data Management → Diagnostic log.`);
+    else setMsg(`${ok} generated, ${errors.length} failed: ${reasons}. See Data Management → Diagnostic log.`);
+    if (errors.length) appendAppLog('audiobook', `run finished: ${ok} ok, ${errors.length} failed of ${job.targets.length} (${labelVoice(voiceId)})`);
   }
 
   // ── transfer + wipe ──
