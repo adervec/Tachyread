@@ -23,17 +23,53 @@ function readCwStyles(s) {
 const GUIDE_COLORS = ['Red', 'Pink', 'Orange', 'Green', 'Blue', 'Purple'];
 const ALIGNMENTS = ['Left', 'Center', 'Right', 'Justify'];
 
+// One-line explanations shown when you click a setting's label (keyed by label, so the Fields don't
+// each need editing). Only the non-obvious settings need an entry; the rest show no ⓘ.
+const HINTS = {
+  'Context words before': 'How many words before the current one to show faintly around the Fast Reader word, for peripheral context.',
+  'Context words after': 'How many words after the current one to show faintly around the Fast Reader word.',
+  'Show guide lines': 'Draw crosshair guides through the Fast Reader word to anchor your gaze.',
+  'Highlight ORP character': 'Tint the Optimal Recognition Point (the letter your eye should land on) so words centre themselves.',
+  'Hide Fast Reader pane': 'Remove the flashing-word pane entirely and read only from the Lines pane.',
+  'Line spacing (1 = single)': 'Vertical spacing between lines in the Lines pane.',
+  '% separators': 'Show faint percentage markers down the Lines pane so you can see how far through you are.',
+  'Alternate unread sentence colours': 'Give consecutive not-yet-read sentences a slightly different colour so where one ends and the next begins is easy to see.',
+  'Split pane (before / current / after)': 'Split the Lines pane into what you have read, the current line, and what is ahead.',
+  'Center current line': 'Keep the line you are reading pinned to the middle of the Lines pane instead of scrolling naturally.',
+  'Line jump: long-press hold (ms, 0 = instant click)': 'How long to hold a tap on a line before it jumps there (0 = a plain click jumps immediately).',
+  'Reveal mode (hide text ahead)': 'Progressively hide upcoming text (by word/line/sentence/paragraph) so you cannot read ahead.',
+  'Bionic font': 'Bold the first few letters of each word to pull your eye through the line faster.',
+  'Current-word highlight (combine any)': 'How the word you are on is marked in the Lines pane — combine any of underline, bold, background, colour, box.',
+  'Auto-collapse completed sections': 'Fold away ToC sections once you have finished reading them.',
+  'Show faces': 'Animated reader faces whose expression tracks your pace and progress.',
+  'Paragraph break (sec)': 'Extra pause the auto-player takes at the end of a paragraph.',
+  'Line break pause (ms)': 'Extra pause the auto-player takes at the end of each line.',
+  'Detect proper names (heavy on large docs)': 'Find names/entities so they can be indexed and optionally dwelt on longer — slower on big books.',
+  'Auto-skip headers/footers': 'Skip repeated running headers/footers (page numbers, book title) while reading.',
+  'Surprisal-weighted dwell': 'Spend longer on rare/informative words and less on predictable ones — your average WPM is unchanged.',
+  'Enable beat at reading pace': 'A metronome click locked to your current WPM — a rhythm to read along with.',
+  'Blur strength (%)': 'How steeply the focus-blur ramps: 100% blurs the nearest hidden line completely; lower makes it fade in gradually across the blur window.',
+  'Scroll read point (%)': 'In scroll-to-read, where a line is counted as read: 0% = only once it scrolls off the top; higher = further down the clear (unblurred) area, up to as soon as it appears.',
+};
+
+function hueOf(s) { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
+
 function Field({ label, children }) {
+  const hint = HINTS[label];
+  const [show, setShow] = useState(false);
   return (
     <div className="field-row">
-      <label>{label}</label>
+      <label className={hint ? 'has-hint' : ''} title={hint || undefined} onClick={hint ? () => setShow((v) => !v) : undefined}>
+        {label}{hint && <span className="field-hint-mark" aria-hidden="true">ⓘ</span>}
+      </label>
       <div>{children}</div>
+      {show && hint && <div className="field-hint">{hint}</div>}
     </div>
   );
 }
 
 function Section({ children }) {
-  return <div className="field-section">{children}</div>;
+  return <div className="field-section" style={{ '--sec-hue': hueOf(children) }}>{children}</div>;
 }
 
 // 'rightPaneFontSize' → 'right pane font size' for the difference chips.
@@ -213,6 +249,13 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ showPercentSeparators: e.target.checked })}
         />
       </Field>
+      <Field label="Alternate unread sentence colours">
+        <input
+          type="checkbox"
+          checked={!!s.altSentenceColors}
+          onChange={(e) => patch({ altSentenceColors: e.target.checked })}
+        />
+      </Field>
       <Field label="Split pane (before / current / after)">
         <input
           type="checkbox"
@@ -245,6 +288,12 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           <option>Sentences</option>
           <option>Paragraphs</option>
         </select>
+      </Field>
+      <Field label="Scroll read point (%)">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="range" min={0} max={100} step={5} value={Math.round((s.scrollReadPoint ?? 0) * 100)} onChange={(e) => patch({ scrollReadPoint: Number(e.target.value) / 100 })} />
+          <span style={{ fontSize: 12, color: 'var(--status-fg)' }}>{Math.round((s.scrollReadPoint ?? 0) * 100)}%</span>
+        </div>
       </Field>
       <Field label="Click sound on line advance">
         <input
@@ -428,6 +477,12 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       </Field>
       <Field label="Blur lines after">
         <input type="number" min={0} max={10} value={s.blurLinesAfter || 0} onChange={(e) => patch({ blurLinesAfter: Number(e.target.value) })} />
+      </Field>
+      <Field label="Blur strength (%)">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="range" min={0} max={100} step={5} value={s.blurGradient ?? 100} onChange={(e) => patch({ blurGradient: Number(e.target.value) })} />
+          <span style={{ fontSize: 12, color: 'var(--status-fg)' }}>{s.blurGradient ?? 100}%</span>
+        </div>
       </Field>
       <Field label="Current-line font boost (px)">
         <input type="number" min={0} max={12} value={s.currentLineFontSizeBoost || 0} onChange={(e) => patch({ currentLineFontSizeBoost: Number(e.target.value) })} />

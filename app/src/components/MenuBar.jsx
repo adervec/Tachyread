@@ -135,8 +135,26 @@ function MenuItem({ it, onPick, badges }) {
 }
 
 
+// Open-recent list appended to the File menu — reopens a persisted document by its checksum.
+function RecentFiles({ recent, onPick }) {
+  return (
+    <>
+      <div className="separator" />
+      <div className="menu-sub-head">Open recent</div>
+      {recent.length === 0
+        ? <div className="item menu-recent-empty"><span>No recent files</span></div>
+        : recent.slice(0, 12).map((r) => (
+          <div key={r.checksum} className="item menu-recent" onClick={() => onPick(r.checksum)} title={r.name}>
+            <span className="menu-recent-name">{r.name}</span>
+          </div>
+        ))}
+    </>
+  );
+}
+
 export default function MenuBar({ onFileOpen, onAction }) {
   const { state, dispatch, activeTab, patchSettings, updateGlobal } = useApp();
+  const recent = state.global.recentFiles || [];
   const isCompact = useIsCompact();
   const themeName =
     activeTab?.settings?.themeName || (activeTab?.settings?.darkMode ? 'Dark' : 'Light');
@@ -213,6 +231,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
         >
           <ThemeOptions />
         </select>
+        {open && <div className="menu-scrim" onClick={closeDrawer} aria-hidden="true" />}
         {open && (
           <div className="menu-drawer">
             {sub === null ? (
@@ -250,6 +269,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
                 <div className="menu-drawer-back" onClick={() => setSub(null)}>‹ All menus</div>
                 <div className="menu-drawer-section">{MENU_TITLE[sub] || sub}</div>
                 {MENUS[sub].map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
+                {sub === 'file' && <RecentFiles recent={recent} onPick={(cs) => handle('open-recent:' + cs)} />}
               </>
             )}
           </div>
@@ -270,6 +290,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
           {openMenu === key && (
             <div className="menu-dropdown">
               {MENUS[key].map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
+              {key === 'file' && <RecentFiles recent={recent} onPick={(cs) => handle('open-recent:' + cs)} />}
             </div>
           )}
         </div>

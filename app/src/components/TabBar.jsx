@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { groupForChecksum, masterOf } from '../features/bookGroups.js';
 
@@ -14,10 +15,12 @@ const PANEL_LABELS = {
 };
 
 export default function TabBar() {
-  const { state, setActiveTab, closeTab, setActivePanel, closePanel } = useApp();
+  const { state, setActiveTab, closeTab, setActivePanel, closePanel, reorderTabs } = useApp();
   const { panels, activePanelId, tabs } = state;
   const groups = state.global.bookGroups || [];
   const noDocs = tabs.length === 0;
+  const dragId = useRef(null);                 // document tab being dragged
+  const [dropId, setDropId] = useState(null);  // tab the drop indicator is on
   return (
     <div className="tab-bar">
       {/* Dialog tabs first (leftmost), styled distinctly from document tabs. */}
@@ -64,8 +67,14 @@ export default function TabBar() {
         return (
           <div
             key={tab.id}
-            className={`tab ${tab.id === state.activeTabId ? 'active' : ''} ${tab.lazy ? 'lazy' : ''}`}
+            className={`tab ${tab.id === state.activeTabId ? 'active' : ''} ${tab.lazy ? 'lazy' : ''}${dropId === tab.id ? ' drop-target' : ''}`}
+            draggable
             onClick={() => setActiveTab(tab.id)}
+            onDragStart={(e) => { dragId.current = tab.id; e.dataTransfer.effectAllowed = 'move'; }}
+            onDragOver={(e) => { if (dragId.current && dragId.current !== tab.id) { e.preventDefault(); setDropId(tab.id); } }}
+            onDragLeave={() => setDropId((d) => (d === tab.id ? null : d))}
+            onDrop={(e) => { e.preventDefault(); if (dragId.current && dragId.current !== tab.id) reorderTabs(dragId.current, tab.id); dragId.current = null; setDropId(null); }}
+            onDragEnd={() => { dragId.current = null; setDropId(null); }}
             title={named ? `${named.name} — ${fileName}${cs === masterOf(named) ? ' (master)' : ''}` : (tab.lazy ? `${fileName} — tap to load` : fileName)}
           >
             <span className="name">{label}{mark && <sup className="tab-grp-mark">{mark}</sup>}</span>

@@ -9,6 +9,7 @@ import { useReportVisibility } from '../state/useReportVisibility.js';
 // Reading-pointer feature archived for now (not useful). Flip to true to restore it, and uncomment
 // its Settings section in dialogs/SettingsDialog.jsx.
 const POINTER_ENABLED = false;
+const MAX_BLUR_PX = 5; // "fully blurred" — text at this blur is unreadable (feeds the blur gradient)
 
 function stripPunct(w) {
   return w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
@@ -99,13 +100,17 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
   const isHead = headLevel >= 0;
   const headCenter = isHead && headingPack && headingPack !== 'terminal' && headingPack !== 'retro';
 
-  // Focus blur: blur lines within the configured window before/after the current line.
+  // Focus blur: blur lines within the window before/after the current line. `blurGradient` (0–100)
+  // sets the ramp — at 100% the first blurred line is already fully blurred; below that the blur
+  // ramps up gradually across the window (the nearest line lightest, the farthest fully blurred).
   const before = dsettings.blurLinesBefore || 0;
   const after = dsettings.blurLinesAfter || 0;
   let blur = 0;
   if (!isCurrent) {
-    if (index < ctx.currentLine && ctx.currentLine - index <= before) blur = Math.min(2.5, (ctx.currentLine - index) * 0.9);
-    else if (index > ctx.currentLine && index - ctx.currentLine <= after) blur = Math.min(2.5, (index - ctx.currentLine) * 0.9);
+    const g = Math.max(0, Math.min(1, (dsettings.blurGradient ?? 100) / 100));
+    const ramp = (d, w) => MAX_BLUR_PX * Math.min(1, g + (1 - g) * (d / Math.max(1, w)));
+    if (before && index < ctx.currentLine && ctx.currentLine - index <= before) blur = ramp(ctx.currentLine - index, before);
+    else if (after && index > ctx.currentLine && index - ctx.currentLine <= after) blur = ramp(index - ctx.currentLine, after);
   }
 
   const boost = dsettings.currentLineFontSizeBoost || 0;
@@ -114,6 +119,11 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
     filter: blur ? `blur(${blur}px)` : undefined,
     fontSize: isCurrent && boost ? `calc(1em + ${boost}px)` : undefined,
   };
+
+  // Mildly alternate the colour of still-unread sentences so consecutive ones are easy to tell apart
+  // (odd sentences get a subtle accent tint). Only the unread band — read/current lines keep their look.
+  const altSent = dsettings.altSentenceColors && status === ReadStatus.Unread
+    && (((doc.wordToSentence?.[line.startWordIndex] ?? index) % 2) === 1);
 
   const showPointer = POINTER_ENABLED && dsettings.showPointer && isCurrent && !line.isEmpty;
   const pointer = showPointer ? (
@@ -130,7 +140,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
 
   return (
     <div
-      className={`line-row status-${status} ${isHF ? 'is-header-footer' : ''} ${inPara ? 'in-current-para' : ''} ${pressing ? 'pressing' : ''} ${isHead ? `toc-head toc-head-l${headLevel}` : ''}`}
+      className={`line-row status-${status} ${isHF ? 'is-header-footer' : ''} ${inPara ? 'in-current-para' : ''} ${pressing ? 'pressing' : ''} ${isHead ? `toc-head toc-head-l${headLevel}` : ''} ${altSent ? 'alt-sent' : ''}`}
       data-line={index}
       data-start={line.startWordIndex}
       style={pressing ? { '--lp-ms': `${ctx.longPressMs}ms` } : undefined}
@@ -359,6 +369,8 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     () => ({
       blurLinesBefore: settings.blurLinesBefore || 0,
       blurLinesAfter: settings.blurLinesAfter || 0,
+      blurGradient: settings.blurGradient ?? 100,
+      altSentenceColors: !!settings.altSentenceColors,
       currentLineFontSizeBoost: settings.currentLineFontSizeBoost || 0,
       textAlignment: settings.textAlignment || 'Left',
       showPointer: settings.showPointer,
@@ -371,7 +383,8 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       currentWordStyles: currentWordStyles(settings),
     }),
     [
-      settings.blurLinesBefore, settings.blurLinesAfter, settings.currentLineFontSizeBoost,
+      settings.blurLinesBefore, settings.blurLinesAfter, settings.blurGradient, settings.altSentenceColors,
+      settings.currentLineFontSizeBoost,
       settings.textAlignment, settings.showPointer, settings.pointerStyle, settings.pointerPlacement,
       settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP,
       settings.currentWordStyles, settings.currentWordStyle,
@@ -445,17 +458,42 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     const wrap = listWrapRef.current;
     if (!wrap) return undefined;
     const scroller = [...wrap.querySelectorAll('*')].find((el) => /(auto|scroll)/.test(getComputedStyle(el).overflowY)) || wrap;
-    // The word at the very top edge: the topmost line still on screen, interpolated within it by how
-    // far it's scrolled off — so progress is word-level even inside one long wrapped paragraph.
+    const before = settings.blurLinesBefore || 0;
+    const after = settings.blurLinesAfter || 0;
+    // The "assume-read" line sits at this fraction (0 = top, 1 = bottom) of the READABLE band — the
+    // viewport minus any blurred (before/after) or hidden (reveal-mode) rows, since any blur on a line
+    // means it isn't yet readable. At 0 this is the classic "read once it leaves the top" behaviour.
+    const point = Math.max(0, Math.min(1, settings.scrollReadPoint ?? 0));
     const frontierWord = () => {
-      const top = wrap.getBoundingClientRect().top;
-      for (const row of wrap.querySelectorAll('.line-row[data-line]')) {
+      const rect = wrap.getBoundingClientRect();
+      const viewTop = rect.top, viewBottom = rect.bottom;
+      const curLine = doc.wordToLine[idxRef.current] ?? 0;
+      const revealAt = revealBoundary(doc, idxRef.current, hideMode); // first hidden line, or null
+      const rows = wrap.querySelectorAll('.line-row[data-line]');
+      // Shrink the band past any on-screen blurred/hidden rows above (raise the top) and below (lower
+      // the bottom of the clear zone).
+      let rTop = viewTop, rBottom = viewBottom;
+      for (const row of rows) {
+        const li = Number(row.getAttribute('data-line'));
         const rr = row.getBoundingClientRect();
-        if (rr.bottom <= top + 1) continue; // fully above the edge → already read
+        if (rr.bottom <= viewTop || rr.top >= viewBottom) continue;
+        const blurredBefore = before > 0 && li < curLine && curLine - li <= before;
+        const blurredAfter = after > 0 && li > curLine && li - curLine <= after;
+        const hidden = revealAt != null && li >= revealAt;
+        if (blurredBefore) rTop = Math.max(rTop, Math.min(viewBottom, rr.bottom));
+        if (blurredAfter || hidden) rBottom = Math.min(rBottom, Math.max(viewTop, rr.top));
+      }
+      if (rBottom < rTop) rBottom = rTop;
+      const readY = rTop + point * (rBottom - rTop);
+      // Word at the read line: topmost row whose bottom is past readY, interpolated within it so
+      // progress stays word-level even inside one long wrapped paragraph.
+      for (const row of rows) {
+        const rr = row.getBoundingClientRect();
+        if (rr.bottom <= readY + 1) continue;
         const ln = doc.lines[Number(row.getAttribute('data-line'))];
         if (!ln) return null;
         const end = ln.endWordIndex >= 0 ? ln.endWordIndex : ln.startWordIndex;
-        const frac = Math.max(0, Math.min(1, (top - rr.top) / Math.max(1, rr.height)));
+        const frac = Math.max(0, Math.min(1, (readY - rr.top) / Math.max(1, rr.height)));
         return ln.startWordIndex + Math.round(frac * Math.max(0, end - ln.startWordIndex));
       }
       return null;
@@ -471,7 +509,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     };
     scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => { scroller.removeEventListener('scroll', onScroll); if (raf) cancelAnimationFrame(raf); };
-  }, [split, scrollRead, doc]);
+  }, [split, scrollRead, doc, settings.blurLinesBefore, settings.blurLinesAfter, settings.scrollReadPoint, hideMode]);
 
   // Peek: scroll the (list-view) viewport to a previewed line without moving the reading position,
   // and scroll back to the current line when the peek clears. (Split view handles peek in its bottom

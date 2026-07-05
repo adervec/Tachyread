@@ -3,7 +3,7 @@ import { playLineSound, playTick, TYPING_SOUNDS } from '../features/clickSound.j
 import { getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import { deviceKind } from '../state/device.js';
 import { buildPassage, TYPING_MODES, TYPING_MODE_BY_ID } from '../engine/typingModes.js';
-import { prepToken, isExotic } from '../engine/typingText.js';
+import { transformToken, isExotic } from '../engine/typingText.js';
 import { letterGrade, playGradeSound, GRADE_STATEMENTS } from '../features/gradeChime.js';
 import { createReadAloud } from '../features/readAloud.js';
 import { rateFromIndex } from '../features/tts.js';
@@ -81,20 +81,23 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // Auto-bypass characters a QWERTY keyboard can't make (default on): normalize typographic look-
   // alikes and drop purely-decorative tokens so the drill never asks you to type a "•" or a "¶".
   const bypassSym = cfg.bypassNonQwerty !== false;
+  // Text transforms — the drill shows exactly what you type. `lowercase` and `noSpecial` (no
+  // punctuation/symbols) are opt-in; `bypassSym` (non-typeable chars → removed) is folded in here too.
+  const lowercase = !!cfg.lowercase;
+  const noSpecial = !!cfg.noSpecial;
   // Prepared passage: `prepared` entries are { text, gi } where gi is the source-doc word index (for
-  // line/sentence cues and forward continuation), with bypassed tokens filtered out; `passage` is the
-  // text-only array the run/render use. Built in one memo so the two stay in lockstep.
+  // line/sentence cues and forward continuation), with transformed-away tokens filtered out; `passage`
+  // is the text-only array the run/render use. Built in one memo so the two stay in lockstep.
   const { prepared, passage } = useMemo(() => {
     const raw = buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: PASSAGE_MAX, seed });
     const base = isDocMode ? startIndex.current : 0;
     const prep = [];
     for (let i = 0; i < raw.length; i++) {
-      if (!bypassSym) { prep.push({ text: raw[i], gi: base + i }); continue; }
-      const { text, skip } = prepToken(raw[i]);
+      const { text, skip } = transformToken(raw[i], { bypassNonQwerty: bypassSym, lowercase, noSpecial });
       if (!skip) prep.push({ text, gi: base + i });
     }
     return { prepared: prep, passage: prep.map((p) => p.text) };
-  }, [doc, gameMode, seed, bypassSym, isDocMode]);
+  }, [doc, gameMode, seed, bypassSym, lowercase, noSpecial, isDocMode]);
   // A typed char matches its target when it's equal (case rule) or the target is exotic (auto-accepted).
   const charOk = (typedCh, targetCh) => (bypassSym && isExotic(targetCh)) || sameChar(typedCh, targetCh, caseSensitive);
 
@@ -402,6 +405,25 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     if (nextPos >= passage.length) { endRun(); }
   }
 
+  // Monkeytype-style: Backspace at the START of the current word reopens the PREVIOUS word so you can
+  // fix and retry it — its committed result is dropped and its typed text restored into the buffer.
+  // ponytail: char stats aren't rewound (same "every keystroke counts" model as retyping within a
+  // word); the word/perfect tally IS rewound so the run count stays right. Off in one-word mode.
+  function goBackWord() {
+    const prevPos = pos - 1;
+    if (prevPos < 0) return;
+    const prev = results[prevPos];
+    setResults((r) => r.slice(0, prevPos));
+    setPos(prevPos);
+    posRef.current = prevPos;
+    setBuf(prev?.typed ?? '');
+    const s = stats.current;
+    s.words = Math.max(0, s.words - 1);
+    if (prev?.perfect) s.perfect = Math.max(0, s.perfect - 1);
+    wordErrors.current = 0;
+    lastGiRef.current = prevPos - 1 >= 0 ? (prepared[prevPos - 1]?.gi ?? null) : null;
+  }
+
   // Score the characters of `str` from index `fromLen` onward against the current target word.
   function scoreChars(fromLen, str) {
     const s = stats.current;
@@ -457,6 +479,13 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       e.preventDefault();
       if (phase === 'countdown') { clearCount(); setCount(null); setPhase('idle'); return; }
       phase === 'running' ? endRun() : onExitDiscard?.();
+      return;
+    }
+    if (e.key === 'Backspace' && phase === 'running' && !oneWord && !e.target.value && pos > 0) {
+      // Empty buffer + Backspace → step back a word (the input value is the live source of truth).
+      e.preventDefault();
+      goBackWord();
+      armIdle();
       return;
     }
     if (e.key === 'Enter') {
@@ -541,6 +570,16 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                 <input type="checkbox" checked={raceVoice}
                   onChange={(e) => onPatch?.({ typing: { ...cfg, raceVoice: e.target.checked } })} />
                 <span>🏁 Race voice</span>
+              </label>
+              <label className="tr-oneword" title="Type everything in lowercase">
+                <input type="checkbox" checked={lowercase}
+                  onChange={(e) => onPatch?.({ typing: { ...cfg, lowercase: e.target.checked } })} />
+                <span>aa</span>
+              </label>
+              <label className="tr-oneword" title="No special characters — type letters, numbers and spaces only (punctuation & symbols removed)">
+                <input type="checkbox" checked={noSpecial}
+                  onChange={(e) => onPatch?.({ typing: { ...cfg, noSpecial: e.target.checked } })} />
+                <span>no&nbsp;#</span>
               </label>
             </>
           )}

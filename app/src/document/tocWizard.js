@@ -131,15 +131,49 @@ export function matchEntriesToBody(doc, parsed, fromLine) {
   return out;
 }
 
-// Full pipeline: parse the printed region, infer levels, and locate each title in the body. Returns
-// candidates (some possibly unmatched) for the wizard's review step — NOT yet normalized/sorted, so
-// the UI can show unmatched rows alongside.
-export function buildFromPrintedToc(doc, startLine, endLine) {
-  const parsed = parsePrintedToc(doc, startLine, endLine);
-  if (!parsed.length) return [];
+// Infer levels + locate each parsed title in the body → review candidates (some possibly unmatched).
+export function buildFromParsed(doc, parsed, fromLine) {
+  if (!parsed || !parsed.length) return [];
   const levels = assignLevels(parsed);
-  const matched = matchEntriesToBody(doc, parsed, endLine + 1);
+  const matched = matchEntriesToBody(doc, parsed, fromLine);
   return matched.map((m, i) => ({ ...m, level: levels[i] ?? 0 }));
+}
+
+// Full pipeline for a normally line-per-entry printed TOC.
+export function buildFromPrintedToc(doc, startLine, endLine) {
+  return buildFromParsed(doc, parsePrintedToc(doc, startLine, endLine), endLine + 1);
+}
+
+// ── guided parsing for a squashed / one-line printed TOC ─────────────────────────────────────────
+// Some books print the whole contents on a single wrapped line ("Introduction 1 Chapter One 5 …").
+// parsePrintedToc sees one line and finds nothing. These helpers let the user GUIDE the split instead
+// of being stopped: we join the region to a blob, offer a best-guess split into "title … page" pieces
+// (which they can then hand-edit line by line), and parse the edited text.
+export function joinRegion(doc, startLine, endLine) {
+  const lo = Math.max(0, startLine), hi = Math.min(doc.lines.length - 1, endLine);
+  let blob = '';
+  for (let li = lo; li <= hi; li++) { const ln = doc.lines[li]; if (ln && !ln.isEmpty && ln.text.trim()) blob += (blob ? ' ' : '') + ln.text.trim(); }
+  return blob.replace(/[.…·•‧]{2,}/g, ' ').replace(/\s+/g, ' ').trim(); // drop dot leaders
+}
+
+// Best-guess split of a squashed blob: newline after each page number that's followed by a capital
+// (the likely start of the next entry). A starting point the user refines by editing the text.
+export function autoSplitSquashed(blob) {
+  return String(blob).replace(/(\s\d{1,4})\s+(?=[A-Z0-9])/g, '$1\n').trim();
+}
+
+// Parse hand-split text (one entry per line) into { title, page, indent } candidates.
+export function parseManualToc(text) {
+  const out = [];
+  for (const rawLine of String(text || '').split(/\r?\n/)) {
+    const trimmed = rawLine.replace(/[.…·•‧]{2,}/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!trimmed) continue;
+    const { title, page } = splitTitlePage(trimmed);
+    const clean = title.replace(/^[•·–—\-*]\s*/u, '').trim();
+    if (!clean || normTitle(clean).length < 2) continue;
+    out.push({ title: clean, page, indent: rawLine.length - rawLine.replace(/^\s+/, '').length, srcLine: 0 });
+  }
+  return out;
 }
 
 // Turn reviewed candidates into final, stored TOC entries: keep matched ones, sort by position,

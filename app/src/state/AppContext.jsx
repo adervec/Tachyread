@@ -106,6 +106,15 @@ function reducer(state, action) {
     }
     case 'CLOSE_ALL_TABS':
       return { ...state, tabs: [], activeTabId: null };
+    case 'REORDER_TABS': {
+      const from = state.tabs.findIndex((t) => t.id === action.fromId);
+      const to = state.tabs.findIndex((t) => t.id === action.toId);
+      if (from < 0 || to < 0 || from === to) return state;
+      const tabs = [...state.tabs];
+      const [moved] = tabs.splice(from, 1);
+      tabs.splice(to, 0, moved);
+      return { ...state, tabs };
+    }
     case 'SET_ACTIVE_TAB':
       // Going to read a document minimizes any focused dialog overlay (its tab stays in the strip).
       return { ...state, activeTabId: action.id, activePanelId: null };
@@ -316,6 +325,14 @@ export function AppProvider({ children }) {
         wordToSegment: doc.wordToSegment || null,
         segmentCount: doc.segmentCount || 0,
       }).catch(() => {});
+      // Record it in the Open-Recent list (most-recent first, deduped, capped). recentFiles is a data
+      // key (not a synced setting), so save directly without stamping the settings-sync clock.
+      const g = stateRef.current.global;
+      const recentFiles = [{ name: doc.fileName, checksum: doc.contentChecksum, lastOpened: Date.now() },
+        ...(g.recentFiles || []).filter((r) => r.checksum !== doc.contentChecksum)].slice(0, 20);
+      const ng = { ...g, recentFiles };
+      dispatch({ type: 'SET_GLOBAL', global: ng });
+      saveGlobal(ng).catch(() => {});
     }
     return tab;
   }, [buildTabData]);
@@ -362,6 +379,22 @@ export function AppProvider({ children }) {
       hydratingRef.current.delete(id);
     }
   }, [buildTabData]);
+
+  // Open a file from the Open-Recent list: focus it if already open/restored, else rebuild it from
+  // the persisted doc payload. Returns silently if the saved copy is gone. (Declared after hydrateTab
+  // because it calls it.)
+  const openRecent = useCallback(async (checksum) => {
+    const existing = stateRef.current.tabs.find((t) => (t.lazy ? t.checksum : t.doc?.contentChecksum) === checksum);
+    if (existing) { dispatch({ type: 'SET_ACTIVE_TAB', id: existing.id }); if (existing.lazy) await hydrateTab(existing.id); return; }
+    const rec = await loadDocPayload(checksum);
+    if (!rec?.fullText) { dispatch({ type: 'SET_STATUS', text: 'That file’s saved copy is no longer available.' }); return; }
+    const doc = readerDocFromText(rec.fullText, rec.fileName || 'Document');
+    if (rec.source) doc.source = rec.source;
+    if (rec.wordToSegment) doc.wordToSegment = rec.wordToSegment;
+    if (rec.segmentCount) doc.segmentCount = rec.segmentCount;
+    await attachChecksum(doc);
+    await openDoc(doc);
+  }, [openDoc, hydrateTab]);
 
   // Throttled persistence of reading state: mask → readstate store, counters/daily → settings
   // (so the Statistics / History dialogs, which read FileSettings, see real data).
@@ -584,6 +617,7 @@ export function AppProvider({ children }) {
     dispatch({ type: 'SET_ACTIVE_PANEL', id: stateRef.current.activePanelId === id ? null : id });
   }, []);
   const closePanel = useCallback((id) => dispatch({ type: 'CLOSE_PANEL', id }), []);
+  const reorderTabs = useCallback((fromId, toId) => dispatch({ type: 'REORDER_TABS', fromId, toId }), []);
 
   const updateGlobal = useCallback(async (patch) => {
     const g = { ...stateRef.current.global, ...patch };
@@ -603,6 +637,7 @@ export function AppProvider({ children }) {
     openFiles,
     openClipboard,
     openDoc,
+    openRecent,
     hydrateTab,
     closeTab,
     closeAllTabs,
@@ -614,6 +649,7 @@ export function AppProvider({ children }) {
     closeDialog,
     setActivePanel,
     closePanel,
+    reorderTabs,
     updateGlobal,
     flushReadState,
   };
