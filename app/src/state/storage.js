@@ -5,7 +5,7 @@ import { openDB } from 'idb';
 import { defaultGlobalSettings, defaultFileSettings, tabDefaultsFrom, syncableGlobalSettings } from './settings.js';
 
 const DB_NAME = 'Tachyread';
-const DB_VERSION = 10;
+const DB_VERSION = 11;
 
 let _dbPromise = null;
 
@@ -75,6 +75,12 @@ function getDB() {
         // file, like audiobook audio) so a 5 MB library never bloats the local backup.
         db.createObjectStore('library');
       }
+      if (!db.objectStoreNames.contains('translations')) {
+        // Translation cache for the translate obscure mode / parallel view: key
+        // `provider:source:target:hash(text)` → translated string. Pure cache (regenerable,
+        // costs API quota to rebuild) — excluded from backups on purpose.
+        db.createObjectStore('translations');
+      }
     },
   });
   return _dbPromise;
@@ -92,6 +98,16 @@ export async function saveReadState(checksum, state) {
   if (!checksum) return;
   const db = await getDB();
   await db.put('readstate', state, checksum);
+}
+
+// Translation cache (see the `translations` store note above).
+export async function getCachedTranslation(key) {
+  const db = await getDB();
+  return (await db.get('translations', key)) ?? null;
+}
+export async function putCachedTranslation(key, text) {
+  const db = await getDB();
+  try { await db.put('translations', text, key); } catch { /* quota — cache only */ }
 }
 
 export async function loadGlobal() {

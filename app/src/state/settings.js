@@ -155,7 +155,7 @@ export function countOffDefaultSettings(settings, defaults) {
 // restores every preference to its default but preserves these so a reset never destroys the
 // user's library, history, saved work, sync setup, or their separate Default Tab Settings.
 export const GLOBAL_DATA_KEYS = new Set([
-  'recentFiles', 'ocrTemplates', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey',
+  'recentFiles', 'ocrTemplates', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey', 'translateKey',
   'readingList', 'drillBestSpan', 'bestFlowWpm', 'bestDictationWpm', 'webcamCalib', 'sync',
   'deviceName', 'fileDefaults', 'ambient',
 ]);
@@ -251,6 +251,12 @@ export function defaultGlobalSettings() {
     // this device (a secret — kept out of cloud sync); model remembered.
     anthropicKey: '',
     anthropicModel: 'claude-sonnet-5',
+    // Translation service (optional — powers the "translate" obscure mode + the side-by-side
+    // parallel view). Key is a secret and stays on this device; the rest are preferences.
+    translateProvider: 'mymemory', // mymemory | google | libre (see features/translateService.js)
+    translateKey: '',
+    translateEndpoint: '',         // LibreTranslate base URL
+    translateTarget: 'ja',         // language the text is translated INTO
     // On a typing run's end, show a grade + final statement and play a grade-matched sound.
     typingEndFanfare: true,
     // Touch gesture navigation (off by default — it can interfere with text selection/scroll):
