@@ -1298,6 +1298,12 @@
 .line-row .text.obscure-hide { color: transparent; }
 .line-row .text.obscure-redact { color: transparent; background: var(--line-unread-fg); border-radius: 2px; opacity: 0.82; }
 .line-row .text.obscure-illegible { -webkit-text-security: disc; text-security: disc; }
+.line-row .text.obscure-translate .lp-trans { opacity: 0.9; }
+/* Side-by-side translation: original | translation per row, so the columns always line up. */
+.line-row .text.parallel { display: grid; grid-template-columns: 1fr 1fr; column-gap: 20px; align-items: baseline; }
+.line-row .text.parallel .pl-col { min-width: 0; }
+.line-row .text.parallel .pl-trans { color: color-mix(in srgb, var(--line-unread-fg) 78%, var(--toggle-active-bg)); }
+.pl-wait { opacity: 0.45; font-size: 0.9em; }
 .line-row.status-Read .text { color: var(--line-read-fg); font-weight: bold; }
 .line-row.status-SessionRead .text { color: var(--session-read-fg); font-weight: bold; }
 .line-row.status-NavSessionRead .text { color: var(--nav-session-read-fg); font-weight: bold; }

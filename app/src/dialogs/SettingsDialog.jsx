@@ -48,7 +48,8 @@ const HINTS = {
   'Auto-skip headers/footers': 'Skip repeated running headers/footers (page numbers, book title) while reading.',
   'Surprisal-weighted dwell': 'Spend longer on rare/informative words and less on predictable ones — your average WPM is unchanged.',
   'Enable beat at reading pace': 'A metronome click locked to your current WPM — a rhythm to read along with.',
-  'Obscure with': 'How the before/after focus window is hidden — blur, hide, redact (blackout bar), or illegible dots — to discourage backtracking or reading too far ahead.',
+  'Obscure with': 'How the before/after focus window is hidden — blur, hide, redact (blackout bar), illegible dots, or translated into another language — to discourage backtracking or reading too far ahead.',
+  'Side-by-side translation': 'Show each line in two columns: the original next to its translation (service + language from Application Settings → Translation). Lines are translated one-by-one so the columns always align.',
   'Obscure lines before': 'How many already-read lines above the current one to obscure (0 = none).',
   'Obscure lines after': 'How many upcoming lines below the current one to obscure (0 = none).',
   'Blur strength (%)': 'Overall blur strength. The current line stays clear (the “eye”); blur ramps up from there to the window edge, so you can peek a line but not read far. Lines beyond the window are left clear.',
@@ -481,7 +482,17 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           <option value="hide">Hide</option>
           <option value="redact">Redact (blackout)</option>
           <option value="illegible">Illegible (dots)</option>
+          <option value="translate">Translate (another language)</option>
         </select>
+      </Field>
+      {(s.obscureMode === 'translate') && (
+        <p className="settings-note" style={{ margin: '2px 0 0' }}>
+          Windowed lines are shown translated into another language instead of English — pick the
+          service and target under <b>Settings → Application Settings → Translation</b>.
+        </p>
+      )}
+      <Field label="Side-by-side translation">
+        <input type="checkbox" checked={!!s.parallelTranslation} onChange={(e) => patch({ parallelTranslation: e.target.checked })} />
       </Field>
       <Field label="Obscure lines before">
         <input type="number" min={0} max={10} value={s.blurLinesBefore || 0} onChange={(e) => patch({ blurLinesBefore: Number(e.target.value) })} />

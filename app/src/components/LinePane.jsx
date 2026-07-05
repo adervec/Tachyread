@@ -5,6 +5,9 @@ import { getTocEntries } from '../document/toc.js';
 import { resolveHeadingPack } from '../state/themes.js';
 import Pointer from './Pointer.jsx';
 import { useReportVisibility } from '../state/useReportVisibility.js';
+import { useApp } from '../state/AppContext.jsx';
+import { translateText, translateConfigured, cacheKey } from '../features/translateService.js';
+import { getCachedTranslation, putCachedTranslation } from '../state/storage.js';
 
 // Reading-pointer feature archived for now (not useful). Flip to true to restore it, and uncomment
 // its Settings section in dialogs/SettingsDialog.jsx.
@@ -108,8 +111,10 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
   const before = dsettings.blurLinesBefore || 0;
   const after = dsettings.blurLinesAfter || 0;
   const obsMode = dsettings.obscureMode || 'blur';
+  const translated = ctx.translations ? ctx.translations.get(index) : undefined; // string | null(failed) | undefined
   let blur = 0;
   let obscureCls = '';
+  let showTranslated = false; // obscure-translate: replace the words with their translation
   if (!isCurrent) {
     let d = 0, w = 0;
     if (before && index < ctx.currentLine && ctx.currentLine - index <= before) { d = ctx.currentLine - index; w = before; }
@@ -118,11 +123,18 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
       if (obsMode === 'blur') {
         const strength = Math.max(0, Math.min(1, (dsettings.blurGradient ?? 100) / 100));
         blur = MAX_BLUR_PX * strength * (d / Math.max(1, w)); // 0 at the eye → strongest at the edge
+      } else if (obsMode === 'translate') {
+        // Hide the line behind its translation. Until (or unless) one arrives, blur stands in so the
+        // original is never flashed at the reader.
+        if (typeof translated === 'string' && !line.isEmpty) { showTranslated = true; obscureCls = ' obscure obscure-translate'; }
+        else blur = 2.5;
       } else {
         obscureCls = ` obscure obscure-${obsMode}`;
       }
     }
   }
+  // Side-by-side translation: every line renders original | translation in two columns.
+  const parallel = dsettings.parallelTranslation && !line.isEmpty && !showTranslated;
 
   const boost = dsettings.currentLineFontSizeBoost || 0;
   const textStyle = {
@@ -158,21 +170,32 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
     >
       <div className="num">{line.lineNumber}</div>
       <div className="accent" />
-      <div className={`text${obscureCls}`} style={textStyle}>
+      <div className={`text${obscureCls}${parallel ? ' parallel' : ''}`} style={textStyle}>
         {pointerBefore && pointer}
         {line.isEmpty ? (
           <span style={{ opacity: 0.4 }}>·</span>
+        ) : showTranslated ? (
+          <span className="lp-trans">{translated}</span>
         ) : (
-          renderWords(line, {
-            isCurrent,
-            currentWordIndex: ctx.currentWordIndex,
-            bionic: dsettings.bionicFont,
-            highlightORP: dsettings.highlightORP,
-            currentWordStyles: dsettings.currentWordStyles,
-            properNamesSet: propNameKeys,
-            isHeaderFooter: isHF,
-            hideBeyond: ctx.hideBeyond,
-          })
+          (() => {
+            const words = renderWords(line, {
+              isCurrent,
+              currentWordIndex: ctx.currentWordIndex,
+              bionic: dsettings.bionicFont,
+              highlightORP: dsettings.highlightORP,
+              currentWordStyles: dsettings.currentWordStyles,
+              properNamesSet: propNameKeys,
+              isHeaderFooter: isHF,
+              hideBeyond: ctx.hideBeyond,
+            });
+            if (!parallel) return words;
+            return (
+              <>
+                <span className="pl-col">{words}</span>
+                <span className="pl-col pl-trans">{typeof translated === 'string' ? translated : <span className="pl-wait">{translated === null ? '⚠ translation failed' : '…'}</span>}</span>
+              </>
+            );
+          })()
         )}
         {pointer && !pointerBefore && pointer}
       </div>
@@ -190,6 +213,7 @@ function lineRowEqual(p, n) {
   const i = n.index;
   if (pc.hideBeyond !== nc.hideBeyond) return false;        // progressive-reveal boundary moved
   if (pc.pressingStart !== nc.pressingStart) return false;  // long-press highlight
+  if ((pc.translations?.get(i)) !== (nc.translations?.get(i))) return false; // this line's translation arrived/changed
   if (pc.sessionLines !== nc.sessionLines || pc.sessionNavLines !== nc.sessionNavLines || pc.readLines !== nc.readLines) return false;
   const pCur = pc.currentLine === i, nCur = nc.currentLine === i;
   if (pCur !== nCur) return false;                          // gained / lost "current"
@@ -302,6 +326,46 @@ function WordMenu({ menu, onClose, onJumpWord, onAddNote }) {
   );
 }
 
+// Per-line translations for the translate obscure mode / side-by-side view. Returns Map(lineIndex →
+// translated string | null(failed)). Requests run one at a time (rate-limit friendly) through the
+// persistent IndexedDB cache, so a line is only ever sent to the service once per provider/target.
+// ponytail: translates each display LINE independently — alignment with the original is exact by
+// construction (each row holds both); the cost is quality at line breaks. Upgrade path: translate per
+// sentence and distribute across its lines.
+function useLineTranslations(doc, needed, cfg, enabled) {
+  const [map, setMap] = useState(() => new Map());
+  const mapRef = useRef(map);
+  mapRef.current = map;
+  const pendingRef = useRef(new Set());
+  const cfgSig = `${cfg.translateProvider}|${cfg.translateTarget}|${cfg.translateSource}|${cfg.translateEndpoint}`;
+  useEffect(() => { setMap(new Map()); pendingRef.current = new Set(); }, [doc, cfgSig]);
+  const neededSig = needed.join(',');
+  useEffect(() => {
+    if (!enabled || !needed.length) return undefined;
+    let alive = true;
+    (async () => {
+      for (const li of needed) {
+        if (!alive) return;
+        if (mapRef.current.has(li) || pendingRef.current.has(li)) continue;
+        const text = (doc.lines[li]?.text || '').trim();
+        if (!text) continue;
+        pendingRef.current.add(li);
+        try {
+          const key = cacheKey(cfg, text);
+          let t = await getCachedTranslation(key);
+          if (t == null) { t = await translateText(cfg, text); putCachedTranslation(key, t); }
+          if (alive) setMap((m) => new Map(m).set(li, t));
+        } catch {
+          if (alive) setMap((m) => new Map(m).set(li, null)); // failed — marked, not retried in a loop
+        } finally { pendingRef.current.delete(li); }
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, neededSig, doc, cfgSig]);
+  return map;
+}
+
 // Progressive-reveal boundary: the last word index that should remain visible.
 function revealBoundary(doc, idx, mode) {
   if (!mode || mode === 'None') return Infinity;
@@ -382,6 +446,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       blurLinesAfter: settings.blurLinesAfter || 0,
       blurGradient: settings.blurGradient ?? 100,
       obscureMode: settings.obscureMode || 'blur',
+      parallelTranslation: !!settings.parallelTranslation,
       altSentenceColors: !!settings.altSentenceColors,
       currentLineFontSizeBoost: settings.currentLineFontSizeBoost || 0,
       textAlignment: settings.textAlignment || 'Left',
@@ -395,7 +460,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       currentWordStyles: currentWordStyles(settings),
     }),
     [
-      settings.blurLinesBefore, settings.blurLinesAfter, settings.blurGradient, settings.obscureMode, settings.altSentenceColors,
+      settings.blurLinesBefore, settings.blurLinesAfter, settings.blurGradient, settings.obscureMode, settings.parallelTranslation, settings.altSentenceColors,
       settings.currentLineFontSizeBoost,
       settings.textAlignment, settings.showPointer, settings.pointerStyle, settings.pointerPlacement,
       settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP,
@@ -422,6 +487,38 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   // pairs better with thumb-scroll-to-read (drag the whole list to advance), and it still fills the
   // phone screen via the panes-full lock in App.jsx (see linesLocked).
   const split = !!settings.linePaneSplit;
+
+  // ── translation (translate obscure mode + side-by-side parallel view) ──────────────────────────
+  const { state: appState } = useApp();
+  const gt = appState.global;
+  const trCfg = useMemo(() => ({
+    translateProvider: gt.translateProvider || 'mymemory',
+    translateKey: gt.translateKey || '',
+    translateEndpoint: gt.translateEndpoint || '',
+    translateTarget: gt.translateTarget || 'ja',
+    translateSource: gt.language || 'en',
+  }), [gt.translateProvider, gt.translateKey, gt.translateEndpoint, gt.translateTarget, gt.language]);
+  const parallelOn = !!settings.parallelTranslation;
+  const translateObscure = settings.obscureMode === 'translate' && ((settings.blurLinesBefore || 0) > 0 || (settings.blurLinesAfter || 0) > 0);
+  const trEnabled = (parallelOn || translateObscure) && translateConfigured(trCfg);
+  const [visRange, setVisRange] = useState([0, 40]); // rendered-row range (tracked only while parallel is on)
+  const trackVisRef = useRef(false);
+  trackVisRef.current = parallelOn && trEnabled && !split;
+  const neededLines = useMemo(() => {
+    if (!trEnabled) return [];
+    const out = new Set();
+    if (translateObscure) {
+      const b = settings.blurLinesBefore || 0, a = settings.blurLinesAfter || 0;
+      for (let li = currentLine - b; li <= currentLine + a; li++) if (li >= 0 && li < doc.lines.length && li !== currentLine) out.add(li);
+    }
+    if (parallelOn) {
+      const lo = split ? Math.max(0, currentLine - 12) : Math.max(0, visRange[0]);
+      const hi = Math.min(doc.lines.length - 1, split ? currentLine + 30 : visRange[1]);
+      for (let li = lo; li <= hi && out.size < 80; li++) out.add(li);
+    }
+    return [...out].filter((li) => { const l = doc.lines[li]; return l && !l.isEmpty && l.text.trim(); });
+  }, [trEnabled, translateObscure, parallelOn, currentLine, visRange, doc, split, settings.blurLinesBefore, settings.blurLinesAfter]);
+  const translations = useLineTranslations(doc, neededLines, trCfg, trEnabled);
 
   useEffect(() => {
     // In scroll-to-read mode the scroll is the user's — don't yank it back to centre the cursor.
@@ -460,7 +557,12 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
 
   // onRowsRendered is the reliable line-granular signal; a scroll listener refines it to word-level
   // within the straddling line. Both advance the frontier forward only.
-  function onRowsRendered({ startIndex }) {
+  function onRowsRendered({ startIndex, stopIndex }) {
+    // Track the rendered range for the parallel-translation view (only while it's active).
+    if (trackVisRef.current) {
+      const hi = stopIndex ?? startIndex + 40;
+      setVisRange((v) => (v[0] === startIndex && v[1] === hi ? v : [startIndex, hi]));
+    }
     if (!scrollRead) return;
     const ln = doc.lines[startIndex];
     if (ln && ln.startWordIndex > idxRef.current) jumpRef.current(ln.startWordIndex, { read: true, src: 'scroll' });
@@ -549,8 +651,9 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       hideBeyond,
       pressingStart,
       longPressMs,
+      translations,
     }),
-    [currentLine, idx, tab.sessionLinesRead, tab.sessionNavLinesRead, tab.readLinesAllTime, paraRange, hideBeyond, pressingStart, longPressMs]
+    [currentLine, idx, tab.sessionLinesRead, tab.sessionNavLinesRead, tab.readLinesAllTime, paraRange, hideBeyond, pressingStart, longPressMs, translations]
   );
 
   // rowProps must not contain ariaAttributes/index/style (those are auto-passed by List).

@@ -3,6 +3,7 @@ import Dialog from './Dialog.jsx';
 import { resetGlobalToDefaults } from '../state/settings.js';
 import { LANGUAGES } from '../state/languages.js';
 import { ANTHROPIC_MODELS } from '../features/anthropic.js';
+import { TRANSLATE_PROVIDERS, TARGET_LANGS, translateConfigured, translateText } from '../features/translateService.js';
 
 // General application settings ONLY. Everything domain-specific lives on its own page under the
 // Settings / Typing / Audio menus: Camera & Gestures, Comfort & Breaks, Font Manager (incl. the
@@ -21,6 +22,18 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
   function patch(p) {
     setG({ ...g, ...p });
     onPatch(p);
+  }
+
+  // Live check of the translation setup: send one short phrase, show what comes back.
+  const [trTest, setTrTest] = useState('');
+  const [trBusy, setTrBusy] = useState(false);
+  async function testTranslate() {
+    setTrBusy(true); setTrTest('Translating “Hello, world”…');
+    try {
+      const out = await translateText({ ...g, translateSource: g.language || 'en' }, 'Hello, world');
+      setTrTest(`✓ “${out}”`);
+    } catch (e) { setTrTest('✗ ' + (e?.message || e)); }
+    setTrBusy(false);
   }
 
   function resetAll() {
@@ -153,6 +166,39 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         Enables <strong>Summarize / Analyze / Discuss</strong> in <strong>View → Notes &amp; Annotations</strong>.
         The key is stored only on this device and is never synced; text you send (document excerpts + your
         notes) goes to Anthropic and spends your own API credits.
+      </p>
+
+      <div className="field-section">Translation (optional)</div>
+      <Field label="Service">
+        <select value={g.translateProvider || 'mymemory'} onChange={(e) => patch({ translateProvider: e.target.value })}>
+          {TRANSLATE_PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+        </select>
+      </Field>
+      {TRANSLATE_PROVIDERS.find((p) => p.id === (g.translateProvider || 'mymemory'))?.needsKey && (
+        <Field label="API key">
+          <input type="password" value={g.translateKey || ''} onChange={(e) => patch({ translateKey: e.target.value.trim() })} placeholder="Translation API key" style={{ width: '100%' }} />
+        </Field>
+      )}
+      {TRANSLATE_PROVIDERS.find((p) => p.id === (g.translateProvider || 'mymemory'))?.needsEndpoint && (
+        <Field label="Endpoint">
+          <input type="text" value={g.translateEndpoint || ''} onChange={(e) => patch({ translateEndpoint: e.target.value.trim() })} placeholder="https://your-libretranslate.example.com" style={{ width: '100%' }} />
+        </Field>
+      )}
+      <Field label="Translate into">
+        <select value={g.translateTarget || 'ja'} onChange={(e) => patch({ translateTarget: e.target.value })}>
+          {TARGET_LANGS.map(([code, label]) => <option key={code} value={code}>{label} ({code})</option>)}
+        </select>
+      </Field>
+      <Field label="Check it works">
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button type="button" disabled={!translateConfigured(g) || trBusy} onClick={testTranslate}>🌐 Test</button>
+          {trTest && <span className="settings-note" style={{ margin: 0 }}>{trTest}</span>}
+        </div>
+      </Field>
+      <p className="settings-note">
+        Powers the <strong>Translate</strong> obscure mode and the <strong>side-by-side translation</strong> view
+        (both in <strong>Settings → Tab Settings</strong>). The source language follows your Document language
+        above. A key/endpoint stays on this device; the text of lines being translated is sent to the service.
       </p>
 
       <div className="field-section">Table of contents</div>
