@@ -1972,22 +1972,21 @@
   flex-direction: column;
   position: relative;
 }
-/* Docked dialog tab: the same dialog markup, but the backdrop stops dimming/blocking and the box
-   parks against the top-right as a side panel so reading continues underneath. Below true modals. */
+/* Docked dialog tab: the same dialog markup, but it's portaled into .dialog-slot inside the content
+   area and made to FILL it — so it reads as the tab's page (the reading view yields; controls stay
+   below). The backdrop stops being a fixed dimming overlay and flows as a plain filling box. */
+.content-area > .dialog-slot { flex: 1 1 auto; min-height: 0; min-width: 0; display: flex; }
+.content-area > .dialog-slot:empty { display: none; }
+.dialog-dock { flex: 1 1 auto; display: flex; min-height: 0; min-width: 0; }
 .dialog-dock .dialog-backdrop {
-  background: none;
-  pointer-events: none;
-  align-items: flex-start;
-  justify-content: flex-end;
-  padding: 6px;
-  z-index: 4000;
+  position: static; inset: auto; z-index: auto; background: none; padding: 0;
+  flex: 1 1 auto; display: flex; align-items: stretch; justify-content: stretch; min-height: 0; min-width: 0;
 }
 .dialog-dock .dialog {
-  pointer-events: auto;
-  max-height: calc(100vh - 60px);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
-  border-radius: 6px;
+  flex: 1 1 auto; width: 100%; min-width: 0; max-width: none; max-height: none;
+  border: 0; border-radius: 0; box-shadow: none;
 }
+.dialog-dock .dialog-body { flex: 1 1 auto; min-height: 0; }
 .dialog-title {
   padding: 10px 14px;
   background: var(--menu-bg);
