@@ -185,6 +185,25 @@ export const googleDriveProvider = {
   async upload(conn, name, blob) {
     const existing = await driveFindId(conn.token, name);
     const meta = existing ? {} : { name, parents: ['appDataFolder'] };
+    // Drive's multipart upload is capped at 5 MB — the Trackyread library file sits right at that
+    // size, so big payloads go through the RESUMABLE protocol (init → one PUT of the bytes; no cap
+    // that matters here). Small files (the progress bundle) keep the single multipart request.
+    if (blob.size > 4 * 1024 * 1024) {
+      const initUrl = existing
+        ? `https://www.googleapis.com/upload/drive/v3/files/${existing}?uploadType=resumable`
+        : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable';
+      const init = await fetch(initUrl, {
+        method: existing ? 'PATCH' : 'POST',
+        headers: { Authorization: `Bearer ${conn.token}`, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': blob.type || 'application/json' },
+        body: JSON.stringify(meta),
+      });
+      if (!init.ok) throw new Error(`Drive upload init failed (${init.status}).`);
+      const session = init.headers.get('Location');
+      if (!session) throw new Error('Drive upload init returned no session URL.');
+      const put = await fetch(session, { method: 'PUT', body: blob });
+      if (!put.ok) throw new Error(`Drive upload failed (${put.status}).`);
+      return;
+    }
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
     form.append('file', blob);
