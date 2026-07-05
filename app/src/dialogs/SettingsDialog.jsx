@@ -48,7 +48,10 @@ const HINTS = {
   'Auto-skip headers/footers': 'Skip repeated running headers/footers (page numbers, book title) while reading.',
   'Surprisal-weighted dwell': 'Spend longer on rare/informative words and less on predictable ones — your average WPM is unchanged.',
   'Enable beat at reading pace': 'A metronome click locked to your current WPM — a rhythm to read along with.',
-  'Blur strength (%)': 'How steeply the focus-blur ramps: 100% blurs the nearest hidden line completely; lower makes it fade in gradually across the blur window.',
+  'Obscure with': 'How the before/after focus window is hidden — blur, hide, redact (blackout bar), or illegible dots — to discourage backtracking or reading too far ahead.',
+  'Obscure lines before': 'How many already-read lines above the current one to obscure (0 = none).',
+  'Obscure lines after': 'How many upcoming lines below the current one to obscure (0 = none).',
+  'Blur strength (%)': 'Overall blur strength. The current line stays clear (the “eye”); blur ramps up from there to the window edge, so you can peek a line but not read far. Lines beyond the window are left clear.',
   'Scroll read point (%)': 'In scroll-to-read, where a line is counted as read: 0% = only once it scrolls off the top; higher = further down the clear (unblurred) area, up to as soon as it appears.',
 };
 
@@ -471,19 +474,29 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       </Field>
       */}
 
-      <Section>Right pane</Section>
-      <Field label="Blur lines before">
+      <Section>Focus window (obscure before / after)</Section>
+      <Field label="Obscure with">
+        <select value={s.obscureMode || 'blur'} onChange={(e) => patch({ obscureMode: e.target.value })}>
+          <option value="blur">Blur</option>
+          <option value="hide">Hide</option>
+          <option value="redact">Redact (blackout)</option>
+          <option value="illegible">Illegible (dots)</option>
+        </select>
+      </Field>
+      <Field label="Obscure lines before">
         <input type="number" min={0} max={10} value={s.blurLinesBefore || 0} onChange={(e) => patch({ blurLinesBefore: Number(e.target.value) })} />
       </Field>
-      <Field label="Blur lines after">
+      <Field label="Obscure lines after">
         <input type="number" min={0} max={10} value={s.blurLinesAfter || 0} onChange={(e) => patch({ blurLinesAfter: Number(e.target.value) })} />
       </Field>
-      <Field label="Blur strength (%)">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input type="range" min={0} max={100} step={5} value={s.blurGradient ?? 100} onChange={(e) => patch({ blurGradient: Number(e.target.value) })} />
-          <span style={{ fontSize: 12, color: 'var(--status-fg)' }}>{s.blurGradient ?? 100}%</span>
-        </div>
-      </Field>
+      {(s.obscureMode || 'blur') === 'blur' && (
+        <Field label="Blur strength (%)">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="range" min={0} max={100} step={5} value={s.blurGradient ?? 100} onChange={(e) => patch({ blurGradient: Number(e.target.value) })} />
+            <span style={{ fontSize: 12, color: 'var(--status-fg)' }}>{s.blurGradient ?? 100}%</span>
+          </div>
+        </Field>
+      )}
       <Field label="Current-line font boost (px)">
         <input type="number" min={0} max={12} value={s.currentLineFontSizeBoost || 0} onChange={(e) => patch({ currentLineFontSizeBoost: Number(e.target.value) })} />
       </Field>

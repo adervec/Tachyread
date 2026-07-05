@@ -100,17 +100,28 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
   const isHead = headLevel >= 0;
   const headCenter = isHead && headingPack && headingPack !== 'terminal' && headingPack !== 'retro';
 
-  // Focus blur: blur lines within the window before/after the current line. `blurGradient` (0–100)
-  // sets the ramp — at 100% the first blurred line is already fully blurred; below that the blur
-  // ramps up gradually across the window (the nearest line lightest, the farthest fully blurred).
+  // Obscure the reading window before/after the current line to discourage excessive backtrack /
+  // read-ahead. The current line is the clear "eye of the storm"; for BLUR the effect ramps OUTWARD
+  // (lightest next to the eye, heaviest at the window edge — `blurGradient` scales the strength) and
+  // lines beyond the window stay clear. Other modes (hide / redact / illegible) obscure the whole
+  // window uniformly. Any obscured line also counts as not-readable for scroll-to-read.
   const before = dsettings.blurLinesBefore || 0;
   const after = dsettings.blurLinesAfter || 0;
+  const obsMode = dsettings.obscureMode || 'blur';
   let blur = 0;
+  let obscureCls = '';
   if (!isCurrent) {
-    const g = Math.max(0, Math.min(1, (dsettings.blurGradient ?? 100) / 100));
-    const ramp = (d, w) => MAX_BLUR_PX * Math.min(1, g + (1 - g) * (d / Math.max(1, w)));
-    if (before && index < ctx.currentLine && ctx.currentLine - index <= before) blur = ramp(ctx.currentLine - index, before);
-    else if (after && index > ctx.currentLine && index - ctx.currentLine <= after) blur = ramp(index - ctx.currentLine, after);
+    let d = 0, w = 0;
+    if (before && index < ctx.currentLine && ctx.currentLine - index <= before) { d = ctx.currentLine - index; w = before; }
+    else if (after && index > ctx.currentLine && index - ctx.currentLine <= after) { d = index - ctx.currentLine; w = after; }
+    if (d > 0) {
+      if (obsMode === 'blur') {
+        const strength = Math.max(0, Math.min(1, (dsettings.blurGradient ?? 100) / 100));
+        blur = MAX_BLUR_PX * strength * (d / Math.max(1, w)); // 0 at the eye → strongest at the edge
+      } else {
+        obscureCls = ` obscure obscure-${obsMode}`;
+      }
+    }
   }
 
   const boost = dsettings.currentLineFontSizeBoost || 0;
@@ -147,7 +158,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
     >
       <div className="num">{line.lineNumber}</div>
       <div className="accent" />
-      <div className="text" style={textStyle}>
+      <div className={`text${obscureCls}`} style={textStyle}>
         {pointerBefore && pointer}
         {line.isEmpty ? (
           <span style={{ opacity: 0.4 }}>·</span>
@@ -370,6 +381,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       blurLinesBefore: settings.blurLinesBefore || 0,
       blurLinesAfter: settings.blurLinesAfter || 0,
       blurGradient: settings.blurGradient ?? 100,
+      obscureMode: settings.obscureMode || 'blur',
       altSentenceColors: !!settings.altSentenceColors,
       currentLineFontSizeBoost: settings.currentLineFontSizeBoost || 0,
       textAlignment: settings.textAlignment || 'Left',
@@ -383,7 +395,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       currentWordStyles: currentWordStyles(settings),
     }),
     [
-      settings.blurLinesBefore, settings.blurLinesAfter, settings.blurGradient, settings.altSentenceColors,
+      settings.blurLinesBefore, settings.blurLinesAfter, settings.blurGradient, settings.obscureMode, settings.altSentenceColors,
       settings.currentLineFontSizeBoost,
       settings.textAlignment, settings.showPointer, settings.pointerStyle, settings.pointerPlacement,
       settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP,

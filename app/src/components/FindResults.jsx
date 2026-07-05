@@ -19,9 +19,10 @@ function highlight(text, q) {
 // Shared results table for the Find dialog and the ToC wizard's locate-in-text tool. Columns: result
 // #, line #, word #, % location, (optional) containing ToC section + already-read. Clicking a match
 // row expands the surrounding lines inline (context peek). `actions` (or null) adds per-row buttons.
-export default function FindResults({ doc, results, query, showSection = true, showRead = true, actions = null }) {
+export default function FindResults({ doc, results, query, showSection = true, showRead = true, actions = null, seqRange = null }) {
   const [open, setOpen] = useState(null); // seq of the row whose context is expanded
-  const colCount = 4 + (showSection ? 1 : 0) + (showRead ? 1 : 0) + 1 + (actions ? 1 : 0);
+  const inSeq = (r) => !seqRange || (r.wordIndex > seqRange.lo && r.wordIndex < seqRange.hi);
+  const colCount = 4 + (seqRange ? 1 : 0) + (showSection ? 1 : 0) + (showRead ? 1 : 0) + 1 + (actions ? 1 : 0);
   return (
     <div className="find-table-wrap">
       <table className="find-table">
@@ -31,6 +32,7 @@ export default function FindResults({ doc, results, query, showSection = true, s
             <th title="Line number">Ln</th>
             <th title="Word number in the document">Wd</th>
             <th title="Percent through the document">@%</th>
+            {seqRange && <th title="In sequence: after the entries above it and before those below">Seq</th>}
             {showSection && <th title="Containing table-of-contents section">Section</th>}
             {showRead && <th title="Already read (before your current position)">✓</th>}
             <th className="find-th-text">Match — click for context</th>
@@ -40,11 +42,12 @@ export default function FindResults({ doc, results, query, showSection = true, s
         <tbody>
           {results.map((r) => (
             <Fragment key={r.seq}>
-              <tr className={`find-row${r.read ? ' read' : ''}${open === r.seq ? ' exp' : ''}`}>
+              <tr className={`find-row${r.read ? ' read' : ''}${open === r.seq ? ' exp' : ''}${seqRange && !inSeq(r) ? ' out-of-seq' : ''}`}>
                 <td className="find-num">{r.seq}</td>
                 <td className="find-num">{r.lineIndex + 1}</td>
                 <td className="find-num">{r.wordIndex >= 0 ? r.wordIndex + 1 : '—'}</td>
                 <td className="find-num">{r.pct.toFixed(1)}%</td>
+                {seqRange && <td className="find-seq" title={inSeq(r) ? 'In sequence' : 'Out of sequence — would break the entry order'}>{inSeq(r) ? '✓' : '⚠'}</td>}
                 {showSection && <td className="find-sec" title={r.section}>{r.section || '—'}</td>}
                 {showRead && <td className="find-read" title={r.read ? 'Already read' : 'Not yet read'}>{r.read ? '✓' : ''}</td>}
                 <td className="find-text" title="Click to show the surrounding lines" onClick={() => setOpen((o) => (o === r.seq ? null : r.seq))}>

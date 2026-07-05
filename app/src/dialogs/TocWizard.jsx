@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { getLineIndex } from '../document/readerDocument.js';
 import { autoDetectToc, isMatterTitle, sectionSpan } from '../document/toc.js';
-import { detectTocRegion, parsePrintedToc, buildFromParsed, finalizeEntries, joinRegion, autoSplitSquashed, parseManualToc } from '../document/tocWizard.js';
+import { detectTocRegion, parsePrintedToc, buildFromParsed, finalizeEntries, joinRegion, autoSplitSquashed, parseManualToc, outOfSequence, seqWindow, autoLocateRemaining } from '../document/tocWizard.js';
 import { findInDoc } from '../document/findText.js';
 import FindResults from '../components/FindResults.jsx';
+
+const TIER_SYM = ['◆', '▸', '▹', '·', '·', '·']; // per-level glyph shown next to the explicit L-number
 
 // Robust TOC-generation wizard. Three paths, with the printed-Contents path as the headline feature:
 // the user points at the book's own printed table of contents, and we use it to locate each heading
@@ -66,6 +68,11 @@ export default function TocWizard({ tab, onApply, onClose }) {
   const setSkip = (i, v) => setCandidates((cs) => cs.map((c, k) => (k === i ? { ...c, skip: v } : c)));
 
   const matchedCount = candidates.filter((c) => c.matched && Number.isFinite(c.wordIndex)).length;
+  const unmatchedCount = candidates.length - matchedCount;
+  // Located entries whose position breaks the printed order (likely mis-matches) → warning-flag them.
+  const seqBad = useMemo(() => outOfSequence(candidates), [candidates]);
+  // While searching for one entry, the in-sequence word window it must land in (between its neighbours).
+  const findSeq = useMemo(() => (findFor != null ? seqWindow(candidates, findFor) : null), [findFor, candidates]);
 
   // ── review-step edits ──
   const setTitle = (i, title) => setCandidates((cs) => cs.map((c, k) => (k === i ? { ...c, title } : c)));
@@ -209,7 +216,11 @@ export default function TocWizard({ tab, onApply, onClose }) {
       {step === 'review' && (
         <div className="tw-review">
           <div className="tw-review-head">
-            <span><b>{matchedCount}</b> of {candidates.length} located in the text.</span>
+            <span><b>{matchedCount}</b> of {candidates.length} located{seqBad.size ? <> · <span className="tw-seq-warn">⚠ {seqBad.size} out of sequence</span></> : ''}.</span>
+            <span style={{ flex: 1 }} />
+            {unmatchedCount > 0 && (
+              <button className="tw-autoloc" title="Locate every remaining entry automatically — walks the missing ones in order and grabs the first in-sequence match for each" onClick={() => setCandidates((cs) => autoLocateRemaining(doc, cs))}>🪄 Auto-locate {unmatchedCount}</button>
+            )}
             {candidates.some((c) => !c.matched) && (
               <label className="inline-check"><input type="checkbox" checked={showUnmatched} onChange={(e) => setShowUnmatched(e.target.checked)} /> show unmatched</label>
             )}
@@ -244,6 +255,7 @@ export default function TocWizard({ tab, onApply, onClose }) {
                   query={findQuery}
                   showSection={false}
                   showRead={false}
+                  seqRange={findSeq}
                   actions={[{ icon: '✓ use', title: 'Use this line as the entry’s start', cls: 'find-use', onClick: (r) => { assignLine(findFor, r.lineIndex + 1); setFindFor(null); } }]}
                 />
                 {findQuery.trim().length >= 2 && wizHits.length === 0 && <div className="settings-note" style={{ padding: '4px 8px' }}>No lines match “{findQuery.trim()}”.</div>}
@@ -255,15 +267,18 @@ export default function TocWizard({ tab, onApply, onClose }) {
               if (!c.matched && !showUnmatched) return null;
               const pct = Number.isFinite(c.wordIndex) ? (c.wordIndex / total) * 100 : null;
               const line = Number.isFinite(c.wordIndex) ? getLineIndex(doc, c.wordIndex) + 1 : null;
+              const lvl = c.level || 0;
+              const badSeq = c.matched && seqBad.has(i);
               return (
-                <div key={i} className={`tw-rev-row${c.matched ? '' : ' unmatched'}`}>
-                  <span className="tw-rev-status" title={c.matched ? 'Located in the text' : 'Not found — set a line or it will be skipped'}>{c.matched ? '✓' : '✗'}</span>
-                  <span className="tw-rev-indent" style={{ width: (c.level || 0) * 14 }} />
-                  <button className="tw-rev-lvl" title="Promote" disabled={!(c.level > 0)} onClick={() => bump(i, -1)}>⇤</button>
-                  <button className="tw-rev-lvl" title="Demote" onClick={() => bump(i, 1)}>⇥</button>
+                <div key={i} className={`tw-rev-row${c.matched ? '' : ' unmatched'}${badSeq ? ' out-of-seq' : ''}`}>
+                  <span className="tw-rev-status" title={!c.matched ? 'Not found — set a line or it will be skipped' : badSeq ? 'Located OUT OF SEQUENCE — its % is before an entry above it or after one below. Check this match.' : 'Located in the text'}>{c.matched ? (badSeq ? '⚠' : '✓') : '✗'}</span>
+                  <span className="tw-rev-indent" style={{ width: lvl * 11 }} />
+                  <span className="tw-rev-lvl-badge" title={`Heading level ${lvl} (0 = top-level section)`} style={{ '--lvl-hue': lvl * 52 }}>L{lvl}<i>{TIER_SYM[Math.min(lvl, TIER_SYM.length - 1)]}</i></span>
+                  <button className="tw-rev-lvl" title="Promote a tier (outdent)" disabled={!(c.level > 0)} onClick={() => bump(i, -1)}>⇤</button>
+                  <button className="tw-rev-lvl" title="Demote a tier (indent)" onClick={() => bump(i, 1)}>⇥</button>
                   <input className="tw-rev-title" value={c.title} onChange={(e) => setTitle(i, e.target.value)} />
                   {c.matched
-                    ? <span className="tw-rev-pos" title={`Line ${line}`}>{pct.toFixed(1)}%</span>
+                    ? <span className={`tw-rev-pos${badSeq ? ' bad' : ''}`} title={`Line ${line}${badSeq ? ' — out of sequence' : ''}`}>{pct.toFixed(1)}%</span>
                     : <input className="tw-rev-line" type="number" min={1} placeholder="line #" onChange={(e) => assignLine(i, e.target.value)} title="Type the line where this section starts" />}
                   <button className="tw-rev-find" title="Find this section in the text" onClick={() => { setFindFor(i); setFindQuery(c.title || ''); }}>🔍</button>
                   <label className="tw-rev-skip" title="Exclude this section from the completion %">

@@ -26,7 +26,8 @@ export function defaultFileSettings() {
     textAlignment: 'Left',
     blurLinesBefore: 0,
     blurLinesAfter: 0,
-    blurGradient: 100,   // blur ramp strength (%): 100 = first blurred line fully blurred; lower ramps up
+    obscureMode: 'blur', // how obscured before/after lines look: blur | hide | redact | illegible
+    blurGradient: 100,   // blur strength (%): ramps outward from the clear current line to the window edge
     currentLineFontSizeBoost: 0,
     scrollReadPoint: 0,  // scroll-to-read "assume read" line, 0 (top of readable band) .. 1 (bottom)
     hideRsvpPane: false,
