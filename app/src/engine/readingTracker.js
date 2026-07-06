@@ -26,7 +26,7 @@ const SKIP_WORDS = 50; // forward jump larger than this (when not contiguous) is
 // pane for a while (the dwell), THEN scrolls what they finished past the top edge in a burst of
 // frame-sized advances. Per-move classification would see a skim (many words, tiny gaps) preceded
 // by capped idle — so scroll advances aggregate into one "gesture" credited at the dwell pace.
-const SCROLL_DWELL_CAP_MS = 90000; // a screenful can legitimately take this long to read
+const SCROLL_DWELL_CAP_MS = 180000; // a screenful can legitimately take this long to read (scrolling is bursty)
 const SCROLL_GESTURE_GAP_MS = 600; // a pause this long between advances = the gesture ended
 // A gesture claiming a faster sustained pace than this is a fling past unread text, not reading —
 // without it, "read 45s, then fling 700 words" blends into a plausible-looking wpm and the whole
@@ -41,6 +41,10 @@ const SCROLL_HOLD_MS = 180000;
 const SCROLL_LIVE_MIN_WORDS = 8;
 const REVISIT_WORDS = 50; // backward jump larger than this is a far revisit, not a re-read
 const WINDOW_MS = 30000; // sliding window for the live "recent WPM"
+// Scroll reading arrives in irregular bursts (long dwell, then a burst of advances), so its live
+// readout averages over a much longer window than continuous reading — otherwise the number whips
+// around with every screenful.
+const SCROLL_WINDOW_MS = 120000;
 const MIN_MS_PER_WORD = 25; // faster than this (~2400 wpm) over a multi-word move = skim/skip
 const MAX_RECENT_WPM = 2500; // clamp the live readout for sanity
 // Regression awareness: a backward saccade of ≤ this many words is a "short" regression — the kind
@@ -190,7 +194,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
   }
 
   function trim(now) {
-    const cutoff = now - WINDOW_MS;
+    const cutoff = now - SCROLL_WINDOW_MS; // keep events for the longest window; recentWpm sub-filters
     while (events.length && events[0].ts < cutoff) events.shift();
   }
 
@@ -349,9 +353,13 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
   function recentWpm(now = Date.now()) {
     flushScroll(now);
     trim(now);
+    // Scroll mode smooths over a 4× longer window (bursty gestures); continuous reading keeps 30s.
+    const scrolling = !!scrollPend || (lastScroll && now - lastScroll.ts < SCROLL_HOLD_MS);
+    const winCut = now - (scrolling ? SCROLL_WINDOW_MS : WINDOW_MS);
     let p = 0;
     let ms = 0;
     for (const e of events) {
+      if (e.ts < winCut) continue;
       p += e.processed;
       ms += e.activeMs;
     }

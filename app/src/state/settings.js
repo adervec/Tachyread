@@ -155,7 +155,7 @@ export function countOffDefaultSettings(settings, defaults) {
 // restores every preference to its default but preserves these so a reset never destroys the
 // user's library, history, saved work, sync setup, or their separate Default Tab Settings.
 export const GLOBAL_DATA_KEYS = new Set([
-  'recentFiles', 'ocrTemplates', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey', 'translateKey',
+  'recentFiles', 'ocrTemplates', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey', 'translateKey', 'settingsProfiles',
   'readingList', 'drillBestSpan', 'bestFlowWpm', 'bestDictationWpm', 'webcamCalib', 'sync',
   'deviceName', 'fileDefaults', 'ambient',
 ]);
@@ -193,6 +193,9 @@ export function defaultGlobalSettings() {
     audioCtrlMode: 'Both', // Voice | Claps | Both
     fileDefaults: defaultFileSettings(),
     recentFiles: [], // {name, checksum, lastOpened}
+    // Named settings profiles (device-local): tab = reusable tab-settings snapshots
+    // (tabDefaultsFrom), app = application-preference snapshots (syncableGlobalSettings).
+    settingsProfiles: { tab: [], app: [] }, // each: { name, data, savedAt }
     ocrTemplates: [], // saved Grab layout templates: { name, regions:[{fx,fy,fw,fh}] }
     tocTierIcons: ['📖', '📑', '📄', '§', '•'], // TOC-bar icon per hierarchy tier (index = level)
     drillBestSpan: 0, // best perceptual-span drill width (words) reached
