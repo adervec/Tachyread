@@ -533,6 +533,16 @@
 .grab-hud-hold { background: rgba(200, 140, 20, 0.92); }
 .grab-hud-skip { background: rgba(90, 96, 110, 0.9); }
 .grab-hud-wait { background: rgba(40, 110, 200, 0.9); }
+/* Settle countdown inside the HUD — fills as the page holds still toward the grab. */
+.grab-hud-bar { height: 4px; margin-top: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.25); overflow: hidden; }
+.grab-hud-bar > div { height: 100%; width: 0; background: #fff; border-radius: 3px; }
+/* Timed-auto countdown + OCR live-status strips: a labelled progress bar so no wait is a mystery. */
+.grab-timer-strip { margin: 6px 0 0; font-size: 12px; color: var(--status-fg); }
+.grab-timer-strip > span { display: block; margin-bottom: 3px; }
+.grab-timer-strip .imp-bar { height: 6px; }
+/* Per-page recognise progress on the active thumbnail. */
+.grab-shot-bar { position: absolute; left: 2px; right: 2px; bottom: 2px; height: 3px; background: rgba(0, 0, 0, 0.35); border-radius: 2px; overflow: hidden; }
+.grab-shot-bar > div { height: 100%; background: var(--toggle-active-bg); border-radius: 2px; }
 .grab-controls {
   display: flex;
   align-items: center;

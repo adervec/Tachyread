@@ -11,6 +11,13 @@
 let _workerPromise = null;
 let _workerLang = null;
 
+// A single progress sink so the UI can show what OCR is doing — including the (multi-MB) engine +
+// language download on first use, and the per-page recognize progress. The logger is attached once
+// to the worker and forwards every {status, progress} tick here; OCR is serialized upstream, so one
+// sink is enough. Set to null to stop listening.
+let _ocrLogger = null;
+export function setOcrLogger(cb) { _ocrLogger = cb; }
+
 // One cached worker; switching language tears it down and spins up a new one (a tesseract
 // worker is bound to its traineddata, which downloads on first use per language).
 async function getWorker(lang = 'eng') {
@@ -19,7 +26,8 @@ async function getWorker(lang = 'eng') {
     _workerLang = lang;
     _workerPromise = (async () => {
       const { createWorker } = await import('tesseract.js');
-      return createWorker(lang); // downloads core+lang on first use
+      // logger fires {status, progress 0..1} for engine load, traineddata download, and recognition.
+      return createWorker(lang, undefined, { logger: (m) => { if (_ocrLogger) _ocrLogger(m); } }); // downloads core+lang on first use
     })();
   }
   return _workerPromise;

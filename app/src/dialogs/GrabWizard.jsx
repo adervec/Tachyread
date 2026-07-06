@@ -14,7 +14,7 @@ import {
   signatureBandDiff,
   signatureBandVariance,
 } from '../features/screenCapture.js';
-import { recognizeImageEx, ocrSupported, loadImage, glyphCategory } from '../features/ocr.js';
+import { recognizeImageEx, ocrSupported, loadImage, glyphCategory, setOcrLogger } from '../features/ocr.js';
 import { getLanguage } from '../state/languages.js';
 import { armPing, armStep, DEFAULT_ARM_PORT } from '../features/pageArm.js';
 import { buildGrabbedDoc } from '../document/grab.js';
@@ -226,6 +226,11 @@ export default function GrabWizard({ onClose }) {
   const [autoRunning, setAutoRunning] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrProg, setOcrProg] = useState(null); // batch OCR progress: { done, total }
+  // What OCR is doing right now, so a timer/download never surprises the user: { phase, progress } —
+  // phase covers the first-run engine + language download as well as per-page recognition.
+  const [ocrLive, setOcrLive] = useState(null);
+  const ocrActiveIdRef = useRef(null); // seg id currently being recognized (to attach a per-page bar)
+  const [ocrActiveId, setOcrActiveId] = useState(null);
   const [autoOcr, setAutoOcr] = useState(true); // recognize each page in the background the moment it's captured
 
   // Advanced "watch" mode — continuously grab each settled new page; skip blanks/loading screens.
@@ -234,6 +239,9 @@ export default function GrabWizard({ onClose }) {
   const [watching, setWatching] = useState(false);
   const [watchHud, setWatchHud] = useState(null); // big glanceable capture state over the preview: { label, tone }
   const watchRef = useRef({ running: false });
+  const settleBarRef = useRef(null); // width driven directly in the watch loop → the settle countdown
+  const autoBarRef = useRef(null);   // width driven directly in the auto loop → the next-grab countdown
+  const [autoStatus, setAutoStatus] = useState(null); // { i, total, phase } for the timed auto-grab
   // SimpleClicker "arm": after each grab, ask the clicker to turn the page (see features/pageArm.js).
   const [armOn, setArmOn] = useState(false);
   const [armPort, setArmPort] = useState(DEFAULT_ARM_PORT);
@@ -342,12 +350,15 @@ export default function GrabWizard({ onClose }) {
 
   // Recognize one page in the background. Chained so pages OCR one at a time while the user keeps
   // capturing; result is patched back by id and never clobbers text the user has already edited.
+  const ocrPendingRef = useRef(0);
   function ocrSeg(seg) {
+    ocrPendingRef.current++;
     ocrChainRef.current = ocrChainRef.current
       .then(async () => {
         if (!seg || !ocrSupported()) return;
         const params = ocrParamsRef.current;
         patchSeg(seg.id, { ocrStatus: 'doing' });
+        setOcrActiveId(seg.id); ocrActiveIdRef.current = seg.id;
         try {
           const { text } = await recognizeImageEx(seg.image, {
             regions: params.segRegions(seg),
@@ -361,7 +372,11 @@ export default function GrabWizard({ onClose }) {
           patchSeg(seg.id, { ocrStatus: 'error' });
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        // When the background queue drains, drop the live-status so it doesn't linger.
+        if (--ocrPendingRef.current <= 0) { ocrPendingRef.current = 0; setOcrActiveId(null); ocrActiveIdRef.current = null; setOcrLive(null); }
+      });
   }
 
   // Add a captured page, kicking off background OCR immediately when the option is on. ocrCrop, when
@@ -372,6 +387,28 @@ export default function GrabWizard({ onClose }) {
     if (autoOcrRef.current && ocrSupported()) ocrSeg(seg);
     return seg;
   }
+
+  // Surface what OCR is doing (never let a silent timer surprise the user): the first-run engine +
+  // language download and every per-page recognition report progress here.
+  const OCR_PHASE = {
+    'loading tesseract core': 'Downloading OCR engine',
+    'initializing tesseract': 'Starting OCR engine',
+    'initialized tesseract': 'Starting OCR engine',
+    'loading language traineddata': 'Downloading language data',
+    'loading language traineddata (from cache)': 'Loading language data',
+    'initializing api': 'Preparing OCR',
+    'initialized api': 'Preparing OCR',
+    'recognizing text': 'Recognizing text',
+  };
+  useEffect(() => {
+    setOcrLogger((m) => {
+      if (!m || !m.status) return;
+      const phase = OCR_PHASE[m.status] || m.status;
+      setOcrLive({ phase, progress: typeof m.progress === 'number' ? m.progress : 0, recognizing: m.status === 'recognizing text' });
+    });
+    return () => setOcrLogger(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (stream && videoRef.current) {
@@ -579,6 +616,8 @@ export default function GrabWizard({ onClose }) {
     setAutoRunning(true);
     let lastSig = null, consec = 0, captured = 0;
     for (let i = 0; i < count && autoRef.current.running; i++) {
+      setAutoStatus({ i: i + 1, total: count, phase: 'grabbing' });
+      if (autoBarRef.current) autoBarRef.current.style.width = '100%';
       const v = videoRef.current;
       if (!v || !v.videoWidth) break;
       const cap = bufferedCapture();
@@ -598,15 +637,22 @@ export default function GrabWizard({ onClose }) {
       }
       if (i < count - 1 && autoRef.current.running) {
         await armAdvance(); // no-op unless the SimpleClicker arm is enabled
-        await delay(interval);
+        // Countdown to the next grab, drawn as a draining bar so the wait is never a mystery.
+        setAutoStatus({ i: i + 1, total: count, phase: 'waiting' });
+        const t0 = Date.now();
+        while (autoRef.current.running && Date.now() - t0 < interval) {
+          if (autoBarRef.current) autoBarRef.current.style.width = `${Math.max(0, 100 - ((Date.now() - t0) / interval) * 100)}%`;
+          await delay(80);
+        }
       }
     }
     autoRef.current.running = false;
     setAutoRunning(false);
+    setAutoStatus(null);
     setMsg(`Auto-grab done — ${captured} page(s).`);
   }
 
-  function abortAuto() { autoRef.current.running = false; setAutoRunning(false); }
+  function abortAuto() { autoRef.current.running = false; setAutoRunning(false); setAutoStatus(null); }
 
   // Continuous "watch" capture: poll the shared region; when a NEW page settles (holds still for the
   // dwell) and isn't blank / a marked loading screen / the page already grabbed, capture it once. The
@@ -646,9 +692,14 @@ export default function GrabWizard({ onClose }) {
         (signatureDiff(sig, decidedSig) > STILL_EPS || signatureBandDiff(sig, decidedSig) > BAND_EPS);
       if (moved || newEdge) {
         holdSig = sig; holdStart = now; handled = false; // (re)start the settle timer
+        if (settleBarRef.current) settleBarRef.current.style.width = '0%';
         // Motion after a grab means the user started turning the page — cue them to hold it flat.
         hud(captured ? 'Hold the page still…' : 'Hold still…', 'hold');
-      } else if (!handled && now - holdStart >= dwellMs) {
+      } else if (!handled) {
+        // Settling: fill the countdown so the wait is visible, then decide at the dwell.
+        const frac = Math.min(1, (now - holdStart) / dwellMs);
+        if (settleBarRef.current) settleBarRef.current.style.width = `${frac * 100}%`;
+        if (now - holdStart < dwellMs) { await delay(POLL); continue; }
         handled = true; watchRef.current.decidedSig = sig; // the page settled — decide once
         let decision = 'grab';
         if (signatureBandVariance(sig) < BLANK_STD) {
@@ -749,6 +800,7 @@ export default function GrabWizard({ onClose }) {
       const seg = segmentsRef.current.find((s) => s.id === ids[i]);
       if (!seg) continue;
       patchSeg(seg.id, { ocrStatus: 'doing' });
+      setOcrActiveId(seg.id); ocrActiveIdRef.current = seg.id;
       setOcrProg({ done: i, total: ids.length });
       setMsg(`Recognizing page ${i + 1} of ${ids.length}… (first run downloads the OCR engine)`);
       try {
@@ -762,6 +814,8 @@ export default function GrabWizard({ onClose }) {
     }
     setOcrBusy(false);
     setOcrProg(null);
+    setOcrActiveId(null); ocrActiveIdRef.current = null;
+    setOcrLive(null);
     setMsg('Recognition complete — review and edit the text, then open it.');
   }
   // Re-OCR everything (e.g. after changing OCR settings) — overwrites existing text.
@@ -980,8 +1034,13 @@ export default function GrabWizard({ onClose }) {
     >
       {msg && <p className="settings-note">{msg}</p>}
       {ocrBusy && ocrProg && (
-        <div className="imp-bar" title={`OCR ${ocrProg.done} / ${ocrProg.total} pages`} style={{ marginBottom: 8 }}>
-          <div className="imp-fill" style={{ width: `${(ocrProg.done / Math.max(1, ocrProg.total)) * 100}%` }} />
+        <div style={{ marginBottom: 8 }}>
+          {/* Batch bar advances smoothly WITHIN each page using the live recognise fraction, so it
+              never sits frozen between pages. */}
+          <div className="imp-bar" title={`OCR ${ocrProg.done} / ${ocrProg.total} pages`}>
+            <div className="imp-fill" style={{ width: `${((ocrProg.done + (ocrLive?.recognizing ? (ocrLive.progress || 0) : 0)) / Math.max(1, ocrProg.total)) * 100}%` }} />
+          </div>
+          {ocrLive && <p className="settings-note" style={{ margin: '2px 0 0' }}>🔎 {ocrLive.phase}{ocrLive.progress ? ` — ${Math.round(ocrLive.progress * 100)}%` : '…'}</p>}
         </div>
       )}
 
@@ -1062,8 +1121,27 @@ export default function GrabWizard({ onClose }) {
               <video ref={videoRef} muted playsInline />
               {bufBox && <div className="grab-crop-buffer" style={{ left: `${bufBox.fx * 100}%`, top: `${bufBox.fy * 100}%`, width: `${bufBox.fw * 100}%`, height: `${bufBox.fh * 100}%` }} />}
               {crop && <div className="grab-crop" style={{ left: `${crop.fx * 100}%`, top: `${crop.fy * 100}%`, width: `${crop.fw * 100}%`, height: `${crop.fh * 100}%` }} />}
-              {watching && watchHud && <div className={`grab-hud grab-hud-${watchHud.tone}`}>{watchHud.label}</div>}
+              {watching && watchHud && (
+                <div className={`grab-hud grab-hud-${watchHud.tone}`}>
+                  <span>{watchHud.label}</span>
+                  <div className="grab-hud-bar"><div ref={settleBarRef} /></div>
+                </div>
+              )}
             </div>
+            {/* Timed auto-grab: a draining bar to the next grab + which page it's on — never a silent wait. */}
+            {autoRunning && autoStatus && (
+              <div className="grab-timer-strip">
+                <span>{autoStatus.phase === 'waiting' ? `⏱ Next grab in a moment · page ${autoStatus.i}/${autoStatus.total}` : `📸 Grabbing page ${autoStatus.i}/${autoStatus.total}`}</span>
+                <div className="imp-bar"><div ref={autoBarRef} className="imp-fill" /></div>
+              </div>
+            )}
+            {/* What OCR is doing right now — the first-run engine/language download, or a page recognise. */}
+            {ocrLive && (
+              <div className="grab-timer-strip">
+                <span>🔎 {ocrLive.phase}{ocrLive.progress ? ` — ${Math.round(ocrLive.progress * 100)}%` : '…'}</span>
+                <div className="imp-bar"><div className="imp-fill" style={{ width: `${(ocrLive.progress || 0) * 100}%` }} /></div>
+              </div>
+            )}
             <div className="grab-controls">
               <button onClick={grabOnce} disabled={autoRunning} title={watching ? 'Force-capture the current frame even while watching' : 'Capture the current frame'}>📸 Grab page</button>
               {streamKind === 'camera' && (
@@ -1163,6 +1241,9 @@ export default function GrabWizard({ onClose }) {
                   {s.ocrStatus === 'doing' && <span className="grab-shot-ocr" title="Recognizing…">⏳</span>}
                   {s.ocrStatus === 'done' && s.text && <span className="grab-shot-ocr done" title="Recognized">✓</span>}
                   {s.ocrStatus === 'error' && <span className="grab-shot-ocr err" title="OCR failed — recognize again on the review step">⚠</span>}
+                  {s.ocrStatus === 'doing' && s.id === ocrActiveId && (
+                    <div className="grab-shot-bar"><div style={{ width: `${(ocrLive?.recognizing ? (ocrLive.progress || 0) : 0) * 100}%` }} /></div>
+                  )}
                   <button className="grab-shot-x" onClick={() => remove(s.id)} title="Remove">×</button>
                 </div>
               ))}
