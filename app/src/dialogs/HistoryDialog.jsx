@@ -72,7 +72,9 @@ function Spark({ daily }) {
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────────────────────
-export default function HistoryDialog({ onClose }) {
+// The full reading-history view — rendered standalone below AND embedded as Trackyread's Reading
+// History tab (the history was folded into the tracker).
+export function HistoryView() {
   const { state, updateGlobal } = useApp();
   const [files, setFiles] = useState(null);
   const [nameMap, setNameMap] = useState({});
@@ -248,7 +250,7 @@ export default function HistoryDialog({ onClose }) {
   ];
 
   return (
-    <Dialog title="Reading History" onClose={onClose} width={840} buttons={<button onClick={onClose}>Close</button>}>
+    <div className="history-view">
       {!files && <p>Loading…</p>}
       {files && model && model.books.length === 0 && (
         <p className="settings-note">No reading recorded yet — open a document and start reading to build your history.</p>
@@ -432,6 +434,14 @@ export default function HistoryDialog({ onClose }) {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+export default function HistoryDialog({ onClose }) {
+  return (
+    <Dialog title="Reading History" onClose={onClose} width={840} buttons={<button onClick={onClose}>Close</button>}>
+      <HistoryView />
     </Dialog>
   );
 }

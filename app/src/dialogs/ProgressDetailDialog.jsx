@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { getTocEntries, sectionSpan } from '../document/toc.js';
+import { loadFile, loadReadState, saveReadState } from '../state/storage.js';
+import { createReadingTracker } from '../engine/readingTracker.js';
 
 // Detailed annotated progress popup. Pulls everything the reading tracker knows into one view:
 //   • WHAT was read   — the coverage strip (read this session / earlier / unread / excluded).
@@ -39,14 +41,39 @@ function steadiness(cv) {
   return 'erratic';
 }
 
-export default function ProgressDetailDialog({ tab, onJumpWord, onClose }) {
-  const tracker = tab?.tracker;
-  const doc = tab?.doc;
+// Works from a LIVE tab (tab prop) or from STORED reading state (storedChecksum prop) — the latter
+// rebuilds a tracker from the synced files/readstate records, so Trackyread can show a bound book's
+// progress even when the file itself was never opened on this device.
+export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, onClose }) {
+  const [storedTab, setStoredTab] = useState(null);
+  useEffect(() => {
+    if (!storedChecksum) return undefined;
+    let alive = true;
+    (async () => {
+      const [fsRec, rs] = await Promise.all([loadFile(storedChecksum).catch(() => null), loadReadState(storedChecksum).catch(() => null)]);
+      if (!alive) return;
+      const wordCount = fsRec?.totalWords || 0;
+      if (!wordCount) { setStoredTab({ missing: true }); return; }
+      const tracker = createReadingTracker({
+        wordCount, maskB64: rs?.maskB64 || '', wpmB64: rs?.wpmB64 || '',
+        lifetimeActiveMs: rs?.lifetimeActiveMs || 0, daily: rs?.daily || [], paraTsB64: rs?.paraTsB64 || '',
+      });
+      setStoredTab({ doc: { words: { length: wordCount } }, settings: fsRec, tracker });
+    })();
+    return () => { alive = false; };
+  }, [storedChecksum]);
+
+  const t = storedChecksum ? (storedTab && !storedTab.missing ? storedTab : null) : tab;
+  const tracker = t?.tracker;
+  const doc = t?.doc;
   const total = doc?.words.length || 0;
-  const idx = tab?.settings.wordIndex || 0;
-  const skipRanges = tab?.settings.skipRanges || [];
+  const idx = t?.settings?.wordIndex || 0;
+  const skipRanges = t?.settings?.skipRanges || [];
   const wrapRef = useRef(null);
   const [hover, setHover] = useState(null); // { col, px }
+  const [pendingJump, setPendingJump] = useState(null); // { wi, label } — jumps need a confirm click
+  const [selSecs, setSelSecs] = useState(() => new Set()); // section indices staged for mark-unread
+  const [unreadArm, setUnreadArm] = useState(false);
 
   // Refresh live so the view tracks reading while it's open.
   const [tick, setTick] = useState(0);
@@ -68,7 +95,11 @@ export default function ProgressDetailDialog({ tab, onJumpWord, onClose }) {
   const sessionActiveMs = tracker ? tracker.sessionActiveMs : 0;
   const lifetimeActiveMs = tracker ? tracker.lifetimeActiveMs : 0;
 
-  const entries = useMemo(() => (tab ? getTocEntries(tab) : []), [tab, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Stored mode has no parsed doc, so only explicitly saved ToC entries are available (no auto-detect).
+  const entries = useMemo(
+    () => (storedChecksum ? (t?.settings?.tocEntries || []) : (tab ? getTocEntries(tab) : [])),
+    [tab, t, storedChecksum, tick], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const sections = useMemo(() => {
     if (!entries.length || !tracker) return [];
     return entries.map((e, i) => {
@@ -138,12 +169,31 @@ export default function ProgressDetailDialog({ tab, onJumpWord, onClose }) {
     // tipX: keep the tooltip from spilling past either edge (clamp here so render reads no ref).
     setHover({ col: Math.floor(frac * COLS), px, tipX: Math.min(Math.max(px, 90), rect.width - 90) });
   }
+  // Clicks STAGE a jump; a visible confirm button executes it (too easy to fat-finger otherwise).
   function onClick(e) {
+    if (!onJumpWord) return; // stored mode: the file isn't open here — nothing to jump in
     const rect = wrapRef.current?.getBoundingClientRect();
     if (!rect || !total) return;
     const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    onJumpWord?.(Math.round(frac * (total - 1)));
-    onClose?.();
+    const wi = Math.round(frac * (total - 1));
+    setPendingJump({ wi, label: `${((wi / total) * 100).toFixed(1)}% · word ${(wi + 1).toLocaleString()}` });
+  }
+  const stageJump = (wi, label) => { if (onJumpWord) setPendingJump({ wi, label }); };
+
+  // Mark the selected sections unread (confirmation-guarded) — for text that got "read" by
+  // unattended playback. Live tabs persist via the app's readstate flush (the tracker is dirty);
+  // stored mode writes the readstate back directly.
+  const selWords = [...selSecs].reduce((n, i) => n + (sections[i]?.readWords || 0), 0);
+  async function markSelectedUnread() {
+    if (!tracker) return;
+    for (const i of selSecs) { const s = sections[i]; if (s) tracker.unmarkRangeRead(s.start, s.end); }
+    if (storedChecksum) {
+      await saveReadState(storedChecksum, {
+        maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(),
+        lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(), paraTsB64: tracker.serializeParaTs(),
+      }).catch(() => {});
+    }
+    setSelSecs(new Set()); setUnreadArm(false); setTick((n) => n + 1);
   }
 
   // Hover tooltip content.
@@ -169,9 +219,20 @@ export default function ProgressDetailDialog({ tab, onJumpWord, onClose }) {
   return (
     <Dialog title="Progress Detail" onClose={onClose} width={960} buttons={<button onClick={onClose}>Close</button>}>
       {!tracker || !total ? (
-        <p className="settings-note">No reading data yet — open a document and start reading.</p>
+        <p className="settings-note">
+          {storedChecksum
+            ? (storedTab ? 'No synced reading data for this file on this device yet — read it somewhere, sync, and it will appear here.' : 'Loading stored reading data…')
+            : 'No reading data yet — open a document and start reading.'}
+        </p>
       ) : (
         <>
+          {pendingJump && (
+            <div className="pd-confirm">
+              Jump to <b>{pendingJump.label}</b>?
+              <button className="toggle-on" onClick={() => { onJumpWord?.(pendingJump.wi); onClose?.(); }}>▶ Jump</button>
+              <button onClick={() => setPendingJump(null)}>Cancel</button>
+            </div>
+          )}
           <div className="pd-cards">
             {card(`${(coverage * 100).toFixed(1)}%`, 'book read', 'Coverage (flagged front/back matter excluded)')}
             {card(readCount.toLocaleString(), `of ${total.toLocaleString()} words`, 'Unique words marked read across all sessions')}
@@ -183,7 +244,7 @@ export default function ProgressDetailDialog({ tab, onJumpWord, onClose }) {
             {card(steadiness(cv), 'pace', `Pace variability (CV ${cv.toFixed(2)}) — lower is steadier`)}
           </div>
 
-          <div className="field-section">Annotated progress · height &amp; colour = pace · click to jump</div>
+          <div className="field-section">Annotated progress · height &amp; colour = pace · click to jump (asks to confirm)</div>
           <div className="pd-bar-wrap" ref={wrapRef} onPointerMove={onMove} onPointerLeave={() => setHover(null)} onClick={onClick}>
             <svg className="pd-bar" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
               {/* excluded bands */}
@@ -226,11 +287,21 @@ export default function ProgressDetailDialog({ tab, onJumpWord, onClose }) {
 
           {sections.length > 0 && (
             <>
-              <div className="field-section">By section — where, how much, how fast</div>
+              <div className="field-section">By section — where, how much, how fast · tick sections to mark them unread</div>
               <div className="pd-sections">
                 {sections.map((s, i) => (
-                  <div key={i} className="pd-sec-row" style={{ paddingLeft: 8 + (s.level || 0) * 14 }}
-                    title="Jump to this section" onClick={() => { onJumpWord?.(s.start); onClose?.(); }}>
+                  <div key={i} className={`pd-sec-row${selSecs.has(i) ? ' pd-sec-sel' : ''}`} style={{ paddingLeft: 8 + (s.level || 0) * 14 }}
+                    title={onJumpWord ? 'Click to jump to this section (asks to confirm)' : s.title}
+                    onClick={() => stageJump(s.start, s.title)}>
+                    <input
+                      type="checkbox"
+                      className="pd-sec-check"
+                      checked={selSecs.has(i)}
+                      disabled={!s.readWords}
+                      title="Select this section to mark it unread"
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => { e.stopPropagation(); setSelSecs((prev) => { const n = new Set(prev); e.target.checked ? n.add(i) : n.delete(i); return n; }); setUnreadArm(false); }}
+                    />
                     <span className="pd-sec-title">{s.title}</span>
                     <span className="pd-sec-bar"><i style={{ width: `${Math.round(s.readFrac * 100)}%` }} /></span>
                     <span className="pd-sec-pct">{Math.round(s.readFrac * 100)}%</span>
@@ -239,6 +310,19 @@ export default function ProgressDetailDialog({ tab, onJumpWord, onClose }) {
                   </div>
                 ))}
               </div>
+              {selSecs.size > 0 && (
+                <div className="pd-unread-bar">
+                  {!unreadArm ? (
+                    <button onClick={() => setUnreadArm(true)}>↩ Mark {selSecs.size} section{selSecs.size === 1 ? '' : 's'} unread…</button>
+                  ) : (
+                    <>
+                      <button className="grab-trash" onClick={markSelectedUnread}>⚠ Confirm — clear {selWords.toLocaleString()} read word{selWords === 1 ? '' : 's'}</button>
+                      <button onClick={() => setUnreadArm(false)}>Cancel</button>
+                    </>
+                  )}
+                  <span className="settings-note" style={{ margin: 0 }}>For text accidentally “read” by unattended playback. Coverage drops; recorded time is kept.</span>
+                </div>
+              )}
             </>
           )}
 
@@ -248,8 +332,8 @@ export default function ProgressDetailDialog({ tab, onJumpWord, onClose }) {
           ) : (
             <div className="pd-days">
               {sessions.map((s, i) => (
-                <div key={i} className="pd-day-row pd-sess-row" title="Jump to where this session started"
-                  onClick={() => { onJumpWord?.(s.minW); onClose?.(); }}>
+                <div key={i} className="pd-day-row pd-sess-row" title={onJumpWord ? 'Click to jump to where this session started (asks to confirm)' : ''}
+                  onClick={() => stageJump(s.minW, `session start (${fmtWhen(s.startTs)})`)}>
                   <span className="pd-day-date">{fmtWhen(s.startTs)}</span>
                   <span className="pd-sess-range">{((s.minW / total) * 100).toFixed(0)}–{((s.maxW / total) * 100).toFixed(0)}%</span>
                   <span className="pd-sess-paras">{s.paras} ¶</span>

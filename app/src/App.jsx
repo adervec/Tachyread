@@ -25,7 +25,6 @@ import FindDialog from './dialogs/FindDialog.jsx';
 import GoToLineDialog from './dialogs/GoToLineDialog.jsx';
 import SettingsDialog from './dialogs/SettingsDialog.jsx';
 import StatisticsDialog from './dialogs/StatisticsDialog.jsx';
-import HistoryDialog from './dialogs/HistoryDialog.jsx';
 import ProperNamesDialog from './dialogs/ProperNamesDialog.jsx';
 import AudiobookDialog from './dialogs/AudiobookDialog.jsx';
 import NotesDialog from './dialogs/NotesDialog.jsx';
@@ -1243,7 +1242,7 @@ function AppInner() {
         if (key === 'f') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'find' }); return; }
         if (key === 'g') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'goto' }); return; }
         if (key === 't') { e.preventDefault(); k.openDialog({ kind: 'stats' }); return; }
-        if (key === 'h') { e.preventDefault(); k.openDialog({ kind: 'history' }); return; }
+        if (key === 'h') { e.preventDefault(); k.openDialog({ kind: 'literary-journey', tab: 'rhistory' }); return; }
         if (key === 'i') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'proper-names' }); return; }
         if (key === ',') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'tab-settings' }); return; }
         if (e.key === 'ArrowUp') { e.preventDefault(); if (!inDialog) k.nav('prevPara'); return; }
@@ -1274,6 +1273,7 @@ function AppInner() {
       if (e.key === '=' || e.key === '+') { k.adjustWpm(25); return; }
       if (e.key >= '1' && e.key <= '6') { k.togglePane(Number(e.key)); return; }
       if (key === 'j') { k.jumpToCurrent(); return; }
+    if (key === 'u') { k.jumpToFrontier(); return; }
       if (key === 'a') { k.toggleReadAloud(); return; }
       if (key === 's') { k.toggleScrollRead(); return; }
       if (key === 'v') { k.toggleAudioCtrl(); return; }
@@ -1630,7 +1630,7 @@ function AppInner() {
     }
     if (action === 'stats') return openDialog({ kind: 'stats' });
     if (action === 'progress-detail' && activeTab) return openDialog({ kind: 'progress-detail' });
-    if (action === 'history') return openDialog({ kind: 'history' });
+    if (action === 'history') return openDialog({ kind: 'literary-journey', tab: 'rhistory' }); // history now lives inside Trackyread
     if (action === 'proper-names' && activeTab) return openDialog({ kind: 'proper-names' });
     if (action === 'toc-wizard' && activeTab) return openDialog({ kind: 'toc-wizard' });
     if (action === 'names-wizard' && activeTab) return openDialog({ kind: 'resource-wizard', resourceKind: 'names' });
@@ -1690,6 +1690,12 @@ function AppInner() {
     if (auxOpen) { showAuxOnly(null); setMobileView('lines'); }
     setRecenterKey((k) => k + 1);
   };
+  // Jump to the first unread word after everything ever read (the reading frontier).
+  const jumpToFrontier = () => {
+    if (!activeTab?.tracker) return;
+    jumpWord(activeTab.tracker.frontierIndex(), { nav: true, src: 'jump' });
+    jumpToCurrent();
+  };
 
   // ── Mode helpers (shared by the controls bar and keyboard shortcuts). Full read-aloud TTS drives the
   // position, so it's mutually exclusive with the speak-along FOLLOW modes AND with voice commands (and
@@ -1748,7 +1754,7 @@ function AppInner() {
   kbdRef.current = {
     activeTab, state, showFootnote, playPause, nav, pageLines, jumpToCurrent, triggerOpen,
     openClipboard, openDialog, closeDialog, setShowFootnote, toggleFocusMode, dispatch,
-    toggleReadAloud, toggleAudioCtrl, toggleScrollRead, adjustWpm, cycleTabs, togglePane,
+    toggleReadAloud, toggleAudioCtrl, toggleScrollRead, adjustWpm, cycleTabs, togglePane, jumpToFrontier,
   };
 
   // Maximise the text on a phone. The Lines view is for immersive (often thumb-scrolled) reading, so
@@ -1902,8 +1908,10 @@ function AppInner() {
           <button className="incog-off" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}>Turn off</button>
         </div>
       )}
-      {!dialogDocked && (activeTab ? (
-        <div className="main-wrap">
+      {/* The reading view stays MOUNTED (just hidden) while a dialog tab is focused, so closing the
+          dialog returns to exactly the line you were on instead of remounting at the top. */}
+      {(activeTab || !dialogDocked) && (activeTab ? (
+        <div className="main-wrap" style={dialogDocked ? { display: 'none' } : undefined}>
           <ChapterHeading tab={activeTab} onJumpWord={jumpWord} />
           {isCompact && (
             <div className="reading-view-switch" role="tablist" aria-label="Reading view">
@@ -2108,6 +2116,7 @@ function AppInner() {
             goalKills={goalKills}
             onTocIcon={onTocIcon}
             onJumpToCurrent={jumpToCurrent}
+            onJumpToFrontier={jumpToFrontier}
             moreOpen={moreOpen}
           />
         ) : (
@@ -2236,9 +2245,8 @@ function AppInner() {
       {dialog?.kind === 'stats' && (
         <StatisticsDialog tab={activeTab} onClose={closeDialog} />
       )}
-      {dialog?.kind === 'history' && <HistoryDialog onClose={closeDialog} />}
       {dialog?.kind === 'literary-journey' && (
-        <LiteraryJourneyDialog global={state.global} onPatch={(p) => updateGlobal(p)} onClose={closeDialog} />
+        <LiteraryJourneyDialog global={state.global} onPatch={(p) => updateGlobal(p)} initialTab={dialog.tab} onClose={closeDialog} />
       )}
       {dialog?.kind === 'proper-names' && dlgTab && (
         <ProperNamesDialog

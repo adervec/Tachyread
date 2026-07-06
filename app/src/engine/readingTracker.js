@@ -479,6 +479,8 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     recentWpm,
     sampleTrend,
     rangeStats,
+    // First unread word AFTER the furthest word ever read — the "latest unread" jump target.
+    frontierIndex: () => { for (let i = wordCount - 1; i >= 0; i--) if (mask[i]) return Math.min(wordCount - 1, i + 1); return 0; },
     regressionStats,
     resetRegressions,
     recentRegressionCount,

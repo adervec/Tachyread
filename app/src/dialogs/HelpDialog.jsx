@@ -111,6 +111,7 @@ const SECTIONS = [
         ['Home', 'Restart from the top'],
         ['− +', 'Reading speed −/+ 25 WPM'],
         ['j', 'Jump to the current word'],
+        ['u', 'Jump to the latest unread word'],
       ] },
       { name: 'Toggle panes', keys: [
         ['1', 'Fast Reader'], ['2', 'Lines'], ['3', 'Table of Contents'],

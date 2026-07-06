@@ -597,8 +597,11 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     const now = Date.now();
     const win = speedWin.current;
     win.push({ t: now, w: f - idxRef.current });
-    while (win.length && win[0].t < now - 2000) win.shift();
-    if (win.reduce((s, x) => s + x.w, 0) > 120) {
+    while (win.length && win[0].t < now - 3000) win.shift();
+    // Kill switch only for a genuinely LONG fling (~600 words inside 3s — several screenfuls).
+    // Aggressively scrolling a single page is normal scroll-reading and must never trip it; the
+    // tracker separately refuses PACE credit for anything over its own scroll-wpm cap anyway.
+    if (win.reduce((s, x) => s + x.w, 0) > 600) {
       speedWin.current = [];
       updateGlobal({ scrollAdvances: false });
       setStatus('📜 Scroll-to-read switched itself off — that scroll was faster than any reading. Nothing was marked read.');
