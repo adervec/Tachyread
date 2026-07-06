@@ -978,6 +978,26 @@
 .ew-controls .grow { flex: 1; }
 .ew-tip { font-size: 13px; color: var(--text3, #888); }
 
+/* Warmup setup screen (slider + drill picker) — scrolls inside the stage on small heights. */
+.ew-setup { justify-content: flex-start; gap: 10px; padding: 16px 20px; overflow: auto; background: rgba(8, 11, 18, 0.82); }
+.ew-slider { display: flex; flex-direction: column; gap: 4px; width: min(460px, 100%); color: #dbe2f0; font-size: 13px; }
+.ew-slider input { width: 100%; }
+.ew-picker { display: flex; flex-wrap: wrap; gap: 12px 18px; justify-content: center; width: 100%; }
+.ew-picker-group { display: flex; flex-direction: column; gap: 4px; }
+.ew-picker-head { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #8794ab; }
+.ew-picker-items { display: flex; flex-direction: column; gap: 4px; }
+.ew-pick {
+  font-size: 12px; padding: 3px 10px; border-radius: 6px; cursor: pointer; text-align: left;
+  border: 1px solid #2a3346; background: transparent; color: #9aa6bd;
+}
+.ew-pick.on { color: #e6ecf7; background: rgba(255, 255, 255, 0.05); }
+.ew-setup-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+/* Once-a-day desktop nudge to warm up before reading. */
+.ew-nudge { display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: var(--menu-highlight); border-bottom: 1px solid var(--divider); font-size: 13px; }
+.ew-nudge .grow { flex: 1; }
+.ew-nudge .ew-nudge-x { background: transparent; border: none; color: var(--status-fg); cursor: pointer; font-size: 15px; }
+
 /* Span drill */
 .span-drill { min-width: 440px; }
 .sd-stats { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text3, #888); margin-bottom: 10px; }

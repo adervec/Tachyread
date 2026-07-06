@@ -1484,6 +1484,27 @@ function AppInner() {
     // eslint-disable-next-line
   }, []);
 
+  // Once-a-day desktop nudge to warm up the eyes before reading. Waits for stored settings to load
+  // (globalHydrated) so a lastPrompt saved earlier today isn't missed, fires at most once per local
+  // day, and never on mobile (the drills want a steady head + a real screen). Dismissed silently.
+  const [warmupNudge, setWarmupNudge] = useState(false);
+  const nudgeCheckedRef = useRef(false);
+  useEffect(() => {
+    if (nudgeCheckedRef.current || !state.globalHydrated || isCompact) return;
+    nudgeCheckedRef.current = true;
+    let acked = true;
+    try { acked = !!localStorage.getItem('tachyread-disclaimer-ack'); } catch { /* ignore */ }
+    if (!acked) return;
+    const ew = state.global.eyeWarmup || {};
+    if (ew.prompt === false) return;
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (ew.lastPrompt === today) return;
+    setWarmupNudge(true);
+    updateGlobal({ eyeWarmup: { ...ew, lastPrompt: today } }); // stamp so it fires once/day even if ignored
+  }, [state.globalHydrated, isCompact, state.global.eyeWarmup, updateGlobal]);
+  function dismissWarmupNudge() { setWarmupNudge(false); }
+
   // One-click backup to the configured sync target (menu-bar ☁ Sync). Routes the user to setup when
   // the target isn't ready, otherwise pushes the backup and stamps lastSync.
   async function doSyncNow() {
@@ -1933,6 +1954,16 @@ function AppInner() {
           <span className="incog-eyes">🕶</span>
           <span className="incog-text"><b>Incognito reading</b> — tracking is off. Nothing is recorded, and your place rewinds when you turn this off.</span>
           <button className="incog-off" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}>Turn off</button>
+        </div>
+      )}
+      {warmupNudge && (
+        <div className="ew-nudge" role="status">
+          <span>👁️ First read of the day — warm up your eyes first?</span>
+          <span className="grow" />
+          <button className="toggle-on" onClick={() => { dismissWarmupNudge(); openDialog({ kind: 'eye-warmup' }); }}>Warm up ▸</button>
+          <button onClick={dismissWarmupNudge}>Not today</button>
+          <button onClick={() => { dismissWarmupNudge(); updateGlobal({ eyeWarmup: { ...(state.global.eyeWarmup || {}), prompt: false } }); }}>Don’t ask</button>
+          <button className="ew-nudge-x" title="Dismiss" onClick={dismissWarmupNudge}>×</button>
         </div>
       )}
       {/* The reading view stays MOUNTED (just hidden) while a dialog tab is focused, so closing the
