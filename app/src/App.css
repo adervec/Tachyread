@@ -521,6 +521,18 @@
   background: rgba(120, 200, 255, 0.07);
   pointer-events: none;
 }
+/* Watch-mode capture HUD — big glanceable state so hand page-flipping doesn't need reading the
+   status line. go = grabbed / your turn to flip; hold = keep the page still; skip = blank/ignored. */
+.grab-hud {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  padding: 6px 18px; border-radius: 999px; font-size: clamp(15px, 2.4vw, 22px); font-weight: 800;
+  letter-spacing: 0.02em; pointer-events: none; white-space: nowrap;
+  background: rgba(0, 0, 0, 0.62); color: #fff; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+}
+.grab-hud-go { background: rgba(24, 160, 80, 0.92); box-shadow: 0 0 18px 3px rgba(40, 220, 120, 0.55); }
+.grab-hud-hold { background: rgba(200, 140, 20, 0.92); }
+.grab-hud-skip { background: rgba(90, 96, 110, 0.9); }
+.grab-hud-wait { background: rgba(40, 110, 200, 0.9); }
 .grab-controls {
   display: flex;
   align-items: center;
