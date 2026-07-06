@@ -3241,3 +3241,22 @@
 .lj-refhead em { color: var(--status-fg); font-size: 11px; }
 .lj-refbody { padding: 4px 2px 10px; font-size: 12px; line-height: 1.5; color: var(--status-fg); }
 .lj-subgenres { margin-top: 4px; font-style: italic; }
+
+/* Long-pressing UI chrome on mobile pops the text-selection callout (and Chrome's "search"
+   prompt) over labels and buttons nobody needs to copy. Kill selection on chrome only —
+   reading text, inputs and dialog bodies stay selectable. */
+.menu-bar, .tab-bar, .controls-dock, .app-status, .mode-block, .dash-stats,
+.floating-chip, .floating-stats, .floating-face, .reading-view-switch, .rh-tabs,
+button, label, summary, .dialog-title, .dock-handle {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+input, textarea { -webkit-user-select: text; user-select: text; }
+
+/* Sync deconflict modal: one row per contested book, two buttons = two devices' positions. */
+.sync-conflict { border-top: 1px solid var(--divider); padding: 10px 0; }
+.sync-conflict-name { font-weight: 600; margin-bottom: 6px; }
+.sync-conflict-opts { display: flex; gap: 8px; flex-wrap: wrap; }
+.sync-conflict-opts button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 12px; }
+.sync-conflict-opts button em { font-size: 10px; font-style: normal; opacity: 0.75; }

@@ -137,6 +137,7 @@ export function HistoryView() {
       const b = {
         checksum,
         name: f.fileName || nameMap[checksum] || recentName[checksum] || `Book ${checksum.slice(0, 6)}`,
+        posDevice: f.posDevice || '', // which device last moved the reading position
         totalWords,
         wordIndex: f.wordIndex || 0,
         wordsRead,
@@ -364,6 +365,7 @@ export function HistoryView() {
                       </div>
                       <div className="rh-book-sub">
                         {Math.round(b.posFrac * 100)}% · {fmtInt(b.wordsRead)} words · {fmtDur(b.activeSecs)} · {b.avgWpm} WPM
+                        {b.posDevice && <span title="Device that last moved the reading position"> · 📱 {b.posDevice}</span>}
                         {b.rating > 0 && <span className="rh-stars"> · {'★'.repeat(b.rating)}</span>}
                         {b.completions > 0 && <span> · finished ×{b.completions}</span>}
                       </div>

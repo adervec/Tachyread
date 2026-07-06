@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useReducer, useRef, useCallback } from 'react';
-import { defaultFileSettings, defaultGlobalSettings, isSyncedGlobalKey } from './settings.js';
+import { defaultFileSettings, defaultGlobalSettings, isSyncedGlobalKey, tabDefaultsFrom } from './settings.js';
 import { loadGlobal, saveGlobal, loadFile, saveFile, loadReadState, saveReadState, saveDocPayload, loadDocPayload, loadSession, saveSession } from './storage.js';
 import { parseFile, parseClipboardText } from '../document/parsers.js';
 import { readerDocFromText, attachChecksum } from '../document/readerDocument.js';
@@ -243,6 +243,11 @@ export function AppProvider({ children }) {
   // several large books open on a phone).
   const saveTimer = useRef(null);
   const savedSettingsRef = useRef(new Map()); // tab.id -> last-saved settings reference
+  // Sync stamps per tab: what was last persisted, so a change can be DATED. `updatedAt` dates the
+  // reusable (appearance/behaviour) settings — without it the cloud LWW never accepts them on another
+  // device (the reported "theme reset to default"); `posUpdatedAt`/`posDevice` date the reading
+  // position so the cross-device merge can prefer the NEWEST progress, not just the furthest.
+  const saveMetaRef = useRef(new Map()); // tab.id -> { wordIndex, reuse, updatedAt, posUpdatedAt, posDevice }
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
@@ -253,9 +258,19 @@ export function AppProvider({ children }) {
         if (tab.lazy) continue; // placeholder — its settings shell must not overwrite the stored record
         if (savedSettingsRef.current.get(tab.id) === tab.settings) continue; // unchanged → skip
         savedSettingsRef.current.set(tab.id, tab.settings);
-        saveFile(tab.settings).catch(() => {});
+        const s = tab.settings;
+        let meta = saveMetaRef.current.get(tab.id);
+        if (!meta) {
+          // Seed from the loaded settings (stored stamps ride in via buildTabData's spread).
+          meta = { wordIndex: s.wordIndex, reuse: JSON.stringify(tabDefaultsFrom(s)), updatedAt: s.updatedAt || 0, posUpdatedAt: s.posUpdatedAt || 0, posDevice: s.posDevice || '' };
+        }
+        const reuse = JSON.stringify(tabDefaultsFrom(s));
+        if (reuse !== meta.reuse) { meta.updatedAt = Date.now(); meta.reuse = reuse; }
+        if (s.wordIndex !== meta.wordIndex) { meta.posUpdatedAt = Date.now(); meta.posDevice = stateRef.current.global.deviceName || ''; meta.wordIndex = s.wordIndex; }
+        saveMetaRef.current.set(tab.id, meta);
+        saveFile({ ...s, updatedAt: meta.updatedAt, posUpdatedAt: meta.posUpdatedAt, posDevice: meta.posDevice }).catch(() => {});
       }
-      for (const id of [...savedSettingsRef.current.keys()]) if (!live.has(id)) savedSettingsRef.current.delete(id);
+      for (const id of [...savedSettingsRef.current.keys()]) if (!live.has(id)) { savedSettingsRef.current.delete(id); saveMetaRef.current.delete(id); }
     }, 600);
     return () => clearTimeout(saveTimer.current);
   }, [state.tabs]);

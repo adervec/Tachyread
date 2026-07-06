@@ -554,6 +554,18 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     api.scrollToRow({ index: currentLine, align: 'center' });
   }, [currentLine, settings.centerOnCurrent, split, listRef, scrollRead]);
 
+  // Opening a file should land on the current line — but dynamic row heights are only measured
+  // as rows render, so an immediate scrollToRow undershoots. One delayed re-snap after mount
+  // settles it. (Scroll-to-read has its own resume; split view centres by construction.)
+  useEffect(() => {
+    if (split || scrollRead) return;
+    const t = setTimeout(() => {
+      listRef.current?.scrollToRow?.({ index: currentLine, align: 'center' });
+    }, 400); // ponytail: one-shot delay beats a ResizeObserver settle-detector here
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc]);
+
   // "Jump to current word": recenter on demand (bumped by a control), regardless of centerOnCurrent
   // or scroll-to-read — so you can always snap back to where you're reading.
   useEffect(() => {
