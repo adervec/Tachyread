@@ -281,11 +281,43 @@ function htmlToSections(htmlString) {
   return { texts, htmls, toc, styles };
 }
 
-function docFromHtmlString(htmlString, fileName) {
+export function docFromHtmlString(htmlString, fileName) {
   const { texts, htmls, toc, styles } = htmlToSections(htmlString);
   const doc = readerDocFromText(texts.join('\n\n'), fileName);
   attachSegments(doc, texts, { kind: 'html', sections: htmls, styles });
   if (toc.length) doc.tocEntries = toc;
+  return doc;
+}
+
+// A readable document name derived from a URL — its <title>/<h1> is preferred by the caller; this is
+// the fallback: the last meaningful path segment, else the hostname.
+export function nameFromUrl(url) {
+  try {
+    const u = new URL(url);
+    const seg = u.pathname.split('/').filter(Boolean).pop() || '';
+    const base = decodeURIComponent(seg).replace(/\.(html?|php|aspx?)$/i, '').replace(/[-_]+/g, ' ').trim();
+    return base || u.hostname.replace(/^www\./, '');
+  } catch {
+    return 'Web page';
+  }
+}
+
+// Turn fetched/pasted web content into an opened-ready doc. HTML (auto-detected, or forced via
+// `asHtml`) goes through the same structure-aware pipeline as .html files (readability + source view
+// + ToC); anything else is treated as plain text. A checksum is attached so openDoc can adopt it.
+export async function docFromWebContent(content, { url = '', asHtml = null } = {}) {
+  const looksHtml = asHtml != null ? asHtml : /<\/?(?:html|body|main|article|section|div|p|h[1-6]|ul|ol|table)\b/i.test(content);
+  let doc;
+  if (looksHtml) {
+    const titleM = content.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const h1M = content.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+    const title = (titleM?.[1] || h1M?.[1] || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    doc = docFromHtmlString(content, title || nameFromUrl(url));
+  } else {
+    doc = readerDocFromText(content.replace(/\r\n?/g, '\n'), nameFromUrl(url));
+  }
+  if (url) doc.sourceUrl = url;
+  await attachChecksum(doc);
   return doc;
 }
 
