@@ -61,13 +61,53 @@ function PdfSource({ doc, page }) {
   );
 }
 
-function EpubSource({ doc, section }) {
+// Wrap the off-th whitespace-delimited token under root in a marker span (previous marker
+// unwrapped first) and return it; off < 0 just clears. Token counting mirrors the reader's
+// tokenizer (\S+ runs) so the reading position maps onto the source text.
+// ponytail: tokens spanning element boundaries (<b>H</b>ello) count as two — the marker may
+// drift a word on heavy inline formatting, which is fine for a visual cursor.
+function markToken(rootDoc, root, off, cls) {
+  for (const old of root.querySelectorAll('.' + cls)) old.replaceWith(rootDoc.createTextNode(old.textContent));
+  if (off < 0) return null;
+  const walker = rootDoc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (/^(SCRIPT|STYLE)$/.test(n.parentNode?.nodeName || '') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  let count = 0, node;
+  while ((node = walker.nextNode())) {
+    const re = /\S+/g;
+    let m;
+    while ((m = re.exec(node.nodeValue))) {
+      if (count === off) {
+        const range = rootDoc.createRange();
+        range.setStart(node, m.index);
+        range.setEnd(node, m.index + m[0].length);
+        const span = rootDoc.createElement('span');
+        span.className = cls;
+        try { range.surroundContents(span); } catch { return null; }
+        return span;
+      }
+      count++;
+    }
+  }
+  return null;
+}
+
+// The "invert vortex" word marker: difference-blend against whatever the source page looks
+// like, so it inverts any styling instead of assuming one.
+const CURSOR_CSS = '.tx-src-cur { background: #fff; mix-blend-mode: difference; border-radius: 3px; box-shadow: 0 0 0 2px #fff, 0 0 14px 5px rgba(255,255,255,0.5); }';
+
+function EpubSource({ doc, section, curOff, pad }) {
   const ref = useRef(null);
   const html = doc.source.sections[section] || '';
   useEffect(() => {
     if (ref.current) ref.current.scrollTop = 0;
   }, [section]);
-  return <div className="source-html" ref={ref} dangerouslySetInnerHTML={{ __html: html }} />;
+  useEffect(() => {
+    if (!ref.current) return;
+    const span = markToken(document, ref.current, curOff, 'tx-src-cur');
+    span?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [curOff, section, html]);
+  return <div className="source-html" ref={ref} style={{ padding: pad }} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 // HTML/Markdown source: a sandboxed iframe (scripts allowed but origin-isolated; document
@@ -83,12 +123,13 @@ const BASE_SRC_CSS = `
   img { max-width: 100%; } li.task { list-style: none; margin-left: -1.2em; }
 `;
 
-function HtmlSource({ doc, section, checks, onCheck }) {
+function HtmlSource({ doc, section, checks, onCheck, curOff, pad }) {
+  const frameRef = useRef(null);
   const html = doc.source.sections[section] || '';
   const styles = doc.source.styles || '';
   const saved = checks?.[section] || [];
   const srcdoc = `<!doctype html><html><head><meta charset="utf-8">
-    <style>${BASE_SRC_CSS}</style><style>${styles}</style></head><body>${html}
+    <style>${BASE_SRC_CSS}</style><style>body { margin: ${pad}px ${pad + 4}px; }</style><style>${CURSOR_CSS}</style><style>${styles}</style></head><body>${html}
     <script>
       (function () {
         var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox]'));
@@ -100,20 +141,67 @@ function HtmlSource({ doc, section, checks, onCheck }) {
             parent.postMessage({ t: 'src-check', section: ${section}, box: i, on: b.checked }, '*');
           });
         });
+        // Current-word cursor: parent posts the token offset; we wrap it and keep it in view.
+        function mark(off) {
+          var olds = document.querySelectorAll('.tx-src-cur');
+          for (var j = 0; j < olds.length; j++) olds[j].replaceWith(document.createTextNode(olds[j].textContent));
+          if (off < 0) return;
+          var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+            acceptNode: function (n) { return /^(SCRIPT|STYLE)$/.test(n.parentNode && n.parentNode.nodeName || '') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT; }
+          });
+          var count = 0, node;
+          while ((node = walker.nextNode())) {
+            var re = /\\S+/g, m;
+            while ((m = re.exec(node.nodeValue))) {
+              if (count === off) {
+                var range = document.createRange();
+                range.setStart(node, m.index); range.setEnd(node, m.index + m[0].length);
+                var span = document.createElement('span'); span.className = 'tx-src-cur';
+                try { range.surroundContents(span); } catch (e) { return; }
+                span.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                return;
+              }
+              count++;
+            }
+          }
+        }
+        window.addEventListener('message', function (e) {
+          if (e.data && e.data.t === 'src-cur') mark(e.data.off);
+        });
+        // Clicking the page focuses this sandboxed frame — forward the reader's navigation keys
+        // so the arrow shortcuts keep working.
+        document.addEventListener('keydown', function (e) {
+          if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'].indexOf(e.key) >= 0) {
+            e.preventDefault();
+            parent.postMessage({ t: 'src-key', key: e.key, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey }, '*');
+          }
+        });
+        parent.postMessage({ t: 'src-ready', section: ${section} }, '*');
       })();
     </script></body></html>`;
 
+  // Latest offset in a ref so the frame's load handshake can request it without re-binding.
+  const offRef = useRef(curOff);
+  offRef.current = curOff;
   useEffect(() => {
     function onMsg(e) {
       const d = e.data;
       if (d && d.t === 'src-check' && d.section === section) onCheck?.(d.section, d.box, d.on);
+      if (d && d.t === 'src-key') document.dispatchEvent(new KeyboardEvent('keydown', { key: d.key, ctrlKey: d.ctrlKey, shiftKey: d.shiftKey, bubbles: true }));
+      if (d && d.t === 'src-ready') frameRef.current?.contentWindow?.postMessage({ t: 'src-cur', off: offRef.current }, '*');
     }
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
   }, [section, onCheck]);
 
+  // Word moved within the same section — update the marker without reloading the frame.
+  useEffect(() => {
+    frameRef.current?.contentWindow?.postMessage({ t: 'src-cur', off: curOff }, '*');
+  }, [curOff]);
+
   return (
     <iframe
+      ref={frameRef}
       className="source-frame"
       title="Original document"
       sandbox="allow-scripts"
@@ -152,20 +240,45 @@ export default function SourcePane({ tab, onPatch }) {
     );
   }
 
-  const seg = doc.wordToSegment ? doc.wordToSegment[Math.min(idx, doc.wordToSegment.length - 1)] || 0 : 0;
+  const wIdx = Math.min(idx, (doc.wordToSegment?.length || 1) - 1);
+  const seg = doc.wordToSegment ? doc.wordToSegment[wIdx] || 0 : 0;
   const totalSeg = src.kind === 'pdf' ? src.pageCount : src.kind === 'images' ? src.images.length : src.sections.length;
   const label = src.kind === 'pdf' ? 'PDF page' : src.kind === 'images' ? 'Grabbed page' : src.kind === 'html' ? 'Section' : 'EPUB section';
+
+  // Token offset of the current word WITHIN its segment — the DOM cursor counts tokens per section.
+  // Scan back to the segment boundary (bounded by the segment's length, not the whole document).
+  const cursorOn = settings.sourceCursor !== false && (src.kind === 'html' || src.kind === 'epub');
+  let curOff = -1;
+  if (cursorOn && doc.wordToSegment) {
+    let start = wIdx;
+    while (start > 0 && doc.wordToSegment[start - 1] === seg) start--;
+    curOff = wIdx - start;
+  }
+  const pad = Math.max(0, Number(settings.sourcePad ?? 12));
 
   return (
     <div className="source-pane">
       <div className="source-toolbar">
         <span>{label} {seg + 1} / {totalSeg}</span>
-        <span className="source-sync" title="Follows your reading position">⟳ synced</span>
+        <span className="source-tools">
+          {(src.kind === 'html' || src.kind === 'epub') && (
+            <>
+              <button
+                className={`src-tool${settings.sourceCursor !== false ? ' on' : ''}`}
+                title="Mark the current word on the page"
+                onClick={() => onPatch?.({ sourceCursor: settings.sourceCursor === false })}
+              >◎</button>
+              <button className="src-tool" title="Less page padding" onClick={() => onPatch?.({ sourcePad: Math.max(0, pad - 4) })}>–</button>
+              <button className="src-tool" title="More page padding" onClick={() => onPatch?.({ sourcePad: Math.min(48, pad + 4) })}>+</button>
+            </>
+          )}
+          <span className="source-sync" title="Follows your reading position">⟳ synced</span>
+        </span>
       </div>
       <div className="source-body">
         {src.kind === 'pdf' && <PdfSource doc={doc} page={seg} />}
-        {src.kind === 'epub' && <EpubSource doc={doc} section={seg} />}
-        {src.kind === 'html' && <HtmlSource doc={doc} section={seg} checks={checks} onCheck={onCheck} />}
+        {src.kind === 'epub' && <EpubSource doc={doc} section={seg} curOff={curOff} pad={pad} />}
+        {src.kind === 'html' && <HtmlSource doc={doc} section={seg} checks={checks} onCheck={onCheck} curOff={curOff} pad={pad} />}
         {src.kind === 'images' && <ImageSource doc={doc} index={seg} />}
       </div>
     </div>

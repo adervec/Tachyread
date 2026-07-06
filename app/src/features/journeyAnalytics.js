@@ -104,11 +104,42 @@ export function estHours(book, wpm = 250) {
   return round1(words / wpm / 60);
 }
 
-// The on-deck queue as an ordered list with per-book + total time estimates (highest rec first).
-export function queueWithEstimates(books, wpm = 250) {
+const bookWords = (b) => Number(b.words) || (Number(b.pages) ? Number(b.pages) * 275 : 0);
+
+// Words/day the reader has actually been getting through lately — drives the queue's completion
+// dates. Counts FINISHED books (incl. manually entered paper reads) by finishTime in the trailing
+// window, so paper and in-app reading both count. Divides by the elapsed span (floored at 14 days so
+// a single recent finish doesn't imply a wild daily rate). null when there's too little data.
+export function recentWordsPerDay(books, windowDays = 90, now = Date.now()) {
+  const cutoff = now - windowDays * 86400000;
+  let words = 0, earliest = now;
+  for (const b of books || []) {
+    if (readStatus(b) !== 'finished') continue;
+    const t = Date.parse(b.finishTime || '');
+    if (!t || t < cutoff || t > now) continue;
+    const w = bookWords(b);
+    if (!w) continue;
+    words += w;
+    earliest = Math.min(earliest, t);
+  }
+  if (!words) return null;
+  const spanDays = Math.max(14, (now - earliest) / 86400000); // ponytail: 14-day floor tames small samples
+  return Math.round(words / spanDays);
+}
+
+// The on-deck queue as an ordered list (highest rec first) with per-book hours AND a projected
+// completion date per book, assuming the queue is read IN ORDER at the reader's recent words/day.
+export function queueWithEstimates(books, wpm = 250, opts = {}) {
+  const now = opts.now || Date.now();
+  const wordsPerDay = opts.wordsPerDay != null ? opts.wordsPerDay : recentWordsPerDay(books, 90, now);
+  let cumWords = 0;
   const items = books.filter((b) => readStatus(b) === 'queue')
     .sort((a, b) => (Number(b.recScore) || 0) - (Number(a.recScore) || 0))
-    .map((b) => ({ book: b, hours: estHours(b, wpm) }));
+    .map((b) => {
+      cumWords += bookWords(b);
+      const etc = wordsPerDay && cumWords ? new Date(now + (cumWords / wordsPerDay) * 86400000).toISOString().slice(0, 10) : null;
+      return { book: b, hours: estHours(b, wpm), etc };
+    });
   const totalHours = round1(items.reduce((s, i) => s + (i.hours || 0), 0));
-  return { items, totalHours, count: items.length };
+  return { items, totalHours, count: items.length, wordsPerDay };
 }

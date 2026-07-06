@@ -1,12 +1,19 @@
 // Self-check for readerArchetype.js — run: node app/src/features/readerArchetype.demo.mjs
 import assert from 'node:assert';
-import { bookVector, readerProfile, matchArchetype, currentArchetype, archetypeTrend, MIN_BOOKS } from './readerArchetype.js';
+import { bookVector, readerProfile, matchArchetype, currentArchetype, archetypeTrend, archetypeAxes, READER_ARCHETYPES, AXES, MIN_BOOKS } from './readerArchetype.js';
 
 const fin = (o) => ({ completion: true, ...o });
 
-// bookVector indicators
+// bookVector indicators (12 axes now): fiction, literary, challenge, volume set; old → not contemporary
 const v = bookVector({ fnf: 'F', genre: 'Literary', difficultyLevel: 5, pubDate: '1866', pages: 700 });
-assert.deepEqual(v, [1, 0, 1, 0, 0, 0, 1, 1]); // fiction, literary, challenge, volume; old → not contemporary
+assert.deepEqual(v, [1, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0]);
+// A speculative series book lights speculative + genreFiction + series
+const sfV = bookVector({ fnf: 'F', genre: 'Science Fiction', series: 'Foundation', seriesNum: 2, pubDate: '2018', pages: 400 });
+assert.equal(sfV[AXES.indexOf('speculative')], 1);
+assert.equal(sfV[AXES.indexOf('series')], 1);
+assert.equal(sfV[AXES.indexOf('genreFiction')], 1);
+// Every archetype vector has one weight per axis
+assert.ok(READER_ARCHETYPES.every((a) => a.vector.length === AXES.length), 'archetype vectors match axis count');
 
 // A classic-literary reader → The Classicist / Aesthete
 const classicist = [
@@ -47,5 +54,20 @@ assert.equal(shortWin.at(-1).count, 3, 'short window holds only the 3 recent rea
 assert.notStrictEqual(shortWin.at(-1).archetypeId, null);
 assert.equal(longWin.at(-1).count, 6, 'long window holds all reads');
 assert.ok(shortWin.at(-1).count < longWin.at(-1).count, 'shorter window < books than longer window');
+
+// archetypeAxes: the legend's defining axes are the highest-weighted, above the floor, capped at n.
+const scholarAxes = archetypeAxes(READER_ARCHETYPES.find((a) => a.id === 'scholar'), 3);
+assert.ok(scholarAxes.length <= 3 && scholarAxes.every((x) => x.weight >= 0.5));
+assert.ok(scholarAxes.some((x) => x.ax === 'nonfiction' || x.ax === 'ideas'), 'scholar defined by nonfiction/ideas');
+// weights are descending
+for (let i = 1; i < scholarAxes.length; i++) assert.ok(scholarAxes[i - 1].weight >= scholarAxes[i].weight);
+
+// A speculative-series reader lands on a speculative archetype (worldbuilder / series-binger / genre-devotee)
+const spec = [
+  fin({ fnf: 'F', genre: 'Science Fiction', series: 'A', seriesNum: 1, difficultyLevel: 3, pubDate: '2016', pages: 600, finishTime: '2024-01-10' }),
+  fin({ fnf: 'F', genre: 'Fantasy', series: 'B', seriesNum: 2, difficultyLevel: 3, pubDate: '2018', pages: 700, finishTime: '2024-03-10' }),
+  fin({ fnf: 'F', genre: 'Fantasy', series: 'B', seriesNum: 3, difficultyLevel: 4, pubDate: '2020', pages: 800, finishTime: '2024-05-10' }),
+];
+assert.ok(['worldbuilder', 'series-binger', 'genre-devotee', 'completionist'].includes(currentArchetype(spec).archetype.id), 'speculative-series reader → speculative archetype');
 
 console.log('readerArchetype.demo: all assertions passed ✅');

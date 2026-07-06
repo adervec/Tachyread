@@ -457,10 +457,19 @@
   color: var(--status-fg);
 }
 .source-toolbar .source-sync { color: var(--nav-session-read-fg); }
+.stat-file-card { border: 1px solid var(--divider); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+.stat-file-card.active { border-color: var(--toggle-active-bg); }
+.stat-file-name { font-weight: 600; margin-bottom: 4px; }
+.stat-active-tag { color: var(--toggle-active-bg); font-weight: 600; }
+.stat-file-card .history-table { margin: 0; }
+.source-tools { display: flex; align-items: center; gap: 4px; }
+.src-tool { font-size: 12px; line-height: 1; padding: 2px 6px; min-width: 22px; }
+.src-tool.on { background: var(--toggle-active-bg); color: #fff; }
 .source-body { flex: 1; min-height: 0; overflow: auto; display: flex; justify-content: center; }
 .source-canvas-wrap { width: 100%; padding: 5px; display: flex; justify-content: center; align-items: flex-start; }
 .source-canvas-wrap canvas { max-width: 100%; height: auto; box-shadow: var(--shadow); background: #fff; }
 .source-html { padding: 12px 16px; max-width: 100%; line-height: 1.5; color: var(--line-unread-fg); }
+.source-html .tx-src-cur { background: #fff; mix-blend-mode: difference; border-radius: 3px; box-shadow: 0 0 0 2px #fff, 0 0 14px 5px rgba(255, 255, 255, 0.5); }
 .source-html img { max-width: 100%; height: auto; }
 .source-image { max-width: 100%; height: auto; box-shadow: var(--shadow); }
 .source-msg { padding: 16px; color: var(--status-fg); font-size: 12px; text-align: center; }
@@ -3150,6 +3159,16 @@
 .lj-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 11px; }
 .lj-legend-item { display: inline-flex; align-items: center; gap: 4px; color: var(--status-fg); }
 .lj-legend-item i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.lj-arch-legend { margin-top: 14px; border-top: 1px solid var(--divider); padding-top: 8px; }
+.lj-arch-legend-toggle { background: transparent; border: none; color: var(--menu-fg); font: inherit; font-size: 12px; cursor: pointer; padding: 2px 0; }
+.lj-arch-legend-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; margin-top: 6px; }
+.lj-arch-legend-row { display: flex; gap: 8px; padding: 6px 8px; border: 1px solid var(--divider); border-radius: 6px; }
+.lj-arch-legend-row.current { border-color: var(--accent, #3a86ff); background: var(--menu-highlight); }
+.lj-arch-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; margin-top: 4px; }
+.lj-arch-legend-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lj-arch-legend-body b { font-size: 12px; }
+.lj-arch-legend-axes { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+.lj-arch-legend-axis { font-size: 10px; background: var(--divider); border-radius: 4px; padding: 1px 5px; color: var(--menu-fg); }
 
 /* Constellation / tech tree */
 .lj-sky-wrap { position: relative; margin-top: 6px; }
@@ -3164,8 +3183,18 @@
 .lj-star.lj-abandoned { opacity: 0.28; stroke: #b05555; stroke-dasharray: 1 1.5; }
 .lj-star.sel { stroke: #fff; stroke-width: 2; }
 @keyframes lj-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
-.lj-starcard { position: absolute; left: 10px; bottom: 10px; max-width: 62%; max-height: 74%; overflow: auto; background: var(--menu-bg, #1b1c22); border: 1px solid var(--accent, #3a86ff); border-radius: 8px; padding: 8px 26px 8px 10px; font-size: 12px; }
+.lj-starcards { position: absolute; left: 10px; bottom: 10px; right: 10px; display: flex; flex-wrap: wrap-reverse; align-items: flex-end; gap: 8px; max-height: 82%; overflow: auto; pointer-events: none; }
+.lj-starcard { position: relative; width: 260px; max-width: 100%; max-height: 78vh; overflow: auto; background: var(--menu-bg, #1b1c22); border: 1px solid var(--accent, #3a86ff); border-radius: 8px; padding: 8px 26px 8px 10px; font-size: 12px; pointer-events: auto; box-shadow: var(--shadow); }
 .lj-starcard .close-x { position: absolute; top: 2px; right: 4px; }
+.lj-starcard-notes { font-size: 11px; color: var(--status-fg); margin-top: 4px; line-height: 1.4; font-style: italic; }
+.lj-chooser { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); max-width: 80%; max-height: 70%; overflow: auto; background: var(--menu-bg, #1b1c22); border: 1px solid var(--accent, #3a86ff); border-radius: 8px; padding: 4px; font-size: 12px; box-shadow: var(--shadow); z-index: 3; }
+.lj-chooser-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 4px 4px; color: var(--status-fg); font-size: 11px; }
+.lj-chooser-head .close-x { position: static; }
+.lj-chooser-item { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer; padding: 4px 6px; border-radius: 5px; }
+.lj-chooser-item:hover { background: var(--menu-highlight); }
+.lj-chooser-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.lj-chooser-title { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.lj-chooser-item em { color: var(--status-fg); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lj-star-label { fill: var(--menu-fg); paint-order: stroke; stroke: rgba(0, 0, 0, 0.55); stroke-width: 0.5px; pointer-events: none; opacity: 0.92; }
 .lj-edge-legend { position: absolute; top: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 3px 10px; max-width: 55%; justify-content: flex-end; background: color-mix(in srgb, var(--menu-bg) 82%, transparent); border-radius: 6px; padding: 4px 7px; font-size: 10px; }
 .lj-starcard-desc { font-size: 11px; color: var(--status-fg); margin-top: 4px; line-height: 1.4; }
@@ -3187,7 +3216,8 @@
 .lj-queue-main { display: flex; flex-direction: column; min-width: 0; }
 .lj-queue-main b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lj-queue-main em { color: var(--status-fg); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lj-queue-est { color: var(--status-fg); font-size: 11px; white-space: nowrap; }
+.lj-queue-est { color: var(--status-fg); font-size: 11px; white-space: nowrap; text-align: right; }
+.lj-queue-etc { color: var(--nav-session-read-fg); }
 .lj-queue-acts { display: flex; gap: 4px; }
 .lj-queue-acts button { font-size: 11px; padding: 3px 7px; }
 

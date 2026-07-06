@@ -1,6 +1,6 @@
 // Self-check for journeyAnalytics.js — run: node app/src/features/journeyAnalytics.demo.mjs
 import assert from 'node:assert';
-import { cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, estHours, queueWithEstimates } from './journeyAnalytics.js';
+import { cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, estHours, queueWithEstimates, recentWordsPerDay } from './journeyAnalytics.js';
 
 const books = [
   { id: 'a', title: 'A', author: 'X', genre: 'Literary', fnf: 'F', completion: true, finishTime: '2023-02-10', pages: 300, words: 90000, difficultyLevel: 4, rating: 5, recBy: 'Sam' },
@@ -71,5 +71,33 @@ const q = queueWithEstimates(books, 250);
 assert.equal(q.count, 2);
 assert.equal(q.items[0].book.id, 'e'); // highest recScore first
 assert.ok(q.totalHours > 0);
+
+// recentWordsPerDay: only finishes within the window count; paper entries (words/pages) included.
+const NOW = Date.parse('2024-06-01');
+const paceBooks = [
+  { completion: true, finishTime: '2024-05-01', words: 100000 }, // 31 days before NOW, in window
+  { completion: true, finishTime: '2024-05-20', pages: 200 },     // paper entry (200*275=55000 words)
+  { completion: true, finishTime: '2020-01-01', words: 999999 },  // way outside the 90-day window → ignored
+  { shelf: 'queue', words: 50000 },                                // not finished → ignored
+];
+const wpd = recentWordsPerDay(paceBooks, 90, NOW);
+// span = 31 days (earliest in-window finish), words = 100000 + 55000 = 155000 → ~5000/day
+assert.equal(wpd, Math.round(155000 / 31));
+
+// ETC: read in order at a fixed pace → cumulative, monotonically later dates.
+const qEtc = queueWithEstimates(books, 250, { now: NOW, wordsPerDay: 5000 });
+assert.equal(qEtc.wordsPerDay, 5000);
+assert.ok(qEtc.items[0].etc && qEtc.items[1].etc);
+assert.ok(qEtc.items[1].etc >= qEtc.items[0].etc); // second book finishes no earlier than the first
+// book 'e' = 100000 words / 5000 per day = 20 days after NOW
+assert.equal(qEtc.items[0].etc, new Date(NOW + 20 * 86400000).toISOString().slice(0, 10));
+
+// no recent finishes → no pace → null ETCs but hours still computed. `books` has a 2024-05 finish,
+// so push NOW far into the future to leave nothing in the trailing 90-day window.
+const FUTURE = Date.parse('2030-01-01');
+const qNone = queueWithEstimates(books, 250, { now: FUTURE });
+assert.equal(qNone.wordsPerDay, null);
+assert.equal(qNone.items[0].etc, null);
+assert.ok(qNone.items[0].hours > 0);
 
 console.log('journeyAnalytics.demo: all assertions passed ✅');
