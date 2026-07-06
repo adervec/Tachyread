@@ -51,6 +51,7 @@ const compactStart = isCompactScreen(); // touch + short-side aware, so a phone 
 
 const init = {
   global: defaultGlobalSettings(),
+  globalHydrated: false, // true once stored global settings have loaded (guards boot-once prompts)
   tabs: [],
   activeTabId: null,
   appStatus: 'Ready.',
@@ -94,7 +95,7 @@ export const DOC_SCOPED_KINDS = new Set([
 function reducer(state, action) {
   switch (action.type) {
     case 'SET_GLOBAL':
-      return { ...state, global: action.global };
+      return { ...state, global: action.global, globalHydrated: true };
     case 'ADD_TAB': {
       const tabs = [...state.tabs, action.tab];
       return { ...state, tabs, activeTabId: action.tab.id };

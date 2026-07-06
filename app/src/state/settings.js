@@ -207,6 +207,9 @@ export function defaultGlobalSettings() {
     vocabDeck: [], // spaced-repetition cards: { word, context, addedAt, reps, interval, ease, due, lastGrade }
     // Comfort & calibration: 20-20-20 eye-rest microbreaks + fatigue-aware speed easing.
     comfort: { enabled: true, breakIntervalMin: 20, microbreakSec: 20, autoBackoff: true },
+    // Eye warmup: once-a-day desktop nudge + the last routine the user configured (total minutes and
+    // which drills). prompt=false silences the nudge; lastPrompt is a YYYY-MM-DD guard so it fires once/day.
+    eyeWarmup: { prompt: true, lastPrompt: '', minutes: 3, exercises: null }, // exercises null = the default set
     // Ambient background soundscape — last-used type + volume. Volume is hard-capped low by the
     // engine (features/ambient.js) so it can never overpower read-aloud / TTS.
     ambient: { type: 'Brown', volume: 0.18 },
