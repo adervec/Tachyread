@@ -469,12 +469,18 @@
 .source-canvas-wrap { width: 100%; padding: 5px; display: flex; justify-content: center; align-items: flex-start; }
 .source-canvas-wrap canvas { max-width: 100%; height: auto; box-shadow: var(--shadow); background: #fff; }
 .source-html { padding: 12px 16px; max-width: 100%; line-height: 1.5; color: var(--line-unread-fg); }
-.source-html .tx-src-cur { background: #fff; mix-blend-mode: difference; border-radius: 3px; box-shadow: 0 0 0 2px #fff, 0 0 14px 5px rgba(255, 255, 255, 0.5); }
+/* Source cursor look — one set of variants shared by the EPUB DOM marker (.tx-src-cur) and the PDF
+   overlay (.src-canvas-mark). Colour comes from --src-cur (set on the container), amber by default. */
+.cur-vortex.tx-src-cur, .cur-vortex.src-canvas-mark { background: #fff; mix-blend-mode: difference; border-radius: 3px; box-shadow: 0 0 0 2px #fff, 0 0 14px 5px rgba(255, 255, 255, 0.5); }
+.cur-box.tx-src-cur, .cur-box.src-canvas-mark { background: transparent; outline: 2px solid var(--src-cur, #ffd54f); border-radius: 3px; box-shadow: 0 0 8px 1px var(--src-cur, #ffd54f); }
+.cur-underline.tx-src-cur, .cur-underline.src-canvas-mark { background: transparent; border-bottom: 3px solid var(--src-cur, #ffd54f); }
+.cur-highlight.tx-src-cur, .cur-highlight.src-canvas-mark { background: color-mix(in srgb, var(--src-cur, #ffd54f) 42%, transparent); border-radius: 2px; }
 /* Best-effort cursor on rendered (non-DOM) sources: a word box over a PDF, a progress band over a
    grabbed image. The wrap goes edge-to-edge so the % coordinates line up with the canvas/image. */
 .source-canvas-cursor { position: relative; padding: 0; }
-.src-canvas-mark { position: absolute; background: #fff; mix-blend-mode: difference; border-radius: 2px; box-shadow: 0 0 0 1.5px #fff, 0 0 10px 3px rgba(255, 255, 255, 0.5); pointer-events: none; }
-.src-band-mark { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid rgba(90, 169, 255, 0.9); box-shadow: 0 0 8px 2px rgba(90, 169, 255, 0.5); pointer-events: none; }
+.src-canvas-mark { position: absolute; pointer-events: none; }
+.src-band-mark { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid var(--src-cur, rgba(90, 169, 255, 0.9)); box-shadow: 0 0 8px 2px var(--src-cur, rgba(90, 169, 255, 0.5)); pointer-events: none; }
+.src-tool-sel { font-size: 11px; padding: 1px 3px; max-width: 92px; }
 .source-html img { max-width: 100%; height: auto; }
 .source-image { max-width: 100%; height: auto; box-shadow: var(--shadow); }
 .source-msg { padding: 16px; color: var(--status-fg); font-size: 12px; text-align: center; }
@@ -1371,11 +1377,15 @@
 .line-row.toc-entry { background: var(--toc-entry-bg); }
 .line-row.toc-entry .text { color: var(--toc-entry-fg); font-weight: bold; }
 .line-row .word { display: inline; }
-.line-row .word.current.style-Underline { text-decoration: underline; }
+.line-row .word.current.style-Underline { text-decoration: underline; text-decoration-color: var(--cw-color, currentColor); }
+.line-row .word.current.style-Overline { text-decoration: overline; text-decoration-color: var(--cw-color, currentColor); }
+.line-row .word.current.style-Underline.style-Overline { text-decoration: underline overline; text-decoration-color: var(--cw-color, currentColor); }
 .line-row .word.current.style-Bold { font-weight: 800; }
-.line-row .word.current.style-Color { color: var(--orp-fg); }
-.line-row .word.current.style-Background { background: rgba(255, 235, 59, 0.35); border-radius: 2px; }
-.line-row .word.current.style-Box { outline: 1.5px solid var(--orp-fg); border-radius: 3px; padding: 0 2px; }
+.line-row .word.current.style-Italic { font-style: italic; }
+.line-row .word.current.style-Color { color: var(--cw-color, var(--orp-fg)); }
+.line-row .word.current.style-Background { background: color-mix(in srgb, var(--cw-color, #ffeb3b) 35%, transparent); border-radius: 2px; }
+.line-row .word.current.style-Box { outline: 1.5px solid var(--cw-color, var(--orp-fg)); border-radius: 3px; padding: 0 2px; }
+.line-row .word.current.style-Glow { text-shadow: 0 0 6px var(--cw-color, var(--orp-fg)), 0 0 10px var(--cw-color, var(--orp-fg)); }
 .line-row .word.hidden-word { visibility: hidden; }
 .line-row .orp-char { color: var(--orp-fg); font-weight: bold; }
 .line-row .bionic-bold { font-weight: 700; }
@@ -2246,6 +2256,11 @@
   cursor: pointer;
 }
 .checkbox-pill input { margin: 0; }
+/* Colour swatch row (current-word highlight, source cursor). "Theme" swatch shows an A on the input bg. */
+.swatch-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.swatch { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--input-border); cursor: pointer; background: var(--input-bg); color: var(--menu-fg); font-size: 11px; line-height: 1; padding: 0; }
+.swatch.on { outline: 2px solid var(--toggle-active-bg); outline-offset: 1px; }
+.swatch-custom { width: 26px; height: 24px; padding: 0; border: 1px solid var(--input-border); border-radius: 4px; background: none; cursor: pointer; }
 .settings-note { color: var(--status-fg); font-size: 11px; margin: 0 0 10px; }
 
 /* Star rating */

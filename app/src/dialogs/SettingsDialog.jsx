@@ -12,7 +12,12 @@ const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel']
 // Reading-pointer options archived with its Settings section (see below). Restore alongside it.
 // const POINTER_STYLES = ['Arrow', 'Diamond', 'Star', 'Circle', 'Hand'];
 // const POINTER_PLACEMENTS = ['Above', 'Below', 'Left', 'Right'];
-const CURRENT_WORD_STYLES = ['Underline', 'Bold', 'Background', 'Color', 'Box'];
+const CURRENT_WORD_STYLES = ['Underline', 'Overline', 'Bold', 'Italic', 'Color', 'Background', 'Box', 'Glow'];
+// Named highlight colours shared by the current-word highlight and the source cursor. '' = theme default.
+const HIGHLIGHT_COLORS = [
+  ['', 'Theme'], ['#ffd54f', 'Amber'], ['#4fd8ff', 'Cyan'], ['#7dff8a', 'Green'],
+  ['#ff7ab0', 'Pink'], ['#ffb04f', 'Orange'], ['#b58cff', 'Purple'], ['#ff5c5c', 'Red'],
+];
 
 // Back-compat: older saved tabs used a single `currentWordStyle` string.
 function readCwStyles(s) {
@@ -342,6 +347,21 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
               </label>
             );
           })}
+        </div>
+      </Field>
+      <Field label="Current-word colour">
+        <div className="swatch-row">
+          {HIGHLIGHT_COLORS.map(([hex, label]) => (
+            <button
+              key={hex || 'theme'}
+              type="button"
+              className={`swatch${(s.currentWordColor || '') === hex ? ' on' : ''}`}
+              style={hex ? { background: hex } : undefined}
+              title={label}
+              onClick={() => patch({ currentWordColor: hex })}
+            >{hex ? '' : 'A'}</button>
+          ))}
+          <input type="color" className="swatch-custom" value={s.currentWordColor || '#ffd54f'} onChange={(e) => patch({ currentWordColor: e.target.value })} title="Custom colour" />
         </div>
       </Field>
 

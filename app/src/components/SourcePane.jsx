@@ -19,7 +19,7 @@ function getPdf(doc) {
   return p;
 }
 
-function PdfSource({ doc, page, curOff }) {
+function PdfSource({ doc, page, curOff, curStyle, curColor }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const markRef = useRef(null);
@@ -88,21 +88,33 @@ function PdfSource({ doc, page, curOff }) {
   const box = tokens && curOff >= 0 ? tokens[Math.min(curOff, tokens.length - 1)] : null;
   useEffect(() => { markRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, [box]);
 
+  const wrapStyle = curColor ? { '--src-cur': curColor } : undefined;
   return (
-    <div className="source-canvas-wrap source-canvas-cursor" ref={wrapRef}>
+    <div className="source-canvas-wrap source-canvas-cursor" ref={wrapRef} style={wrapStyle}>
       {err ? <div className="source-msg">Could not render page: {err}</div> : <canvas ref={canvasRef} />}
-      {box && <span ref={markRef} className="src-canvas-mark" style={{ left: `${box.left}%`, top: `${box.top}%`, width: `${Math.max(box.w, 1.5)}%`, height: `${Math.max(box.h, 1.6)}%` }} />}
+      {box && <span ref={markRef} className={`src-canvas-mark cur-${curStyle}`} style={{ left: `${box.left}%`, top: `${box.top}%`, width: `${Math.max(box.w, 1.5)}%`, height: `${Math.max(box.h, 1.6)}%` }} />}
     </div>
   );
 }
 
+// Marker CSS declarations for the chosen style/colour — used to inject the cursor look into the
+// sandboxed HTML iframe (which can't see App.css). The parent-DOM markers (EPUB/PDF) use the
+// matching .cur-<style> classes in App.css instead.
+export function cursorDecls(style, color) {
+  const c = color || '#ffd54f';
+  if (style === 'box') return `background:transparent;outline:2px solid ${c};border-radius:3px;box-shadow:0 0 8px 1px ${c};`;
+  if (style === 'underline') return `background:transparent;border-bottom:3px solid ${c};`;
+  if (style === 'highlight') return `background:color-mix(in srgb, ${c} 42%, transparent);border-radius:2px;`;
+  return 'background:#fff;mix-blend-mode:difference;border-radius:3px;box-shadow:0 0 0 2px #fff,0 0 14px 5px rgba(255,255,255,0.5);'; // vortex
+}
+
 // Wrap the off-th whitespace-delimited token under root in a marker span (previous marker
 // unwrapped first) and return it; off < 0 just clears. Token counting mirrors the reader's
-// tokenizer (\S+ runs) so the reading position maps onto the source text.
-// ponytail: tokens spanning element boundaries (<b>H</b>ello) count as two — the marker may
-// drift a word on heavy inline formatting, which is fine for a visual cursor.
-function markToken(rootDoc, root, off, cls) {
-  for (const old of root.querySelectorAll('.' + cls)) old.replaceWith(rootDoc.createTextNode(old.textContent));
+// tokenizer (\S+ runs) so the reading position maps onto the source text. `styleCls` = the
+// cur-<style> class picking the look. ponytail: tokens spanning element boundaries (<b>H</b>ello)
+// count as two — the marker may drift a word on heavy inline formatting, fine for a visual cursor.
+function markToken(rootDoc, root, off, styleCls) {
+  for (const old of root.querySelectorAll('.tx-src-cur')) old.replaceWith(rootDoc.createTextNode(old.textContent));
   if (off < 0) return null;
   const walker = rootDoc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => (/^(SCRIPT|STYLE)$/.test(n.parentNode?.nodeName || '') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
@@ -117,7 +129,7 @@ function markToken(rootDoc, root, off, cls) {
         range.setStart(node, m.index);
         range.setEnd(node, m.index + m[0].length);
         const span = rootDoc.createElement('span');
-        span.className = cls;
+        span.className = `tx-src-cur ${styleCls || 'cur-vortex'}`;
         try { range.surroundContents(span); } catch { return null; }
         return span;
       }
@@ -129,9 +141,7 @@ function markToken(rootDoc, root, off, cls) {
 
 // The "invert vortex" word marker: difference-blend against whatever the source page looks
 // like, so it inverts any styling instead of assuming one.
-const CURSOR_CSS = '.tx-src-cur { background: #fff; mix-blend-mode: difference; border-radius: 3px; box-shadow: 0 0 0 2px #fff, 0 0 14px 5px rgba(255,255,255,0.5); }';
-
-function EpubSource({ doc, section, curOff, pad }) {
+function EpubSource({ doc, section, curOff, pad, curStyle, curColor }) {
   const ref = useRef(null);
   const html = doc.source.sections[section] || '';
   useEffect(() => {
@@ -139,10 +149,12 @@ function EpubSource({ doc, section, curOff, pad }) {
   }, [section]);
   useEffect(() => {
     if (!ref.current) return;
-    const span = markToken(document, ref.current, curOff, 'tx-src-cur');
+    const span = markToken(document, ref.current, curOff, `cur-${curStyle}`);
     span?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  }, [curOff, section, html]);
-  return <div className="source-html" ref={ref} style={{ padding: pad }} dangerouslySetInnerHTML={{ __html: html }} />;
+  }, [curOff, section, html, curStyle]);
+  const st = { padding: pad };
+  if (curColor) st['--src-cur'] = curColor;
+  return <div className="source-html" ref={ref} style={st} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 // HTML/Markdown source: a sandboxed iframe (scripts allowed but origin-isolated; document
@@ -158,13 +170,14 @@ const BASE_SRC_CSS = `
   img { max-width: 100%; } li.task { list-style: none; margin-left: -1.2em; }
 `;
 
-function HtmlSource({ doc, section, checks, onCheck, curOff, pad }) {
+function HtmlSource({ doc, section, checks, onCheck, curOff, pad, curStyle, curColor }) {
   const frameRef = useRef(null);
   const html = doc.source.sections[section] || '';
   const styles = doc.source.styles || '';
   const saved = checks?.[section] || [];
+  const cursorCss = `.tx-src-cur { ${cursorDecls(curStyle, curColor)} }`;
   const srcdoc = `<!doctype html><html><head><meta charset="utf-8">
-    <style>${BASE_SRC_CSS}</style><style>body { margin: ${pad}px ${pad + 4}px; }</style><style>${CURSOR_CSS}</style><style>${styles}</style></head><body>${html}
+    <style>${BASE_SRC_CSS}</style><style>body { margin: ${pad}px ${pad + 4}px; }</style><style>${cursorCss}</style><style>${styles}</style></head><body>${html}
     <script>
       (function () {
         var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox]'));
@@ -245,19 +258,23 @@ function HtmlSource({ doc, section, checks, onCheck, curOff, pad }) {
   );
 }
 
-function ImageSource({ doc, index, frac }) {
+function ImageSource({ doc, index, frac, curColor }) {
   const url = doc.source.images[index];
   const markRef = useRef(null);
   useEffect(() => { markRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, [frac]);
   // A grabbed page is a flat image with no word geometry, so the cursor is a best-effort progress
   // band at the fraction of the page you've reached (by word count) — a "you're about here" guide.
+  const wrapStyle = curColor ? { '--src-cur': curColor } : undefined;
   return (
-    <div className="source-canvas-wrap source-canvas-cursor">
+    <div className="source-canvas-wrap source-canvas-cursor" style={wrapStyle}>
       {url ? <img className="source-image" src={url} alt={`grabbed page ${index + 1}`} /> : <div className="source-msg">No image.</div>}
       {url && frac != null && frac >= 0 && <span ref={markRef} className="src-band-mark" style={{ top: `${Math.min(98, frac * 100)}%` }} />}
     </div>
   );
 }
+
+const CUR_STYLES = [['vortex', 'Invert'], ['box', 'Box'], ['underline', 'Underline'], ['highlight', 'Highlight']];
+const CUR_COLORS = [['', 'Auto'], ['#ffd54f', 'Amber'], ['#4fd8ff', 'Cyan'], ['#7dff8a', 'Green'], ['#ff7ab0', 'Pink'], ['#ffb04f', 'Orange'], ['#b58cff', 'Purple'], ['#ff5c5c', 'Red']];
 
 export default function SourcePane({ tab, onPatch }) {
   const { doc, settings } = tab;
@@ -300,6 +317,8 @@ export default function SourcePane({ tab, onPatch }) {
   }
   const pad = Math.max(0, Number(settings.sourcePad ?? 12));
   const textSource = src.kind === 'html' || src.kind === 'epub';
+  const curStyle = settings.sourceCursorStyle || 'vortex';
+  const curColor = settings.sourceCursorColor || '';
 
   return (
     <div className="source-pane">
@@ -311,6 +330,18 @@ export default function SourcePane({ tab, onPatch }) {
             title="Mark the current word on the page"
             onClick={() => onPatch?.({ sourceCursor: settings.sourceCursor === false })}
           >◎</button>
+          {settings.sourceCursor !== false && (
+            <>
+              {src.kind !== 'images' && (
+                <select className="src-tool-sel" value={curStyle} title="Cursor style" onChange={(e) => onPatch?.({ sourceCursorStyle: e.target.value })}>
+                  {CUR_STYLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              )}
+              <select className="src-tool-sel" value={curColor} title="Cursor colour" onChange={(e) => onPatch?.({ sourceCursorColor: e.target.value })}>
+                {CUR_COLORS.map(([v, l]) => <option key={v || 'auto'} value={v}>{l}</option>)}
+              </select>
+            </>
+          )}
           {textSource && (
             <>
               <button className="src-tool" title="Less page padding" onClick={() => onPatch?.({ sourcePad: Math.max(0, pad - 4) })}>–</button>
@@ -321,10 +352,10 @@ export default function SourcePane({ tab, onPatch }) {
         </span>
       </div>
       <div className="source-body">
-        {src.kind === 'pdf' && <PdfSource doc={doc} page={seg} curOff={curOff} />}
-        {src.kind === 'epub' && <EpubSource doc={doc} section={seg} curOff={curOff} pad={pad} />}
-        {src.kind === 'html' && <HtmlSource doc={doc} section={seg} checks={checks} onCheck={onCheck} curOff={curOff} pad={pad} />}
-        {src.kind === 'images' && <ImageSource doc={doc} index={seg} frac={cursorOn && segLen ? curOff / segLen : -1} />}
+        {src.kind === 'pdf' && <PdfSource doc={doc} page={seg} curOff={curOff} curStyle={curStyle} curColor={curColor} />}
+        {src.kind === 'epub' && <EpubSource doc={doc} section={seg} curOff={curOff} pad={pad} curStyle={curStyle} curColor={curColor} />}
+        {src.kind === 'html' && <HtmlSource doc={doc} section={seg} checks={checks} onCheck={onCheck} curOff={curOff} pad={pad} curStyle={curStyle} curColor={curColor} />}
+        {src.kind === 'images' && <ImageSource doc={doc} index={seg} frac={cursorOn && segLen ? curOff / segLen : -1} curColor={curColor} />}
       </div>
     </div>
   );

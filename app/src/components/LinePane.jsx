@@ -843,11 +843,14 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     if (visibleRef) visibleRef.current = { page: pageTargetLine };
   });
 
+  const paneStyle = {};
+  if (settings.fontFamily) paneStyle.fontFamily = settings.fontFamily;
+  if (settings.currentWordColor) paneStyle['--cw-color'] = settings.currentWordColor;
   return (
     <div
       className={`line-pane${headingPack ? ` hsp-${headingPack}` : ''}`}
       ref={paneVisRef}
-      style={settings.fontFamily ? { fontFamily: settings.fontFamily } : undefined}
+      style={Object.keys(paneStyle).length ? paneStyle : undefined}
     >
       <div className="line-pane-toolbar">
         <span>Lines</span>
