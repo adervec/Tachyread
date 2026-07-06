@@ -207,6 +207,7 @@ function AppInner() {
   // Peek: preview a line without moving the reading position. The Lines pane scrolls to it (list
   // view) or shows it in the bottom zone (split view), reverting once normal reading resumes.
   const [peek, setPeek] = useState({ line: -1, token: 0 });
+  const [scrollCmd, setScrollCmd] = useState(null); // scroll-mode nav command for LinePane {token, kind}
   const [tocFlash, setTocFlash] = useState({ index: -1, token: 0 });
   const peekToLine = useCallback((line) => setPeek((s) => ({ line, token: s.token + 1 })), []);
   const clearPeek = useCallback(() => setPeek((s) => (s.line < 0 ? s : { line: -1, token: s.token + 1 })), []);
@@ -649,6 +650,12 @@ function AppInner() {
 
   function nav(kind) {
     if (!activeTab) return;
+    // In scroll-to-read the nav buttons drive the SCROLL, not the index: snap the current line to
+    // the configured read point, then scroll by the corresponding amount (LinePane executes it).
+    if (state.global.scrollAdvances && state.showLines !== false) {
+      setScrollCmd((c) => ({ token: (c?.token || 0) + 1, kind }));
+      return;
+    }
     const doc = activeTab.doc;
     const cur = activeTab.settings.wordIndex;
     const curLine = getLineIndex(doc, cur);
@@ -714,6 +721,10 @@ function AppInner() {
   // (e.g. mobile Fast-Reader view) or can't report a range.
   function pageLines(dir) {
     if (!activeTab) return;
+    if (state.global.scrollAdvances && state.showLines !== false) {
+      setScrollCmd((c) => ({ token: (c?.token || 0) + 1, kind: dir > 0 ? 'pageDown' : 'pageUp' }));
+      return;
+    }
     const target = linesVisibleRef.current?.page?.(dir);
     if (target == null) { nav(dir > 0 ? 'nextPara' : 'prevPara'); return; }
     const doc = activeTab.doc;
@@ -1839,6 +1850,7 @@ function AppInner() {
           onVisible={onLinesVisible}
           compact={isCompact}
           scrollRead={state.global.scrollAdvances}
+          scrollCmd={scrollCmd}
           recenterKey={recenterKey}
           onAddNote={(wi) => { jumpWord(wi); openDialog({ kind: 'notes' }); }}
         />
@@ -1846,13 +1858,19 @@ function AppInner() {
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showStats, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances, recenterKey]);
+  }, [activeTab, state.showToc, state.showStats, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances, scrollCmd, recenterKey]);
 
   // One derived `dialog` drives the whole render block below: a blocking modal wins, otherwise the
   // focused dialog tab. When it's a panel (no modal), `dialogDocked` restyles it from a centered
   // overlay into a non-blocking docked side panel — the tab's content, essentially.
   const dialog = state.modal || state.panels.find((p) => p.id === state.activePanelId) || null;
   const dialogDocked = !state.modal && !!dialog;
+  // Doc-scoped dialog tabs render against the file they were OPENED for (their stamped docTabId),
+  // not whatever tab is active now — so peeking another book can't retarget an open Audiobook/Notes
+  // tab. Unscoped dialogs keep following the active tab.
+  const dlgTab = dialog?.docTabId != null
+    ? (() => { const t = state.tabs.find((tt) => tt.id === dialog.docTabId); return t && !t.lazy ? t : null; })()
+    : activeTab;
 
   return (
     <div
@@ -2138,39 +2156,41 @@ function AppInner() {
       {dialog?.kind === 'goto' && activeTab && (
         <GoToLineDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
       )}
-      {dialog?.kind === 'tab-settings' && activeTab && (
+      {dialog?.kind === 'tab-settings' && dlgTab && (
         <SettingsDialog
-          settings={activeTab.settings}
-          onPatch={(p) => patchSettings(activeTab.id, p)}
+          settings={dlgTab.settings}
+          onPatch={(p) => patchSettings(dlgTab.id, p)}
           onClose={closeDialog}
           title="Tab Settings"
           onOpenFontManager={() => openDialog({ kind: 'font-manager' })}
           diffAgainst={{ other: state.global.fileDefaults || {}, label: 'Differs from your defaults:', resettable: true }}
+          profiles={state.global.settingsProfiles}
+          onProfilesChange={(p) => updateGlobal({ settingsProfiles: p })}
         />
       )}
-      {dialog?.kind === 'typing-settings' && activeTab && (
+      {dialog?.kind === 'typing-settings' && dlgTab && (
         <TypingSettingsDialog
-          settings={activeTab.settings}
-          onPatch={(p) => patchSettings(activeTab.id, p)}
+          settings={dlgTab.settings}
+          onPatch={(p) => patchSettings(dlgTab.id, p)}
           global={state.global}
           onPatchGlobal={updateGlobal}
           onClose={closeDialog}
         />
       )}
-      {dialog?.kind === 'audio-settings' && activeTab && (
+      {dialog?.kind === 'audio-settings' && dlgTab && (
         <AudioSettingsDialog
-          settings={activeTab.settings}
-          onPatch={(p) => patchSettings(activeTab.id, p)}
+          settings={dlgTab.settings}
+          onPatch={(p) => patchSettings(dlgTab.id, p)}
           global={state.global}
           onPatchGlobal={updateGlobal}
           onClose={closeDialog}
         />
       )}
-      {dialog?.kind === 'font-manager' && activeTab && (
+      {dialog?.kind === 'font-manager' && dlgTab && (
         <FontManagerDialog
-          tab={activeTab}
+          tab={dlgTab}
           global={state.global}
-          onPatchSettings={(p) => patchSettings(activeTab.id, p)}
+          onPatchSettings={(p) => patchSettings(dlgTab.id, p)}
           onPatchGlobal={updateGlobal}
           onClose={closeDialog}
         />
@@ -2220,22 +2240,22 @@ function AppInner() {
       {dialog?.kind === 'literary-journey' && (
         <LiteraryJourneyDialog global={state.global} onPatch={(p) => updateGlobal(p)} onClose={closeDialog} />
       )}
-      {dialog?.kind === 'proper-names' && activeTab && (
+      {dialog?.kind === 'proper-names' && dlgTab && (
         <ProperNamesDialog
-          tab={activeTab}
+          tab={dlgTab}
           onJumpWord={jumpWord}
           onWizard={() => openDialog({ kind: 'resource-wizard', resourceKind: 'names' })}
           onClose={closeDialog}
         />
       )}
-      {dialog?.kind === 'audiobook' && activeTab && (
-        <AudiobookDialog tab={activeTab} onClose={closeDialog} />
+      {dialog?.kind === 'audiobook' && dlgTab && (
+        <AudiobookDialog tab={dlgTab} onClose={closeDialog} />
       )}
-      {dialog?.kind === 'notes' && activeTab && (
-        <NotesDialog tab={activeTab} onJumpWord={(wi) => jumpWord(wi)} onClose={closeDialog} />
+      {dialog?.kind === 'notes' && dlgTab && (
+        <NotesDialog tab={dlgTab} onJumpWord={(wi) => jumpWord(wi)} onClose={closeDialog} />
       )}
-      {dialog?.kind === 'tts-popup' && activeTab && (
-        <TtsPopupDialog tab={activeTab} onClose={closeDialog} />
+      {dialog?.kind === 'tts-popup' && dlgTab && (
+        <TtsPopupDialog tab={dlgTab} onClose={closeDialog} />
       )}
       {dialog?.kind === 'face-library' && <FaceLibraryDialog onClose={closeDialog} />}
       {dialog?.kind === 'disclaimer' && (
@@ -2253,14 +2273,14 @@ function AppInner() {
       {dialog?.kind === 'dictation' && <DictationDialog onClose={closeDialog} />}
       {dialog?.kind === 'ambient' && <AmbientDialog onClose={closeDialog} />}
       {dialog?.kind === 'vocab' && <VocabDialog doc={activeTab?.doc} onClose={closeDialog} />}
-      {dialog?.kind === 'regressions' && activeTab && (
-        <RegressionDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
+      {dialog?.kind === 'regressions' && dlgTab && (
+        <RegressionDialog tab={dlgTab} onJumpWord={jumpWord} onClose={closeDialog} />
       )}
-      {dialog?.kind === 'progress-detail' && activeTab && (
-        <ProgressDetailDialog tab={activeTab} onJumpWord={jumpWord} onClose={closeDialog} />
+      {dialog?.kind === 'progress-detail' && dlgTab && (
+        <ProgressDetailDialog tab={dlgTab} onJumpWord={jumpWord} onClose={closeDialog} />
       )}
-      {dialog?.kind === 'attention' && activeTab && (
-        <AttentionDialog tab={activeTab} recentScores={probeScoresRef.current} onClose={closeDialog} />
+      {dialog?.kind === 'attention' && dlgTab && (
+        <AttentionDialog tab={dlgTab} recentScores={probeScoresRef.current} onClose={closeDialog} />
       )}
       {dialog?.kind === 'grab' && <GrabWizard onClose={closeDialog} />}
       {dialog?.kind === 'toc-wizard' && activeTab && (

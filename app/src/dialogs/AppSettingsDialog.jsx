@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Dialog from './Dialog.jsx';
-import { resetGlobalToDefaults } from '../state/settings.js';
+import { resetGlobalToDefaults, syncableGlobalSettings } from '../state/settings.js';
+import ProfilesBar from '../components/ProfilesBar.jsx';
 import { LANGUAGES } from '../state/languages.js';
 import { ANTHROPIC_MODELS } from '../features/anthropic.js';
 import { TRANSLATE_PROVIDERS, TARGET_LANGS, translateConfigured, translateText } from '../features/translateService.js';
@@ -67,6 +68,13 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         <strong> Settings → Tab Settings</strong>.
       </p>
 
+      <ProfilesBar
+        kind="app"
+        profiles={g.settingsProfiles}
+        onChange={(p) => patch({ settingsProfiles: p })}
+        capture={() => syncableGlobalSettings(g)}
+        apply={(data) => { setG({ ...g, ...data }); onPatch(data); }}
+      />
       <div className="dlg-cols">
       <div className="field-section">Language</div>
       <Field label="Document language">

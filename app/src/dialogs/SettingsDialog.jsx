@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { THEME_CATEGORIES, HEADING_PACKS } from '../state/themes.js';
-import { offDefaultKeys, defaultFileSettings } from '../state/settings.js';
+import { offDefaultKeys, defaultFileSettings, tabDefaultsFrom } from '../state/settings.js';
+import ProfilesBar from '../components/ProfilesBar.jsx';
 import { createMetronome } from '../features/metronome.js';
 import { DEFAULT_METRONOME } from '../engine/metronome.js';
 import { LINE_SOUNDS, playLineSound } from '../features/clickSound.js';
@@ -79,7 +80,7 @@ function Section({ children }) {
 // 'rightPaneFontSize' → 'right pane font size' for the difference chips.
 const prettyKey = (k) => k.replace(/([A-Z])/g, ' $1').toLowerCase().trim();
 
-export default function SettingsDialog({ settings, onPatch, onClose, title = 'Tab Settings', matchCurrent, onResetFactory, onOpenFontManager, diffAgainst }) {
+export default function SettingsDialog({ settings, onPatch, onClose, title = 'Tab Settings', matchCurrent, onResetFactory, onOpenFontManager, diffAgainst, profiles, onProfilesChange }) {
   const [s, setS] = useState(settings);
   const metroRef = useRef(null);
 
@@ -129,6 +130,15 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
         </>
       }
     >
+      {profiles && onProfilesChange && (
+        <ProfilesBar
+          kind="tab"
+          profiles={profiles}
+          onChange={onProfilesChange}
+          capture={() => tabDefaultsFrom(s)}
+          apply={(data) => { setS({ ...s, ...data }); onPatch(data); }}
+        />
+      )}
       {matchCurrent && (
         <p className="settings-note" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={() => { const next = matchCurrent(); if (next) patch(next); }}>⤓ Match current tab</button>

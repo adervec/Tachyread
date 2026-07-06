@@ -405,7 +405,7 @@ function revealBoundary(doc, idx, mode) {
   return Infinity;
 }
 
-export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { line: -1, token: 0 }, visibleRef, onVisible, compact = false, scrollRead = false, recenterKey = 0, onAddNote }) {
+export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { line: -1, token: 0 }, visibleRef, onVisible, compact = false, scrollRead = false, scrollCmd = null, recenterKey = 0, onAddNote }) {
   const { doc, settings } = tab;
   const paneVisRef = useReportVisibility(onVisible || (() => {}));
   const idx = settings.wordIndex;
@@ -588,10 +588,12 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   const peekActiveRef = useRef(false);
   peekActiveRef.current = (peek?.line ?? -1) >= 0;
   const speedWin = useRef([]); // rolling {t, w} of recent frontier advances
+  const cmdScrollRef = useRef(false); // a nav-button-commanded scroll is deliberate — exempt from the kill switch
   const creditRef = useRef(null);
   creditRef.current = (f) => {
     if (f == null || f <= idxRef.current) return;
     if (peekActiveRef.current) return;
+    if (cmdScrollRef.current) { jumpRef.current(f, { read: true, src: 'scroll' }); return; } // deliberate: credit, don't poison the speed window
     const now = Date.now();
     const win = speedWin.current;
     win.push({ t: now, w: f - idxRef.current });
@@ -604,6 +606,40 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     }
     jumpRef.current(f, { read: true, src: 'scroll' });
   };
+
+  // Nav buttons while scroll-reading: snap the current line to the configured read point, then
+  // scroll by the requested amount (word/line = one line, paragraph = its line span, page = a
+  // screenful). The scroll itself advances the frontier through the normal crediting path above.
+  useEffect(() => {
+    if (!scrollCmd || split || !scrollRead) return undefined;
+    const wrap = listWrapRef.current;
+    if (!wrap) return undefined;
+    const scroller = [...wrap.querySelectorAll('*')].find((el) => /(auto|scroll)/.test(getComputedStyle(el).overflowY)) || wrap;
+    const point = Math.max(0, Math.min(1, settings.scrollReadPoint ?? 0));
+    const row = wrap.querySelector('.line-row[data-line]');
+    const lineH = row ? row.getBoundingClientRect().height : 26;
+    const k = scrollCmd.kind;
+    const dir = /prev|Up/.test(k) ? -1 : 1;
+    let delta = lineH; // word & line → one line
+    if (/Para/.test(k)) {
+      const r = getParagraphRange(doc, currentLine);
+      const span = dir > 0
+        ? Math.max(1, r.endLine + 1 - currentLine)
+        : Math.max(1, currentLine - getParagraphRange(doc, Math.max(0, r.startLine - 1)).startLine);
+      delta = span * lineH;
+    } else if (/page/i.test(k)) delta = scroller.clientHeight * 0.85;
+    cmdScrollRef.current = true;
+    // Snap synchronously by direct scrollTop math (react-window's scrollToRow applies async and
+    // would clobber the delta): put the current line's row ON the read point, then add the step.
+    const curRow = wrap.querySelector(`.line-row[data-line="${currentLine}"]`);
+    if (curRow) {
+      const targetY = wrap.getBoundingClientRect().top + point * scroller.clientHeight;
+      scroller.scrollTop += curRow.getBoundingClientRect().top - targetY;
+    }
+    scroller.scrollTop += dir * delta;
+    setTimeout(() => { cmdScrollRef.current = false; }, 350);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollCmd?.token]);
 
   // onRowsRendered is the reliable line-granular signal; a scroll listener refines it to word-level
   // within the straddling line. Both advance the frontier forward only.
@@ -657,6 +693,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
         if (rr.bottom <= readY + 1) continue;
         const ln = doc.lines[Number(row.getAttribute('data-line'))];
         if (!ln) return null;
+        if (ln.startWordIndex < 0) continue; // blank separator on the read point — use the next text line
         const end = ln.endWordIndex >= 0 ? ln.endWordIndex : ln.startWordIndex;
         const frac = Math.max(0, Math.min(1, (readY - rr.top) / Math.max(1, rr.height)));
         return ln.startWordIndex + Math.round(frac * Math.max(0, end - ln.startWordIndex));

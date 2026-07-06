@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { groupForChecksum, masterOf } from '../features/bookGroups.js';
 
@@ -21,29 +21,35 @@ export default function TabBar() {
   const noDocs = tabs.length === 0;
   const dragId = useRef(null);                 // document tab being dragged
   const [dropId, setDropId] = useState(null);  // tab the drop indicator is on
+
+  // A doc-scoped panel (its docTabId names a file tab) renders in a GROUP right after that file's
+  // tab, titled with the file / book-group name; unscoped panels stay leftmost.
+  const docLabelOf = (tab) => {
+    const cs = tab.lazy ? tab.settings?.contentChecksum : tab.doc?.contentChecksum;
+    const grp = groupForChecksum(groups, cs);
+    const name = (grp && grp.name && grp.name !== 'Untitled book' ? grp.name : (tab.lazy ? tab.fileName : tab.doc.fileName)) || '';
+    return name.replace(/\.[a-z0-9]+$/i, '');
+  };
+  const renderPanel = (p, docLabel) => {
+    const base = PANEL_LABELS[p.kind] || p.kind;
+    const label = docLabel ? `${base} · ${docLabel}` : base;
+    return (
+      <div
+        key={`panel-${p.id}`}
+        className={`tab dialog-tab${docLabel ? ' grouped' : ''} ${p.id === activePanelId ? 'active' : ''}`}
+        onClick={() => setActivePanel(p.id)}
+        title={p.id === activePanelId ? `${label} — tap to minimize` : label}
+      >
+        <span className="name">{label}</span>
+        <button className="close" onClick={(e) => { e.stopPropagation(); closePanel(p.id); }} title="Close">×</button>
+      </div>
+    );
+  };
+
   return (
     <div className="tab-bar">
-      {/* Dialog tabs first (leftmost), styled distinctly from document tabs. */}
-      {panels.map((p) => {
-        const label = PANEL_LABELS[p.kind] || p.kind;
-        return (
-          <div
-            key={`panel-${p.id}`}
-            className={`tab dialog-tab ${p.id === activePanelId ? 'active' : ''}`}
-            onClick={() => setActivePanel(p.id)}
-            title={p.id === activePanelId ? `${label} — tap to minimize` : label}
-          >
-            <span className="name">{label}</span>
-            <button
-              className="close"
-              onClick={(e) => { e.stopPropagation(); closePanel(p.id); }}
-              title="Close"
-            >
-              ×
-            </button>
-          </div>
-        );
-      })}
+      {/* Unscoped dialog tabs first (leftmost); doc-scoped ones render inside their file's group below. */}
+      {panels.filter((p) => p.docTabId == null).map((p) => renderPanel(p, null))}
       {noDocs && panels.length === 0 && (
         <span className="empty">No documents open — File → Open or drop a file</span>
       )}
@@ -64,10 +70,11 @@ export default function TabBar() {
           mark = cs === master ? '★' : String((named.members || []).filter((m) => m !== master).indexOf(cs) + 1);
         }
         const label = named ? named.name : fileName;
+        const scopedPanels = panels.filter((p) => p.docTabId === tab.id);
         return (
+          <Fragment key={tab.id}>
           <div
-            key={tab.id}
-            className={`tab ${tab.id === state.activeTabId ? 'active' : ''} ${tab.lazy ? 'lazy' : ''}${dropId === tab.id ? ' drop-target' : ''}`}
+            className={`tab ${tab.id === state.activeTabId ? 'active' : ''} ${tab.lazy ? 'lazy' : ''}${dropId === tab.id ? ' drop-target' : ''}${scopedPanels.length ? ' has-group' : ''}`}
             draggable
             onClick={() => setActiveTab(tab.id)}
             onDragStart={(e) => { dragId.current = tab.id; e.dataTransfer.effectAllowed = 'move'; }}
@@ -90,6 +97,9 @@ export default function TabBar() {
             </button>
             <div className="progress" style={{ width: `${pct}%` }} />
           </div>
+          {/* This file's dialog tabs (settings / audiobook / notes / …) grouped right after it. */}
+          {scopedPanels.map((p) => renderPanel(p, docLabelOf(tab)))}
+          </Fragment>
         );
       })}
     </div>

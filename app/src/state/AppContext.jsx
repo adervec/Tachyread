@@ -83,6 +83,14 @@ const MODAL_KINDS = new Set([
   'webcam-calib', 'hand-calib', 'grab', 'toc-wizard', 'resource-wizard',
 ]);
 
+// Dialog-tab kinds whose subject is ONE document. Opening one stamps the active doc tab's id onto
+// the panel: it stays locked to that file (switching doc tabs doesn't retarget it), shows the file's
+// name in its title, renders grouped next to its file tab, and closes when the file tab closes.
+export const DOC_SCOPED_KINDS = new Set([
+  'tab-settings', 'typing-settings', 'audio-settings', 'font-manager', 'proper-names',
+  'audiobook', 'notes', 'tts-popup', 'regressions', 'progress-detail', 'attention',
+]);
+
 function reducer(state, action) {
   switch (action.type) {
     case 'SET_GLOBAL':
@@ -102,10 +110,16 @@ function reducer(state, action) {
       const active = state.activeTabId === action.id
         ? (tabs[tabs.length - 1]?.id ?? null)
         : state.activeTabId;
-      return { ...state, tabs, activeTabId: active };
+      // A file's doc-scoped dialog tabs (its settings/audiobook/notes/…) close with the file.
+      const panels = state.panels.filter((p) => p.docTabId !== action.id);
+      const activePanelId = panels.some((p) => p.id === state.activePanelId) ? state.activePanelId : null;
+      return { ...state, tabs, activeTabId: active, panels, activePanelId };
     }
-    case 'CLOSE_ALL_TABS':
-      return { ...state, tabs: [], activeTabId: null };
+    case 'CLOSE_ALL_TABS': {
+      const panels = state.panels.filter((p) => p.docTabId == null);
+      return { ...state, tabs: [], activeTabId: null, panels,
+        activePanelId: panels.some((p) => p.id === state.activePanelId) ? state.activePanelId : null };
+    }
     case 'REORDER_TABS': {
       const from = state.tabs.findIndex((t) => t.id === action.fromId);
       const to = state.tabs.findIndex((t) => t.id === action.toId);
@@ -138,15 +152,18 @@ function reducer(state, action) {
       const d = action.dialog;
       if (!d) return state;
       if (MODAL_KINDS.has(d.kind)) return { ...state, modal: d };
-      // Dedupe: opening a kind that's already a tab just refocuses it (no second copy) and refreshes
-      // its props — so you can never get two Application Settings tabs.
-      const existing = state.panels.find((p) => p.kind === d.kind);
+      // Doc-scoped dialogs lock to the file they were opened for.
+      const scoped = DOC_SCOPED_KINDS.has(d.kind);
+      const docTabId = scoped ? state.activeTabId : undefined;
+      // Dedupe: same kind refocuses (per FILE for doc-scoped kinds — Audiobook for book A and for
+      // book B are two different tabs; there's still never two Audiobook tabs for the same book).
+      const existing = state.panels.find((p) => p.kind === d.kind && (!scoped || p.docTabId === docTabId));
       if (existing) {
         return { ...state, activePanelId: existing.id,
           panels: state.panels.map((p) => (p.id === existing.id ? { ...p, ...d } : p)) };
       }
       const id = state.panelSeq + 1;
-      return { ...state, panels: [...state.panels, { ...d, id }], activePanelId: id, panelSeq: id };
+      return { ...state, panels: [...state.panels, { ...d, id, docTabId }], activePanelId: id, panelSeq: id };
     }
     case 'CLOSE_DIALOG': {
       // A dialog's own ×/Esc closes whatever is focused: a modal first, else the active panel tab.
