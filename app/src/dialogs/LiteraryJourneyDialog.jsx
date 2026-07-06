@@ -20,6 +20,8 @@ import {
 } from '../features/journeyAnalytics.js';
 import { normTitle } from '../document/tocWizard.js';
 import { groupForChecksum } from '../features/bookGroups.js';
+import { HistoryView } from './HistoryDialog.jsx';
+import ProgressDetailDialog from './ProgressDetailDialog.jsx';
 import { getSyncProvider } from '../features/sync/syncProviders.js';
 import { syncLibraryWithProvider, backupLibraryToProvider } from '../features/sync/syncManager.js';
 import { AXES, READER_ARCHETYPES, readerProfile, matchArchetype, currentArchetype, archetypeTrend } from '../features/readerArchetype.js';
@@ -44,14 +46,15 @@ function Stat({ v, l, sub }) {
   return <div className="rh-stat"><b className="rh-stat-v">{v}</b><span className="rh-stat-l">{l}</span>{sub && <em className="rh-stat-sub">{sub}</em>}</div>;
 }
 
-export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
+export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onClose }) {
   const [books, setBooks] = useState(null);
   const [refs, setRefs] = useState({ authors: null, genres: null, subgenres: null });
   const [ai, setAi] = useState(null);
   const [size, setSize] = useState(null);
   const [bindMap, setBindMap] = useState(null);
   const [docMeta, setDocMeta] = useState([]);
-  const [tab, setTab] = useState('dashboard');
+  const [tab, setTab] = useState(initialTab || 'dashboard');
+  const [progressFor, setProgressFor] = useState(null); // checksum whose stored progress detail is open
   const fileRef = useRef(null);
   const [importMode, setImportMode] = useState('merge');
   const [syncBusy, setSyncBusy] = useState(false);
@@ -79,7 +82,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
     setBindMap(bind); setDocMeta(docs);
   }
   useEffect(() => { reload(); }, []);
-  useEffect(() => { if (books && !didInit.current) { didInit.current = true; if (books.length === 0) setTab('data'); } }, [books]);
+  useEffect(() => { if (books && !didInit.current) { didInit.current = true; if (books.length === 0 && !initialTab) setTab('data'); } }, [books, initialTab]);
 
   // Reconcile-on-open: any tracker book linked to an app document that's now finished (a completion,
   // a "finished" shelf, or ≥99% read) gets marked finished. Runs once per open. ponytail: a snapshot
@@ -189,6 +192,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
     { id: 'library', label: `Library${books ? ` (${books.length})` : ''}` },
     { id: 'queue', label: `Queue${queueCount ? ` (${queueCount})` : ''}` },
     { id: 'timeline', label: 'Timeline' },
+    { id: 'rhistory', label: 'Reading History' },
     { id: 'analytics', label: 'Analytics' },
     { id: 'authors', label: 'Authors' },
     { id: 'genres', label: 'Genres' },
@@ -281,7 +285,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
               </div>
 
               {adding && <BookEditor book={{ id: '', title: '', author: '', genre: '', fnf: 'F', type: 'long' }} isNew onCancel={() => setAdding(false)} onSave={async (b) => { await saveBook({ ...b, id: deriveId(b) }); setAdding(false); }} />}
-              {selBook && <BookEditor book={selBook} docMeta={docMeta} bindMap={bindMap} groups={global?.bookGroups} onBind={bind} onCancel={() => setSelected(null)} onSave={saveBook} onDelete={() => removeBook(selBook.id)} />}
+              {selBook && <BookEditor book={selBook} docMeta={docMeta} bindMap={bindMap} groups={global?.bookGroups} onBind={bind} onProgress={setProgressFor} onCancel={() => setSelected(null)} onSave={saveBook} onDelete={() => removeBook(selBook.id)} />}
 
               <div className="lj-list">
                 {shown.map((b) => {
@@ -309,6 +313,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
 
           {tab === 'queue' && <QueueView books={books} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
           {tab === 'timeline' && <TimelineView books={books} />}
+          {tab === 'rhistory' && <HistoryView />}
           {tab === 'analytics' && <AnalyticsView books={books} />}
           {tab === 'authors' && <RefList kind="author" items={refs.authors} books={books} />}
           {tab === 'genres' && <RefList kind="genre" items={refs.genres} subitems={refs.subgenres} books={books} />}
@@ -349,6 +354,9 @@ export default function LiteraryJourneyDialog({ global, onPatch, onClose }) {
           )}
         </>
       )}
+      {progressFor && (
+        <ProgressDetailDialog storedChecksum={progressFor} onClose={() => setProgressFor(null)} />
+      )}
     </Dialog>
   );
 }
@@ -367,7 +375,7 @@ function suggestDoc(book, docMeta) {
 }
 
 // Inline add/edit card for one book.
-function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, groups = [], onBind, onSave, onCancel, onDelete }) {
+function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, groups = [], onBind, onProgress, onSave, onCancel, onDelete }) {
   const [b, setB] = useState(book);
   useEffect(() => { setB(book); }, [book]);
   const status = readStatus(b);
@@ -402,6 +410,7 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, groups = 
             </select>
           </label>
           {suggested && <button className="link-btn" onClick={() => onBind(suggested.checksum, b.id)}>Link “{suggested.fileName}”?</button>}
+          {currentLink && onProgress && <button className="link-btn" title="Reading progress detail for the linked document — works even when the file isn't on this device (uses the synced reading state)" onClick={() => onProgress(currentLink)}>📈 Progress</button>}
           {linkedGroup && <span className="settings-note">📚 Also in book group <b>{linkedGroup.name}</b> (Settings → Book Groups).</span>}
           <span className="settings-note">Linking auto-marks this book finished when you complete that document.</span>
         </div>

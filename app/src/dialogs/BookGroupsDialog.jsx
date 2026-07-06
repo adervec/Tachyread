@@ -22,7 +22,10 @@ export default function BookGroupsDialog({ onClose }) {
       const fs = (await allFiles().catch(() => [])).filter((f) => f.checksum);
       setFiles(fs);
       const map = {};
-      for (const r of state.global.recentFiles || []) if (r.checksum) map[r.checksum] = r.name;
+      // The file record's own name first (it syncs with progress, so books read on OTHER devices
+      // are named too) — no raw checksums.
+      for (const f of fs) if (f.fileName) map[f.checksum] = f.fileName;
+      for (const r of state.global.recentFiles || []) if (r.checksum && !map[r.checksum]) map[r.checksum] = r.name;
       for (const g of await allGrabbed().catch(() => [])) if (g.checksum && !map[g.checksum]) map[g.checksum] = g.name;
       for (const t of state.tabs) if (t.doc?.contentChecksum && !map[t.doc.contentChecksum]) map[t.doc.contentChecksum] = t.doc.fileName;
       setNameMap(map);
@@ -36,7 +39,7 @@ export default function BookGroupsDialog({ onClose }) {
   const groupedSet = useMemo(() => new Set(groups.flatMap((g) => g.members || [])), [groups]);
   const bookById = useMemo(() => Object.fromEntries(trackerBooks.map((b) => [b.id, b])), [trackerBooks]);
   const openSet = useMemo(() => new Set(state.tabs.map((t) => t.doc?.contentChecksum).filter(Boolean)), [state.tabs]);
-  const nameOf = (cs) => nameMap[cs] || `${cs.slice(0, 8)}…`;
+  const nameOf = (cs) => nameMap[cs] || `Book ${cs.slice(0, 6)}`; // never a raw checksum
   const pctLabel = (cs) => (recByChecksum[cs]?.totalWords ? `${Math.round(percentOf(recByChecksum[cs]) * 100)}%` : 'not opened here');
   // The Trackyread book this file is linked to (via the tracker's doc-binding), if any.
   const trackerFor = (cs) => { const id = bindMap[cs]; return id ? bookById[id] : null; };
