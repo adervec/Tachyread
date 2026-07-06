@@ -2062,7 +2062,9 @@ function AppInner() {
       {/* A docked dialog tab portals its content in here, filling the tab's page (controls stay below). */}
       <div className="dialog-slot" ref={dialogSlotRef} />
       </div>
-      <div className={`controls-dock${controlsCollapsed ? ' collapsed' : ''}`}>
+      {/* A docked dialog (settings/tools screen) fills the content area — the reading controls
+          below it belong to the hidden reader, so hide them too (they read as residual state). */}
+      <div className={`controls-dock${controlsCollapsed ? ' collapsed' : ''}`} style={dialogDocked ? { display: 'none' } : undefined}>
         <div className="dock-handle-bar">
           <button
             className="dock-handle"
@@ -2280,7 +2282,7 @@ function AppInner() {
       {dialog?.kind === 'data' && <DataDialog onClose={closeDialog} />}
       {dialog?.kind === 'book-groups' && <BookGroupsDialog onClose={closeDialog} />}
       {dialog?.kind === 'stats' && (
-        <StatisticsDialog tab={activeTab} onClose={closeDialog} />
+        <StatisticsDialog tabs={state.tabs} activeTabId={state.activeTabId} onClose={closeDialog} />
       )}
       {dialog?.kind === 'literary-journey' && (
         <LiteraryJourneyDialog global={state.global} onPatch={(p) => updateGlobal(p)} initialTab={dialog.tab} onClose={closeDialog} />

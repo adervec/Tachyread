@@ -10,7 +10,51 @@ function fmtTime(secs) {
   return `${h ? h + 'h ' : ''}${m ? m + 'm ' : ''}${s}s`;
 }
 
-export default function StatisticsDialog({ tab, onClose }) {
+// Live per-file card for one OPEN tab (has a hydrated tracker). Lazy tabs (not yet loaded) show a
+// lightweight line from their stored settings instead.
+function OpenFileCard({ tab, active }) {
+  if (tab.lazy || !tab.tracker) {
+    const s = tab.settings || {};
+    const pct = s.totalWords ? ((s.wordIndex / s.totalWords) * 100).toFixed(0) : '0';
+    return (
+      <div className={`stat-file-card${active ? ' active' : ''}`}>
+        <div className="stat-file-name">{tab.fileName || s.fileName || 'Untitled'}{active ? ' ·' : ''} <span className="settings-note">not loaded — {pct}% ({s.wordIndex || 0} words in)</span></div>
+      </div>
+    );
+  }
+  const t = tab.tracker;
+  return (
+    <div className={`stat-file-card${active ? ' active' : ''}`}>
+      <div className="stat-file-name">{tab.doc.fileName}{active && <span className="stat-active-tag"> · current</span>}</div>
+      <table className="history-table">
+        <tbody>
+          <tr>
+            <td>Coverage</td>
+            <td>{(t.coverage() * 100).toFixed(1)}% ({t.readCount} / {t.wordCount} words)</td>
+          </tr>
+          <tr>
+            <td>This session</td>
+            <td>{t.sessionNewWords} new words · {fmtTime(Math.round(t.sessionActiveMs / 1000))} active · {t.sessionWpm()} WPM</td>
+          </tr>
+          <tr>
+            <td>Reading now</td>
+            <td>{t.recentWpm()} WPM</td>
+          </tr>
+          <tr>
+            <td>Lifetime (this file)</td>
+            <td>{fmtTime(Math.round(t.lifetimeActiveMs / 1000))} active · {t.lifetimeWpm()} WPM</td>
+          </tr>
+          <tr>
+            <td>Completions</td>
+            <td>{(tab.settings.completions || []).length}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default function StatisticsDialog({ tabs = [], activeTabId, onClose }) {
   const [files, setFiles] = useState([]);
   useEffect(() => {
     allFiles().then(setFiles);
@@ -40,8 +84,10 @@ export default function StatisticsDialog({ tab, onClose }) {
     return secs > 0 ? Math.round((words / secs) * 60) : 0;
   }
 
+  const openTabs = tabs.filter((t) => t && (t.doc || t.lazy));
+
   return (
-    <Dialog title="Statistics" onClose={onClose} width={620}>
+    <Dialog title="Statistics" onClose={onClose} width={640}>
       <div className="field-section">Aggregate (all files)</div>
       <table className="history-table">
         <thead>
@@ -60,45 +106,16 @@ export default function StatisticsDialog({ tab, onClose }) {
         </tbody>
       </table>
 
-      {tab && (
-        <>
-          <div className="field-section">Current file: {tab.doc.fileName}</div>
-          {tab.tracker && (
-            <table className="history-table" style={{ marginBottom: 10 }}>
-              <tbody>
-                <tr>
-                  <td>Book read (coverage)</td>
-                  <td>
-                    {(tab.tracker.coverage() * 100).toFixed(1)}% ({tab.tracker.readCount} / {tab.tracker.wordCount} words)
-                  </td>
-                </tr>
-                <tr>
-                  <td>This session</td>
-                  <td>
-                    {tab.tracker.sessionNewWords} new words · {fmtTime(Math.round(tab.tracker.sessionActiveMs / 1000))} active ·{' '}
-                    {tab.tracker.sessionWpm()} WPM efficiency
-                  </td>
-                </tr>
-                <tr>
-                  <td>Reading now</td>
-                  <td>{tab.tracker.recentWpm()} WPM</td>
-                </tr>
-                <tr>
-                  <td>Lifetime (this file)</td>
-                  <td>
-                    {fmtTime(Math.round(tab.tracker.lifetimeActiveMs / 1000))} active · {tab.tracker.lifetimeWpm()} WPM efficiency
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          )}
-          <div>Completions: {(tab.settings.completions || []).length}</div>
-          <p className="settings-note">
-            “Efficiency” = unique new words read per active minute (excludes idle, skips, and
-            re-reads). “Reading now” is your pace over the last ~30s of active reading.
-          </p>
-        </>
-      )}
+      <div className="field-section">Open files ({openTabs.length})</div>
+      {openTabs.length === 0 && <p className="settings-note">No files open.</p>}
+      {openTabs.map((t) => (
+        <OpenFileCard key={t.id} tab={t} active={t.id === activeTabId} />
+      ))}
+
+      <p className="settings-note">
+        “Effective WPM” = unique new words read per active minute (excludes idle, skips, and
+        re-reads). “Reading now” is your pace over the last ~30s of active reading.
+      </p>
     </Dialog>
   );
 }

@@ -24,7 +24,7 @@ import { HistoryView } from './HistoryDialog.jsx';
 import ProgressDetailDialog from './ProgressDetailDialog.jsx';
 import { getSyncProvider } from '../features/sync/syncProviders.js';
 import { syncLibraryWithProvider, backupLibraryToProvider } from '../features/sync/syncManager.js';
-import { AXES, READER_ARCHETYPES, readerProfile, matchArchetype, currentArchetype, archetypeTrend } from '../features/readerArchetype.js';
+import { AXES, READER_ARCHETYPES, readerProfile, matchArchetype, currentArchetype, archetypeTrend, archetypeAxes } from '../features/readerArchetype.js';
 import { constellationLayout, CONSTELLATION_R } from '../features/bookConstellation.js';
 
 // Trigger a client-side file download (same anchor trick DataDialog uses; showSaveFilePicker hangs
@@ -468,11 +468,12 @@ function RefList({ kind, items, subitems, books }) {
 }
 
 // ── Archetype view ───────────────────────────────────────────────────────────────────────────────
-const AXIS_SHORT = { fiction: 'Fic', nonfiction: 'NF', literary: 'Lit', genreFiction: 'Genre', ideas: 'Ideas', contemporary: 'New', challenge: 'Hard', volume: 'Vol' };
+const AXIS_SHORT = { fiction: 'Fic', nonfiction: 'NF', literary: 'Lit', genreFiction: 'Genre', ideas: 'Ideas', contemporary: 'New', challenge: 'Hard', volume: 'Vol', speculative: 'SFF', factual: 'Fact', poetic: 'Poet', series: 'Ser' };
 const ARCHETYPE_COLOR = {
-  classicist: '#c9a227', aesthete: '#b5651d', 'genre-devotee': '#3a86ff', storyteller: '#5e60ce',
-  autodidact: '#2a9d8f', scholar: '#118ab2', 'deep-diver': '#7209b7', contemporary: '#ef476f',
-  voracious: '#f77f00', completionist: '#06d6a0', eclectic: '#8d99ae', explorer: '#90be6d',
+  classicist: '#c9a227', aesthete: '#b5651d', poet: '#d264a5', 'genre-devotee': '#3a86ff', worldbuilder: '#4361ee',
+  'series-binger': '#00b4d8', storyteller: '#5e60ce', autodidact: '#2a9d8f', historian: '#8a5a44', scholar: '#118ab2',
+  'deep-diver': '#7209b7', contemporary: '#ef476f', voracious: '#f77f00', completionist: '#06d6a0',
+  eclectic: '#8d99ae', explorer: '#90be6d',
 };
 
 function Radar({ vector }) {
@@ -529,6 +530,37 @@ function ArchetypeView({ books }) {
           {dated.length < finished.length && <p className="settings-note">{finished.length - dated.length} finished book(s) have no date and don’t appear in the timeline.</p>}
         </>
       )}
+
+      <ArchetypeLegend currentId={cur.archetype?.id || allTime.archetype?.id} />
+    </div>
+  );
+}
+
+// What each archetype actually means — its blurb plus the axes that define it. Collapsed by default;
+// the reader's current archetype is highlighted so they can see why they got it.
+function ArchetypeLegend({ currentId }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="lj-arch-legend">
+      <button className="lj-arch-legend-toggle" onClick={() => setOpen((o) => !o)}>
+        {open ? '▾' : '▸'} What the archetypes mean ({READER_ARCHETYPES.length})
+      </button>
+      {open && (
+        <div className="lj-arch-legend-list">
+          {READER_ARCHETYPES.map((a) => (
+            <div key={a.id} className={`lj-arch-legend-row${a.id === currentId ? ' current' : ''}`}>
+              <span className="lj-arch-legend-dot" style={{ background: ARCHETYPE_COLOR[a.id] }} />
+              <div className="lj-arch-legend-body">
+                <b style={{ color: ARCHETYPE_COLOR[a.id] }}>{a.name}{a.id === currentId ? ' — you' : ''}</b>
+                <span className="settings-note">{a.blurb}</span>
+                <span className="lj-arch-legend-axes">
+                  {archetypeAxes(a, 4).map((x) => <span key={x.ax} className="lj-arch-legend-axis">{x.label}</span>)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -561,7 +593,8 @@ function ConstellationView({ books, ai }) {
   const [genre, setGenre] = useState('all');
   const [status, setStatus] = useState('all');
   const [view, setView] = useState(FULL_VIEW);
-  const [sel, setSel] = useState(null);
+  const [openIds, setOpenIds] = useState([]); // several detail cards can be open at once
+  const [chooser, setChooser] = useState(null); // { nodes } — click hit several stacked stars
   const drag = useRef(null);
   const movedRef = useRef(false); // distinguishes a pan from a click (a pan must NOT select a star)
   const layout = useMemo(() => constellationLayout(books, ai?.treeMeta), [books, ai]);
@@ -575,8 +608,22 @@ function ConstellationView({ books, ai }) {
   const showAuthors = view.w < CONSTELLATION_R * 0.6;
   const labelSize = view.w / 46; // in viewBox units → roughly constant on screen across zoom levels
 
-  const selBook = sel ? booksById[sel.id] : null;
-  const neighbors = sel ? layout.edges.filter((e) => e.a === sel.id || e.b === sel.id).map((e) => ({ node: nodeById[e.a === sel.id ? e.b : e.a], kind: e.kind })).filter((x) => x.node) : [];
+  const openSet = new Set(openIds);
+  const openNodes = openIds.map((id) => nodeById[id]).filter(Boolean);
+  const neighborsOf = (id) => layout.edges.filter((e) => e.a === id || e.b === id)
+    .map((e) => ({ node: nodeById[e.a === id ? e.b : e.a], kind: e.kind })).filter((x) => x.node);
+
+  function openCard(node) { setChooser(null); setOpenIds((ids) => (ids.includes(node.id) ? ids : [...ids, node.id])); }
+  function closeCard(id) { setOpenIds((ids) => ids.filter((x) => x !== id)); }
+  // A click "hits" every shown star within a small (zoom-scaled) radius — so tightly stacked stars
+  // resolve to a chooser instead of whichever circle happened to be on top.
+  function starClick(node) {
+    if (movedRef.current) return;
+    const thresh = view.w * 0.02;
+    const stack = shown.filter((m) => Math.hypot(m.x - node.x, m.y - node.y) <= thresh + Math.max(m.r, node.r));
+    if (stack.length > 1) setChooser({ nodes: stack });
+    else openCard(node);
+  }
 
   // No pointer capture on purpose: capturing the SVG would retarget the click off the star and break
   // click-to-select (the SVG fills the area and onPointerLeave ends a stray drag). `movedRef` tells a
@@ -601,14 +648,14 @@ function ConstellationView({ books, ai }) {
         <button title="Zoom out" onClick={() => zoom(1.25)}>－</button>
         <button onClick={() => setView(FULL_VIEW)}>Reset</button>
       </div>
-      <p className="settings-note">{shown.length} of {layout.nodes.length} books · size = rec score · distance from centre = difficulty · brightness = read status{layout.edges.length ? ` · ${layout.edges.length} knowledge-graph links` : ' · no links yet (build the knowledge graph from AI / Cowork)'}. Drag to pan, scroll to zoom, click a star for details.</p>
+      <p className="settings-note">{shown.length} of {layout.nodes.length} books · size = rec score · distance from centre = difficulty · brightness = read status{layout.edges.length ? ` · ${layout.edges.length} knowledge-graph links` : ' · no links yet (build the knowledge graph from AI / Cowork)'}. Drag to pan, scroll to zoom, click a star for details (open several; tightly stacked stars show a chooser).</p>
       <div className="lj-sky-wrap">
         <svg className="lj-sky" viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp} onWheel={(e) => zoom(e.deltaY > 0 ? 1.1 : 0.9)}>
           {layout.edges.map((e, i) => {
-            const on = sel && (e.a === sel.id || e.b === sel.id);
-            return <line key={i} className={`lj-edge${on ? ' lj-edge-on' : ''}`} x1={e.ax} y1={e.ay} x2={e.bx} y2={e.by} stroke={edgeColor(e.kind)} strokeWidth={(on ? 2.2 : 1) * (view.w / FULL_VIEW.w)} opacity={sel ? (on ? 0.95 : 0.15) : 0.5} />;
+            const on = openSet.has(e.a) || openSet.has(e.b);
+            return <line key={i} className={`lj-edge${on ? ' lj-edge-on' : ''}`} x1={e.ax} y1={e.ay} x2={e.bx} y2={e.by} stroke={edgeColor(e.kind)} strokeWidth={(on ? 2.2 : 1) * (view.w / FULL_VIEW.w)} opacity={openIds.length ? (on ? 0.95 : 0.15) : 0.5} />;
           })}
-          {shown.map((n) => <circle key={n.id} data-id={n.id} className={`lj-star lj-${n.status}${sel?.id === n.id ? ' sel' : ''}`} cx={n.x} cy={n.y} r={n.r} style={{ fill: genreHue(n.genre) }} onClick={() => { if (!movedRef.current) setSel(n); }} />)}
+          {shown.map((n) => <circle key={n.id} data-id={n.id} className={`lj-star lj-${n.status}${openSet.has(n.id) ? ' sel' : ''}`} cx={n.x} cy={n.y} r={n.r} style={{ fill: genreHue(n.genre) }} onClick={() => starClick(n)} />)}
           {showTitles && shown.map((n) => (
             <text key={`t-${n.id}`} className="lj-star-label" x={n.x + n.r + labelSize * 0.35} y={n.y + labelSize * 0.34} fontSize={labelSize}>
               {n.title}{showAuthors && n.author ? ` · ${n.author}` : ''}
@@ -618,30 +665,60 @@ function ConstellationView({ books, ai }) {
         {edgeKinds.length > 0 && (
           <div className="lj-edge-legend">{edgeKinds.map((k) => <span key={k} className="lj-legend-item"><i style={{ background: edgeColor(k) }} />{(EDGE_KINDS[k] || EDGE_KINDS.link).label}</span>)}</div>
         )}
-        {sel && (
-          <div className="lj-starcard">
-            <button className="close-x" onClick={() => setSel(null)}>×</button>
-            <b>{sel.title}</b><br /><em>{sel.author}</em>
-            <div className="settings-note">{sel.genre}{selBook?.series ? ` · ${selBook.series}${selBook.seriesNum ? ' #' + selBook.seriesNum : ''}` : ''} · difficulty {sel.difficulty || '—'} · rec {sel.recScore || '—'} · {STATUS_LABEL[sel.status] || sel.status}</div>
-            {selBook && (
-              <div className="settings-note">{[selBook.pages ? `${selBook.pages} pp` : '', pubYear(selBook) ? pubYear(selBook) : '', recommender(selBook) !== 'Claude' ? `✦ ${recommender(selBook)}` : ''].filter(Boolean).join(' · ')}</div>
-            )}
-            {selBook?.description && <div className="lj-starcard-desc">{selBook.description}</div>}
-            {selBook && (
-              <div className="lj-starcard-links">
-                {BOOK_LINKS.map(([k, label]) => selBook[k] ? <a key={k} href={selBook[k]} target="_blank" rel="noreferrer">{label}</a> : null)}
-              </div>
-            )}
-            {neighbors.length > 0 && (
-              <div className="lj-starcard-neighbors">
-                <div className="rh-section-h" style={{ marginTop: 6 }}>Connected</div>
-                {neighbors.slice(0, 8).map(({ node, kind }, i) => (
-                  <button key={i} className="lj-neighbor" onClick={() => setSel(node)}>
-                    <i style={{ background: edgeColor(kind) }} /> <span>{node.title}</span> <em>{(EDGE_KINDS[kind] || EDGE_KINDS.link).label}</em>
-                  </button>
-                ))}
-              </div>
-            )}
+        {chooser && (
+          <div className="lj-chooser">
+            <div className="lj-chooser-head"><span>{chooser.nodes.length} stars here</span><button className="close-x" onClick={() => setChooser(null)}>×</button></div>
+            {chooser.nodes.map((n) => (
+              <button key={n.id} className="lj-chooser-item" onClick={() => openCard(n)}>
+                <i className="lj-chooser-dot" style={{ background: genreHue(n.genre) }} />
+                <span className="lj-chooser-title">{n.title}</span>
+                <em>{n.author}{n.genre ? ` · ${n.genre}` : ''}</em>
+              </button>
+            ))}
+          </div>
+        )}
+        {openNodes.length > 0 && (
+          <div className="lj-starcards">
+            {openNodes.map((node) => {
+              const b = booksById[node.id];
+              const nbrs = neighborsOf(node.id);
+              const facts = b ? [
+                b.pages ? `${b.pages} pp` : (b.words ? `${Math.round(b.words / 1000)}k words` : ''),
+                pubYear(b) || '',
+                b.fnf === 'NF' ? 'nonfiction' : (b.fnf === 'F' ? 'fiction' : ''),
+                b.finishTime ? `read ${String(b.finishTime).slice(0, 4)}` : '',
+                recommender(b) !== 'Claude' ? `✦ ${recommender(b)}` : '',
+              ].filter(Boolean) : [];
+              return (
+                <div key={node.id} className="lj-starcard">
+                  <button className="close-x" onClick={() => closeCard(node.id)}>×</button>
+                  <b>{node.title}</b><br /><em>{node.author}</em>
+                  <div className="settings-note">
+                    {node.genre}{b?.subgenre ? ` › ${b.subgenre}` : ''}{b?.series ? ` · ${b.series}${b.seriesNum ? ' #' + b.seriesNum : ''}` : ''}
+                    {' · '}difficulty {node.difficulty || '—'} · rec {node.recScore || '—'} · {STATUS_LABEL[node.status] || node.status}
+                    {b?.rating ? ` · ${'★'.repeat(b.rating)}` : ''}
+                  </div>
+                  {facts.length > 0 && <div className="settings-note">{facts.join(' · ')}</div>}
+                  {b?.description && <div className="lj-starcard-desc">{b.description}</div>}
+                  {b?.notes && <div className="lj-starcard-notes">📝 {b.notes}</div>}
+                  {b && (
+                    <div className="lj-starcard-links">
+                      {BOOK_LINKS.map(([k, label]) => b[k] ? <a key={k} href={b[k]} target="_blank" rel="noreferrer">{label}</a> : null)}
+                    </div>
+                  )}
+                  {nbrs.length > 0 && (
+                    <div className="lj-starcard-neighbors">
+                      <div className="rh-section-h" style={{ marginTop: 6 }}>Connected ({nbrs.length})</div>
+                      {nbrs.slice(0, 10).map(({ node: nb, kind }, i) => (
+                        <button key={i} className="lj-neighbor" onClick={() => openCard(nb)}>
+                          <i style={{ background: edgeColor(kind) }} /> <span>{nb.title}</span> <em>{(EDGE_KINDS[kind] || EDGE_KINDS.link).label}</em>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -667,14 +744,17 @@ function QueueView({ books, onShelve, onOpen }) {
         <span className="settings-note">≈ {queue.totalHours} h total at</span>
         <input type="number" className="lj-wpm" min="100" max="800" step="10" value={wpm} onChange={(e) => setWpm(Number(e.target.value) || 250)} />
         <span className="settings-note">wpm</span>
+        {queue.wordsPerDay
+          ? <span className="settings-note" title="From your recently finished books (paper entries included)"> · finish dates assume ~{queue.wordsPerDay.toLocaleString()} words/day</span>
+          : <span className="settings-note"> · finish dates need a few recent finishes to estimate your pace</span>}
       </div>
       {queue.count === 0 ? <p className="settings-note">Nothing queued yet. Pull books from your recommendations below, or tap 📋 on any Library row.</p> : (
         <ol className="lj-queue-list">
-          {queue.items.map(({ book: b, hours }, i) => (
+          {queue.items.map(({ book: b, hours, etc }, i) => (
             <li key={b.id} className="lj-queue-item">
               <span className="lj-queue-rank">{i + 1}</span>
               <span className="lj-queue-main"><b>{b.title}</b><em>{b.author}{b.genre ? ` · ${b.genre}` : ''}{b.recScore ? ` · ★${b.recScore}` : ''}{recommender(b) !== 'Claude' ? ` · ✦${recommender(b)}` : ''}</em></span>
-              <span className="lj-queue-est">{hours != null ? `~${hours} h` : '—'}</span>
+              <span className="lj-queue-est">{hours != null ? `~${hours} h` : '—'}{etc ? <><br /><span className="lj-queue-etc" title="Projected finish if read in order at your recent pace">done ~{etc}</span></> : ''}</span>
               <span className="lj-queue-acts">
                 <button onClick={() => onShelve(b, 'reading')}>Start</button>
                 <button title="Remove from queue" onClick={() => onShelve(b, 'toread')}>✕</button>

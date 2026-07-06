@@ -66,18 +66,73 @@ export function estimateBytes(ms, format) {
   return Math.round(sec * (format === 'mp3' ? 16000 : 44100));
 }
 
-// Encode mono Float32 PCM to a 16-bit WAV byte array (universal, no dependency). Pure.
-export function encodeWav(samples, sampleRate) {
+// ── Track metadata so a phone media player shows book/title/track order, not raw filenames ──
+// Latin-1 bytes for a string (non-latin chars downgrade to '?', enough for the media scanner).
+function latin1(s) {
+  const out = [];
+  for (const ch of String(s ?? '')) { const c = ch.charCodeAt(0); out.push(c > 0xff ? 0x3f : c); }
+  return out;
+}
+
+// Minimal ID3v2.3 tag (prepended to an MP3) carrying title/artist/album/track. v2.3 frame sizes are
+// plain big-endian; only the 10-byte tag header size is synchsafe. Android's media scanner reads it.
+export function buildId3v2({ title, artist, album, track, trackTotal } = {}) {
+  const frame = (id, text) => {
+    const payload = [0x00, ...latin1(text)]; // encoding byte 0 = ISO-8859-1
+    const n = payload.length;
+    return [...latin1(id), (n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff, 0, 0, ...payload];
+  };
+  const frames = [];
+  if (title) frames.push(...frame('TIT2', title));
+  if (artist) frames.push(...frame('TPE1', artist));
+  if (album) frames.push(...frame('TALB', album));
+  if (track) frames.push(...frame('TRCK', trackTotal ? `${track}/${trackTotal}` : String(track)));
+  const n = frames.length;
+  const synchsafe = [(n >>> 21) & 0x7f, (n >>> 14) & 0x7f, (n >>> 7) & 0x7f, n & 0x7f];
+  return new Uint8Array([0x49, 0x44, 0x33, 3, 0, 0, ...synchsafe, ...frames]);
+}
+
+// RIFF INFO LIST subchunks — the WAV-native equivalent of ID3 (INAM=title, IART=artist,
+// IPRD=album/product, ITRK=track). Returns { len, subs } or null. Pure.
+function buildInfoList(tags = {}) {
+  const sub = (id, text) => {
+    const bytes = [...latin1(text), 0]; // null-terminated
+    if (bytes.length % 2) bytes.push(0); // pad to even (RIFF word alignment)
+    return { id, bytes };
+  };
+  const subs = [];
+  if (tags.title) subs.push(sub('INAM', tags.title));
+  if (tags.artist) subs.push(sub('IART', tags.artist));
+  if (tags.album) subs.push(sub('IPRD', tags.album));
+  if (tags.track) subs.push(sub('ITRK', tags.trackTotal ? `${tags.track}/${tags.trackTotal}` : String(tags.track)));
+  if (!subs.length) return null;
+  let len = 4; // "INFO"
+  for (const s of subs) len += 8 + s.bytes.length;
+  return { len, subs };
+}
+
+// Encode mono Float32 PCM to a 16-bit WAV byte array (universal, no dependency). Optional `tags`
+// appends a RIFF INFO LIST chunk (title/artist/album/track). Pure.
+export function encodeWav(samples, sampleRate, tags = null) {
   const len = samples.length;
-  const buf = new ArrayBuffer(44 + len * 2);
+  const info = tags ? buildInfoList(tags) : null;
+  const listBytes = info ? 8 + info.len : 0; // "LIST" + size + payload
+  const buf = new ArrayBuffer(44 + len * 2 + listBytes);
   const view = new DataView(buf);
   const wStr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
-  wStr(0, 'RIFF'); view.setUint32(4, 36 + len * 2, true); wStr(8, 'WAVE');
+  wStr(0, 'RIFF'); view.setUint32(4, 36 + len * 2 + listBytes, true); wStr(8, 'WAVE');
   wStr(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
   view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
   wStr(36, 'data'); view.setUint32(40, len * 2, true);
   let o = 44;
   for (let i = 0; i < len; i++) { const s = Math.max(-1, Math.min(1, samples[i])); view.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true); o += 2; }
+  if (info) {
+    wStr(o, 'LIST'); view.setUint32(o + 4, info.len, true); wStr(o + 8, 'INFO'); o += 12;
+    for (const s of info.subs) {
+      wStr(o, s.id); view.setUint32(o + 4, s.bytes.length, true); o += 8;
+      for (const b of s.bytes) view.setUint8(o++, b);
+    }
+  }
   return new Uint8Array(buf);
 }
 

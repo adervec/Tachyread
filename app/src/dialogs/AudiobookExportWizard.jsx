@@ -3,7 +3,7 @@ import Dialog from './Dialog.jsx';
 import { getAudioClip, entryClips } from '../state/storage.js';
 import { saveBlobToFile } from '../features/fileSystem.js';
 import {
-  planTracks, trackFileName, buildM3u, encodeWav, estimateBytes, fmtDuration, sanitizeFilename,
+  planTracks, trackFileName, buildM3u, encodeWav, buildId3v2, estimateBytes, fmtDuration, sanitizeFilename,
 } from '../features/audiobookExport.js';
 
 const fmtBytes = (b) => (b >= 1073741824 ? `${(b / 1073741824).toFixed(2)} GB` : b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
@@ -12,11 +12,12 @@ const MAX_CHAPTER_MS = 30 * 60000; // split a chapter longer than this into part
 // Assemble one track's clips into a single audio Blob. mp3 → concatenate the ElevenLabs mp3 blobs
 // directly (fast, stays small). Otherwise decode every clip and re-render to one mono 22.05 kHz WAV
 // (handles Piper WAV, mic WebM/Opus, mixed) — universal, no encoder dependency.
-async function assembleTrack(checksum, track, format) {
+async function assembleTrack(checksum, track, format, tags) {
   const blobs = [];
   for (const it of track.items) { const rec = await getAudioClip(checksum, it.startLine); if (rec?.blob) blobs.push(rec.blob); }
   if (!blobs.length) return null;
-  if (format === 'mp3') return new Blob(blobs, { type: 'audio/mpeg' });
+  // mp3 → prepend an ID3v2 tag so the phone shows book/title/track instead of the filename.
+  if (format === 'mp3') return new Blob([buildId3v2(tags), ...blobs], { type: 'audio/mpeg' });
   const AC = window.AudioContext || window.webkitAudioContext;
   const actx = new AC();
   const bufs = [];
@@ -29,7 +30,7 @@ async function assembleTrack(checksum, track, format) {
   let t = 0;
   for (const b of bufs) { const src = octx.createBufferSource(); src.buffer = b; src.connect(octx.destination); src.start(t); t += b.duration; }
   const rendered = await octx.startRendering();
-  return new Blob([encodeWav(rendered.getChannelData(0), SR)], { type: 'audio/wav' });
+  return new Blob([encodeWav(rendered.getChannelData(0), SR, tags)], { type: 'audio/wav' });
 }
 
 export default function AudiobookExportWizard({ checksum, fileName, sections, manifest, onClose }) {
@@ -73,7 +74,8 @@ export default function AudiobookExportWizard({ checksum, fileName, sections, ma
       for (let i = 0; i < tracks.length; i++) {
         if (abort.current) break;
         setProg({ done: i, total: tracks.length, label: tracks[i].title });
-        const blob = await assembleTrack(checksum, tracks[i], format);
+        const tags = { title: tracks[i].title, album, artist: 'Tachyread', track: i + 1, trackTotal: tracks.length };
+        const blob = await assembleTrack(checksum, tracks[i], format, tags);
         if (!blob) continue;
         if (dir) {
           const fh = await dir.getFileHandle(names[i], { create: true });

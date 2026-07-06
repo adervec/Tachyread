@@ -6,12 +6,22 @@
 
 import { finishMs, pubYear, readStatus } from './journeyLibrary.js';
 
-export const AXES = ['fiction', 'nonfiction', 'literary', 'genreFiction', 'ideas', 'contemporary', 'challenge', 'volume'];
+export const AXES = ['fiction', 'nonfiction', 'literary', 'genreFiction', 'ideas', 'contemporary', 'challenge', 'volume', 'speculative', 'factual', 'poetic', 'series'];
 export const MIN_BOOKS = 3; // below this we don't claim an archetype
+
+// Human labels for the axes — used by the Archetype legend so the vectors read as English.
+export const AXIS_LABELS = {
+  fiction: 'Fiction', nonfiction: 'Non-fiction', literary: 'Literary', genreFiction: 'Genre fiction',
+  ideas: 'Ideas & knowledge', contemporary: 'Contemporary', challenge: 'Challenging', volume: 'Long / tomes',
+  speculative: 'Speculative (SFF)', factual: 'Factual (history/science)', poetic: 'Poetry & drama', series: 'Series',
+};
 
 const LITERARY_GENRES = /liter|classic|poet|drama|modernis/i;
 const GENRE_FICTION = /sci-?fi|science fiction|fantasy|myster|thriller|romance|horror|crime|detective|adventure|western|dystop/i;
 const IDEAS_GENRES = /philosoph|science|history|histor|econom|politic|psycholog|religion|essay|biograph|memoir|nature|math/i;
+const SPECULATIVE = /sci-?fi|science fiction|fantasy|horror|dystop|speculative|weird|space opera/i;
+const FACTUAL = /histor|science|biograph|memoir|nature|econom|geograph|technolog|politic|journalis/i;
+const POETIC = /poet|verse|drama|\bplay\b|sonnet/i;
 
 // One book → a 0/1 indicator per axis. Non-exclusive on purpose (a book can be several things).
 export function bookVector(b) {
@@ -21,6 +31,7 @@ export function bookVector(b) {
   const diff = Number(b.difficultyLevel) || 0;
   const yr = pubYear(b);
   const words = Number(b.words) || 0, pages = Number(b.pages) || 0;
+  const inSeries = (b.series && String(b.series).trim()) || b.seriesNum ? 1 : 0;
   return [
     fic,
     nf,
@@ -30,24 +41,41 @@ export function bookVector(b) {
     (yr != null && yr >= 1980) ? 1 : 0,                               // contemporary
     diff >= 4 ? 1 : 0,                                                // challenge
     (pages >= 500 || words >= 150000) ? 1 : 0,                        // volume / tome
+    SPECULATIVE.test(g) ? 1 : 0,                                      // speculative (SFF)
+    (nf && FACTUAL.test(g)) ? 1 : 0,                                 // factual (history/science)
+    POETIC.test(g) ? 1 : 0,                                           // poetry & drama
+    inSeries,                                                         // part of a series
   ];
 }
 
-// axis order: [fiction, nonfiction, literary, genreFiction, ideas, contemporary, challenge, volume]
+// axis order: [fiction, nonfiction, literary, genreFiction, ideas, contemporary, challenge, volume,
+//              speculative, factual, poetic, series]
 export const READER_ARCHETYPES = [
-  { id: 'classicist', name: 'The Classicist', blurb: 'Old, difficult, literary fiction — the canon.', vector: [0.9, 0.1, 1.0, 0.1, 0.1, 0.05, 0.8, 0.7] },
-  { id: 'aesthete', name: 'The Literary Aesthete', blurb: 'Literary fiction for the prose, any era.', vector: [0.9, 0.1, 1.0, 0.05, 0.2, 0.4, 0.7, 0.5] },
-  { id: 'genre-devotee', name: 'The Genre Devotee', blurb: 'SFF, mystery, thriller — story-first fiction.', vector: [1.0, 0.0, 0.1, 1.0, 0.0, 0.7, 0.2, 0.4] },
-  { id: 'storyteller', name: 'The Storyteller', blurb: 'Broadly-read fiction across genres.', vector: [1.0, 0.05, 0.5, 0.5, 0.1, 0.5, 0.4, 0.5] },
-  { id: 'autodidact', name: 'The Autodidact', blurb: 'Non-fiction to learn — ideas and knowledge.', vector: [0.1, 1.0, 0.2, 0.0, 1.0, 0.5, 0.6, 0.5] },
-  { id: 'scholar', name: 'The Scholar', blurb: 'Dense, weighty non-fiction and ideas.', vector: [0.05, 1.0, 0.3, 0.0, 1.0, 0.3, 0.9, 0.8] },
-  { id: 'deep-diver', name: 'The Deep Diver', blurb: 'The hardest, longest books, fiction or not.', vector: [0.5, 0.5, 0.8, 0.1, 0.6, 0.2, 1.0, 1.0] },
-  { id: 'contemporary', name: 'The Contemporary', blurb: 'What’s recent and talked-about, mixed.', vector: [0.6, 0.4, 0.3, 0.5, 0.3, 1.0, 0.3, 0.4] },
-  { id: 'voracious', name: 'The Voracious', blurb: 'High volume, broad, keeps turning pages.', vector: [0.6, 0.4, 0.4, 0.5, 0.4, 0.6, 0.4, 0.9] },
-  { id: 'completionist', name: 'The Completionist', blurb: 'Series and long genre runs, start to finish.', vector: [0.8, 0.2, 0.2, 0.8, 0.1, 0.6, 0.3, 0.8] },
-  { id: 'eclectic', name: 'The Eclectic', blurb: 'Balanced across every kind of book.', vector: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
-  { id: 'explorer', name: 'The Casual Explorer', blurb: 'Lighter, recent, wide-ranging reads.', vector: [0.6, 0.4, 0.1, 0.5, 0.2, 0.8, 0.05, 0.1] },
+  { id: 'classicist', name: 'The Classicist', blurb: 'Old, difficult, literary fiction — the canon.', vector: [0.9, 0.1, 1.0, 0.1, 0.1, 0.05, 0.8, 0.7, 0.1, 0.1, 0.5, 0.1] },
+  { id: 'aesthete', name: 'The Literary Aesthete', blurb: 'Literary fiction for the prose, any era.', vector: [0.9, 0.1, 1.0, 0.05, 0.2, 0.4, 0.7, 0.5, 0.1, 0.1, 0.6, 0.1] },
+  { id: 'poet', name: 'The Poet', blurb: 'Poetry, verse and drama above all.', vector: [0.7, 0.3, 0.9, 0.1, 0.3, 0.4, 0.6, 0.2, 0.1, 0.1, 1.0, 0.1] },
+  { id: 'genre-devotee', name: 'The Genre Devotee', blurb: 'SFF, mystery, thriller — story-first fiction.', vector: [1.0, 0.0, 0.1, 1.0, 0.0, 0.7, 0.2, 0.4, 0.8, 0.0, 0.0, 0.5] },
+  { id: 'worldbuilder', name: 'The Worldbuilder', blurb: 'Epic speculative fiction — big SFF worlds and series.', vector: [1.0, 0.0, 0.4, 1.0, 0.0, 0.7, 0.5, 0.9, 1.0, 0.0, 0.1, 0.9] },
+  { id: 'series-binger', name: 'The Series Binger', blurb: 'Long genre series, read run by run.', vector: [0.9, 0.1, 0.2, 0.9, 0.1, 0.7, 0.2, 0.7, 0.7, 0.0, 0.0, 1.0] },
+  { id: 'storyteller', name: 'The Storyteller', blurb: 'Broadly-read fiction across genres.', vector: [1.0, 0.05, 0.5, 0.5, 0.1, 0.5, 0.4, 0.5, 0.4, 0.1, 0.2, 0.4] },
+  { id: 'autodidact', name: 'The Autodidact', blurb: 'Non-fiction to learn — ideas and knowledge.', vector: [0.1, 1.0, 0.2, 0.0, 1.0, 0.5, 0.6, 0.5, 0.0, 0.8, 0.05, 0.1] },
+  { id: 'historian', name: 'The Historian', blurb: 'History, biography and the factual record.', vector: [0.1, 1.0, 0.3, 0.0, 1.0, 0.3, 0.6, 0.7, 0.0, 1.0, 0.05, 0.2] },
+  { id: 'scholar', name: 'The Scholar', blurb: 'Dense, weighty non-fiction and ideas.', vector: [0.05, 1.0, 0.3, 0.0, 1.0, 0.3, 0.9, 0.8, 0.0, 0.7, 0.1, 0.2] },
+  { id: 'deep-diver', name: 'The Deep Diver', blurb: 'The hardest, longest books, fiction or not.', vector: [0.5, 0.5, 0.8, 0.1, 0.6, 0.2, 1.0, 1.0, 0.3, 0.5, 0.3, 0.3] },
+  { id: 'contemporary', name: 'The Contemporary', blurb: 'What’s recent and talked-about, mixed.', vector: [0.6, 0.4, 0.3, 0.5, 0.3, 1.0, 0.3, 0.4, 0.4, 0.3, 0.1, 0.3] },
+  { id: 'voracious', name: 'The Voracious', blurb: 'High volume, broad, keeps turning pages.', vector: [0.6, 0.4, 0.4, 0.5, 0.4, 0.6, 0.4, 0.9, 0.4, 0.4, 0.1, 0.6] },
+  { id: 'completionist', name: 'The Completionist', blurb: 'Series and long genre runs, start to finish.', vector: [0.8, 0.2, 0.2, 0.8, 0.1, 0.6, 0.3, 0.8, 0.6, 0.1, 0.0, 1.0] },
+  { id: 'eclectic', name: 'The Eclectic', blurb: 'Balanced across every kind of book.', vector: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
+  { id: 'explorer', name: 'The Casual Explorer', blurb: 'Lighter, recent, wide-ranging reads.', vector: [0.6, 0.4, 0.1, 0.5, 0.2, 0.8, 0.05, 0.1, 0.4, 0.3, 0.1, 0.2] },
 ];
+
+// The defining axes of an archetype (highest-weighted) — powers the legend. Pure.
+export function archetypeAxes(archetype, n = 3, floor = 0.5) {
+  return AXES.map((ax, i) => ({ ax, label: AXIS_LABELS[ax], weight: archetype.vector[i] }))
+    .filter((x) => x.weight >= floor)
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, n);
+}
 
 function cosine(a, b) {
   let dot = 0, na = 0, nb = 0;

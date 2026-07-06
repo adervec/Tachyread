@@ -1,6 +1,6 @@
 // Self-check for audiobookExport.js — run: node app/src/features/audiobookExport.demo.mjs
 import assert from 'node:assert';
-import { planTracks, trackFileName, buildM3u, encodeWav, sanitizeFilename, estimateBytes, fmtDuration } from './audiobookExport.js';
+import { planTracks, trackFileName, buildM3u, encodeWav, buildId3v2, sanitizeFilename, estimateBytes, fmtDuration } from './audiobookExport.js';
 
 // Build 40 chunks across 3 sections, 60s each.
 const items = [];
@@ -47,6 +47,24 @@ assert.equal(wav.length, 44 + 5 * 2);
 const dv = new DataView(wav.buffer);
 assert.equal(dv.getUint32(40, true), 5 * 2); // data chunk size
 assert.equal(dv.getInt16(44 + 2 * 2, true), Math.round(-0.5 * 0x8000)); // sample index 2 (-0.5) encoded
+
+// ID3v2 tag: "ID3" magic, v2.3, synchsafe size = frame bytes, and TIT2/TALB/TRCK present.
+const id3 = buildId3v2({ title: 'Chapter 1', album: 'My Book', artist: 'Tachyread', track: 2, trackTotal: 9 });
+assert.equal(String.fromCharCode(id3[0], id3[1], id3[2]), 'ID3');
+assert.equal(id3[3], 3); // v2.3
+const id3str = String.fromCharCode(...id3);
+assert.ok(id3str.includes('TIT2') && id3str.includes('TALB') && id3str.includes('TRCK'));
+assert.ok(id3str.includes('2/9')); // track/total
+const synch = (id3[6] << 21) | (id3[7] << 14) | (id3[8] << 7) | id3[9];
+assert.equal(synch, id3.length - 10); // synchsafe size = everything after the 10-byte header
+
+// WAV with tags: a RIFF INFO LIST chunk is appended and RIFF size accounts for it.
+const wavT = encodeWav(new Float32Array([0, 0.5, -0.5]), 22050, { title: 'Chapter 1', album: 'My Book', track: 2, trackTotal: 9 });
+const wavTstr = String.fromCharCode(...wavT);
+assert.ok(wavTstr.includes('LIST') && wavTstr.includes('INFO') && wavTstr.includes('INAM'));
+assert.ok(wavTstr.includes('IPRD') && wavTstr.includes('ITRK'));
+const dvT = new DataView(wavT.buffer);
+assert.equal(dvT.getUint32(4, true), wavT.length - 8); // RIFF size = whole file minus "RIFF"+size
 
 assert.ok(estimateBytes(60000, 'mp3') < estimateBytes(60000, 'wav')); // mp3 smaller
 assert.equal(fmtDuration(3661000), '1:01:01');
