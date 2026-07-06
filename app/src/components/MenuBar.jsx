@@ -19,6 +19,7 @@ const MENUS = {
     { label: 'Open Document (PDF, EPUB, HTML, DOCX, MD)...', shortcut: 'Ctrl+D', action: 'open-doc' },
     { label: 'Open from Clipboard', shortcut: 'Ctrl+B', action: 'open-clip' },
     { label: 'Grab Text (OCR)...', shortcut: 'Ctrl+Shift+G', action: 'grab' },
+    { label: 'Grab from Web URL...', action: 'web-grab' },
     { label: 'Save Tab Text...', action: 'save-tab' },
     { kind: 'separator' },
     { label: 'Find...', shortcut: 'Ctrl+F', action: 'find' },

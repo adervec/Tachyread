@@ -81,7 +81,7 @@ const init = {
 // a modal). Everything else the menus open becomes a dockable dialog tab.
 const MODAL_KINDS = new Set([
   'disclaimer', 'finished', 'save-tab', 'find', 'goto',
-  'webcam-calib', 'hand-calib', 'grab', 'toc-wizard', 'resource-wizard',
+  'webcam-calib', 'hand-calib', 'grab', 'web-grab', 'toc-wizard', 'resource-wizard',
 ]);
 
 // Dialog-tab kinds whose subject is ONE document. Opening one stamps the active doc tab's id onto

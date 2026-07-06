@@ -481,6 +481,10 @@
 .src-canvas-mark { position: absolute; pointer-events: none; }
 .src-band-mark { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid var(--src-cur, rgba(90, 169, 255, 0.9)); box-shadow: 0 0 8px 2px var(--src-cur, rgba(90, 169, 255, 0.5)); pointer-events: none; }
 .src-tool-sel { font-size: 11px; padding: 1px 3px; max-width: 92px; }
+
+/* Web-grab wizard: the fallback panel shown when a direct fetch is blocked. */
+.wg-fallback { border: 1px solid var(--divider); border-radius: 6px; padding: 8px 10px; margin: 8px 0; background: var(--menu-highlight); }
+.wg-fallback .field-section { margin-top: 0; }
 .source-html img { max-width: 100%; height: auto; }
 .source-image { max-width: 100%; height: auto; box-shadow: var(--shadow); }
 .source-msg { padding: 16px; color: var(--status-fg); font-size: 12px; text-align: center; }

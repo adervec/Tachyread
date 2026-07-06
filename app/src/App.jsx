@@ -35,6 +35,7 @@ import TypingProgressDialog from './dialogs/TypingProgressDialog.jsx';
 import AppSettingsDialog from './dialogs/AppSettingsDialog.jsx';
 import BookFinishedDialog from './dialogs/BookFinishedDialog.jsx';
 import GrabWizard from './dialogs/GrabWizard.jsx';
+import WebGrabWizard from './dialogs/WebGrabWizard.jsx';
 import TocWizard from './dialogs/TocWizard.jsx';
 import ResourceWizard from './dialogs/ResourceWizard.jsx';
 import IndexPane from './components/IndexPane.jsx';
@@ -1620,6 +1621,7 @@ function AppInner() {
     if (action === 'save-tab' && activeTab) return doSaveTab();
     if (action === 'open-clip') return openClipboard();
     if (action === 'grab') return openDialog({ kind: 'grab' });
+    if (action === 'web-grab') return openDialog({ kind: 'web-grab' });
     if (action === 'close-tab' && activeTab) {
       dispatch({ type: 'CLOSE_TAB', id: activeTab.id });
       return;
@@ -2361,6 +2363,7 @@ function AppInner() {
         <AttentionDialog tab={dlgTab} recentScores={probeScoresRef.current} onClose={closeDialog} />
       )}
       {dialog?.kind === 'grab' && <GrabWizard onClose={closeDialog} />}
+      {dialog?.kind === 'web-grab' && <WebGrabWizard onClose={closeDialog} />}
       {dialog?.kind === 'toc-wizard' && activeTab && (
         <TocWizard
           tab={activeTab}
