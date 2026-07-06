@@ -46,10 +46,14 @@ export function finishMs(b) {
 // on-deck, pulled out of the vast to-read pile) and 'abandoned' (started-then-dropped, i.e. DNF /
 // reshelved). Anything with none of these is a plain 'toread' recommendation.
 export function readStatus(b) {
+  if (b?.shelf === 'abandoned') return 'abandoned';   // an explicit DNF wins even if a date lingers
   if (b?.completion === true) return 'finished';
-  if (b?.shelf === 'abandoned') return 'abandoned';
-  if (b?.inProgress) return 'reading';
+  if (b?.inProgress) return 'reading';                // actively reading now (e.g. a re-read) beats a stale date
   if (b?.shelf === 'queue') return 'queue';
+  // Some library.json records carry a completion DATE without the completion flag set — a finished
+  // book that never got ticked. Treat the date as the finish it plainly is (fallback, so explicit
+  // states above still win).
+  if (finishMs(b) != null) return 'finished';
   return 'toread';
 }
 

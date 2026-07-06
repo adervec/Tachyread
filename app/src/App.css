@@ -470,6 +470,11 @@
 .source-canvas-wrap canvas { max-width: 100%; height: auto; box-shadow: var(--shadow); background: #fff; }
 .source-html { padding: 12px 16px; max-width: 100%; line-height: 1.5; color: var(--line-unread-fg); }
 .source-html .tx-src-cur { background: #fff; mix-blend-mode: difference; border-radius: 3px; box-shadow: 0 0 0 2px #fff, 0 0 14px 5px rgba(255, 255, 255, 0.5); }
+/* Best-effort cursor on rendered (non-DOM) sources: a word box over a PDF, a progress band over a
+   grabbed image. The wrap goes edge-to-edge so the % coordinates line up with the canvas/image. */
+.source-canvas-cursor { position: relative; padding: 0; }
+.src-canvas-mark { position: absolute; background: #fff; mix-blend-mode: difference; border-radius: 2px; box-shadow: 0 0 0 1.5px #fff, 0 0 10px 3px rgba(255, 255, 255, 0.5); pointer-events: none; }
+.src-band-mark { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid rgba(90, 169, 255, 0.9); box-shadow: 0 0 8px 2px rgba(90, 169, 255, 0.5); pointer-events: none; }
 .source-html img { max-width: 100%; height: auto; }
 .source-image { max-width: 100%; height: auto; box-shadow: var(--shadow); }
 .source-msg { padding: 16px; color: var(--status-fg); font-size: 12px; text-align: center; }
