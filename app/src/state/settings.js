@@ -34,11 +34,14 @@ export function defaultFileSettings() {
     contextWordCount: 0,
     contextWordsBefore: 0,
     contextWordsAfter: 0,
-    currentWordStyles: ['Underline'], // combinable: Underline | Bold | Background | Color | Box
+    currentWordStyles: ['Underline'], // combinable: Underline | Bold | Italic | Color | Background | Box | Glow | Overline
+    currentWordColor: '', // highlight colour for Color/Background/Box/Glow/Underline styles ('' = theme default)
     rightPaneFontSize: 12,
     lineSpacing: 1.5, // Lines-pane line-height multiplier
     sourceChecks: {}, // ticked checkboxes in html/markdown source sections: { section: [box…] }
     sourceCursor: true, // show the current-word marker on the Source page view
+    sourceCursorStyle: 'vortex', // marker look: vortex (invert) | box | underline | highlight
+    sourceCursorColor: '', // marker colour for box/underline/highlight ('' = default amber)
     sourcePad: 12, // inner padding (px) of the Source page so text doesn't touch the edge
     faceOpacity: 0.9, // transparency of the floating reader face on mobile (0.15–1)
     statsOpacity: 0.92, // transparency of the floating stats popup on mobile (0.2–1)
