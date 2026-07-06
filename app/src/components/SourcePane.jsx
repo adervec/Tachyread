@@ -19,15 +19,18 @@ function getPdf(doc) {
   return p;
 }
 
-function PdfSource({ doc, page }) {
+function PdfSource({ doc, page, curOff }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
+  const markRef = useRef(null);
   const [err, setErr] = useState('');
+  const [tokens, setTokens] = useState(null); // per-page word boxes as % of the page: { start, end%, ... }
   const task = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
     setErr('');
+    setTokens(null);
     (async () => {
       try {
         const pdf = await getPdf(doc);
@@ -36,7 +39,7 @@ function PdfSource({ doc, page }) {
         if (cancelled || !canvasRef.current) return;
         const wrapW = wrapRef.current?.clientWidth || 360;
         const base = pg.getViewport({ scale: 1 });
-        const scale = Math.max(0.2, (wrapW - 10) / base.width);
+        const scale = Math.max(0.2, (wrapW - 2) / base.width); // canvas ≈ wrap width so the % cursor aligns
         const viewport = pg.getViewport({ scale });
         const canvas = canvasRef.current;
         canvas.width = viewport.width;
@@ -44,6 +47,34 @@ function PdfSource({ doc, page }) {
         if (task.current) task.current.cancel();
         task.current = pg.render({ canvasContext: canvas.getContext('2d'), viewport });
         await task.current.promise;
+        // Best-effort word cursor: pull the text layer and record each token's box as a % of the
+        // page, so the marker tracks the CSS-scaled canvas without pixel math. Tokens are counted
+        // the same way (\S+ runs) the reader tokenizes, so `curOff` lines up. ponytail: char-level
+        // width within an item is estimated evenly — good enough for a highlight box.
+        const tc = await pg.getTextContent();
+        if (cancelled) return;
+        const boxes = [];
+        for (const it of tc.items) {
+          const words = (it.str.match(/\S+/g) || []);
+          if (!words.length) continue;
+          const [x, y] = viewport.convertToViewportPoint(it.transform[4], it.transform[5]);
+          const fontH = Math.hypot(it.transform[2], it.transform[3]) * scale;
+          const wTotal = (it.width || 0) * scale;
+          const chars = it.str.length || 1;
+          let ci = 0;
+          for (const w of words) {
+            const startCol = it.str.indexOf(w, ci); ci = startCol + w.length;
+            const wx = x + (startCol / chars) * wTotal;
+            const ww = (w.length / chars) * wTotal;
+            boxes.push({
+              left: (wx / viewport.width) * 100,
+              top: ((y - fontH) / viewport.height) * 100,
+              w: (ww / viewport.width) * 100,
+              h: (fontH / viewport.height) * 100,
+            });
+          }
+        }
+        setTokens(boxes);
       } catch (e) {
         if (!cancelled && e?.name !== 'RenderingCancelledException') setErr(String(e?.message || e));
       }
@@ -54,9 +85,13 @@ function PdfSource({ doc, page }) {
     };
   }, [doc, page]);
 
+  const box = tokens && curOff >= 0 ? tokens[Math.min(curOff, tokens.length - 1)] : null;
+  useEffect(() => { markRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, [box]);
+
   return (
-    <div className="source-canvas-wrap" ref={wrapRef}>
+    <div className="source-canvas-wrap source-canvas-cursor" ref={wrapRef}>
       {err ? <div className="source-msg">Could not render page: {err}</div> : <canvas ref={canvasRef} />}
+      {box && <span ref={markRef} className="src-canvas-mark" style={{ left: `${box.left}%`, top: `${box.top}%`, width: `${Math.max(box.w, 1.5)}%`, height: `${Math.max(box.h, 1.6)}%` }} />}
     </div>
   );
 }
@@ -210,11 +245,16 @@ function HtmlSource({ doc, section, checks, onCheck, curOff, pad }) {
   );
 }
 
-function ImageSource({ doc, index }) {
+function ImageSource({ doc, index, frac }) {
   const url = doc.source.images[index];
+  const markRef = useRef(null);
+  useEffect(() => { markRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, [frac]);
+  // A grabbed page is a flat image with no word geometry, so the cursor is a best-effort progress
+  // band at the fraction of the page you've reached (by word count) — a "you're about here" guide.
   return (
-    <div className="source-canvas-wrap">
+    <div className="source-canvas-wrap source-canvas-cursor">
       {url ? <img className="source-image" src={url} alt={`grabbed page ${index + 1}`} /> : <div className="source-msg">No image.</div>}
+      {url && frac != null && frac >= 0 && <span ref={markRef} className="src-band-mark" style={{ top: `${Math.min(98, frac * 100)}%` }} />}
     </div>
   );
 }
@@ -245,29 +285,34 @@ export default function SourcePane({ tab, onPatch }) {
   const totalSeg = src.kind === 'pdf' ? src.pageCount : src.kind === 'images' ? src.images.length : src.sections.length;
   const label = src.kind === 'pdf' ? 'PDF page' : src.kind === 'images' ? 'Grabbed page' : src.kind === 'html' ? 'Section' : 'EPUB section';
 
-  // Token offset of the current word WITHIN its segment — the DOM cursor counts tokens per section.
-  // Scan back to the segment boundary (bounded by the segment's length, not the whole document).
-  const cursorOn = settings.sourceCursor !== false && (src.kind === 'html' || src.kind === 'epub');
-  let curOff = -1;
+  // Token offset of the current word WITHIN its segment (+ segment length) — text cursors count
+  // tokens per section; the image band uses the offset/length fraction. Scan back to the segment
+  // boundary, bounded by the segment's length not the whole document.
+  const cursorOn = settings.sourceCursor !== false;
+  let curOff = -1, segLen = 0;
   if (cursorOn && doc.wordToSegment) {
     let start = wIdx;
     while (start > 0 && doc.wordToSegment[start - 1] === seg) start--;
+    let end = wIdx;
+    while (end + 1 < doc.wordToSegment.length && doc.wordToSegment[end + 1] === seg) end++;
     curOff = wIdx - start;
+    segLen = end - start + 1;
   }
   const pad = Math.max(0, Number(settings.sourcePad ?? 12));
+  const textSource = src.kind === 'html' || src.kind === 'epub';
 
   return (
     <div className="source-pane">
       <div className="source-toolbar">
         <span>{label} {seg + 1} / {totalSeg}</span>
         <span className="source-tools">
-          {(src.kind === 'html' || src.kind === 'epub') && (
+          <button
+            className={`src-tool${settings.sourceCursor !== false ? ' on' : ''}`}
+            title="Mark the current word on the page"
+            onClick={() => onPatch?.({ sourceCursor: settings.sourceCursor === false })}
+          >◎</button>
+          {textSource && (
             <>
-              <button
-                className={`src-tool${settings.sourceCursor !== false ? ' on' : ''}`}
-                title="Mark the current word on the page"
-                onClick={() => onPatch?.({ sourceCursor: settings.sourceCursor === false })}
-              >◎</button>
               <button className="src-tool" title="Less page padding" onClick={() => onPatch?.({ sourcePad: Math.max(0, pad - 4) })}>–</button>
               <button className="src-tool" title="More page padding" onClick={() => onPatch?.({ sourcePad: Math.min(48, pad + 4) })}>+</button>
             </>
@@ -276,10 +321,10 @@ export default function SourcePane({ tab, onPatch }) {
         </span>
       </div>
       <div className="source-body">
-        {src.kind === 'pdf' && <PdfSource doc={doc} page={seg} />}
+        {src.kind === 'pdf' && <PdfSource doc={doc} page={seg} curOff={curOff} />}
         {src.kind === 'epub' && <EpubSource doc={doc} section={seg} curOff={curOff} pad={pad} />}
         {src.kind === 'html' && <HtmlSource doc={doc} section={seg} checks={checks} onCheck={onCheck} curOff={curOff} pad={pad} />}
-        {src.kind === 'images' && <ImageSource doc={doc} index={seg} />}
+        {src.kind === 'images' && <ImageSource doc={doc} index={seg} frac={cursorOn && segLen ? curOff / segLen : -1} />}
       </div>
     </div>
   );

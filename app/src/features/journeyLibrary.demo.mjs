@@ -18,6 +18,12 @@ assert.equal(readStatus({ completion: false }), 'toread');
 assert.equal(readStatus({ shelf: 'queue' }), 'queue');
 assert.equal(readStatus({ shelf: 'abandoned' }), 'abandoned');
 assert.equal(readStatus({ inProgress: true, shelf: 'abandoned' }), 'abandoned'); // abandon wins over reading
+// a completion DATE without the flag ⇒ finished (fallback); explicit states still win
+assert.equal(readStatus({ finishTime: '2024-03-01' }), 'finished');
+assert.equal(readStatus({ finishTime: '2024-03-01', completion: false }), 'finished');
+assert.equal(readStatus({ finishTime: '2024-03-01', shelf: 'abandoned' }), 'abandoned');
+assert.equal(readStatus({ finishTime: '2024-03-01', inProgress: true }), 'reading'); // re-read: reading now wins
+assert.equal(readStatus({ finishTime: '' }), 'toread'); // empty date is not a finish
 
 // setReadStatus clears conflicting fields on transition
 assert.equal(setReadStatus({ inProgress: true }, 'abandoned').inProgress, false);
