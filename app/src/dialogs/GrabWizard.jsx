@@ -230,8 +230,9 @@ export default function GrabWizard({ onClose }) {
 
   // Advanced "watch" mode — continuously grab each settled new page; skip blanks/loading screens.
   const [captureMode, setCaptureMode] = useState('timed'); // 'timed' | 'watch'
-  const [watchDwell, setWatchDwell] = useState(0.6); // seconds a page must hold still before it's grabbed
+  const [watchDwell, setWatchDwell] = useState(0.5); // seconds a page must hold still before it's grabbed
   const [watching, setWatching] = useState(false);
+  const [watchHud, setWatchHud] = useState(null); // big glanceable capture state over the preview: { label, tone }
   const watchRef = useRef({ running: false });
   // SimpleClicker "arm": after each grab, ask the clicker to turn the page (see features/pageArm.js).
   const [armOn, setArmOn] = useState(false);
@@ -382,7 +383,7 @@ export default function GrabWizard({ onClose }) {
   useEffect(() => () => stopCapture(stream), [stream]);
 
   // Stop the watch loop when leaving the capture step.
-  useEffect(() => { if (step !== 'screen' && watchRef.current.running) { watchRef.current.running = false; setWatching(false); } }, [step]);
+  useEffect(() => { if (step !== 'screen' && watchRef.current.running) { watchRef.current.running = false; setWatching(false); setWatchHud(null); } }, [step]);
 
   useEffect(() => {
     allGrabbed().then((list) => setRecent(list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)))).catch(() => {});
@@ -610,13 +611,18 @@ export default function GrabWizard({ onClose }) {
   // Continuous "watch" capture: poll the shared region; when a NEW page settles (holds still for the
   // dwell) and isn't blank / a marked loading screen / the page already grabbed, capture it once. The
   // user just pages through — page-turn animations, blank flashes and loading screens are skipped.
+  // A big glanceable HUD over the preview (HOLD / FLIP / SKIP) paces hand page-flipping so you don't
+  // have to read the status line: grab → "FLIP", you turn the page (motion → "HOLD"), it settles →
+  // grabs → "FLIP" again. `hud()` only re-renders on a label change so the tight loop stays cheap.
   async function runWatch() {
     watchRef.current.running = true;
     setWatching(true);
     setMsg('👁 Watching — page through your document; each new page grabs itself.');
-    const dwellMs = Math.max(150, (Number(watchDwell) || 0.6) * 1000);
-    const POLL = 250;
-    let holdSig = null, holdStart = 0, handled = false;
+    const dwellMs = Math.max(150, (Number(watchDwell) || 0.5) * 1000);
+    const POLL = 140; // snappier than a page-flip cadence so a settled page is caught with little lag
+    let holdSig = null, holdStart = 0, handled = false, hudLabel = null;
+    const hud = (label, tone) => { if (label !== hudLabel) { hudLabel = label; setWatchHud({ label, tone }); } };
+    hud('Watching — flip to a page', 'wait');
     // lastCapSig / decidedSig live on watchRef so a manual "Grab page" during watch can update them
     // and stop the watcher from re-grabbing that same page.
     watchRef.current.lastCapSig = null;
@@ -640,21 +646,25 @@ export default function GrabWizard({ onClose }) {
         (signatureDiff(sig, decidedSig) > STILL_EPS || signatureBandDiff(sig, decidedSig) > BAND_EPS);
       if (moved || newEdge) {
         holdSig = sig; holdStart = now; handled = false; // (re)start the settle timer
+        // Motion after a grab means the user started turning the page — cue them to hold it flat.
+        hud(captured ? 'Hold the page still…' : 'Hold still…', 'hold');
       } else if (!handled && now - holdStart >= dwellMs) {
         handled = true; watchRef.current.decidedSig = sig; // the page settled — decide once
         let decision = 'grab';
         if (signatureBandVariance(sig) < BLANK_STD) {
           decision = 'blank';
-          skipped++; setMsg(`👁 Skipped a blank page (${captured} grabbed · ${skipped} skipped).`);
+          skipped++; hud('Blank — skipped', 'skip'); setMsg(`👁 Skipped a blank page (${captured} grabbed · ${skipped} skipped).`);
         } else if (skipSigsRef.current.some((s) => signatureDiff(sig, s) < DUP_THRESHOLD)) {
           decision = 'ignored'; // a loading screen resolves on its own — don't page past it
-          skipped++; setMsg(`👁 Skipped a loading / ignored screen (${captured} grabbed · ${skipped} skipped).`);
+          skipped++; hud('Ignored pattern', 'skip'); setMsg(`👁 Skipped a loading / ignored screen (${captured} grabbed · ${skipped} skipped).`);
         } else if (lastCapSig && signatureDiff(sig, lastCapSig) < DUP_THRESHOLD && signatureBandDiff(sig, lastCapSig) < BAND_EPS) {
           decision = 'dup'; // same page already grabbed — keep watching for the next one
+          hud(armRef.current.on ? 'Same page…' : 'Flip to the next page →', 'go');
         } else {
           watchRef.current.lastCapSig = sig; captured++;
           playGrabClick();
           addSeg(canvasToDataUrl(canvas), cap.ocrCrop);
+          hud(armRef.current.on ? `✓ ${captured} grabbed` : `✓ ${captured} — flip the page →`, 'go');
           setMsg(armRef.current.on
             ? `👁 Grabbed page ${captured} — 🦾 arm turning the page (${skipped} skipped).`
             : `👁 Grabbed page ${captured} — advance to the next (${skipped} skipped).`);
@@ -674,9 +684,10 @@ export default function GrabWizard({ onClose }) {
     }
     watchRef.current.running = false;
     setWatching(false);
+    setWatchHud(null);
     setMsg(endMsg || `👁 Watch stopped — ${captured} page(s) grabbed, ${skipped} skipped.`);
   }
-  function stopWatch() { watchRef.current.running = false; setWatching(false); }
+  function stopWatch() { watchRef.current.running = false; setWatching(false); setWatchHud(null); }
   // Mark the frame currently on the preview as a pattern to ignore (e.g. a loading spinner / splash).
   function markSkipPattern() {
     const v = videoRef.current;
@@ -1051,6 +1062,7 @@ export default function GrabWizard({ onClose }) {
               <video ref={videoRef} muted playsInline />
               {bufBox && <div className="grab-crop-buffer" style={{ left: `${bufBox.fx * 100}%`, top: `${bufBox.fy * 100}%`, width: `${bufBox.fw * 100}%`, height: `${bufBox.fh * 100}%` }} />}
               {crop && <div className="grab-crop" style={{ left: `${crop.fx * 100}%`, top: `${crop.fy * 100}%`, width: `${crop.fw * 100}%`, height: `${crop.fh * 100}%` }} />}
+              {watching && watchHud && <div className={`grab-hud grab-hud-${watchHud.tone}`}>{watchHud.label}</div>}
             </div>
             <div className="grab-controls">
               <button onClick={grabOnce} disabled={autoRunning} title={watching ? 'Force-capture the current frame even while watching' : 'Capture the current frame'}>📸 Grab page</button>
