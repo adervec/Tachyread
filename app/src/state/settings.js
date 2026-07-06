@@ -127,6 +127,7 @@ const NON_DEFAULT_FIELDS = new Set([
   'dailyHistory', 'completions', 'rating', 'notes',
   'tocEntries', 'tocReadStats', 'skipRanges', 'sourceChecks',
   'properNames', 'properNameSeed', 'indexEntries', 'goal',
+  'updatedAt', 'posUpdatedAt', 'posDevice', // sync stamps — never part of a tab's reusable look
 ]);
 
 export function tabDefaultsFrom(settings) {

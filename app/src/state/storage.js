@@ -155,8 +155,10 @@ export async function loadFile(checksum) {
 export async function saveFile(settings) {
   if (!settings.contentChecksum) return;
   const db = await getDB();
-  // updatedAt is the per-file last-write-wins clock for the tab-settings half of cloud sync.
-  await db.put('files', { ...settings, checksum: settings.contentChecksum, updatedAt: Date.now() });
+  // updatedAt / posUpdatedAt / posDevice arrive from the caller (AppContext persist loop), which
+  // stamps them only when the reusable settings / position ACTUALLY change — stamping here on
+  // every save would let a fresh open clobber another device's customizations in the cloud LWW.
+  await db.put('files', { ...settings, checksum: settings.contentChecksum });
 }
 
 export async function allFiles() {
@@ -813,6 +815,7 @@ export async function importAllData(bundle, { replace = true } = {}) {
 const PROGRESS_FILE_FIELDS = [
   'wordIndex', 'totalWords', 'persistentWordsRead', 'persistentActiveTimeSecs',
   'persistentTotalTimeSecs', 'dailyHistory', 'completions', 'rating', 'tocReadStats',
+  'posUpdatedAt', 'posDevice', // when + where the reading position last moved (newest-wins merge)
 ];
 
 // Bitwise-OR two bit-packed read masks (base64) — a word read on EITHER device stays read.
@@ -899,7 +902,7 @@ export async function exportProgressData() {
   }
   for (const f of await db.getAll('files')) {
     if (!f?.checksum) continue;
-    const rec = { name: nameByChecksum.get(f.checksum) || '' };
+    const rec = { name: f.fileName || nameByChecksum.get(f.checksum) || '' };
     for (const k of PROGRESS_FILE_FIELDS) if (f[k] !== undefined) rec[k] = f[k];
     out.files[f.checksum] = rec;
     // Reusable per-file appearance/behaviour settings (no progress, no identity), LWW by updatedAt.
@@ -957,13 +960,40 @@ export async function importProgressData(bundle) {
     await tx.done;
     merged++;
   }
-  // File progress (resume cursor + persistent counters) — max merge; create a partial record if the
-  // file has never been opened here, so progress is waiting when its local copy is first opened.
+  // File progress (resume cursor + persistent counters). The POSITION merges newest-stamp-wins (a
+  // rewind or re-read on the most recently used device must win — furthest-wins lost those); when
+  // neither side carries a stamp (legacy records) the old furthest-wins stands. A significant
+  // disagreement where the NEWER position is BEHIND the older one is genuinely ambiguous (deliberate
+  // rewind vs. missed progress?) — the newest is applied so sync never stalls, and the conflict is
+  // surfaced (returned + a window event) for the UI to offer a one-click override.
+  const conflicts = [];
   for (const [checksum, inc] of Object.entries(bundle.files || {})) {
     const tx = db.transaction('files', 'readwrite');
     const cur = (await tx.store.get(checksum)) || { ...defaultFileSettings() };
     cur.contentChecksum = checksum; cur.checksum = checksum;
-    cur.wordIndex = Math.max(cur.wordIndex || 0, inc.wordIndex || 0);
+    const curPos = cur.wordIndex || 0, incPos = inc.wordIndex || 0;
+    const curT = cur.posUpdatedAt || 0, incT = inc.posUpdatedAt || 0;
+    const curDev = cur.posDevice || 'this device'; // capture BEFORE the merge overwrites it
+    const total = cur.totalWords || inc.totalWords || 0;
+    const significant = Math.abs(curPos - incPos) > Math.max(200, total * 0.02);
+    if (!curT && !incT) {
+      cur.wordIndex = Math.max(curPos, incPos); // legacy: no stamps on either side
+    } else if (incT > curT) {
+      cur.wordIndex = incPos; cur.posUpdatedAt = incT; cur.posDevice = inc.posDevice || bundle.device || '';
+      if (significant && curT && incPos < curPos) {
+        conflicts.push({ checksum, name: inc.name || cur.fileName || '', total,
+          applied: { pos: incPos, at: incT, device: inc.posDevice || bundle.device || '' },
+          other: { pos: curPos, at: curT, device: curDev } });
+      }
+    } else {
+      // local is newest (or tie) — keep it, but flag when the remote was significantly FURTHER.
+      if (significant && incT && curPos < incPos) {
+        conflicts.push({ checksum, name: inc.name || cur.fileName || '', total,
+          applied: { pos: curPos, at: curT, device: curDev },
+          other: { pos: incPos, at: incT, device: inc.posDevice || bundle.device || '' } });
+      }
+    }
+    if (!cur.fileName && inc.name) cur.fileName = inc.name; // names travel with progress
     if (!cur.totalWords) cur.totalWords = inc.totalWords || 0;
     cur.persistentWordsRead = Math.max(cur.persistentWordsRead || 0, inc.persistentWordsRead || 0);
     cur.persistentActiveTimeSecs = Math.max(cur.persistentActiveTimeSecs || 0, inc.persistentActiveTimeSecs || 0);
@@ -1019,7 +1049,37 @@ export async function importProgressData(bundle) {
   g.remoteAudiobooks = [...remoteAb.values()];
   g.bookGroups = mergeBookGroups(g.bookGroups, bundle.bookGroups);
   await db.put('global', g, 'settings');
-  return { merged };
+  // Surface position conflicts wherever the sync was triggered from (App listens and shows a
+  // deconflict prompt); also PERSISTED because the manual "Restore from sync" path reloads the
+  // page right after import — App re-raises any pending ones on boot.
+  if (conflicts.length) {
+    try { await db.put('global', conflicts, 'syncConflicts'); } catch { /* best-effort */ }
+    if (typeof window !== 'undefined') {
+      try { window.dispatchEvent(new CustomEvent('tachyread-sync-conflicts', { detail: conflicts })); } catch { /* non-DOM */ }
+    }
+  }
+  return { merged, conflicts };
+}
+
+export async function getPendingSyncConflicts() {
+  const db = await getDB();
+  return (await db.get('global', 'syncConflicts')) || [];
+}
+export async function clearPendingSyncConflicts() {
+  const db = await getDB();
+  await db.delete('global', 'syncConflicts');
+}
+
+// Resolve a sync position conflict: set the position with a FRESH stamp so the choice wins the next
+// merge on every device. Returns the updated record.
+export async function applySyncedPosition(checksum, wordIndex, device = '') {
+  const db = await getDB();
+  const rec = (await db.get('files', checksum)) || { ...defaultFileSettings(), checksum, contentChecksum: checksum };
+  rec.wordIndex = wordIndex;
+  rec.posUpdatedAt = Date.now();
+  rec.posDevice = device;
+  await db.put('files', rec);
+  return rec;
 }
 
 // File System Access handles (sync folder, etc.). Kept out of export (not JSON-serializable).

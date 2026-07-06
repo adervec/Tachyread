@@ -79,7 +79,7 @@ import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts } from './state/storage.js';
 import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
 import { startMicScope, micScopeSupported } from './features/micScope.js';
@@ -207,6 +207,32 @@ function AppInner() {
   // view) or shows it in the bottom zone (split view), reverting once normal reading resumes.
   const [peek, setPeek] = useState({ line: -1, token: 0 });
   const [scrollCmd, setScrollCmd] = useState(null); // scroll-mode nav command for LinePane {token, kind}
+  // Cross-device position conflicts surfaced by a progress-sync merge (see importProgressData) —
+  // the newest position was applied; this modal lets the user override per book.
+  const [syncConflicts, setSyncConflicts] = useState(null);
+  useEffect(() => {
+    // Manual "Restore from sync" reloads right after import, so conflicts are also persisted —
+    // re-raise any pending ones here, then listen for live ones (auto boot-sync doesn't reload).
+    getPendingSyncConflicts().then((c) => { if (c.length) setSyncConflicts((prev) => [...(prev || []), ...c]); }).catch(() => {});
+    const onConf = (e) => setSyncConflicts((prev) => [...(prev || []), ...(e.detail || [])]);
+    window.addEventListener('tachyread-sync-conflicts', onConf);
+    return () => window.removeEventListener('tachyread-sync-conflicts', onConf);
+  }, []);
+  function dismissSyncConflicts() {
+    setSyncConflicts(null);
+    clearPendingSyncConflicts().catch(() => {});
+  }
+  async function resolveSyncConflict(c, useOther) {
+    const pos = useOther ? c.other.pos : c.applied.pos;
+    await applySyncedPosition(c.checksum, pos, state.global.deviceName || '');
+    const t = state.tabs.find((tt) => (tt.lazy ? tt.settings?.contentChecksum : tt.doc?.contentChecksum) === c.checksum);
+    if (t && !t.lazy) patchSettings(t.id, { wordIndex: pos });
+    setSyncConflicts((list) => {
+      const n = (list || []).filter((x) => x !== c);
+      if (!n.length) clearPendingSyncConflicts().catch(() => {});
+      return n.length ? n : null;
+    });
+  }
   const [tocFlash, setTocFlash] = useState({ index: -1, token: 0 });
   const peekToLine = useCallback((line) => setPeek((s) => ({ line, token: s.token + 1 })), []);
   const clearPeek = useCallback(() => setPeek((s) => (s.line < 0 ? s : { line: -1, token: s.token + 1 })), []);
@@ -1681,9 +1707,10 @@ function AppInner() {
   const showAuxOnly = (which) => {
     if (which !== 'toc' && state.showToc) dispatch({ type: 'TOGGLE_TOC' });
     if (which !== 'index' && state.showIndex) dispatch({ type: 'TOGGLE_INDEX' });
-    if (state.showSource) dispatch({ type: 'TOGGLE_SOURCE' });
+    if (which !== 'source' && state.showSource) dispatch({ type: 'TOGGLE_SOURCE' });
     if (which === 'toc' && !state.showToc) dispatch({ type: 'TOGGLE_TOC' });
     if (which === 'index' && !state.showIndex) dispatch({ type: 'TOGGLE_INDEX' });
+    if (which === 'source' && !state.showSource) dispatch({ type: 'TOGGLE_SOURCE' });
   };
   // "Jump to current word": close any aux pane so a reader shows, then snap it to the current line.
   const jumpToCurrent = () => {
@@ -1949,6 +1976,16 @@ function AppInner() {
               >
                 🔎 Index
               </button>
+              {activeTab?.doc?.source && (
+                <button
+                  role="tab"
+                  aria-selected={state.showSource}
+                  className={state.showSource ? 'on' : ''}
+                  onClick={() => showAuxOnly(state.showSource ? null : 'source')}
+                >
+                  🗐 Source
+                </button>
+              )}
               {!auxOpen && (
                 <>
                   {/* Rotate JUST the reader box (not the menus/controls) by a quarter-turn. */}
@@ -2360,6 +2397,40 @@ function AppInner() {
           onClose={() => dispatch({ type: 'SET_IMPORT', payload: null })}
           onAction={handleMenuAction}
         />
+      )}
+
+      {/* Cross-device progress deconflict — shown when a sync merge found two devices moving the
+          same book in different directions. The newest position is already applied; pick per book. */}
+      {syncConflicts && syncConflicts.length > 0 && (
+        <div className="dialog-backdrop" style={{ zIndex: 6000 }}>
+          <div className="dialog" style={{ width: 'min(600px, 96vw)' }}>
+            <div className="dialog-title"><span>Sync — whose progress wins?</span><button className="close-x" onClick={dismissSyncConflicts}>×</button></div>
+            <div className="dialog-body">
+              <p className="settings-note" style={{ marginTop: 0 }}>
+                These books were moved on two devices in different directions. The most recent position
+                is applied — keep it, or take the other device’s.
+              </p>
+              {syncConflicts.map((c, i) => {
+                const pct = (p) => (c.total ? `${Math.round((p / c.total) * 100)}%` : `word ${p + 1}`);
+                const when = (t) => (t ? new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
+                return (
+                  <div key={i} className="sync-conflict">
+                    <div className="sync-conflict-name">{c.name || 'Untitled book'}</div>
+                    <div className="sync-conflict-opts">
+                      <button className="toggle-on" onClick={() => resolveSyncConflict(c, false)}>
+                        Keep {pct(c.applied.pos)} <em>{c.applied.device || 'newest'} · {when(c.applied.at)}</em>
+                      </button>
+                      <button onClick={() => resolveSyncConflict(c, true)}>
+                        Take {pct(c.other.pos)} <em>{c.other.device || 'other device'} · {when(c.other.at)}</em>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="dialog-buttons"><button onClick={dismissSyncConflicts}>Dismiss (keep newest)</button></div>
+          </div>
+        </div>
       )}
 
       {dragOver && <div className="drop-overlay">Drop file to open</div>}
