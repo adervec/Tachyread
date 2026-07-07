@@ -2274,6 +2274,7 @@
 .pd-scan { margin-top: 10px; border-top: 1px dashed var(--divider); padding-top: 8px; }
 .pd-scan-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 4px; cursor: pointer; }
 .pd-scan-row .pd-scan-title { font-weight: 600; }
+.pd-cmp-pick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
 .pd-sec-check { flex: 0 0 auto; margin-right: 4px; }
 .pd-sec-row.pd-sec-sel { background: color-mix(in srgb, #d05555 10%, transparent); border-radius: 4px; }
 .history-view { min-width: 0; }
