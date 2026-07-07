@@ -22,6 +22,7 @@ const MENUS = {
     { label: 'Grab Text (OCR)...', shortcut: 'Ctrl+Shift+G', action: 'grab' },
     { label: 'Grab from Web URL...', action: 'web-grab' },
     { label: 'Save Tab Text...', action: 'save-tab' },
+    { label: 'HTML Tools (guide & print to HTML)...', action: 'html-tools' },
     { kind: 'separator' },
     { label: 'Find...', shortcut: 'Ctrl+F', action: 'find' },
     { label: 'Go to Line...', shortcut: 'Ctrl+G', action: 'goto' },
