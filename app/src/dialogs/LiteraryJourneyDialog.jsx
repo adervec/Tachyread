@@ -20,6 +20,7 @@ import {
 } from '../features/journeyAnalytics.js';
 import { normTitle } from '../document/tocWizard.js';
 import { groupForChecksum } from '../features/bookGroups.js';
+import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordCount } from '../features/readingTime.js';
 import { HistoryView } from './HistoryDialog.jsx';
 import ProgressDetailDialog from './ProgressDetailDialog.jsx';
 import { getSyncProvider } from '../features/sync/syncProviders.js';
@@ -53,6 +54,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
   const [size, setSize] = useState(null);
   const [bindMap, setBindMap] = useState(null);
   const [docMeta, setDocMeta] = useState([]);
+  const [fileStats, setFileStats] = useState({}); // checksum → { firstRead, activeSecs, words, coverage } for auto-fill
   const [tab, setTab] = useState(initialTab || 'dashboard');
   const [progressFor, setProgressFor] = useState(null); // checksum whose stored progress detail is open
   const fileRef = useRef(null);
@@ -74,12 +76,26 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
   const [adding, setAdding] = useState(false);
 
   async function reload() {
-    const [bs, a, g, sg, aiRec, sz, bind, docs] = await Promise.all([
+    const [bs, a, g, sg, aiRec, sz, bind, docs, files] = await Promise.all([
       getLibraryBooks(), getLibraryRef('authors'), getLibraryRef('genres'), getLibraryRef('subgenres'),
-      getJourneyAi(), librarySize(), getBinding(), allDocMeta(),
+      getJourneyAi(), librarySize(), getBinding(), allDocMeta(), allFiles().catch(() => []),
     ]);
     setBooks(bs); setRefs({ authors: a, genres: g, subgenres: sg }); setAi(aiRec); setSize(sz);
     setBindMap(bind); setDocMeta(docs);
+    // Per-document reading facts so a bound book can auto-fill its start date + reading time.
+    const stats = {};
+    for (const f of files) {
+      const cs = f.checksum || f.contentChecksum;
+      if (!cs) continue;
+      const daily = (f.dailyHistory || []).filter((d) => (d.wordsRead || 0) > 0 || (d.activeTimeSecs || 0) > 0).sort((x, y) => (x.date < y.date ? -1 : 1));
+      stats[cs] = {
+        firstRead: daily[0]?.date || null,
+        activeSecs: f.persistentActiveTimeSecs || 0,
+        words: f.totalWords || 0,
+        coverage: f.totalWords ? Math.min(1, (f.persistentWordsRead || 0) / f.totalWords) : 0,
+      };
+    }
+    setFileStats(stats);
   }
   useEffect(() => { reload(); }, []);
   useEffect(() => { if (books && !didInit.current) { didInit.current = true; if (books.length === 0 && !initialTab) setTab('data'); } }, [books, initialTab]);
@@ -285,7 +301,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
               </div>
 
               {adding && <BookEditor book={{ id: '', title: '', author: '', genre: '', fnf: 'F', type: 'long' }} isNew onCancel={() => setAdding(false)} onSave={async (b) => { await saveBook({ ...b, id: deriveId(b) }); setAdding(false); }} />}
-              {selBook && <BookEditor book={selBook} docMeta={docMeta} bindMap={bindMap} groups={global?.bookGroups} onBind={bind} onProgress={setProgressFor} onCancel={() => setSelected(null)} onSave={saveBook} onDelete={() => removeBook(selBook.id)} />}
+              {selBook && <BookEditor book={selBook} docMeta={docMeta} bindMap={bindMap} fileStats={fileStats} groups={global?.bookGroups} onBind={bind} onProgress={setProgressFor} onCancel={() => setSelected(null)} onSave={saveBook} onDelete={() => removeBook(selBook.id)} />}
 
               <div className="lj-list">
                 {shown.map((b) => {
@@ -375,7 +391,7 @@ function suggestDoc(book, docMeta) {
 }
 
 // Inline add/edit card for one book.
-function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, groups = [], onBind, onProgress, onSave, onCancel, onDelete }) {
+function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, fileStats = {}, groups = [], onBind, onProgress, onSave, onCancel, onDelete }) {
   const [b, setB] = useState(book);
   useEffect(() => { setB(book); }, [book]);
   const status = readStatus(b);
@@ -383,6 +399,12 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, groups = 
   const currentLink = !isNew && Object.entries(bindMap || {}).find(([, id]) => id === b.id)?.[0];
   const linkedGroup = currentLink ? groupForChecksum(groups, currentLink) : null;
   const suggested = !isNew && !currentLink ? suggestDoc(b, docMeta) : null;
+  // Reading facts from the linked document, for the "auto" fills below.
+  const docStats = currentLink ? fileStats[currentLink] : null;
+  const finishISO = finishMs(b) ? new Date(finishMs(b)).toISOString().slice(0, 10) : null;
+  const eyeFrac = (Number(b.audiobookEyePct) || 0) / 100;
+  const abSecs = b.audiobookFinish ? audiobookSecs(bookWordCount(b), eyeFrac) : 0;
+  const totalSecs = estimateTotalSecs({ readSecs: b.readSecs, words: bookWordCount(b), audiobookFinish: b.audiobookFinish, eyeFrac });
   return (
     <div className="lj-editor">
       <div className="lj-editor-grid">
@@ -398,8 +420,40 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, groups = 
         <label>Difficulty<input type="number" min="1" max="5" value={b.difficultyLevel || ''} onChange={(e) => set({ difficultyLevel: Number(e.target.value) })} /></label>
         <label>Rec score<input type="number" min="0" max="10" value={b.recScore || ''} onChange={(e) => set({ recScore: Number(e.target.value) })} /></label>
         <label>Pages<input type="number" value={b.pages || ''} onChange={(e) => set({ pages: Number(e.target.value) })} /></label>
+        <label>Words<input type="number" value={b.words || ''} placeholder={b.pages ? `~${bookWordCount({ pages: b.pages })}` : ''} onChange={(e) => set({ words: Number(e.target.value) })} /></label>
         <label>Published<input value={b.pubDate || ''} onChange={(e) => set({ pubDate: e.target.value })} /></label>
       </div>
+      <div className="lj-readtime">
+        <div className="field-section" style={{ marginTop: 0 }}>Reading time</div>
+        <div className="lj-editor-grid">
+          <label>Started
+            <span className="lj-inline">
+              <input type="date" value={b.startTime || ''} onChange={(e) => set({ startTime: e.target.value })} />
+              {docStats?.firstRead && b.startTime !== docStats.firstRead && <button type="button" className="link-btn" title="Use the first date you read the linked document" onClick={() => set({ startTime: docStats.firstRead })}>auto</button>}
+            </span>
+          </label>
+          <label>Time reading (min)
+            <span className="lj-inline">
+              <input type="number" min="0" value={b.readSecs ? Math.round(b.readSecs / 60) : ''} onChange={(e) => set({ readSecs: Math.max(0, Number(e.target.value) || 0) * 60 })} />
+              {docStats?.activeSecs > 0 && b.readSecs !== docStats.activeSecs && <button type="button" className="link-btn" title="Use the active reading time recorded for the linked document" onClick={() => set({ readSecs: docStats.activeSecs })}>auto</button>}
+            </span>
+          </label>
+        </div>
+        <label className="inline-check">
+          <input type="checkbox" checked={!!b.audiobookFinish} onChange={(e) => set({ audiobookFinish: e.target.checked, audiobookEyePct: e.target.checked ? (b.audiobookEyePct ?? Math.round((docStats?.coverage || 0) * 100)) : b.audiobookEyePct })} />
+          Finished the rest by audiobook
+        </label>
+        {b.audiobookFinish && (
+          <label className="lj-ab-pct">Read by eye first (%)
+            <input type="number" min="0" max="100" value={b.audiobookEyePct ?? ''} onChange={(e) => set({ audiobookEyePct: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} />
+            <span className="settings-note" style={{ margin: 0 }}>
+              {bookWordCount(b) ? `~${fmtDur(abSecs)} of audiobook at 1× · estimated total ~${fmtDur(totalSecs)}` : 'Add a word or page count to estimate the audiobook time.'}
+            </span>
+          </label>
+        )}
+        <p className="settings-note" style={{ margin: '2px 0 0' }}>{readingTimeSummary(b, finishISO)}</p>
+      </div>
+
       <label className="lj-editor-notes">Notes<textarea rows={3} value={b.notes || ''} onChange={(e) => set({ notes: e.target.value })} /></label>
       {!isNew && onBind && (
         <div className="lj-bind">

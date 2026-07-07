@@ -3262,6 +3262,12 @@
 .lj-editor label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--status-fg); }
 .lj-editor-notes { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--status-fg); margin-top: 8px; }
 .lj-editor-notes textarea { resize: vertical; }
+.lj-readtime { margin-top: 8px; border-top: 1px solid var(--divider); padding-top: 8px; }
+.lj-readtime .lj-inline { display: flex; align-items: center; gap: 6px; margin: 0; flex-wrap: nowrap; }
+.lj-readtime .lj-inline input { flex: 1; min-width: 0; }
+.lj-readtime .inline-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; margin: 6px 0 2px; cursor: pointer; }
+.lj-ab-pct { flex-direction: row !important; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lj-ab-pct input { width: 64px; }
 .lj-editor-buttons { display: flex; gap: 6px; margin-top: 10px; }
 .lj-danger { color: #f85149; border-color: #f85149 !important; }
 .lj-bind { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--divider); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
