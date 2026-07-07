@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
-import { docFromWebContent } from '../document/parsers.js';
+import { docFromWebContent, nameFromUrl } from '../document/parsers.js';
 import { normalizeUrl, proxyUrl, isHtmlContentType } from '../features/webGrab.js';
 
 // Grab a web page's readable text into a reading tab. A browser can't read most cross-origin pages
@@ -9,14 +9,24 @@ import { normalizeUrl, proxyUrl, isHtmlContentType } from '../features/webGrab.j
 // for CORS-friendly sites), an opt-in reader service that relays the page (discloses the URL to a
 // third party), and a fully-local manual paste (open the page yourself, copy it, paste it here).
 export default function WebGrabWizard({ onClose }) {
-  const { openDoc, setStatus } = useApp();
+  const { openDoc, setStatus, openDialog } = useApp();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [blocked, setBlocked] = useState(false); // direct fetch failed → reveal fallbacks
   const [paste, setPaste] = useState('');
+  const [pickRegion, setPickRegion] = useState(false); // hand HTML to the structure picker instead of auto-extracting
+
+  const looksHtml = (s, asHtml) => (asHtml != null ? asHtml : /<\/?(?:html|body|main|article|section|div|p|h[1-6])\b/i.test(s || ''));
 
   async function open(content, opts) {
+    // When the page has messy structure, let the user pick the content region interactively. Both are
+    // single-slot modals, so openDialog swaps web-grab → the picker; do NOT also call onClose (it would
+    // close the picker we just opened).
+    if (pickRegion && looksHtml(content, opts?.asHtml)) {
+      openDialog({ kind: 'html-structure', html: content, fileName: nameFromUrl(opts?.url || url) });
+      return;
+    }
     const doc = await docFromWebContent(content, opts);
     if (!doc.words?.length) { setMsg('That page had no readable text to extract.'); setBusy(false); return; }
     await openDoc(doc);
@@ -88,6 +98,9 @@ export default function WebGrabWizard({ onClose }) {
       </div>
       <div className="data-row">
         <button className="toggle-on" onClick={fetchDirect} disabled={busy || !url.trim()}>Fetch page ▸</button>
+        <label className="inline-check" title="After fetching/pasting, open an interactive picker to choose the content region — use this if the page has a messy layout and auto-extraction grabs the wrong part.">
+          <input type="checkbox" checked={pickRegion} onChange={(e) => setPickRegion(e.target.checked)} /> Let me pick the content region
+        </label>
         {busy && <span className="settings-note" style={{ margin: 0 }}>Working…</span>}
       </div>
       {msg && <p className="settings-note" style={{ marginTop: 4 }}>{msg}</p>}

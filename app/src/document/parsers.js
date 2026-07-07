@@ -81,6 +81,7 @@ function sanitizeHtml(html) {
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
     .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/\sdata-tx-idx="[^"]*"/gi, '') // the structure picker's element indices — never shown
     .replace(/javascript:/gi, '');
 }
 
@@ -226,13 +227,15 @@ function expandTemplates(root) {
 
 // Parse an HTML string into { texts, htmls, toc }: sections split at chapter boundaries
 // (article/section elements or top-level h1/h2), each with reading-order text and sanitized HTML.
-function htmlToSections(htmlString) {
+// `rootSelector` (from the interactive structure picker) forces the content region when the auto
+// heuristic misses it; falls back to pickContentRoot if the selector matches nothing.
+function htmlToSections(htmlString, rootSelector = null) {
   const dom = new DOMParser().parseFromString(htmlString, 'text/html');
   // Keep the document's own CSS (its "theme") for the Source view — inline <style> only; external
   // stylesheets are never fetched.
   const styles = [...dom.querySelectorAll('style')].map((s) => s.textContent || '').join('\n');
 
-  const root = pickContentRoot(dom);
+  const root = (rootSelector && dom.querySelector(rootSelector)) || pickContentRoot(dom);
   expandTemplates(root);
   // A collapsed <details> is hidden until expanded — keep only its <summary> label, drop the body,
   // so author notes / spoilers folded away by default don't leak into the reading text.
@@ -281,12 +284,50 @@ function htmlToSections(htmlString) {
   return { texts, htmls, toc, styles };
 }
 
-export function docFromHtmlString(htmlString, fileName) {
-  const { texts, htmls, toc, styles } = htmlToSections(htmlString);
+export function docFromHtmlString(htmlString, fileName, rootSelector = null) {
+  const { texts, htmls, toc, styles } = htmlToSections(htmlString, rootSelector);
   const doc = readerDocFromText(texts.join('\n\n'), fileName);
   attachSegments(doc, texts, { kind: 'html', sections: htmls, styles });
   if (toc.length) doc.tocEntries = toc;
   return doc;
+}
+
+// Tag every element in an HTML string with a stable index (data-tx-idx) and rank the plausible
+// content containers, so the interactive picker can render the page, let the user click a region,
+// and re-extract from exactly that element via docFromHtmlString(taggedHtml, name, selectorForIdx).
+// Returns { taggedHtml, candidates:[{ idx, tag, id, cls, words, sample }] } (best first). Browser-only
+// (needs DOMParser). Ranking = word count with a tag bonus; a parent that merely wraps an already
+// listed descendant of near-identical length is dropped so the tightest real container wins.
+export function tagHtmlForPicking(htmlString) {
+  const dom = new DOMParser().parseFromString(htmlString, 'text/html');
+  let i = 0;
+  for (const el of dom.body ? dom.body.querySelectorAll('*') : []) el.setAttribute('data-tx-idx', String(i++));
+  const wc = (el) => ((el.textContent || '').match(/\S+/g) || []).length;
+  const TAG_BONUS = { MAIN: 3, ARTICLE: 2.2, SECTION: 1.5, DIV: 1, BODY: 0.9 };
+  const raw = [...(dom.body ? dom.body.querySelectorAll('main, article, section, div, body') : [])]
+    .map((el) => ({ el, idx: Number(el.getAttribute('data-tx-idx')), words: wc(el), tag: el.tagName.toLowerCase(),
+      id: el.id || '', cls: (typeof el.className === 'string' ? el.className : '').trim() }))
+    .filter((c) => c.words >= 25)
+    .map((c) => ({ ...c, score: c.words * (TAG_BONUS[c.el.tagName] || 1) }))
+    .sort((a, b) => b.score - a.score);
+  const chosen = [];
+  for (const c of raw) {
+    // Drop a container that just wraps a descendant we already listed with near-identical text.
+    if (chosen.some((k) => c.el.contains(k.el) && k.words >= c.words * 0.92)) continue;
+    chosen.push(c);
+    if (chosen.length >= 10) break;
+  }
+  const candidates = chosen.map((c) => ({
+    idx: c.idx, tag: c.tag, id: c.id, cls: c.cls, words: c.words,
+    sample: (c.el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120),
+  }));
+  // Serialize a script-free copy for the preview iframe — a reader page's own JS must not run and
+  // rewrite the body while the user is picking a region. (Indices were assigned before removal.)
+  for (const s of dom.querySelectorAll('script')) s.remove();
+  const taggedHtml = '<!doctype html><html><head>'
+    + [...dom.head.querySelectorAll('style')].map((s) => s.outerHTML).join('')
+    + '</head>' + dom.body.outerHTML + '</html>';
+  return { taggedHtml, candidates };
 }
 
 // A readable document name derived from a URL — its <title>/<h1> is preferred by the caller; this is

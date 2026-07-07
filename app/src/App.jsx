@@ -36,6 +36,7 @@ import AppSettingsDialog from './dialogs/AppSettingsDialog.jsx';
 import BookFinishedDialog from './dialogs/BookFinishedDialog.jsx';
 import GrabWizard from './dialogs/GrabWizard.jsx';
 import WebGrabWizard from './dialogs/WebGrabWizard.jsx';
+import HtmlStructureWizard from './dialogs/HtmlStructureWizard.jsx';
 import TocWizard from './dialogs/TocWizard.jsx';
 import ResourceWizard from './dialogs/ResourceWizard.jsx';
 import IndexPane from './components/IndexPane.jsx';
@@ -1622,6 +1623,19 @@ function AppInner() {
     if (action === 'open-clip') return openClipboard();
     if (action === 'grab') return openDialog({ kind: 'grab' });
     if (action === 'web-grab') return openDialog({ kind: 'web-grab' });
+    if (action === 'open-html-pick') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.html,.htm,.xhtml';
+      input.onchange = async () => {
+        const f = input.files?.[0];
+        if (!f) return;
+        try { openDialog({ kind: 'html-structure', html: await f.text(), fileName: f.name.replace(/\.[^.]+$/, '') }); }
+        catch (e) { setStatus('Could not read that file: ' + (e?.message || e)); }
+      };
+      input.click();
+      return;
+    }
     if (action === 'close-tab' && activeTab) {
       dispatch({ type: 'CLOSE_TAB', id: activeTab.id });
       return;
@@ -2364,6 +2378,7 @@ function AppInner() {
       )}
       {dialog?.kind === 'grab' && <GrabWizard onClose={closeDialog} />}
       {dialog?.kind === 'web-grab' && <WebGrabWizard onClose={closeDialog} />}
+      {dialog?.kind === 'html-structure' && <HtmlStructureWizard html={dialog.html} fileName={dialog.fileName} onClose={closeDialog} />}
       {dialog?.kind === 'toc-wizard' && activeTab && (
         <TocWizard
           tab={activeTab}

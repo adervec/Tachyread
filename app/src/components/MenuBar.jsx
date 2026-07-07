@@ -17,6 +17,7 @@ const MENUS = {
   file: [
     { label: 'Open TXT...', shortcut: 'Ctrl+O', action: 'open-txt' },
     { label: 'Open Document (PDF, EPUB, HTML, DOCX, MD)...', shortcut: 'Ctrl+D', action: 'open-doc' },
+    { label: 'Open HTML (choose content region)...', action: 'open-html-pick' },
     { label: 'Open from Clipboard', shortcut: 'Ctrl+B', action: 'open-clip' },
     { label: 'Grab Text (OCR)...', shortcut: 'Ctrl+Shift+G', action: 'grab' },
     { label: 'Grab from Web URL...', action: 'web-grab' },
