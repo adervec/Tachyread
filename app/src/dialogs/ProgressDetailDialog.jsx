@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { getTocEntries, sectionSpan } from '../document/toc.js';
-import { loadFile, loadReadState, saveReadState, getReadSections } from '../state/storage.js';
+import { loadFile, loadReadState, saveReadState, getReadSections, loadDocPayload, allFiles } from '../state/storage.js';
 import { createReadingTracker } from '../engine/readingTracker.js';
 import { sectionChecksum } from '../document/sectionHash.js';
+import { readerDocFromText } from '../document/readerDocument.js';
 
 // Detailed annotated progress popup. Pulls everything the reading tracker knows into one view:
 //   • WHAT was read   — the coverage strip (read this session / earlier / unread / excluded).
@@ -80,6 +81,22 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
   const [readSel, setReadSel] = useState(() => new Set());
   const [readArm, setReadArm] = useState(false);
   const scanAvailable = !storedChecksum && Array.isArray(t?.doc?.words); // needs the real word list
+  // Detailed file-vs-file overlap (requires the OTHER file's stored text): section-level compare + a
+  // word-accurate read-state carry-over.
+  const [fileList, setFileList] = useState([]);
+  const [cmp, setCmp] = useState(null); // { pairs, file } | { error } while comparing
+  const [cmpBusy, setCmpBusy] = useState(false);
+  const [carrySel, setCarrySel] = useState(() => new Set());
+  const [carryArm, setCarryArm] = useState(false);
+  const curChecksum = t?.doc?.contentChecksum;
+  useEffect(() => {
+    if (!scanAvailable) return;
+    allFiles().then((fs) => setFileList(
+      fs.filter((f) => (f.checksum || f.contentChecksum) !== curChecksum && (f.totalWords || 0) > 0 && (f.persistentWordsRead || 0) > 0)
+        .sort((a, b) => (b.dailyHistory?.length || 0) - (a.dailyHistory?.length || 0)),
+    )).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanAvailable, curChecksum]);
 
   // Refresh live so the view tracks reading while it's open.
   const [tick, setTick] = useState(0);
@@ -224,6 +241,61 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
     for (const i of readSel) { const s = sections[i]; if (s) tracker.markRangeRead(s.start, s.end); }
     // Live tab: the tracker is now dirty and the app flushes readstate periodically (same as unread).
     setReadSel(new Set()); setScanMatches(null); setReadArm(false); setTick((n) => n + 1);
+  }
+
+  // Compare THIS file section-by-section with a previously-read one — loading the other file's stored
+  // text so it works even for sections neither file finished. Matched sections (identical content) show
+  // how much was read in the other file, and their per-word read state can be carried over exactly.
+  async function compareWith(checksum) {
+    setCmp(null); setCarrySel(new Set()); setCarryArm(false);
+    if (!checksum) return;
+    setCmpBusy(true);
+    try {
+      const [payload, fsRec, rs] = await Promise.all([loadDocPayload(checksum), loadFile(checksum), loadReadState(checksum)]);
+      const fullText = payload?.fullText;
+      const oldEntries = fsRec?.tocEntries || [];
+      if (!fullText) { setCmp({ error: 'That file’s text isn’t stored here anymore — reopen it once, then compare.' }); return; }
+      if (!oldEntries.length) { setCmp({ error: 'That file has no Table of Contents to compare sections against.' }); return; }
+      const oldDoc = readerDocFromText(fullText, fsRec.fileName || '');
+      const oldWords = oldDoc.words;
+      const oldTotal = oldWords.length;
+      const oldTracker = createReadingTracker({ wordCount: oldTotal, maskB64: rs?.maskB64 || '', wpmB64: rs?.wpmB64 || '', lifetimeActiveMs: rs?.lifetimeActiveMs || 0, daily: rs?.daily || [], paraTsB64: rs?.paraTsB64 || '' });
+      const oldByHash = new Map();
+      oldEntries.forEach((e, i) => {
+        const span = sectionSpan(oldEntries, i, oldTotal);
+        const hash = sectionChecksum(oldWords, span.start, span.end);
+        if (!hash || oldByHash.has(hash)) return;
+        const st = oldTracker.rangeStats(span.start, span.end);
+        oldByHash.set(hash, { title: e.title, start: span.start, end: span.end, readFrac: st.readFrac, runs: oldTracker.readRuns(span.start, span.end) });
+      });
+      const words = t.doc.words;
+      const pairs = [];
+      sections.forEach((s, idx) => {
+        const hash = sectionChecksum(words, s.start, s.end);
+        if (!hash) return;
+        const old = oldByHash.get(hash);
+        if (old && old.readFrac > s.readFrac + 0.01) pairs.push({ idx, title: s.title, curFrac: s.readFrac, oldFrac: old.readFrac, old, cur: s });
+      });
+      setCmp({ pairs, file: fsRec.fileName || 'that file' });
+      setCarrySel(new Set(pairs.map((p) => p.idx)));
+    } catch (e) { setCmp({ error: 'Compare failed: ' + (e?.message || e) }); }
+    setCmpBusy(false);
+  }
+  const carryWords = (cmp?.pairs || []).filter((p) => carrySel.has(p.idx)).reduce((n, p) => {
+    const gained = p.old.runs.reduce((m, [rs, re]) => m + Math.min(p.cur.end, p.cur.start + (rs - p.old.start) + (re - rs)) - Math.max(p.cur.start, p.cur.start + (rs - p.old.start)), 0);
+    return n + Math.max(0, gained);
+  }, 0);
+  function carryOver() {
+    if (!tracker || !cmp?.pairs) return;
+    for (const p of cmp.pairs) {
+      if (!carrySel.has(p.idx)) continue;
+      for (const [rs, re] of p.old.runs) {
+        const start = p.cur.start + (rs - p.old.start);
+        const end = Math.min(p.cur.end, start + (re - rs));
+        if (end > start) tracker.markRangeRead(start, end);
+      }
+    }
+    setCmp(null); setCarrySel(new Set()); setCarryArm(false); setTick((n) => n + 1);
   }
 
   // Hover tooltip content.
@@ -385,6 +457,46 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
                         )}
                         <button onClick={() => { setScanMatches(null); setReadSel(new Set()); setReadArm(false); }}>Cancel scan</button>
                         <span className="settings-note" style={{ margin: 0 }}>Content-matched to sections finished in other files. Coverage rises; use for a successive edition.</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Detailed compare against ONE previously-read file (needs its stored text) — matches every
+                  section, shows the other file's read %, and carries the read state over word-accurately. */}
+              {scanAvailable && fileList.length > 0 && (
+                <div className="pd-scan">
+                  <label className="pd-cmp-pick">
+                    <span>Compare overlap with a previously-read file:</span>
+                    <select value="" disabled={cmpBusy} onChange={(e) => compareWith(e.target.value)}>
+                      <option value="">{cmpBusy ? 'Comparing…' : 'Pick a file…'}</option>
+                      {fileList.map((f) => <option key={f.checksum || f.contentChecksum} value={f.checksum || f.contentChecksum}>{f.fileName || (f.checksum || '').slice(0, 8)}</option>)}
+                    </select>
+                  </label>
+                  {cmp?.error && <p className="settings-note" style={{ margin: '4px 0 0' }}>{cmp.error}</p>}
+                  {cmp?.pairs && cmp.pairs.length === 0 && <p className="settings-note" style={{ margin: '4px 0 0' }}>No sections here were read more in “{cmp.file}”.</p>}
+                  {cmp?.pairs && cmp.pairs.length > 0 && (
+                    <>
+                      <div className="field-section" style={{ marginTop: 6 }}>Read more in “{cmp.file}” ({cmp.pairs.length}) — tick to carry that read state here</div>
+                      {cmp.pairs.map((p) => (
+                        <label key={p.idx} className="pd-scan-row">
+                          <input type="checkbox" checked={carrySel.has(p.idx)} onChange={(e) => setCarrySel((prev) => { const n = new Set(prev); if (e.target.checked) n.add(p.idx); else n.delete(p.idx); return n; })} />
+                          <span className="pd-scan-title">{p.title}</span>
+                          <span className="settings-note" style={{ margin: 0 }}>here {Math.round(p.curFrac * 100)}% → there {Math.round(p.oldFrac * 100)}%</span>
+                        </label>
+                      ))}
+                      <div className="pd-unread-bar">
+                        {!carryArm ? (
+                          <button className="toggle-on" disabled={!carrySel.size} onClick={() => setCarryArm(true)}>⇄ Carry over {carrySel.size} section{carrySel.size === 1 ? '' : 's'}…</button>
+                        ) : (
+                          <>
+                            <button className="grab-trash" onClick={carryOver}>⚠ Confirm — mark {carryWords.toLocaleString()} word{carryWords === 1 ? '' : 's'} read</button>
+                            <button onClick={() => setCarryArm(false)}>Cancel</button>
+                          </>
+                        )}
+                        <button onClick={() => { setCmp(null); setCarrySel(new Set()); setCarryArm(false); }}>Clear</button>
+                        <span className="settings-note" style={{ margin: 0 }}>Transfers the other file’s exact per-word read state onto the content-identical sections here.</span>
                       </div>
                     </>
                   )}

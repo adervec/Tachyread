@@ -82,4 +82,16 @@ for (let i = 0; i < 10; i++) t2.recordMove(i, i + 1, T + 300 * (i + 1));
 assert(t2.readCount === 10, 'recordMove marks words read');
 const r2 = t2.recentWpm(T + 3001);
 assert(r2 >= 180 && r2 <= 220, `step reading ≈ 200 wpm, got ${r2}`);
+
+// readRuns: contiguous read ranges within a span, for edition read-state transfer.
+const t6 = createReadingTracker({ wordCount: 100 });
+t6.markRangeRead(10, 15);
+t6.markRangeRead(20, 22);
+assert.deepEqual(t6.readRuns(0, 100), [[10, 15], [20, 22]], 'readRuns finds the two runs');
+assert.deepEqual(t6.readRuns(12, 21), [[12, 15], [20, 21]], 'readRuns clips to the query window');
+assert.deepEqual(t6.readRuns(30, 40), [], 'no reads → no runs');
+// a run touching the end is closed at the window edge
+const t7 = createReadingTracker({ wordCount: 100 });
+t7.markRangeRead(95, 100);
+assert.deepEqual(t7.readRuns(90, 100), [[95, 100]]);
 console.log('ok');

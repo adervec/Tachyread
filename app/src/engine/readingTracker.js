@@ -429,6 +429,21 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     return { total: n, readWords: read, readFrac: n ? read / n : 0, wpm: paced ? Math.round(sum / paced) : 0 };
   }
 
+  // Contiguous read runs within [from, to) as absolute [start, end) ranges — for transferring one
+  // file's per-word read state onto a content-identical section of another file (edition overlap).
+  function readRuns(from, to) {
+    const a = Math.max(0, Math.min(wordCount, from | 0));
+    const b = Math.max(a, Math.min(wordCount, to | 0));
+    const runs = [];
+    let s = -1;
+    for (let i = a; i < b; i++) {
+      if (mask[i]) { if (s < 0) s = i; }
+      else if (s >= 0) { runs.push([s, i]); s = -1; }
+    }
+    if (s >= 0) runs.push([s, b]);
+    return runs;
+  }
+
   // Session regression summary. `ratePer100` is regressions per 100 words of forward progress this
   // session; `recent` is the newest-first list (each {at, back, ms, ts}) for a jump-to-spot report.
   function regressionStats() {
@@ -479,6 +494,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     recentWpm,
     sampleTrend,
     rangeStats,
+    readRuns,
     // First unread word AFTER the furthest word ever read — the "latest unread" jump target.
     frontierIndex: () => { for (let i = wordCount - 1; i >= 0; i--) if (mask[i]) return Math.min(wordCount - 1, i + 1); return 0; },
     regressionStats,
