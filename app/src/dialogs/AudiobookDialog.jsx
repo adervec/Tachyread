@@ -306,6 +306,20 @@ export default function AudiobookDialog({ tab, onClose }) {
       </div>
       {msg && <p className="settings-note" style={{ marginTop: 0 }}>{msg}</p>}
 
+      {/* Collapse / expand controls — handy for long books; "completed" = fully-generated sections. */}
+      {sections.length > 1 && (() => {
+        const doneIds = sections.filter((s) => s.chunks.length && covered(s.chunks) >= s.chunks.length).map((s) => s.id);
+        return (
+          <div className="ab-sec-tools">
+            <span className="settings-note" style={{ margin: 0 }}>{sections.length} sections</span>
+            <span className="grab-sep" />
+            <button onClick={() => setCollapsed(new Set())} disabled={collapsed.size === 0} title="Expand every section">▾ Expand all</button>
+            <button onClick={() => setCollapsed(new Set(sections.map((s) => s.id)))} disabled={collapsed.size >= sections.length} title="Collapse every section">▸ Collapse all</button>
+            <button onClick={() => setCollapsed(new Set(doneIds))} disabled={!doneIds.length} title="Collapse only the fully-generated sections, leaving the ones that still need audio open">✓ Collapse completed{doneIds.length ? ` (${doneIds.length})` : ''}</button>
+          </div>
+        );
+      })()}
+
       {/* ToC-grouped chunk list */}
       <div className="ab-sections">
         {sections.map((sec) => {
