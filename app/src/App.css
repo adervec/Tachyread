@@ -457,6 +457,8 @@
   color: var(--status-fg);
 }
 .source-toolbar .source-sync { color: var(--nav-session-read-fg); }
+.source-page-nav { display: inline-flex; align-items: center; gap: 6px; }
+.source-page-nav .src-tool { min-width: 26px; }
 .stat-file-card { border: 1px solid var(--divider); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
 .stat-file-card.active { border-color: var(--toggle-active-bg); }
 .stat-file-name { font-weight: 600; margin-bottom: 4px; }
@@ -1584,15 +1586,21 @@
 .dock-mini {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   padding: 6px 14px;
   background: var(--controls-bg);
+  flex-wrap: wrap;
 }
 .dock-mini .play-btn-mini {
   width: 40px; height: 40px; font-size: 18px; font-weight: bold; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.dock-mini-meta { font-size: 12px; color: var(--meta-fg, var(--status-fg)); font-family: Consolas, monospace; }
+.dock-mini-nav {
+  min-width: 40px; height: 40px; font-size: 16px; padding: 0 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.dock-mini-nav.src { font-size: 13px; color: var(--nav-session-read-fg); border-color: var(--nav-session-read-fg); }
+.dock-mini-meta { font-size: 12px; color: var(--meta-fg, var(--status-fg)); font-family: Consolas, monospace; margin-left: auto; }
 .dock-dash {
   flex: 0 0 auto;
   width: 250px;
