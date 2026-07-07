@@ -485,6 +485,23 @@
 /* Web-grab wizard: the fallback panel shown when a direct fetch is blocked. */
 .wg-fallback { border: 1px solid var(--divider); border-radius: 6px; padding: 8px 10px; margin: 8px 0; background: var(--menu-highlight); }
 .wg-fallback .field-section { margin-top: 0; }
+
+/* HTML structure picker: rendered preview (click to choose a region) beside candidates + extraction preview. */
+.hsw { display: grid; grid-template-columns: 1fr 300px; gap: 12px; align-items: stretch; }
+.hsw-preview { border: 1px solid var(--divider); border-radius: 6px; overflow: hidden; background: #fff; min-height: 340px; }
+.hsw-preview iframe { width: 100%; height: 62vh; border: none; display: block; background: #fff; }
+.hsw-side { display: flex; flex-direction: column; min-width: 0; }
+.hsw-cands { display: flex; flex-direction: column; gap: 5px; max-height: 34vh; overflow: auto; }
+.hsw-cand { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; text-align: left; border: 1px solid var(--divider); border-radius: 6px; padding: 5px 8px; background: transparent; color: inherit; cursor: pointer; }
+.hsw-cand.on { border-color: var(--toggle-active-bg); background: var(--menu-highlight); }
+.hsw-cand-tag { font-family: var(--mono-family, monospace); font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hsw-cand-words { font-size: 11px; color: var(--status-fg); white-space: nowrap; }
+.hsw-cand-sample { grid-column: 1 / -1; font-size: 11px; color: var(--status-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hsw-extract { border: 1px solid var(--divider); border-radius: 6px; padding: 6px 8px; overflow: auto; flex: 1; min-height: 100px; }
+.hsw-extract-stat { font-weight: 600; font-size: 12px; margin-bottom: 4px; }
+.hsw-extract-lines { font-size: 12px; line-height: 1.45; color: var(--line-unread-fg, inherit); }
+.hsw-extract-lines > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 720px) { .hsw { grid-template-columns: 1fr; } .hsw-preview iframe { height: 40vh; } }
 .source-html img { max-width: 100%; height: auto; }
 .source-image { max-width: 100%; height: auto; box-shadow: var(--shadow); }
 .source-msg { padding: 16px; color: var(--status-fg); font-size: 12px; text-align: center; }
