@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { getTocEntries, sectionSpan } from '../document/toc.js';
-import { loadFile, loadReadState, saveReadState } from '../state/storage.js';
+import { loadFile, loadReadState, saveReadState, getReadSections } from '../state/storage.js';
 import { createReadingTracker } from '../engine/readingTracker.js';
+import { sectionChecksum } from '../document/sectionHash.js';
 
 // Detailed annotated progress popup. Pulls everything the reading tracker knows into one view:
 //   • WHAT was read   — the coverage strip (read this session / earlier / unread / excluded).
@@ -74,6 +75,11 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
   const [pendingJump, setPendingJump] = useState(null); // { wi, label } — jumps need a confirm click
   const [selSecs, setSelSecs] = useState(() => new Set()); // section indices staged for mark-unread
   const [unreadArm, setUnreadArm] = useState(false);
+  // "Read elsewhere" scan (successive editions): matched section indices → the prior read's meta.
+  const [scanMatches, setScanMatches] = useState(null); // null = not scanned; Map(index → meta)
+  const [readSel, setReadSel] = useState(() => new Set());
+  const [readArm, setReadArm] = useState(false);
+  const scanAvailable = !storedChecksum && Array.isArray(t?.doc?.words); // needs the real word list
 
   // Refresh live so the view tracks reading while it's open.
   const [tick, setTick] = useState(0);
@@ -194,6 +200,30 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
       }).catch(() => {});
     }
     setSelSecs(new Set()); setUnreadArm(false); setTick((n) => n + 1);
+  }
+
+  // Scan this file's sections against the registry of sections finished in ANY file — so a successive
+  // edition (different file checksum, same prose) recognizes chapters you've already read. Matches are
+  // pre-selected; you choose the subset to mark read here.
+  const readWordsToAdd = [...readSel].reduce((n, i) => n + Math.max(0, (sections[i]?.total || 0) - (sections[i]?.readWords || 0)), 0);
+  async function scan() {
+    const words = t?.doc?.words;
+    if (!Array.isArray(words)) { setScanMatches(new Map()); return; }
+    const reg = await getReadSections().catch(() => ({}));
+    const found = new Map();
+    const sel = new Set();
+    sections.forEach((s, i) => {
+      if (s.readFrac >= 0.999) return; // already fully read here — nothing to do
+      const hash = sectionChecksum(words, s.start, s.end);
+      if (hash && reg[hash]) { found.set(i, reg[hash]); sel.add(i); }
+    });
+    setScanMatches(found); setReadSel(sel); setReadArm(false);
+  }
+  async function markSelectedRead() {
+    if (!tracker) return;
+    for (const i of readSel) { const s = sections[i]; if (s) tracker.markRangeRead(s.start, s.end); }
+    // Live tab: the tracker is now dirty and the app flushes readstate periodically (same as unread).
+    setReadSel(new Set()); setScanMatches(null); setReadArm(false); setTick((n) => n + 1);
   }
 
   // Hover tooltip content.
@@ -321,6 +351,43 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
                     </>
                   )}
                   <span className="settings-note" style={{ margin: 0 }}>For text accidentally “read” by unattended playback. Coverage drops; recorded time is kept.</span>
+                </div>
+              )}
+
+              {/* Scan for sections read in another file/edition, and mark a chosen subset read here. */}
+              {scanAvailable && (
+                <div className="pd-scan">
+                  {scanMatches === null ? (
+                    <button onClick={scan} title="Compare each section's content to sections you've finished in other files — useful for a new edition of a book you've already read">🔎 Scan for sections already read elsewhere</button>
+                  ) : scanMatches.size === 0 ? (
+                    <>
+                      <span className="settings-note" style={{ margin: 0 }}>No unread sections here match content you’ve finished in another file.</span>
+                      <button onClick={() => setScanMatches(null)}>Done</button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="field-section" style={{ marginTop: 0 }}>Read elsewhere ({scanMatches.size}) — tick to mark as read here</div>
+                      {[...scanMatches.entries()].map(([i, m]) => (
+                        <label key={i} className="pd-scan-row">
+                          <input type="checkbox" checked={readSel.has(i)} onChange={(e) => setReadSel((prev) => { const n = new Set(prev); if (e.target.checked) n.add(i); else n.delete(i); return n; })} />
+                          <span className="pd-scan-title">{sections[i].title}</span>
+                          <span className="settings-note" style={{ margin: 0 }}>{sections[i].readWords}/{sections[i].total} here · read {m.file ? `in “${m.file}”` : 'earlier'}{m.at ? ` · ${new Date(m.at).toLocaleDateString()}` : ''}</span>
+                        </label>
+                      ))}
+                      <div className="pd-unread-bar">
+                        {!readArm ? (
+                          <button className="toggle-on" disabled={!readSel.size} onClick={() => setReadArm(true)}>✓ Mark {readSel.size} as read here…</button>
+                        ) : (
+                          <>
+                            <button className="grab-trash" onClick={markSelectedRead}>⚠ Confirm — mark {readWordsToAdd.toLocaleString()} word{readWordsToAdd === 1 ? '' : 's'} read</button>
+                            <button onClick={() => setReadArm(false)}>Cancel</button>
+                          </>
+                        )}
+                        <button onClick={() => { setScanMatches(null); setReadSel(new Set()); setReadArm(false); }}>Cancel scan</button>
+                        <span className="settings-note" style={{ margin: 0 }}>Content-matched to sections finished in other files. Coverage rises; use for a successive edition.</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </>

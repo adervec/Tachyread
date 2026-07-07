@@ -155,6 +155,36 @@ export async function clearApiUsage() {
   await db.clear('apiUsage');
 }
 
+// ── Read-sections registry: a content fingerprint (see document/sectionHash) for every section a
+// user has FINISHED, in any file. Lets a successive edition recognize chapters as already read even
+// though the file checksum differs. Stored in the `global` store (map hash → { title, words, file,
+// at }); capped. Local diagnostic-style data — kept out of ALL_STORES / backups.
+const READ_SECTIONS_CAP = 8000;
+export async function getReadSections() {
+  const db = await getDB();
+  return (await db.get('global', 'readSections')) || {};
+}
+// Writes are serialized through a chain: several sections often finish in the same poll cycle, and
+// concurrent read-modify-write on the single map would otherwise clobber all but the last one.
+let _readSecChain = Promise.resolve();
+export function addReadSection(hash, meta = {}) {
+  if (!hash) return _readSecChain;
+  _readSecChain = _readSecChain
+    .then(async () => {
+      const db = await getDB();
+      const map = (await db.get('global', 'readSections')) || {};
+      if (!map[hash]) map[hash] = { title: meta.title || '', words: meta.words || 0, file: meta.file || '', at: Date.now() };
+      const keys = Object.keys(map);
+      if (keys.length > READ_SECTIONS_CAP) {
+        keys.sort((a, b) => (map[a].at || 0) - (map[b].at || 0));
+        for (const k of keys.slice(0, keys.length - READ_SECTIONS_CAP)) delete map[k];
+      }
+      await db.put('global', map, 'readSections');
+    })
+    .catch(() => { /* best-effort */ });
+  return _readSecChain;
+}
+
 // Translation cache (see the `translations` store note above).
 export async function getCachedTranslation(key) {
   const db = await getDB();

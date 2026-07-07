@@ -83,7 +83,8 @@ import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection } from './state/storage.js';
+import { sectionChecksum } from './document/sectionHash.js';
 import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
 import { startMicScope, micScopeSupported } from './features/micScope.js';
@@ -373,6 +374,9 @@ function AppInner() {
         if (rs.readFrac >= 0.999 && !stats[e.wordIndex]?.completed) {
           stats[e.wordIndex] = { ...(stats[e.wordIndex] || {}), started: stats[e.wordIndex]?.started || Date.now(), completed: Date.now() };
           changed = true;
+          // Fingerprint the finished section's content so a successive edition can recognize it.
+          const hash = sectionChecksum(tab.doc.words, span.start, span.end);
+          if (hash) addReadSection(hash, { title: e.title, words: span.end - span.start, file: tab.doc.fileName });
         }
       });
       if (changed) patchSettings(tab.id, { tocReadStats: stats });
