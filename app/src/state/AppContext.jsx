@@ -268,8 +268,19 @@ export function AppProvider({ children }) {
         const reuse = JSON.stringify(tabDefaultsFrom(s));
         if (reuse !== meta.reuse) { meta.updatedAt = Date.now(); meta.reuse = reuse; }
         if (s.wordIndex !== meta.wordIndex) { meta.posUpdatedAt = Date.now(); meta.posDevice = stateRef.current.global.deviceName || ''; meta.wordIndex = s.wordIndex; }
+        // Source-page summary for the reading history (PDF pages / EPUB·HTML sections / grabbed
+        // images). O(1) per save: the word→segment map is on the doc; the furthest page reached is a
+        // running max so a rewind doesn't shrink it.
+        let src = {};
+        const w2s = tab.doc?.wordToSegment;
+        if (w2s && tab.doc.segmentCount) {
+          const curSeg = w2s[Math.min(s.wordIndex, w2s.length - 1)] || 0;
+          if (meta.srcMax == null) meta.srcMax = s.sourceMaxSeg || 0;
+          meta.srcMax = Math.max(meta.srcMax, curSeg);
+          src = { sourcePages: tab.doc.segmentCount, sourceKind: tab.doc.source?.kind || '', sourceCurSeg: curSeg, sourceMaxSeg: meta.srcMax };
+        }
         saveMetaRef.current.set(tab.id, meta);
-        saveFile({ ...s, updatedAt: meta.updatedAt, posUpdatedAt: meta.posUpdatedAt, posDevice: meta.posDevice }).catch(() => {});
+        saveFile({ ...s, ...src, updatedAt: meta.updatedAt, posUpdatedAt: meta.posUpdatedAt, posDevice: meta.posDevice }).catch(() => {});
       }
       for (const id of [...savedSettingsRef.current.keys()]) if (!live.has(id)) { savedSettingsRef.current.delete(id); saveMetaRef.current.delete(id); }
     }, 600);

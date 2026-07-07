@@ -133,6 +133,7 @@ const NON_DEFAULT_FIELDS = new Set([
   'tocEntries', 'tocReadStats', 'skipRanges', 'sourceChecks',
   'properNames', 'properNameSeed', 'indexEntries', 'goal',
   'updatedAt', 'posUpdatedAt', 'posDevice', // sync stamps — never part of a tab's reusable look
+  'sourcePages', 'sourceKind', 'sourceCurSeg', 'sourceMaxSeg', // reading-history source-page summary
 ]);
 
 export function tabDefaultsFrom(settings) {
