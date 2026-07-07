@@ -59,7 +59,7 @@ export default function NotesDialog({ tab, onJumpWord, onClose }) {
       const prompt = kind === 'summary'
         ? `Summarize the following text in a few tight paragraphs, then list the key points as bullets.\n\n<text>\n${docExcerpt()}\n</text>`
         : `Analyze the following text: its themes, structure, argument/plot, tone, and anything notable. Reference the reader's notes where relevant.\n\n<notes>\n${notesBlock()}\n</notes>\n\n<text>\n${docExcerpt()}\n</text>`;
-      setOutput(await askClaude([{ role: 'user', content: prompt }], { key, model, maxTokens: 1400, system }));
+      setOutput(await askClaude([{ role: 'user', content: prompt }], { key, model, maxTokens: 1400, system, source: `notes-${kind}` }));
     } catch (e) { setAiErr(e?.message || String(e)); }
     setAiBusy(false);
   }
@@ -70,7 +70,7 @@ export default function NotesDialog({ tab, onJumpWord, onClose }) {
     setChat(history); setChatInput(''); setAiBusy(true); setAiErr('');
     try {
       const system = `You are discussing the document "${tab.doc.fileName}" with the reader. Use the text and their notes to answer; be concise and cite specifics. If something isn't in the text, say so.\n\n<notes>\n${notesBlock()}\n</notes>\n\n<text_excerpt>\n${docExcerpt()}\n</text_excerpt>`;
-      const reply = await askClaude(history.map((m) => ({ role: m.role, content: m.content })), { key, model, maxTokens: 1024, system });
+      const reply = await askClaude(history.map((m) => ({ role: m.role, content: m.content })), { key, model, maxTokens: 1024, system, source: 'notes-chat' });
       setChat((c) => [...c, { role: 'assistant', content: reply }]);
     } catch (e) { setAiErr(e?.message || String(e)); setChat((c) => c.slice(0, -1)); setChatInput(q); }
     setAiBusy(false);
