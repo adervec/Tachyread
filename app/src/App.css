@@ -2311,6 +2311,26 @@
 .settings-note { color: var(--status-fg); font-size: 11px; margin: 0 0 10px; }
 
 /* Star rating */
+/* API usage & spend dashboard. */
+.au-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 8px; }
+.au-card { border: 1px solid var(--divider); border-radius: 8px; padding: 8px 12px; }
+.au-card-h { font-size: 12px; color: var(--status-fg); }
+.au-card-big { font-size: 22px; font-weight: 700; margin: 2px 0; }
+.au-days { display: flex; flex-direction: column; gap: 3px; }
+.au-day { display: grid; grid-template-columns: 92px 1fr 56px; align-items: center; gap: 8px; font-size: 12px; }
+.au-day-label { color: var(--status-fg); }
+.au-day-bar { height: 10px; background: var(--divider); border-radius: 5px; overflow: hidden; }
+.au-day-bar > div { height: 100%; background: var(--toggle-active-bg); border-radius: 5px; }
+.au-day-cost { text-align: right; }
+.au-table { margin-bottom: 4px; }
+.au-log { max-height: 30vh; overflow: auto; border: 1px solid var(--divider); border-radius: 6px; }
+.au-log-row { display: grid; grid-template-columns: 120px 1fr auto auto; gap: 8px; padding: 3px 8px; font-size: 12px; border-bottom: 1px solid var(--divider); }
+.au-log-row:last-child { border-bottom: none; }
+.au-log-when { color: var(--status-fg); }
+.au-log-detail { color: var(--status-fg); white-space: nowrap; }
+.au-log-cost { text-align: right; min-width: 48px; }
+@media (max-width: 640px) { .au-cards { grid-template-columns: 1fr; } }
+
 /* Book-finished dialog: Trackyread link check. */
 .bf-linked { color: var(--nav-session-read-fg); }
 .bf-link { display: flex; flex-direction: column; gap: 4px; }

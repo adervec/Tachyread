@@ -967,7 +967,7 @@ function AiView({ books, ai, global, onReload }) {
     try {
       const dataset = buildDataset(books, { light: true }); // API path is always the compact subset
       const { system, messages } = buildApiMessages(dataset, { mode, text });
-      const reply = await askClaude(messages, { key: global.anthropicKey, model, system, maxTokens: 2048 });
+      const reply = await askClaude(messages, { key: global.anthropicKey, model, system, maxTokens: 2048, source: 'trackyread-ai' });
       await applyOutput(parseAiOutput(reply), reply);
     } catch (e) { setMsg('API failed: ' + (e?.message || e)); }
     setBusy(false);

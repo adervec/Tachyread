@@ -5,7 +5,7 @@ import { openDB } from 'idb';
 import { defaultGlobalSettings, defaultFileSettings, tabDefaultsFrom, syncableGlobalSettings } from './settings.js';
 
 const DB_NAME = 'Tachyread';
-const DB_VERSION = 11;
+const DB_VERSION = 12;
 
 let _dbPromise = null;
 
@@ -81,6 +81,12 @@ function getDB() {
         // costs API quota to rebuild) — excluded from backups on purpose.
         db.createObjectStore('translations');
       }
+      if (!db.objectStoreNames.contains('apiUsage')) {
+        // API spend log: one record per Anthropic/ElevenLabs call, for the spend dashboard.
+        // { id, ts, provider, model, source, inTokens, outTokens, chars, costUsd }. Local-only
+        // (out of ALL_STORES / backups) — it's diagnostic, like appLog.
+        db.createObjectStore('apiUsage', { keyPath: 'id', autoIncrement: true });
+      }
     },
   });
   return _dbPromise;
@@ -123,6 +129,30 @@ export async function getAppLog() {
 export async function clearAppLog() {
   const db = await getDB();
   await db.delete('global', 'appLog');
+}
+
+// ── API spend log — one record per Anthropic/ElevenLabs call, for the spend dashboard. Best-effort:
+// recording must never break the API call itself. Capped so a heavy audiobook run can't grow it.
+const API_USAGE_CAP = 5000;
+export async function recordApiUsage(entry) {
+  try {
+    const db = await getDB();
+    await db.add('apiUsage', { ts: Date.now(), ...entry });
+    const keys = await db.getAllKeys('apiUsage');
+    if (keys.length > API_USAGE_CAP) {
+      const tx = db.transaction('apiUsage', 'readwrite');
+      for (const k of keys.slice(0, keys.length - API_USAGE_CAP)) await tx.store.delete(k);
+      await tx.done;
+    }
+  } catch { /* logging is best-effort */ }
+}
+export async function getApiUsage() {
+  const db = await getDB();
+  return (await db.getAll('apiUsage')).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+}
+export async function clearApiUsage() {
+  const db = await getDB();
+  await db.clear('apiUsage');
 }
 
 // Translation cache (see the `translations` store note above).

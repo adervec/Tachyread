@@ -38,6 +38,7 @@ import GrabWizard from './dialogs/GrabWizard.jsx';
 import WebGrabWizard from './dialogs/WebGrabWizard.jsx';
 import HtmlStructureWizard from './dialogs/HtmlStructureWizard.jsx';
 import HtmlToolsDialog from './dialogs/HtmlToolsDialog.jsx';
+import ApiUsageDialog from './dialogs/ApiUsageDialog.jsx';
 import TocWizard from './dialogs/TocWizard.jsx';
 import ResourceWizard from './dialogs/ResourceWizard.jsx';
 import IndexPane from './components/IndexPane.jsx';
@@ -1625,6 +1626,7 @@ function AppInner() {
     if (action === 'grab') return openDialog({ kind: 'grab' });
     if (action === 'web-grab') return openDialog({ kind: 'web-grab' });
     if (action === 'html-tools') return openDialog({ kind: 'html-tools' });
+    if (action === 'api-usage') return openDialog({ kind: 'api-usage' });
     if (action === 'open-html-pick') {
       const input = document.createElement('input');
       input.type = 'file';
@@ -2382,6 +2384,7 @@ function AppInner() {
       {dialog?.kind === 'web-grab' && <WebGrabWizard onClose={closeDialog} />}
       {dialog?.kind === 'html-structure' && <HtmlStructureWizard html={dialog.html} fileName={dialog.fileName} onClose={closeDialog} />}
       {dialog?.kind === 'html-tools' && <HtmlToolsDialog onClose={closeDialog} />}
+      {dialog?.kind === 'api-usage' && <ApiUsageDialog onClose={closeDialog} />}
       {dialog?.kind === 'toc-wizard' && activeTab && (
         <TocWizard
           tab={activeTab}

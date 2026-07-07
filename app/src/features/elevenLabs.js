@@ -3,6 +3,9 @@
 // the user's own API key + quota; the returned audio is stored like any other clip and plays offline
 // (survives a screen lock). It's a generation backend only — not used for live read-aloud (per-chunk
 // network calls would be slow/costly). The key lives on-device and is never synced.
+import { recordApiUsage } from '../state/storage.js';
+import { elevenCost } from './apiPricing.js';
+
 const BASE = 'https://api.elevenlabs.io/v1';
 
 export function elevenConfigured(key) { return !!(key && key.trim()); }
@@ -36,5 +39,7 @@ export async function elevenSynth(text, voiceId, apiKey, { modelId = 'eleven_mul
     body: JSON.stringify({ text: (text || '').trim(), model_id: modelId }),
   });
   if (!r.ok) throw new Error(await errorFrom(r));
+  const chars = (text || '').trim().length;
+  recordApiUsage({ provider: 'elevenlabs', model: modelId, source: 'audiobook', chars, costUsd: elevenCost(chars) });
   return await r.blob();
 }
