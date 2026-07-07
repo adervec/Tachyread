@@ -1756,6 +1756,8 @@
   animation: finishPulse 1.6s ease-in-out infinite;
 }
 @keyframes finishPulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
+/* Once confirmed finished the call-to-action calms down — no pulse, a settled "done" look. */
+.finish-btn.done { animation: none; background: transparent; color: var(--nav-session-read-fg); border-color: var(--nav-session-read-fg); font-weight: 700; }
 
 .playback-row {
   display: grid;
@@ -2309,6 +2311,12 @@
 .settings-note { color: var(--status-fg); font-size: 11px; margin: 0 0 10px; }
 
 /* Star rating */
+/* Book-finished dialog: Trackyread link check. */
+.bf-linked { color: var(--nav-session-read-fg); }
+.bf-link { display: flex; flex-direction: column; gap: 4px; }
+.bf-opt { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+.bf-opt em { color: var(--status-fg); font-style: normal; }
+.bf-search { margin: 2px 0; padding: 3px 7px; }
 .star-rating { display: inline-flex; gap: 2px; }
 .star-rating .star {
   border: none;

@@ -96,8 +96,12 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
           {MODES[readingMode]?.icon} {MODES[readingMode]?.label}
         </div>
         {atEnd && (
-          <button className="finish-btn" title="Mark this book finished and review your stats" onClick={onConfirmFinished}>
-            ✓ Confirm finished
+          <button
+            className={`finish-btn${(settings.completions || []).length ? ' done' : ''}`}
+            title={(settings.completions || []).length ? 'Marked finished — click to review or update your rating & notes' : 'Mark this book finished and review your stats'}
+            onClick={onConfirmFinished}
+          >
+            {(settings.completions || []).length ? '✓ Finished' : '✓ Confirm finished'}
           </button>
         )}
       </div>
