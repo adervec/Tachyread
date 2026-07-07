@@ -15,6 +15,14 @@ function fmtDur(secs) {
 }
 function dayKey(d) { return d.toISOString().slice(0, 10); }
 function wpmOf(words, secs) { return secs > 0 ? Math.round((words / secs) * 60) : 0; }
+// "pages 1–42 of 300" (PDF/grabbed images) or "sections …" (EPUB/HTML), from the source-page summary.
+function sourcePageLabel(b) {
+  const noun = b.sourceKind === 'epub' || b.sourceKind === 'html' ? 'section' : 'page';
+  const reached = Math.min(b.sourcePages, (b.sourceMaxSeg || 0) + 1);
+  return reached >= b.sourcePages
+    ? `all ${b.sourcePages} ${noun}s`
+    : `${noun}s 1–${reached} of ${b.sourcePages}`;
+}
 
 const SHELVES = [
   { id: 'reading', label: 'Reading', icon: '📖' },
@@ -154,6 +162,10 @@ export function HistoryView() {
         tocStarted: tocVals.filter((t) => t?.started).length,
         tocCompleted: tocVals.filter((t) => t?.completed).length,
         tocTotal: tocVals.length,
+        // Source pages read (where the doc has a page/section source): total + furthest reached.
+        sourcePages: f.sourcePages || 0,
+        sourceKind: f.sourceKind || '',
+        sourceMaxSeg: f.sourceMaxSeg || 0,
       };
       b.shelf = shelves[checksum] || inferShelf(b);
       b.shelfExplicit = !!shelves[checksum];
@@ -365,6 +377,7 @@ export function HistoryView() {
                       </div>
                       <div className="rh-book-sub">
                         {Math.round(b.posFrac * 100)}% · {fmtInt(b.wordsRead)} words · {fmtDur(b.activeSecs)} · {b.avgWpm} WPM
+                        {b.sourcePages > 0 && <span title="Source pages reached in the original document"> · 📄 {sourcePageLabel(b)}</span>}
                         {b.posDevice && <span title="Device that last moved the reading position"> · 📱 {b.posDevice}</span>}
                         {b.rating > 0 && <span className="rh-stars"> · {'★'.repeat(b.rating)}</span>}
                         {b.completions > 0 && <span> · finished ×{b.completions}</span>}
