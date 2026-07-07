@@ -276,7 +276,7 @@ function ImageSource({ doc, index, frac, curColor }) {
 const CUR_STYLES = [['vortex', 'Invert'], ['box', 'Box'], ['underline', 'Underline'], ['highlight', 'Highlight']];
 const CUR_COLORS = [['', 'Auto'], ['#ffd54f', 'Amber'], ['#4fd8ff', 'Cyan'], ['#7dff8a', 'Green'], ['#ff7ab0', 'Pink'], ['#ffb04f', 'Orange'], ['#b58cff', 'Purple'], ['#ff5c5c', 'Red']];
 
-export default function SourcePane({ tab, onPatch }) {
+export default function SourcePane({ tab, onPatch, onSourcePage }) {
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
   const src = doc.source;
@@ -323,7 +323,11 @@ export default function SourcePane({ tab, onPatch }) {
   return (
     <div className="source-pane">
       <div className="source-toolbar">
-        <span>{label} {seg + 1} / {totalSeg}</span>
+        <span className="source-page-nav">
+          <button className="src-tool" title={`Previous ${label.toLowerCase()}`} disabled={seg <= 0} onClick={() => onSourcePage?.(-1)}>◀</button>
+          <span>{label} {seg + 1} / {totalSeg}</span>
+          <button className="src-tool" title={`Next ${label.toLowerCase()}`} disabled={seg >= totalSeg - 1} onClick={() => onSourcePage?.(1)}>▶</button>
+        </span>
         <span className="source-tools">
           <button
             className={`src-tool${settings.sourceCursor !== false ? ' on' : ''}`}

@@ -1764,6 +1764,19 @@ function AppInner() {
     jumpWord(activeTab.tracker.frontierIndex(), { nav: true, src: 'jump' });
     jumpToCurrent();
   };
+  // Skip to the previous/next SOURCE page (a PDF page / EPUB·HTML section / grabbed image) — moves
+  // the reading position to that segment's first word. Distinct from page-up/down (viewport lines).
+  const jumpSourcePage = (delta) => {
+    const at = activeTabRef.current; // ref, so a memoized SourcePane never calls a stale closure
+    const doc = at?.doc;
+    const w2s = doc?.wordToSegment;
+    if (!w2s || !doc.segmentCount) return;
+    const cur = w2s[Math.min(at.settings.wordIndex, w2s.length - 1)] || 0;
+    const target = Math.max(0, Math.min(doc.segmentCount - 1, cur + delta));
+    let wi = 0;
+    for (let i = 0; i < w2s.length; i++) { if (w2s[i] === target) { wi = i; break; } }
+    jumpWord(wi, { nav: true, src: 'jump' });
+  };
 
   // ── Mode helpers (shared by the controls bar and keyboard shortcuts). Full read-aloud TTS drives the
   // position, so it's mutually exclusive with the speak-along FOLLOW modes AND with voice commands (and
@@ -1908,7 +1921,7 @@ function AppInner() {
     }
     if (showRsvpPane) arr.push({ id: 'rsvp', label: 'Fast Reader', node: <RsvpPane tab={activeTab} onVisible={onRsvpVisible} /> });
     if (state.showSource && activeTab.doc.source)
-      arr.push({ id: 'source', label: 'Source', node: <SourcePane tab={activeTab} onPatch={(p) => patchSettings(activeTab.id, p)} /> });
+      arr.push({ id: 'source', label: 'Source', node: <SourcePane tab={activeTab} onPatch={(p) => patchSettings(activeTab.id, p)} onSourcePage={jumpSourcePage} /> });
     if (state.showIndex)
       arr.push({ id: 'index', label: 'Index', node: <IndexPane tab={activeTab} onJumpWord={jumpWord} onWizard={() => openDialog({ kind: 'resource-wizard', resourceKind: 'index' })} /> });
     if (showLinesPane) arr.push({
@@ -2165,6 +2178,18 @@ function AppInner() {
                   </button>
                 );
               })()}
+              {/* The collapsed dock has room for the core nav, not just play — so paging through a
+                  book (esp. with a pane hidden) doesn't force expanding the controls. */}
+              <button className="dock-mini-nav" title="Page up (⇞)" aria-label="Page up" onClick={() => pageLines(-1)}>⇞</button>
+              <button className="dock-mini-nav" title="Previous line (↑)" aria-label="Previous line" onClick={() => nav('prevLine')}>↑</button>
+              <button className="dock-mini-nav" title="Next line (↓)" aria-label="Next line" onClick={() => nav('nextLine')}>↓</button>
+              <button className="dock-mini-nav" title="Page down (⇟)" aria-label="Page down" onClick={() => pageLines(1)}>⇟</button>
+              {activeTab.doc.source && state.showSource && (
+                <>
+                  <button className="dock-mini-nav src" title="Previous source page" aria-label="Previous source page" onClick={() => jumpSourcePage(-1)}>◀▤</button>
+                  <button className="dock-mini-nav src" title="Next source page" aria-label="Next source page" onClick={() => jumpSourcePage(1)}>▤▶</button>
+                </>
+              )}
               <button className="dock-mini-jump" title="Jump to the current word" aria-label="Jump to current word" onClick={jumpToCurrent}>⌖</button>
               <span className="dock-mini-meta">{activeTab.settings.wordIndex + 1} / {activeTab.doc.words.length}</span>
             </div>
