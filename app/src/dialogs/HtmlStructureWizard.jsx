@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
-import { tagHtmlForPicking, docFromHtmlRange, htmlRangeChildIdxs } from '../document/parsers.js';
+import { tagHtmlForPicking, docFromHtmlRange, htmlRangeChildIdxs, collectLinks, contentHtmlOf, buildDocFromPages } from '../document/parsers.js';
+import { fetchPageText } from '../features/webGrab.js';
 import { attachChecksum } from '../document/readerDocument.js';
 
 // Interactive fallback for when the auto content-root heuristic grabs the wrong region of an HTML
@@ -43,10 +44,13 @@ const PICKER_SHIM = `
     })();
   </script>`;
 
-export default function HtmlStructureWizard({ html, fileName = 'Web page', onClose }) {
+export default function HtmlStructureWizard({ html, fileName = 'Web page', sourceUrl = '', onClose }) {
   const { openDoc, setStatus } = useApp();
   const frameRef = useRef(null);
   const rootRef = useRef(null);
+  const [follow, setFollow] = useState(null); // { done, total, label } while following ToC links
+  const [followMsg, setFollowMsg] = useState('');
+  const abortRef = useRef(false);
   const { taggedHtml, candidates } = useMemo(() => {
     try { return tagHtmlForPicking(html || ''); } catch { return { taggedHtml: html || '', candidates: [] }; }
   }, [html]);
@@ -119,6 +123,44 @@ export default function HtmlStructureWizard({ html, fileName = 'Web page', onClo
     } catch (e) { setBusy(false); setStatus('Could not open that region: ' + (e?.message || e)); }
   }
 
+  // ── Follow ToC links: when this page came from a web grab, the selected region may be a
+  // table-of-contents whose links go to separate chapter pages. Fetch each and stitch into one book.
+  const links = useMemo(() => {
+    if (!sourceUrl || startIdx == null) return [];
+    try { return collectLinks(taggedHtml, startIdx, sourceUrl); } catch { return []; }
+  }, [sourceUrl, startIdx, taggedHtml]);
+
+  async function followLinks() {
+    if (!links.length) return;
+    abortRef.current = false;
+    setFollowMsg(''); setFollow({ done: 0, total: links.length, label: 'Starting…' });
+    const pages = []; const errors = [];
+    let preferProxy = false;
+    for (let i = 0; i < links.length; i++) {
+      if (abortRef.current) break;
+      const lk = links[i];
+      setFollow({ done: i, total: links.length, label: lk.text || lk.url });
+      try {
+        const { text, viaProxy } = await fetchPageText(lk.url, { preferProxy });
+        if (viaProxy) preferProxy = true; // once the relay was needed, the rest of the site needs it too
+        const { title, html: chapterHtml } = contentHtmlOf(text);
+        if (chapterHtml && chapterHtml.replace(/<[^>]+>/g, '').trim()) pages.push({ title: title || lk.text || `Part ${i + 1}`, html: chapterHtml });
+        else errors.push(`${lk.text || lk.url}: no readable text`);
+      } catch (e) { errors.push(`${lk.text || lk.url}: ${e?.message || e}`); }
+      setFollow({ done: i + 1, total: links.length, label: lk.text || lk.url });
+    }
+    if (abortRef.current) { setFollow(null); setFollowMsg(`Stopped — ${pages.length} page(s) fetched.`); return; }
+    if (!pages.length) { setFollow(null); setFollowMsg(`Couldn’t read any linked page. ${errors.slice(0, 2).join(' · ')}`); return; }
+    try {
+      const doc = buildDocFromPages(pages, fileName);
+      doc.sourceUrl = sourceUrl;
+      await attachChecksum(doc);
+      await openDoc(doc);
+      setStatus(`Opened “${doc.fileName}” — stitched ${pages.length} linked page(s)${errors.length ? `, ${errors.length} failed` : ''} (${doc.words.length.toLocaleString()} words).`);
+      onClose();
+    } catch (e) { setFollow(null); setFollowMsg('Could not assemble the book: ' + (e?.message || e)); }
+  }
+
   const label = (c) => `${c.tag}${c.id ? '#' + c.id : ''}${c.cls ? '.' + c.cls.split(/\s+/)[0] : ''}`;
   const elLabel = (el) => `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${(typeof el.className === 'string' && el.className.trim()) ? '.' + el.className.trim().split(/\s+/)[0] : ''}`;
   const chain = startIdx != null ? ancestorChain(startIdx) : [];
@@ -147,6 +189,7 @@ export default function HtmlStructureWizard({ html, fileName = 'Web page', onClo
         Auto-detection missed the text? Click the block that holds the reading content, then use the
         arrows below to <strong>widen / narrow / step</strong> until the preview shows the whole book.
         Shift-click (or <strong>Extend ▸</strong>) to span a run of blocks — handy to skip a preface.
+        {sourceUrl ? <> If this is a <strong>table of contents</strong>, click its list of chapter links and use <strong>Follow links</strong> to stitch the linked pages into one book.</> : null}
       </p>
 
       {/* Navigation toolbar + breadcrumb */}
@@ -206,6 +249,33 @@ export default function HtmlStructureWizard({ html, fileName = 'Web page', onClo
               </div>
             </div>
           ) : <p className="settings-note">Pick a region to preview its text.</p>}
+
+          {sourceUrl && (
+            <>
+              <div className="field-section">Table of contents {links.length ? `· ${links.length} links` : ''}</div>
+              {links.length ? (
+                <div className="hsw-follow">
+                  <p className="settings-note" style={{ marginTop: 0 }}>
+                    This region links to <strong>{links.length}</strong> separate page(s). Follow them to fetch each and stitch them into one book (each page becomes a section).
+                  </p>
+                  {follow ? (
+                    <>
+                      <div className="imp-bar"><div className="imp-fill" style={{ width: `${follow.total ? (follow.done / follow.total) * 100 : 0}%` }} /></div>
+                      <div className="hsw-follow-row">
+                        <span className="settings-note" style={{ margin: 0 }}>Fetching {follow.done}/{follow.total} — {follow.label?.slice(0, 40)}…</span>
+                        <button onClick={() => { abortRef.current = true; }}>Stop</button>
+                      </div>
+                    </>
+                  ) : (
+                    <button className="toggle-on" onClick={followLinks}>Follow {links.length} links ▸</button>
+                  )}
+                  {followMsg && <p className="settings-note">{followMsg}</p>}
+                </div>
+              ) : (
+                <p className="settings-note" style={{ marginTop: 0 }}>No off-page links in this region. If this is a contents page, click its list of chapter links, then Follow.</p>
+              )}
+            </>
+          )}
         </div>
       </div>
     </Dialog>

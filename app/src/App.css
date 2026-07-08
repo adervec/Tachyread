@@ -511,6 +511,8 @@
 .hsw-extract-stat { font-weight: 600; font-size: 12px; margin-bottom: 4px; }
 .hsw-extract-lines { font-size: 12px; line-height: 1.45; color: var(--line-unread-fg, inherit); }
 .hsw-extract-lines > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hsw-follow { display: flex; flex-direction: column; gap: 6px; }
+.hsw-follow-row { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
 @media (max-width: 720px) { .hsw { grid-template-columns: 1fr; } .hsw-preview iframe { height: 40vh; } }
 .source-html img { max-width: 100%; height: auto; }
 .source-image { max-width: 100%; height: auto; box-shadow: var(--shadow); }

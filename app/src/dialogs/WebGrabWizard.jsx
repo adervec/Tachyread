@@ -24,7 +24,7 @@ export default function WebGrabWizard({ onClose }) {
     // single-slot modals, so openDialog swaps web-grab → the picker; do NOT also call onClose (it would
     // close the picker we just opened).
     if (pickRegion && looksHtml(content, opts?.asHtml)) {
-      openDialog({ kind: 'html-structure', html: content, fileName: nameFromUrl(opts?.url || url) });
+      openDialog({ kind: 'html-structure', html: content, fileName: nameFromUrl(opts?.url || url), sourceUrl: opts?.url || normalizeUrl(url) });
       return;
     }
     const doc = await docFromWebContent(content, opts);
