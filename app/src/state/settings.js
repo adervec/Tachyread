@@ -53,6 +53,10 @@ export function defaultFileSettings() {
     contentChecksum: '',
     highlightORP: false,
     orpHorizontalPercent: 0.5,
+    rsvpFocus: 'none', // eye-focuser at the ORP: none | fisheye | pulse | converge
+    wpmWave: false, // let the pace breathe: sinusoidally fluctuate WPM around the setpoint
+    wpmWaveDepth: 0.25, // wave amplitude as a fraction of WPM (0..0.6)
+    wpmWavePeriodSec: 18, // seconds per full fast→slow→fast cycle
     autoSkipHeaders: false,
     enableProperNames: false,
     readAloud: false, // integrated TTS: speak from the current position and advance in sync

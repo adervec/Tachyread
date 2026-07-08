@@ -36,6 +36,11 @@ const HINTS = {
   'Context words after': 'How many words after the current one to show faintly around the Fast Reader word.',
   'Show guide lines': 'Draw crosshair guides through the Fast Reader word to anchor your gaze.',
   'Highlight ORP character': 'Tint the Optimal Recognition Point (the letter your eye should land on) so words centre themselves.',
+  'ORP horizontal position (%)': 'Where across the pane the ORP letter is pinned — 50% centres it. The word halves grow to keep the ORP at this spot every word.',
+  'Eye focuser at the ORP': 'An extra effect that pulls the eye onto the ORP letter each word: fisheye (nearby letters swell toward it), pulse (the ORP flares), or converge (two bars sweep in and settle on it).',
+  'Breathe the pace (sinusoidal WPM)': 'Let the reading speed rise and fall smoothly around your WPM so the eye gets brief rests. The average speed is unchanged.',
+  'Breathe depth (± fraction of WPM)': 'How far the pace swings above and below your WPM. 0.25 = ±25%.',
+  'Breathe period (sec per cycle)': 'Seconds for one full fast → slow → fast cycle of the breathing pace.',
   'Hide Fast Reader pane': 'Remove the flashing-word pane entirely and read only from the Lines pane.',
   'Line spacing (1 = single)': 'Vertical spacing between lines in the Lines pane.',
   '% separators': 'Show faint percentage markers down the Lines pane so you can see how far through you are.',
@@ -218,6 +223,52 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       <Field label="Highlight ORP character">
         <input type="checkbox" checked={s.highlightORP} onChange={(e) => patch({ highlightORP: e.target.checked })} />
       </Field>
+      <Field label="ORP horizontal position (%)">
+        <input
+          type="range"
+          min={10}
+          max={90}
+          step={5}
+          value={Math.round((s.orpHorizontalPercent ?? 0.5) * 100)}
+          onChange={(e) => patch({ orpHorizontalPercent: Math.max(0.1, Math.min(0.9, Number(e.target.value) / 100)) })}
+        />
+        <span className="range-val">{Math.round((s.orpHorizontalPercent ?? 0.5) * 100)}%</span>
+      </Field>
+      <Field label="Eye focuser at the ORP">
+        <select value={s.rsvpFocus || 'none'} onChange={(e) => patch({ rsvpFocus: e.target.value })}>
+          <option value="none">None</option>
+          <option value="fisheye">Fisheye lens</option>
+          <option value="pulse">ORP pulse</option>
+          <option value="converge">Converge</option>
+        </select>
+      </Field>
+      <Field label="Breathe the pace (sinusoidal WPM)">
+        <input type="checkbox" checked={!!s.wpmWave} onChange={(e) => patch({ wpmWave: e.target.checked })} />
+      </Field>
+      {s.wpmWave && (
+        <>
+          <Field label="Breathe depth (± fraction of WPM)">
+            <input
+              type="range"
+              min={0.05}
+              max={0.6}
+              step={0.05}
+              value={s.wpmWaveDepth ?? 0.25}
+              onChange={(e) => patch({ wpmWaveDepth: Math.max(0.05, Math.min(0.6, Number(e.target.value))) })}
+            />
+            <span className="range-val">±{Math.round((s.wpmWaveDepth ?? 0.25) * 100)}%</span>
+          </Field>
+          <Field label="Breathe period (sec per cycle)">
+            <input
+              type="number"
+              min={4}
+              max={120}
+              value={s.wpmWavePeriodSec ?? 18}
+              onChange={(e) => patch({ wpmWavePeriodSec: Math.max(4, Math.min(120, Number(e.target.value) || 18)) })}
+            />
+          </Field>
+        </>
+      )}
       <Field label="Hide Fast Reader pane">
         <input type="checkbox" checked={s.hideRsvpPane} onChange={(e) => patch({ hideRsvpPane: e.target.checked })} />
       </Field>

@@ -51,6 +51,11 @@ export default function RsvpPane({ tab, onVisible }) {
   }, [doc, idx, after]);
 
   const themeClass = `rsvp-pane ${settings.serif ? 'serif' : 'sans'} guide-${settings.guideColor || 'Red'}`;
+  const gc = settings.guideColor || 'Red';
+  const focus = settings.rsvpFocus || 'none';
+  // ORP horizontal focus point (0=far left .. 1=far right). flex-grow ratios pin the ORP glyph there
+  // and let the two halves fill the rest, so the eye lands on the SAME spot every word.
+  const orpPct = Math.max(0.1, Math.min(0.9, settings.orpHorizontalPercent ?? 0.5));
 
   return (
     // The Font Manager's per-tab font wins; the legacy serif/sans class is the fallback look.
@@ -60,12 +65,21 @@ export default function RsvpPane({ tab, onVisible }) {
           <ContextWordChar key={i} word={w} highlightOrp={settings.highlightORP} />
         ))}
       </div>
-      <div className="rsvp-word-row" style={{ fontSize: `${fontSize}px` }}>
-        {settings.showGuideLines && <span className={`guide-line left guide-color-${settings.guideColor || 'Red'}`} />}
-        <span className="rsvp-left">{left}</span>
-        <span className="rsvp-orp">{orpCh}</span>
-        <span className="rsvp-right">{right}</span>
-        {settings.showGuideLines && <span className={`guide-line right guide-color-${settings.guideColor || 'Red'}`} />}
+      {/* key={idx} restarts the per-word focus animations (pulse / converge). */}
+      <div className={`rsvp-word-row focus-${focus}`} style={{ fontSize: `${fontSize}px` }} key={idx}>
+        <span className="rsvp-left" style={{ flexGrow: orpPct }}>{focus === 'fisheye' ? fisheyeSide(left, 'left') : left}</span>
+        <span className="rsvp-orp">
+          {settings.showGuideLines && <span className={`guide-tick top guide-color-${gc}`} />}
+          {orpCh}
+          {settings.showGuideLines && <span className={`guide-tick bottom guide-color-${gc}`} />}
+          {focus === 'converge' && (
+            <>
+              <span className={`orp-converge left guide-color-${gc}`} />
+              <span className={`orp-converge right guide-color-${gc}`} />
+            </>
+          )}
+        </span>
+        <span className="rsvp-right" style={{ flexGrow: 1 - orpPct }}>{focus === 'fisheye' ? fisheyeSide(right, 'right') : right}</span>
       </div>
       <div className="rsvp-context-after">
         {afterWords.map((w, i) => (
@@ -74,4 +88,17 @@ export default function RsvpPane({ tab, onVisible }) {
       </div>
     </div>
   );
+}
+
+// Fisheye: enlarge the letters nearest the ORP so the eye is drawn to the focus point. `side` says
+// which end abuts the ORP (left side's last char is nearest; right side's first char is nearest).
+// transform (not font-size) so the layout — and the ORP's position — never shift.
+function fisheyeSide(text, side) {
+  const chars = [...text];
+  const n = chars.length;
+  return chars.map((c, i) => {
+    const d = side === 'left' ? n - 1 - i : i; // distance from the ORP
+    const scale = d <= 2 ? 1 + 0.26 * (1 - d / 3) : 1;
+    return <span key={i} className="fe-ch" style={scale !== 1 ? { transform: `scale(${scale.toFixed(3)})` } : undefined}>{c}</span>;
+  });
 }

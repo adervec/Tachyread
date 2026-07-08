@@ -42,7 +42,10 @@ function renderWords(line, opts) {
     const isCurrentWord = opts.isCurrent && wordIdx === opts.currentWordIndex;
     const isProperName = opts.properNamesSet && opts.properNamesSet.has(stripPunct(tok).toLowerCase());
     let inner;
-    if (opts.bionic && !opts.isCurrent) {
+    // Apply bionic / ORP marks to every word EXCEPT the current word itself (it has its own
+    // current-word styling). Previously the whole current LINE was excluded, so the ORP highlight —
+    // most useful right where you're reading — vanished on the current line.
+    if (opts.bionic && !isCurrentWord) {
       const split = Math.ceil(tok.length / 2);
       inner = (
         <>
@@ -50,7 +53,7 @@ function renderWords(line, opts) {
           {tok.slice(split)}
         </>
       );
-    } else if (opts.highlightORP && !opts.isCurrent && tok.length >= 2) {
+    } else if (opts.highlightORP && !isCurrentWord && tok.length >= 2) {
       const o = orpIndex(tok.length);
       inner = (
         <>
