@@ -5,6 +5,7 @@ import {
   getAudiobookManifest, getAudioClip, getAudioClipById, entryClips,
   addAudioClip, deleteAudioClipById, deleteAudioChunk, reorderAudioClips,
   audiobookSize, clearAudiobook, exportAudiobook, importAudiobook, appendAppLog,
+  setSectionExtra, deleteSectionExtra, getSectionExtraBlob,
 } from '../state/storage.js';
 import { defaultVoiceForLang, piperSupported, installedVoices, voiceLabel, createPiperEngine } from '../features/piperTts.js';
 import { elevenVoices, elevenSynth, elevenConfigured } from '../features/elevenLabs.js';
@@ -63,6 +64,8 @@ export default function AudiobookDialog({ tab, onClose }) {
   const { state } = useApp();
   const [manifest, setManifest] = useState({ lines: {} });
   const [recWiz, setRecWiz] = useState(null); // chunk whose record/import wizard is open
+  const [secWiz, setSecWiz] = useState(null); // { firstLine, role, previewText, dlgTitle } — section extra wizard
+  const [secBusy, setSecBusy] = useState(''); // `${firstLine}:${role}` while a section-title TTS runs
   const [gen, setGen] = useState(null); // { done, total } while generating
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
@@ -140,6 +143,45 @@ export default function AudiobookDialog({ tab, onClose }) {
   }
 
   // ── recording / import: handled by RecordClipWizard (mic + level meter + pause + trim + file import) ──
+
+  // ── section boundary extras (intro/outro music + a spoken section title) ──
+  const secExtras = (firstLine) => manifest.sections?.[firstLine] || {};
+  async function playSec(firstLine, role, clipId) {
+    const key = `sec:${firstLine}:${role}`;
+    if (playRef.current?.key === key) { stopPlay(); return; }
+    stopPlay();
+    const blob = await getSectionExtraBlob(checksum, firstLine, role, clipId);
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url); audio.onended = stopPlay; audio.onerror = stopPlay;
+    playRef.current = { audio, url, key }; setPlayingKey(key);
+    audio.play().catch(() => {});
+  }
+  async function delSec(firstLine, role) {
+    if (playRef.current?.key === `sec:${firstLine}:${role}`) stopPlay();
+    await deleteSectionExtra(checksum, firstLine, role); refresh();
+  }
+  // Narrate a section's title with the current voice (Piper offline or ElevenLabs cloud).
+  async function genTitle(sec) {
+    const firstLine = sec.chunks[0].startLine;
+    const title = (sec.title || '').trim();
+    if (!title) { setMsg('This section has no title text to narrate.'); return; }
+    setSecBusy(`${firstLine}:title`); setMsg('');
+    try {
+      const isEl = voiceId.startsWith('el:');
+      let blob;
+      if (isEl) blob = await elevenSynth(title, voiceId.slice(3), state.global.elevenLabsKey, { modelId: state.global.elevenModel || 'eleven_multilingual_v2' });
+      else { const engine = createPiperEngine(); try { blob = await engine.synth(title, voiceId); } finally { engine.dispose(); } }
+      await setSectionExtra(checksum, firstLine, 'title', blob, { source: 'tts', voiceId, durationMs: estMs(blob), titleText: title });
+      setMsg(`🔊 Narrated the title “${title.slice(0, 40)}”.`); refresh();
+    } catch (e) { setMsg('Title narration failed: ' + (e?.message || e)); appendAppLog('audiobook', `section title @ ${firstLine + 1}: ${e?.message || e}`); }
+    setSecBusy('');
+  }
+  function openSecWiz(sec, role) {
+    const firstLine = sec.chunks[0].startLine;
+    const kindLabel = role === 'intro' ? 'Intro music' : role === 'outro' ? 'Outro music' : 'Section title';
+    setSecWiz({ firstLine, role, previewText: role === 'title' ? sec.title : '', dlgTitle: `${kindLabel} — ${(sec.title || '').slice(0, 40)}` });
+  }
 
   // ── generation (always confirmed first) ──
   function askGenerate(kind) {
@@ -321,10 +363,42 @@ export default function AudiobookDialog({ tab, onClose }) {
                 <span className={`ab-sec-cov${cov >= tot ? ' full' : ''}`}>{cov}/{tot} · {spct}%</span>
                 <div className="imp-bar ab-sec-bar"><div className="imp-fill" style={{ width: `${spct}%` }} /></div>
               </div>
-              {open && (
-                <table className="history-table ab-table">
-                  <tbody>
-                    {sec.chunks.map((chunk) => {
+              {open && (() => {
+                const firstLine = sec.chunks[0].startLine;
+                const ex = secExtras(firstLine);
+                const canTts = piperSupported() || elVoices.length > 0;
+                const slot = (role) => {
+                  const isTitle = role === 'title';
+                  const c = ex[role];
+                  const pk = `sec:${firstLine}:${role}`;
+                  const busyTitle = isTitle && secBusy === `${firstLine}:title`;
+                  return (
+                    <div className="ab-slot" key={role}>
+                      <span className="ab-slot-label">{role === 'intro' ? '🎵 Intro' : isTitle ? '🔊 Title' : '🎵 Outro'}</span>
+                      {c ? (
+                        <>
+                          <button className={playingKey === pk ? 'toggle-on' : ''} onClick={() => playSec(firstLine, role, c.id)} title={playingKey === pk ? 'Stop' : 'Play'}>{playingKey === pk ? '■' : '▶'}</button>
+                          <span className="ab-slot-meta">{fmtDur(c.durationMs)}{c.source === 'tts' ? ' · 🤖' : c.source === 'mic' ? ' · 🎤' : ' · 🎵'}</span>
+                          {isTitle && canTts && <button disabled={busyTitle} onClick={() => genTitle(sec)} title="Re-narrate the title with the current voice">{busyTitle ? '…' : '↻'}</button>}
+                          <button className="grab-trash" onClick={() => delSec(firstLine, role)} title="Remove">🗑</button>
+                        </>
+                      ) : (
+                        <>
+                          {isTitle && canTts && <button disabled={busyTitle} onClick={() => genTitle(sec)} title="Narrate the section title with the current voice">{busyTitle ? '…' : 'Generate'}</button>}
+                          <button onClick={() => openSecWiz(sec, role)} title={isTitle ? 'Record or import a spoken title' : 'Import a music file'}>{isTitle ? 'Record / import…' : 'Add music…'}</button>
+                        </>
+                      )}
+                    </div>
+                  );
+                };
+                return (
+                  <>
+                    <div className="ab-secaudio" title="Audio played at the section boundaries (in the exported audiobook): intro music, a spoken title, then the narration, then outro music.">
+                      {slot('intro')}{slot('title')}{slot('outro')}
+                    </div>
+                    <table className="history-table ab-table">
+                      <tbody>
+                        {sec.chunks.map((chunk) => {
                       const li = chunk.startLine;
                       const cl = clipsFor(li);
                       const top = cl[0];
@@ -344,10 +418,12 @@ export default function AudiobookDialog({ tab, onClose }) {
                           </td>
                         </tr>
                       );
-                    })}
-                  </tbody>
-                </table>
-              )}
+                        })}
+                      </tbody>
+                    </table>
+                  </>
+                );
+              })()}
             </div>
           );
         })}
@@ -449,6 +525,23 @@ export default function AudiobookDialog({ tab, onClose }) {
           chunk={recWiz}
           onClose={() => setRecWiz(null)}
           onSaved={() => { setRecWiz(null); setMsg('🎤 Clip saved.'); refresh(); }}
+        />
+      )}
+
+      {secWiz && (
+        <RecordClipWizard
+          checksum={checksum}
+          dlgTitle={secWiz.dlgTitle}
+          previewText={secWiz.previewText}
+          commit={async (blob, durationMs) => {
+            await setSectionExtra(checksum, secWiz.firstLine, secWiz.role, blob, {
+              source: secWiz.role === 'title' ? 'mic' : 'music',
+              durationMs,
+              titleText: secWiz.role === 'title' ? secWiz.previewText : undefined,
+            });
+          }}
+          onClose={() => setSecWiz(null)}
+          onSaved={() => { setSecWiz(null); setMsg('Section audio saved.'); refresh(); }}
         />
       )}
     </Dialog>

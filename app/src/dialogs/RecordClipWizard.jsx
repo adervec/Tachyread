@@ -56,9 +56,12 @@ function Waveform({ buffer, trim }) {
   );
 }
 
-// Record / import / trim / save one narration clip for a chunk. Robust vs the old one-shot Rec button:
-// mic permission + level meter + pause/resume, file import, waveform trim, and preview before saving.
-export default function RecordClipWizard({ checksum, chunk, onClose, onSaved }) {
+// Record / import / trim / save one audio clip. Robust vs the old one-shot Rec button: mic permission
+// + level meter + pause/resume, file import, waveform trim, and preview before saving.
+// Default target is a narration chunk (addAudioClip). Pass `commit(blob, durationMs)` to redirect the
+// save elsewhere (e.g. a section's intro/outro music or spoken title) — then `chunk` is optional and
+// `previewText` / `dlgTitle` label the dialog.
+export default function RecordClipWizard({ checksum, chunk, onClose, onSaved, commit, previewText, dlgTitle }) {
   // phase: setup → requesting → recording ↔ paused → decoding → review → saving
   const [phase, setPhase] = useState('setup');
   const [err, setErr] = useState('');
@@ -188,7 +191,8 @@ export default function RecordClipWizard({ checksum, chunk, onClose, onSaved }) 
       durationMs = Math.round((b - a) * 1000);
     }
     try {
-      await addAudioClip(checksum, chunk.startLine, blob, { source: 'mic', durationMs, spanEndLine: chunk.endLine });
+      if (commit) await commit(blob, durationMs);
+      else await addAudioClip(checksum, chunk.startLine, blob, { source: 'mic', durationMs, spanEndLine: chunk.endLine });
       onSaved?.();
     } catch (e) { setErr('Save failed: ' + (e?.message || e)); setPhase('review'); }
   }
@@ -207,7 +211,9 @@ export default function RecordClipWizard({ checksum, chunk, onClose, onSaved }) 
     // NB: we deliberately don't stopStream() — the mic stream is shared (voice commands etc.).
   }, []);
 
-  const lineLabel = chunk.endLine > chunk.startLine ? `${chunk.startLine + 1}–${chunk.endLine + 1}` : `${chunk.startLine + 1}`;
+  const lineLabel = chunk ? (chunk.endLine > chunk.startLine ? `${chunk.startLine + 1}–${chunk.endLine + 1}` : `${chunk.startLine + 1}`) : '';
+  const heading = dlgTitle || `Record clip — chunk ${lineLabel}`;
+  const subject = previewText != null ? previewText : (chunk?.text || '');
   const setA = (v) => setTrim(([, b]) => [Math.min(v, b - 0.05), b]);
   const setB = (v) => setTrim(([a]) => [a, Math.max(v, a + 0.05)]);
 
@@ -220,8 +226,10 @@ export default function RecordClipWizard({ checksum, chunk, onClose, onSaved }) 
     : <button onClick={() => { stopRec(); onClose(); }}>Cancel</button>;
 
   return (
-    <Dialog title={`Record clip — chunk ${lineLabel}`} onClose={() => { stopRec(); onClose(); }} width={600} buttons={footer}>
-      <p className="rcw-text" title="What this clip narrates">{chunk.text.slice(0, 220)}{chunk.text.length > 220 ? '…' : ''}</p>
+    <Dialog title={heading} onClose={() => { stopRec(); onClose(); }} width={600} buttons={footer}>
+      {subject
+        ? <p className="rcw-text" title="What this clip narrates">{subject.slice(0, 220)}{subject.length > 220 ? '…' : ''}</p>
+        : <p className="settings-note" style={{ marginTop: 0 }}>Import a music file (or record) for this slot — trim it before saving.</p>}
       {err && <p className="rcw-err">⚠ {err}</p>}
 
       {(phase === 'setup' || phase === 'requesting') && (

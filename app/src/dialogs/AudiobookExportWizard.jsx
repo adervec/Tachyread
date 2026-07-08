@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
-import { getAudioClip, entryClips } from '../state/storage.js';
+import { getAudioClip, getSectionExtraBlob, entryClips } from '../state/storage.js';
 import { saveBlobToFile } from '../features/fileSystem.js';
 import {
-  planTracks, trackFileName, buildM3u, encodeWav, buildId3v2, estimateBytes, fmtDuration, sanitizeFilename,
+  planTracks, trackFileName, buildM3u, encodeWav, buildId3v2, estimateBytes, fmtDuration, sanitizeFilename, orderSectionItems,
 } from '../features/audiobookExport.js';
 
 const fmtBytes = (b) => (b >= 1073741824 ? `${(b / 1073741824).toFixed(2)} GB` : b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
@@ -14,7 +14,12 @@ const MAX_CHAPTER_MS = 30 * 60000; // split a chapter longer than this into part
 // (handles Piper WAV, mic WebM/Opus, mixed) — universal, no encoder dependency.
 async function assembleTrack(checksum, track, format, tags) {
   const blobs = [];
-  for (const it of track.items) { const rec = await getAudioClip(checksum, it.startLine); if (rec?.blob) blobs.push(rec.blob); }
+  for (const it of track.items) {
+    const blob = it.kind === 'sec'
+      ? await getSectionExtraBlob(checksum, it.firstLine, it.role, it.clipId)
+      : (await getAudioClip(checksum, it.startLine))?.blob || null;
+    if (blob) blobs.push(blob);
+  }
   if (!blobs.length) return null;
   // mp3 → prepend an ID3v2 tag so the phone shows book/title/track instead of the filename.
   if (format === 'mp3') return new Blob([buildId3v2(tags), ...blobs], { type: 'audio/mpeg' });
@@ -41,18 +46,30 @@ export default function AudiobookExportWizard({ checksum, fileName, sections, ma
   const [msg, setMsg] = useState('');
   const abort = useRef(false);
 
-  // Covered chunks in reading order, with their play duration + section + voice.
+  // Covered chunks in reading order, with each section's intro/title/outro extras woven in
+  // (intro → title → chunks → outro), each carrying its play duration + section + voice.
   const items = useMemo(() => {
     const out = [];
-    for (const sec of sections) for (const c of sec.chunks) {
-      const clips = entryClips(manifest.lines[c.startLine]);
-      if (!clips.length) continue;
-      out.push({ startLine: c.startLine, endLine: c.endLine, ms: clips[0].durationMs || 0, sectionTitle: sec.title, voiceId: clips[0].voiceId });
+    for (const sec of sections) {
+      const firstLine = sec.chunks[0]?.startLine;
+      const lastEnd = sec.chunks.length ? sec.chunks[sec.chunks.length - 1].endLine : firstLine;
+      const chunkItems = [];
+      for (const c of sec.chunks) {
+        const clips = entryClips(manifest.lines[c.startLine]);
+        if (!clips.length) continue;
+        chunkItems.push({ startLine: c.startLine, endLine: c.endLine, ms: clips[0].durationMs || 0, sectionTitle: sec.title, voiceId: clips[0].voiceId });
+      }
+      const extras = firstLine != null ? (manifest.sections?.[firstLine] || {}) : {};
+      // A section with neither narration nor extras contributes nothing.
+      if (!chunkItems.length && !extras.intro && !extras.title && !extras.outro) continue;
+      out.push(...orderSectionItems(sec.title, chunkItems, extras, firstLine, lastEnd));
     }
     return out;
   }, [sections, manifest]);
 
-  const allMp3 = items.length > 0 && items.every((it) => (it.voiceId || '').startsWith('el:'));
+  // mp3 fast-path only when every item is an ElevenLabs mp3 clip; any imported music / section extra
+  // forces the decode-and-re-render WAV path (robust for mixed formats).
+  const allMp3 = items.length > 0 && items.every((it) => it.kind !== 'sec' && (it.voiceId || '').startsWith('el:'));
   const format = allMp3 && !forceWav ? 'mp3' : 'wav';
   const ext = format;
   const tracks = useMemo(() => planTracks(items, { mode, targetMs: targetMin * 60000, maxMs: mode === 'duration' ? targetMin * 60000 : MAX_CHAPTER_MS }), [items, mode, targetMin]);
