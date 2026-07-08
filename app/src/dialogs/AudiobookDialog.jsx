@@ -6,13 +6,13 @@ import {
   addAudioClip, deleteAudioClipById, deleteAudioChunk, reorderAudioClips,
   audiobookSize, clearAudiobook, exportAudiobook, importAudiobook, appendAppLog,
 } from '../state/storage.js';
-import { recordClip } from '../features/audioRecorder.js';
 import { defaultVoiceForLang, piperSupported, installedVoices, voiceLabel, createPiperEngine } from '../features/piperTts.js';
 import { elevenVoices, elevenSynth, elevenConfigured } from '../features/elevenLabs.js';
 import { audiobookChunks } from '../document/readerDocument.js';
 import { getTocEntries } from '../document/toc.js';
 import { saveBlobToFile, pickFile, readFileText } from '../features/fileSystem.js';
 import AudiobookExportWizard from './AudiobookExportWizard.jsx';
+import RecordClipWizard from './RecordClipWizard.jsx';
 
 // Rough clip duration from the blob: mp3 (~128 kbps, ElevenLabs) vs 16-bit 22.05 kHz WAV (Piper).
 const estMs = (blob) => (/mpe?g|mp3/i.test(blob.type)
@@ -62,8 +62,7 @@ function ClipWave({ checksum, line, clipId }) {
 export default function AudiobookDialog({ tab, onClose }) {
   const { state } = useApp();
   const [manifest, setManifest] = useState({ lines: {} });
-  const [recordingLi, setRecordingLi] = useState(null);
-  const recorderRef = useRef(null);
+  const [recWiz, setRecWiz] = useState(null); // chunk whose record/import wizard is open
   const [gen, setGen] = useState(null); // { done, total } while generating
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
@@ -140,18 +139,7 @@ export default function AudiobookDialog({ tab, onClose }) {
     audio.play().catch(() => {});
   }
 
-  // ── recording ──
-  async function record(chunk) {
-    if (recorderRef.current) recorderRef.current.stop();
-    setRecordingLi(chunk.startLine);
-    recorderRef.current = await recordClip({
-      onStop: async ({ blob, durationMs }) => {
-        await addAudioClip(checksum, chunk.startLine, blob, { source: 'mic', durationMs, spanEndLine: chunk.endLine });
-        setRecordingLi(null); recorderRef.current = null; refresh();
-      },
-    });
-  }
-  function stopRecord() { if (recorderRef.current) { recorderRef.current.stop(); recorderRef.current = null; setRecordingLi(null); } }
+  // ── recording / import: handled by RecordClipWizard (mic + level meter + pause + trim + file import) ──
 
   // ── generation (always confirmed first) ──
   function askGenerate(kind) {
@@ -351,7 +339,7 @@ export default function AudiobookDialog({ tab, onClose }) {
                           <td className="ab-actions">
                             {top && <button className={isPlaying ? 'toggle-on' : ''} onClick={() => playClip(li)} title={isPlaying ? 'Stop' : 'Play'}>{isPlaying ? '■' : '▶'}</button>}{' '}
                             {(piperSupported() || elVoices.length > 0) && <button onClick={() => setConfirmJob({ kind: 'one', targets: [chunk], sections: [sec.title], words: (chunk.text || '').split(/\s+/).filter(Boolean).length })} title="Generate this chunk">Gen</button>}{' '}
-                            {recordingLi === li ? <button className="toggle-on" onClick={stopRecord}>Stop</button> : <button onClick={() => record(chunk)}>Rec</button>}{' '}
+                            <button onClick={() => setRecWiz(chunk)} title="Record with your mic or import an audio file for this chunk">🎙 Rec…</button>{' '}
                             {cl.length > 0 && <button onClick={() => setClipMgr(chunk)} title="Manage the clips for this chunk">Clips ({cl.length})</button>}
                           </td>
                         </tr>
@@ -438,7 +426,8 @@ export default function AudiobookDialog({ tab, onClose }) {
             ))}
             {cl.length === 0 && <p className="settings-note">No clips.</p>}
             <div className="data-row" style={{ marginTop: 8 }}>
-              <button className="grab-trash" onClick={async () => { stopPlay(); await deleteAudioChunk(checksum, li); await refresh(); setClipMgr(null); }}>Delete all clips for this chunk</button>
+              <button className="toggle-on" onClick={() => setRecWiz(clipMgr)}>🎙 Record / import a clip…</button>
+              {cl.length > 0 && <button className="grab-trash" onClick={async () => { stopPlay(); await deleteAudioChunk(checksum, li); await refresh(); setClipMgr(null); }}>Delete all clips for this chunk</button>}
             </div>
           </Dialog>
         );
@@ -451,6 +440,15 @@ export default function AudiobookDialog({ tab, onClose }) {
           sections={sections}
           manifest={manifest}
           onClose={() => setShowExport(false)}
+        />
+      )}
+
+      {recWiz && (
+        <RecordClipWizard
+          checksum={checksum}
+          chunk={recWiz}
+          onClose={() => setRecWiz(null)}
+          onSaved={() => { setRecWiz(null); setMsg('🎤 Clip saved.'); refresh(); }}
         />
       )}
     </Dialog>
