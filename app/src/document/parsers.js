@@ -330,6 +330,54 @@ export function tagHtmlForPicking(htmlString) {
   return { taggedHtml, candidates };
 }
 
+// Given two tagged elements, find their common ancestor and the index range of that ancestor's
+// direct children spanning from the child holding `a` to the child holding `b` (order-independent).
+function siblingRange(a, b) {
+  const seen = new Set();
+  for (let n = a; n; n = n.parentElement) seen.add(n);
+  let common = b;
+  while (common && !seen.has(common)) common = common.parentElement;
+  common = common || a;
+  const kidOf = (node) => { let n = node; while (n && n.parentElement !== common) n = n.parentElement; return n; };
+  const kids = [...common.children];
+  let i0 = kids.indexOf(kidOf(a)), i1 = kids.indexOf(kidOf(b));
+  if (i0 > i1) [i0, i1] = [i1, i0];
+  return { common, kids, i0, i1 };
+}
+
+// The data-tx-idx values of the top-level blocks a start..end selection spans (for the picker's
+// range highlight). `dom` is a parsed tagged document. Single block when end is null/equal to start.
+export function htmlRangeChildIdxs(dom, startIdx, endIdx) {
+  const a = dom.querySelector(`[data-tx-idx="${startIdx}"]`);
+  if (!a) return [];
+  const b = (endIdx == null || endIdx === startIdx) ? a : dom.querySelector(`[data-tx-idx="${endIdx}"]`);
+  if (!b || a === b) return [startIdx];
+  const { kids, i0, i1 } = siblingRange(a, b);
+  if (i0 < 0 || i1 < 0) return [startIdx];
+  const out = [];
+  for (let k = i0; k <= i1; k++) { const id = kids[k].getAttribute?.('data-tx-idx'); if (id != null) out.push(Number(id)); }
+  return out.length ? out : [startIdx];
+}
+
+// Extract a doc from a RANGE of sibling blocks (start..end, inclusive) rather than a single container
+// — so the picker can skip a leading preface / trailing footer that shares the content's parent.
+// end == null / start → the single-element path (docFromHtmlString). Browser-only (DOMParser).
+export function docFromHtmlRange(taggedHtml, fileName, startIdx, endIdx) {
+  if (endIdx == null || endIdx === startIdx) return docFromHtmlString(taggedHtml, fileName, `[data-tx-idx="${startIdx}"]`);
+  const dom = new DOMParser().parseFromString(taggedHtml, 'text/html');
+  const a = dom.querySelector(`[data-tx-idx="${startIdx}"]`);
+  const b = dom.querySelector(`[data-tx-idx="${endIdx}"]`);
+  if (!a) throw new Error('Region not found.');
+  if (!b) return docFromHtmlString(taggedHtml, fileName, `[data-tx-idx="${startIdx}"]`);
+  const { kids, i0, i1 } = siblingRange(a, b);
+  const styles = [...dom.querySelectorAll('style')].map((s) => s.outerHTML).join('');
+  const wrap = dom.createElement('div');
+  wrap.setAttribute('data-tx-root', '1');
+  for (let k = i0; k <= i1; k++) wrap.appendChild(kids[k].cloneNode(true));
+  const html = `<!doctype html><html><head>${styles}</head><body>${wrap.outerHTML}</body></html>`;
+  return docFromHtmlString(html, fileName, '[data-tx-root]');
+}
+
 // A readable document name derived from a URL — its <title>/<h1> is preferred by the caller; this is
 // the fallback: the last meaningful path segment, else the hostname.
 export function nameFromUrl(url) {
