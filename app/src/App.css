@@ -2005,6 +2005,13 @@
 .clip-card-row { display: flex; align-items: center; gap: 6px; }
 .clip-card-row button { padding: 2px 7px; }
 
+/* Section-boundary audio strip (intro/outro music + spoken title) */
+.ab-secaudio { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 8px; background: rgba(127,127,127,0.06); border-left: 3px solid var(--toggle-active-bg, #3a86ff); border-radius: 0 6px 6px 0; margin-bottom: 6px; }
+.ab-slot { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border: 1px solid var(--divider); border-radius: 999px; background: var(--pane-bg); }
+.ab-slot-label { font-size: 12px; font-weight: 600; }
+.ab-slot-meta { font-size: 11px; color: var(--status-fg); font-variant-numeric: tabular-nums; }
+.ab-slot button { padding: 1px 7px; }
+
 /* Record-clip wizard */
 .rcw-text { white-space: pre-wrap; line-height: 1.45; background: var(--panel-bg, rgba(127,127,127,0.08)); border-radius: 6px; padding: 8px 10px; margin: 0 0 10px; font-size: 13px; }
 .rcw-err { color: var(--ox-bright, #b0413e); margin: 0 0 10px; font-size: 13px; }

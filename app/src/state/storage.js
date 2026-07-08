@@ -369,6 +369,10 @@ export async function clearFocusSessions() {
 const padLine = (n) => String(n).padStart(5, '0');
 const legacyBlobKey = (cs, line) => `${cs}/${padLine(line)}`;
 const clipBlobKey = (cs, line, id) => (id === 'legacy' ? legacyBlobKey(cs, line) : `${cs}/${padLine(line)}/${id}`);
+// Section-boundary extras (intro/outro music, a spoken section title) live under a distinct key
+// namespace so they never collide with a chunk's clips. Keyed by the section's first-chunk line.
+const SEC_ROLES = ['intro', 'title', 'outro'];
+const secBlobKey = (cs, firstLine, role, id) => `${cs}/S${padLine(firstLine)}/${role}/${id}`;
 // Manifest line entry → ordered clip-metadata list (mic clips forced ahead of TTS, else insertion order).
 export function entryClips(entry) {
   if (!entry) return [];
@@ -468,7 +472,48 @@ export async function audiobookSize(checksum) {
   for (const line of Object.keys(manifest.lines)) {
     for (const c of entryClips(manifest.lines[line])) { bytes += c.sizeBytes || 0; clips++; }
   }
+  for (const fl of Object.keys(manifest.sections || {})) {
+    for (const role of SEC_ROLES) { const c = manifest.sections[fl][role]; if (c) { bytes += c.sizeBytes || 0; clips++; } }
+  }
   return { bytes, clips, chunks: Object.keys(manifest.lines).length };
+}
+
+// ── Section-boundary extras: one clip per (section, role). role ∈ intro|title|outro. Music (intro/
+// outro) is imported audio; the title is a spoken section title (TTS or recorded). One clip per slot
+// (setting replaces the old one) — no priority list, unlike chunk clips. `firstLine` = the section's
+// first-chunk start line (its stable identity for a given document).
+export async function setSectionExtra(checksum, firstLine, role, blob, meta = {}) {
+  if (!SEC_ROLES.includes(role)) throw new Error(`bad section role: ${role}`);
+  const db = await getDB();
+  const id = `${role}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const now = Date.now();
+  const manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
+  if (!manifest.sections) manifest.sections = {};
+  const entry = manifest.sections[firstLine] || {};
+  if (entry[role]?.id) { try { await db.delete('audiobook', secBlobKey(checksum, firstLine, role, entry[role].id)); } catch { /* */ } }
+  await db.put('audiobook', { blob, durationMs: meta.durationMs || 0, createdAt: now, source: meta.source || 'music', voiceId: meta.voiceId || null, sizeBytes: blob.size }, secBlobKey(checksum, firstLine, role, id));
+  entry[role] = { id, source: meta.source || 'music', voiceId: meta.voiceId || null, createdAt: now, durationMs: meta.durationMs || 0, sizeBytes: blob.size };
+  if (role === 'title' && meta.titleText != null) entry.titleText = meta.titleText;
+  manifest.sections[firstLine] = entry;
+  await db.put('audiobookManifest', manifest, checksum);
+  return id;
+}
+
+export async function deleteSectionExtra(checksum, firstLine, role) {
+  const db = await getDB();
+  const manifest = await db.get('audiobookManifest', checksum);
+  const entry = manifest?.sections?.[firstLine];
+  if (!entry?.[role]) return;
+  try { await db.delete('audiobook', secBlobKey(checksum, firstLine, role, entry[role].id)); } catch { /* */ }
+  delete entry[role];
+  if (!SEC_ROLES.some((r) => entry[r])) delete manifest.sections[firstLine];
+  await db.put('audiobookManifest', manifest, checksum);
+}
+
+export async function getSectionExtraBlob(checksum, firstLine, role, id) {
+  const db = await getDB();
+  const rec = await db.get('audiobook', secBlobKey(checksum, firstLine, role, id));
+  return rec?.blob || null;
 }
 
 // ── Notes / annotations ─────────────────────────────────────────────────────────────────────
@@ -662,6 +707,9 @@ export async function clearAudiobook(checksum) {
     for (const c of entryClips(manifest.lines[line])) await db.delete('audiobook', clipBlobKey(checksum, Number(line), c.id));
     await db.delete('audiobook', legacyBlobKey(checksum, Number(line))); // any stray legacy blob
   }
+  for (const fl of Object.keys(manifest.sections || {})) {
+    for (const role of SEC_ROLES) { const c = manifest.sections[fl][role]; if (c?.id) await db.delete('audiobook', secBlobKey(checksum, Number(fl), role, c.id)); }
+  }
   await db.delete('audiobookManifest', checksum);
 }
 
@@ -683,7 +731,17 @@ export async function exportAudiobook(checksum, fileName = '') {
       if (rec?.blob) clips.push({ li: line, id: meta.id, source: meta.source, voiceId: meta.voiceId, createdAt: meta.createdAt, durationMs: meta.durationMs, sizeBytes: meta.sizeBytes, blob: await packValue(rec.blob) });
     }
   }
-  return { app: 'tachyread-audiobook', version: 2, checksum, fileName, exportedAt: Date.now(), manifest, clips };
+  const sectionClips = [];
+  for (const fl of Object.keys(manifest.sections || {})) {
+    const firstLine = Number(fl);
+    for (const role of SEC_ROLES) {
+      const meta = manifest.sections[fl][role];
+      if (!meta) continue;
+      const rec = await db.get('audiobook', secBlobKey(checksum, firstLine, role, meta.id));
+      if (rec?.blob) sectionClips.push({ fl: firstLine, role, id: meta.id, source: meta.source, voiceId: meta.voiceId, createdAt: meta.createdAt, durationMs: meta.durationMs, sizeBytes: meta.sizeBytes, titleText: manifest.sections[fl].titleText || null, blob: await packValue(rec.blob) });
+    }
+  }
+  return { app: 'tachyread-audiobook', version: 3, checksum, fileName, exportedAt: Date.now(), manifest, clips, sectionClips };
 }
 
 // Merge an audiobook bundle into this device's store. Keyed by the bundle's own checksum (so it lands
@@ -707,6 +765,18 @@ export async function importAudiobook(bundle) {
     entry.spanEndLine = entry.spanEndLine != null ? entry.spanEndLine : line;
     delete entry.durationMs; delete entry.source; delete entry.voiceId; delete entry.createdAt;
     manifest.lines[line] = entry;
+    imported++;
+  }
+  for (const c of bundle.sectionClips || []) {
+    if (!SEC_ROLES.includes(c.role)) continue;
+    if (!manifest.sections) manifest.sections = {};
+    const entry = manifest.sections[c.fl] || {};
+    if (entry[c.role]?.id === c.id) { skipped++; continue; }
+    const now = c.createdAt || Date.now();
+    await db.put('audiobook', { blob: unpackValue(c.blob), durationMs: c.durationMs || 0, createdAt: now, source: c.source || 'music', voiceId: c.voiceId || null, sizeBytes: c.sizeBytes || 0 }, secBlobKey(checksum, c.fl, c.role, c.id));
+    entry[c.role] = { id: c.id, source: c.source || 'music', voiceId: c.voiceId || null, createdAt: now, durationMs: c.durationMs || 0, sizeBytes: c.sizeBytes || 0 };
+    if (c.role === 'title' && c.titleText) entry.titleText = c.titleText;
+    manifest.sections[c.fl] = entry;
     imported++;
   }
   await db.put('audiobookManifest', manifest, checksum);

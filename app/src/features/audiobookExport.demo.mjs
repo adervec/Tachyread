@@ -1,6 +1,6 @@
 // Self-check for audiobookExport.js — run: node app/src/features/audiobookExport.demo.mjs
 import assert from 'node:assert';
-import { planTracks, trackFileName, buildM3u, encodeWav, buildId3v2, sanitizeFilename, estimateBytes, fmtDuration } from './audiobookExport.js';
+import { planTracks, trackFileName, buildM3u, encodeWav, buildId3v2, sanitizeFilename, estimateBytes, fmtDuration, orderSectionItems } from './audiobookExport.js';
 
 // Build 40 chunks across 3 sections, 60s each.
 const items = [];
@@ -69,5 +69,20 @@ assert.equal(dvT.getUint32(4, true), wavT.length - 8); // RIFF size = whole file
 assert.ok(estimateBytes(60000, 'mp3') < estimateBytes(60000, 'wav')); // mp3 smaller
 assert.equal(fmtDuration(3661000), '1:01:01');
 assert.equal(fmtDuration(65000), '1:05');
+
+// orderSectionItems: intro → title → chunks → outro, missing slots skipped, all one section title.
+const chunkItems = [{ startLine: 10, ms: 1000, sectionTitle: 'Ch 1' }, { startLine: 13, ms: 1000, sectionTitle: 'Ch 1' }];
+const full = orderSectionItems('Ch 1', chunkItems, { intro: { id: 'i', durationMs: 500 }, title: { id: 't', durationMs: 300 }, outro: { id: 'o', durationMs: 500 } }, 10, 15);
+assert.deepEqual(full.map((x) => x.role || 'chunk'), ['intro', 'title', 'chunk', 'chunk', 'outro'], 'listening order');
+assert.ok(full.every((x) => x.sectionTitle === 'Ch 1'), 'all items stay in the section (one track)');
+assert.equal(full[0].clipId, 'i'); assert.equal(full[4].clipId, 'o');
+assert.equal(full[4].startLine, 15, 'outro sits after the last chunk');
+// only some slots
+const some = orderSectionItems('Ch 1', chunkItems, { title: { id: 't', durationMs: 300 } }, 10, 15);
+assert.deepEqual(some.map((x) => x.role || 'chunk'), ['title', 'chunk', 'chunk']);
+// no extras → unchanged
+assert.deepEqual(orderSectionItems('Ch 1', chunkItems, {}, 10, 15), chunkItems);
+// a music-only section (no narration) is just the extras
+assert.deepEqual(orderSectionItems('Interlude', [], { intro: { id: 'i', durationMs: 500 } }, 5, 5).map((x) => x.role), ['intro']);
 
 console.log('audiobookExport.demo: all assertions passed ✅');

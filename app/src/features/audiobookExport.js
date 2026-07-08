@@ -48,6 +48,20 @@ export function planTracks(items, { mode = 'chapter', targetMs = 12 * 60000, max
   return tracks;
 }
 
+// Weave a section's boundary extras around its chunk items, in listening order:
+// intro music → spoken title → narration chunks → outro music. Missing slots are skipped. Pure.
+// `extras` = { intro?, title?, outro? } (each { id, durationMs }); firstLine/lastEnd position the
+// sec items so mkTrack.startLine stays sane and outro sorts after the last chunk.
+export function orderSectionItems(sectionTitle, chunkItems, extras = {}, firstLine = 0, lastEnd = 0) {
+  const mk = (role, meta, at) => ({ kind: 'sec', role, firstLine, clipId: meta.id, ms: meta.durationMs || 0, sectionTitle, startLine: at });
+  const out = [];
+  if (extras.intro) out.push(mk('intro', extras.intro, firstLine));
+  if (extras.title) out.push(mk('title', extras.title, firstLine));
+  for (const it of chunkItems) out.push(it);
+  if (extras.outro) out.push(mk('outro', extras.outro, lastEnd));
+  return out;
+}
+
 // Zero-padded "NN Title.ext" so a phone's file browser sorts them in reading order.
 export function trackFileName(track, total, ext) {
   const pad = String(total).length;
