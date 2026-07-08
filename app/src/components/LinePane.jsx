@@ -2,6 +2,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'rea
 import { List, useDynamicRowHeight, useListRef } from 'react-window';
 import { ReadStatus, orpIndex, getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import { getTocEntries } from '../document/toc.js';
+import { buildWallDoc } from '../document/wallText.js';
 import { resolveHeadingPack } from '../state/themes.js';
 import Pointer from './Pointer.jsx';
 import { useReportVisibility } from '../state/useReportVisibility.js';
@@ -81,6 +82,9 @@ function renderWords(line, opts) {
 function statusForLine(li, ctx) {
   if (li === ctx.currentLine) return ReadStatus.Current;
   if (li < ctx.currentLine) {
+    // Wall-of-text merges source lines into blocks, so the per-source-line read sets don't map —
+    // everything before the current block simply reads as "read" (a clean read/unread split).
+    if (ctx.wall) return ReadStatus.Read;
     if (ctx.sessionNavLines.has(li)) return ReadStatus.NavSessionRead;
     if (ctx.sessionLines.has(li)) return ReadStatus.SessionRead;
     if (ctx.readLines.has(li)) return ReadStatus.Read;
@@ -189,7 +193,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
     >
       <div className="num">{line.lineNumber}</div>
       <div className="accent" />
-      <div ref={justifyWrapRef} className={`text${obscureCls}${parallel ? ' parallel' : ''}`} style={textStyle}>
+      <div ref={justifyWrapRef} className={`text${obscureCls}${parallel ? ' parallel' : ''}${dsettings.wall ? ' wall' : ''}`} style={textStyle}>
         {pointerBefore && pointer}
         {line.isEmpty ? (
           <span style={{ opacity: 0.4 }}>·</span>
@@ -406,7 +410,22 @@ function revealBoundary(doc, idx, mode) {
 }
 
 export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { line: -1, token: 0 }, visibleRef, onVisible, compact = false, scrollRead = false, scrollCmd = null, recenterKey = 0, onAddNote }) {
-  const { doc, settings } = tab;
+  const { doc: srcDoc, settings } = tab;
+  // Wall-of-text mode: merge source lines into flowing blocks (breaks only at headings, percent, or
+  // every N lines). Not in the split view. The whole pane then operates on the merged doc.
+  const wall = !!settings.wallText && !settings.linePaneSplit;
+  const wallBreakEvery = Math.max(0, Number(settings.wallBreakEvery) || 0);
+  const wallHeads = useMemo(() => {
+    if (!wall) return null;
+    const entries = getTocEntries({ settings, doc: srcDoc });
+    const m = new Map();
+    for (const e of entries) { const li = getLineIndex(srcDoc, e.wordIndex); if (li >= 0) m.set(li, Math.max(0, Math.min(2, e.level || 0))); }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wall, srcDoc, settings.tocEntries]);
+  const pctEvery = wall && settings.showPercentSeparators ? 100 : 0;
+  const wallDoc = useMemo(() => (wall ? buildWallDoc(srcDoc, wallHeads, { breakEvery: wallBreakEvery, pctEvery }) : null), [wall, srcDoc, wallHeads, wallBreakEvery, pctEvery]);
+  const doc = wall ? wallDoc : srcDoc;
   const paneVisRef = useReportVisibility(onVisible || (() => {}));
   const idx = settings.wordIndex;
   const [menu, setMenu] = useState(null);
@@ -426,7 +445,8 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     setMenu({ x: Math.min(e.clientX, window.innerWidth - 240), y: Math.min(e.clientY, window.innerHeight - 180), word, start });
   }
   const currentLine = getLineIndex(doc, idx);
-  const paraRange = useMemo(() => getParagraphRange(doc, currentLine), [doc, currentLine]);
+  // No paragraph highlight in wall mode — merged blocks have no blank-line boundaries to bound it.
+  const paraRange = useMemo(() => (wall ? { startLine: -1, endLine: -1 } : getParagraphRange(doc, currentLine)), [doc, currentLine, wall]);
   const propNameKeys = useMemo(
     () =>
       settings.enableProperNames && doc.properNames
@@ -447,6 +467,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   }, [headingStyle, themeName]);
   const headingMap = useMemo(() => {
     if (headingStyle === 'off') return null;
+    if (wall) return doc.headingLevels && doc.headingLevels.size ? doc.headingLevels : null; // already merged-indexed
     const entries = getTocEntries({ settings, doc });
     if (!entries.length) return null;
     const m = new Map();
@@ -456,7 +477,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     }
     return m.size ? m : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, settings.tocEntries, headingStyle]);
+  }, [doc, settings.tocEntries, headingStyle, wall]);
 
   // Stable display-settings subset handed to each line. Unlike `settings` (new identity on every
   // word step, via patchSettings), this keeps the same reference until a display option actually
@@ -466,9 +487,10 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       blurLinesBefore: settings.blurLinesBefore || 0,
       blurLinesAfter: settings.blurLinesAfter || 0,
       blurGradient: settings.blurGradient ?? 100,
-      obscureMode: settings.obscureMode || 'blur',
-      parallelTranslation: !!settings.parallelTranslation,
+      obscureMode: wall && settings.obscureMode === 'translate' ? 'blur' : (settings.obscureMode || 'blur'),
+      parallelTranslation: !wall && !!settings.parallelTranslation, // line-indexed translations don't map onto merged blocks
       altSentenceColors: !!settings.altSentenceColors,
+      wall,
       currentLineFontSizeBoost: settings.currentLineFontSizeBoost || 0,
       textAlignment: settings.textAlignment || 'Left',
       showPointer: settings.showPointer,
@@ -485,7 +507,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       settings.currentLineFontSizeBoost,
       settings.textAlignment, settings.showPointer, settings.pointerStyle, settings.pointerPlacement,
       settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP,
-      settings.currentWordStyles, settings.currentWordStyle,
+      settings.currentWordStyles, settings.currentWordStyle, wall,
     ]
   );
 
@@ -499,7 +521,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   const defaultRowHeight = Math.round(baseFont * lineSpacing) + 8;
   const rowHeightCtl = useDynamicRowHeight({
     defaultRowHeight,
-    key: `${doc.contentChecksum}:${baseFont}:${lineSpacing}`,
+    key: `${doc.contentChecksum}:${baseFont}:${lineSpacing}:${wall ? 'w' + wallBreakEvery : 'n'}`,
   });
 
   const listRef = useListRef();
@@ -745,6 +767,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     () => ({
       currentLine,
       currentWordIndex: idx,
+      wall,
       sessionLines: tab.sessionLinesRead,
       sessionNavLines: tab.sessionNavLinesRead,
       readLines: tab.readLinesAllTime,
@@ -755,7 +778,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       longPressMs,
       translations,
     }),
-    [currentLine, idx, tab.sessionLinesRead, tab.sessionNavLinesRead, tab.readLinesAllTime, paraRange, hideBeyond, pressingStart, longPressMs, translations]
+    [currentLine, idx, wall, tab.sessionLinesRead, tab.sessionNavLinesRead, tab.readLinesAllTime, paraRange, hideBeyond, pressingStart, longPressMs, translations]
   );
 
   // rowProps must not contain ariaAttributes/index/style (those are auto-passed by List).

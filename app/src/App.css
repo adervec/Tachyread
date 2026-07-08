@@ -1386,6 +1386,11 @@
   color: var(--line-unread-fg);
   word-wrap: break-word;
 }
+/* Wall-of-text: merged blocks flow as prose. pre-wrap keeps the paragraph-break tabs as inline indents
+   (tab-size) while still wrapping the block; a little vertical breathing room between blocks. */
+.line-row .text.wall { white-space: pre-wrap; tab-size: 4; -moz-tab-size: 4; }
+.line-row.status-Current .text.wall { white-space: pre-wrap; }
+.line-pane-list .line-row .text.wall { padding-bottom: 2px; }
 /* Alternate unread-sentence colour: odd sentences get a mild accent tint so consecutive sentences
    are easy to tell apart. Only affects still-unread lines (the .alt-sent class is set for those). */
 .line-row.alt-sent .text { color: color-mix(in srgb, var(--line-unread-fg) 74%, var(--toggle-active-bg)); }
