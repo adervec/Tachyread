@@ -39,6 +39,8 @@ const HINTS = {
   'Hide Fast Reader pane': 'Remove the flashing-word pane entirely and read only from the Lines pane.',
   'Line spacing (1 = single)': 'Vertical spacing between lines in the Lines pane.',
   '% separators': 'Show faint percentage markers down the Lines pane so you can see how far through you are.',
+  'Wall of text (merge lines into blocks)': 'Flow the source lines together into solid blocks (line breaks become spaces; paragraph breaks become an indent tab) instead of one row per source line. Blocks break at headings, % markers, or the interval below.',
+  'Wall: break every N lines (0 = sections / % only)': 'In wall-of-text mode, also start a new block every this-many source lines. 0 keeps blocks running until the next heading or % marker.',
   'Alternate unread sentence colours': 'Give consecutive not-yet-read sentences a slightly different colour so where one ends and the next begins is easy to see.',
   'Split pane (before / current / after)': 'Split the Lines pane into what you have read, the current line, and what is ahead.',
   'Center current line': 'Keep the line you are reading pinned to the middle of the Lines pane instead of scrolling naturally.',
@@ -268,6 +270,20 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ showPercentSeparators: e.target.checked })}
         />
       </Field>
+      <Field label="Wall of text (merge lines into blocks)">
+        <input type="checkbox" checked={!!s.wallText} onChange={(e) => patch({ wallText: e.target.checked })} />
+      </Field>
+      {s.wallText && (
+        <Field label="Wall: break every N lines (0 = sections / % only)">
+          <input
+            type="number"
+            min={0}
+            max={500}
+            value={s.wallBreakEvery || 0}
+            onChange={(e) => patch({ wallBreakEvery: Math.max(0, Math.min(500, Number(e.target.value) || 0)) })}
+          />
+        </Field>
+      )}
       <Field label="Alternate unread sentence colours">
         <input
           type="checkbox"

@@ -38,6 +38,8 @@ export function defaultFileSettings() {
     currentWordColor: '', // highlight colour for Color/Background/Box/Glow/Underline styles ('' = theme default)
     rightPaneFontSize: 12,
     lineSpacing: 1.5, // Lines-pane line-height multiplier
+    wallText: false, // "wall of text": merge source lines into flowing blocks (newlines → spaces/tabs)
+    wallBreakEvery: 0, // in wall mode, also start a new block every N source lines (0 = only sections/%)
     sourceChecks: {}, // ticked checkboxes in html/markdown source sections: { section: [box…] }
     sourceCursor: true, // show the current-word marker on the Source page view
     sourceCursorStyle: 'vortex', // marker look: vortex (invert) | box | underline | highlight
