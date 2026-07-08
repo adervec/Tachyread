@@ -1139,31 +1139,60 @@
   display: flex;
   align-items: baseline;
   position: relative;
+  width: 100%;
   font-size: 64px;
   font-weight: 500;
   letter-spacing: 0.5px;
   line-height: 1;
   min-height: 80px;
 }
-.rsvp-left, .rsvp-right { white-space: pre; }
+/* The two halves grow by ratio (flex-grow set inline from orpHorizontalPercent) so the ORP glyph
+   lands at the same focus point every word. min-width:0 lets a long half overflow into the empty
+   pane instead of shoving the ORP off-centre; text-align butts each half against the ORP. */
+.rsvp-left  { white-space: pre; flex-basis: 0; min-width: 0; text-align: right; }
+.rsvp-right { white-space: pre; flex-basis: 0; min-width: 0; text-align: left; }
 .rsvp-orp {
+  position: relative;
+  flex: 0 0 auto;
   color: var(--orp-fg);
   font-weight: bold;
 }
-.guide-line {
+/* Guide ticks are children of the ORP glyph, centred on it — a sight that points AT the ORP. */
+.guide-tick {
   position: absolute;
-  top: -32px;
-  bottom: -32px;
+  left: 50%;
+  transform: translateX(-50%);
   width: 2px;
+  height: 26px;
+  border-radius: 1px;
 }
-.guide-line.left { right: 100%; margin-right: 8px; }
-.guide-line.right { left: 100%; margin-left: 8px; }
+.guide-tick.top { bottom: 100%; margin-bottom: 8px; }
+.guide-tick.bottom { top: 100%; margin-top: 8px; }
+/* Fisheye lens: neighbours of the ORP swell toward it. */
+.rsvp-word-row.focus-fisheye .fe-ch { display: inline-block; transform-origin: 50% 100%; }
+/* Pulse: the ORP flares on each new word (row is remounted per word via key={idx}). */
+.rsvp-word-row.focus-pulse .rsvp-orp { animation: orpPulse 300ms ease-out; }
+@keyframes orpPulse { from { transform: scale(1.7); } to { transform: scale(1); } }
+/* Converge: two bars sweep inward and settle on the ORP, then fade — an eye-focuser. */
+.orp-converge {
+  position: absolute;
+  top: 50%;
+  width: 34px;
+  height: 3px;
+  border-radius: 2px;
+  opacity: 0;
+}
+.orp-converge.left  { right: 100%; margin-right: 6px; animation: convL 340ms ease-out; }
+.orp-converge.right { left: 100%; margin-left: 6px; animation: convR 340ms ease-out; }
+@keyframes convL { 0% { transform: translateX(-90px); opacity: 0; } 55% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(0); opacity: 0; } }
+@keyframes convR { 0% { transform: translateX(90px); opacity: 0; } 55% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(0); opacity: 0; } }
 .guide-color-Red { background: var(--guide-red); }
 .guide-color-Pink { background: var(--guide-pink); }
 .guide-color-Orange { background: var(--guide-orange); }
 .guide-color-Green { background: var(--guide-green); }
 .guide-color-Blue { background: var(--guide-blue); }
 .guide-color-Purple { background: var(--guide-purple); }
+.range-val { margin-left: 8px; font-variant-numeric: tabular-nums; opacity: 0.8; min-width: 3ch; display: inline-block; }
 
 .rsvp-stats {
   position: absolute;

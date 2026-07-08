@@ -419,7 +419,16 @@ function AppInner() {
     const isProperName = doc.properNames?.has?.((word || '').toLowerCase().replace(/[^\p{L}\p{N}]+$/u, ''));
 
     const sw = surprisalWeights ? (surprisalWeights[idx] || 1) : 1;
-    const ms = wordDurationMs(word, settings, isProperName, isHF, atParaEnd, atLineEnd) * sw;
+    // Optional sinusoidal breathing: pace speeds up and slows down around the setpoint so the eye
+    // gets brief rests. Averages to 1 over a cycle, so the mean WPM is unchanged. Divides the delay
+    // (higher effective WPM = shorter gap).
+    let wave = 1;
+    if (settings.wpmWave) {
+      const depth = Math.max(0, Math.min(0.6, settings.wpmWaveDepth ?? 0.25));
+      const period = Math.max(4, settings.wpmWavePeriodSec || 18);
+      wave = 1 + depth * Math.sin((Date.now() / 1000) * (2 * Math.PI / period));
+    }
+    const ms = wordDurationMs(word, settings, isProperName, isHF, atParaEnd, atLineEnd) * sw / wave;
 
     engineRef.current.scheduleNext(ms, () => {
       stepWord(1);
