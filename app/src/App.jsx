@@ -2420,7 +2420,7 @@ function AppInner() {
       )}
       {dialog?.kind === 'grab' && <GrabWizard onClose={closeDialog} />}
       {dialog?.kind === 'web-grab' && <WebGrabWizard onClose={closeDialog} />}
-      {dialog?.kind === 'html-structure' && <HtmlStructureWizard html={dialog.html} fileName={dialog.fileName} onClose={closeDialog} />}
+      {dialog?.kind === 'html-structure' && <HtmlStructureWizard html={dialog.html} fileName={dialog.fileName} sourceUrl={dialog.sourceUrl} onClose={closeDialog} />}
       {dialog?.kind === 'html-tools' && <HtmlToolsDialog onClose={closeDialog} />}
       {dialog?.kind === 'api-usage' && <ApiUsageDialog onClose={closeDialog} />}
       {dialog?.kind === 'toc-wizard' && activeTab && (

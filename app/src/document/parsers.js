@@ -1,6 +1,7 @@
 // Document format parsers: TXT, DOCX (mammoth), PDF (pdf.js), EPUB (epub.js), HTML, Markdown.
 import { readerDocFromText, attachChecksum } from './readerDocument.js';
 import { mdToHtml } from './markdown.js';
+import { resolveLink } from '../features/webGrab.js';
 
 async function parseTxt(file, onProgress) {
   onProgress?.({ phase: 'Reading file' });
@@ -376,6 +377,54 @@ export function docFromHtmlRange(taggedHtml, fileName, startIdx, endIdx) {
   for (let k = i0; k <= i1; k++) wrap.appendChild(kids[k].cloneNode(true));
   const html = `<!doctype html><html><head>${styles}</head><body>${wrap.outerHTML}</body></html>`;
   return docFromHtmlString(html, fileName, '[data-tx-root]');
+}
+
+// Ordered, de-duplicated followable links inside a tagged region (or the whole page when regionIdx is
+// null) — for following a table-of-contents page's chapter links. Resolved same-site + absolute via
+// resolveLink; in-page anchors and the ToC page's own URL are dropped. Browser-only (DOMParser).
+export function collectLinks(taggedHtml, regionIdx, baseUrl) {
+  const dom = new DOMParser().parseFromString(taggedHtml, 'text/html');
+  const scope = (regionIdx != null && dom.querySelector(`[data-tx-idx="${regionIdx}"]`)) || dom.body;
+  if (!scope) return [];
+  let selfUrl = '';
+  try { const b = new URL(baseUrl); b.hash = ''; selfUrl = b.href; } catch { /* no base */ }
+  const out = [], seen = new Set();
+  for (const a of scope.querySelectorAll('a[href]')) {
+    const abs = resolveLink(a.getAttribute('href') || '', baseUrl);
+    if (!abs || abs === selfUrl || seen.has(abs)) continue;
+    seen.add(abs);
+    out.push({ url: abs, text: (a.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120) });
+  }
+  return out;
+}
+
+// The reading content of a fetched page as sanitized HTML + a title — used to stitch each followed
+// ToC link into one book. Reuses the same content-root heuristic and chrome-stripping as the file
+// pipeline. Browser-only (DOMParser).
+export function contentHtmlOf(htmlString) {
+  const dom = new DOMParser().parseFromString(htmlString, 'text/html');
+  const root = pickContentRoot(dom);
+  expandTemplates(root);
+  root.querySelectorAll(SKIP_SEL).forEach((el) => el.remove());
+  // Use the page's leading heading as the section title and REMOVE it, so buildDocFromPages' wrapper
+  // <h1> isn't a duplicate heading (which would also double every ToC entry).
+  const titleM = htmlString.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const lead = root.querySelector('h1, h2');
+  let title = '';
+  if (lead) { title = (lead.textContent || '').replace(/\s+/g, ' ').trim(); lead.remove(); }
+  if (!title) title = (titleM?.[1] || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  return { title, html: sanitizeHtml(root.innerHTML) };
+}
+
+const escHtml = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Stitch a list of followed pages ({ title, html }) into ONE document — each page an <article> with an
+// <h1> title, so the normal HTML pipeline splits it into sections and builds a ToC from the titles.
+export function buildDocFromPages(pages, fileName) {
+  const body = pages
+    .map((p) => `<article><h1>${escHtml(p.title || 'Section')}</h1>${p.html || ''}</article>`)
+    .join('\n');
+  return docFromHtmlString(`<!doctype html><html><head></head><body>${body}</body></html>`, fileName);
 }
 
 // A readable document name derived from a URL — its <title>/<h1> is preferred by the caller; this is

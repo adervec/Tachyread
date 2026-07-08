@@ -1,6 +1,6 @@
 // Self-check for webGrab pure helpers. Run: node src/features/webGrab.demo.mjs
 import assert from 'node:assert';
-import { normalizeUrl, proxyUrl, isHtmlContentType } from './webGrab.js';
+import { normalizeUrl, proxyUrl, isHtmlContentType, resolveLink } from './webGrab.js';
 
 // normalizeUrl: add a scheme, keep valid ones, reject junk
 assert.equal(normalizeUrl('example.com/article'), 'https://example.com/article');
@@ -23,5 +23,16 @@ assert.ok(isHtmlContentType('text/html; charset=utf-8'));
 assert.ok(isHtmlContentType('application/xhtml+xml'));
 assert.ok(!isHtmlContentType('text/plain'));
 assert.ok(!isHtmlContentType(''));
+
+// resolveLink: ToC-follow link resolution (same-site absolute, fragment stripped)
+const base = 'https://ex.com/book/toc.html';
+assert.equal(resolveLink('ch1.html', base), 'https://ex.com/book/ch1.html'); // relative → absolute
+assert.equal(resolveLink('/book/ch2.html', base), 'https://ex.com/book/ch2.html'); // root-relative
+assert.equal(resolveLink('https://ex.com/book/ch3.html#top', base), 'https://ex.com/book/ch3.html'); // fragment stripped
+assert.equal(resolveLink('#section', base), null); // in-page anchor
+assert.equal(resolveLink('mailto:a@b.com', base), null);
+assert.equal(resolveLink('javascript:void(0)', base), null);
+assert.equal(resolveLink('https://other.com/x', base), null); // cross-site rejected
+assert.equal(resolveLink('', base), null);
 
 console.log('webGrab.demo: all assertions passed ✅');
