@@ -2005,6 +2005,30 @@
 .clip-card-row { display: flex; align-items: center; gap: 6px; }
 .clip-card-row button { padding: 2px 7px; }
 
+/* Record-clip wizard */
+.rcw-text { white-space: pre-wrap; line-height: 1.45; background: var(--panel-bg, rgba(127,127,127,0.08)); border-radius: 6px; padding: 8px 10px; margin: 0 0 10px; font-size: 13px; }
+.rcw-err { color: var(--ox-bright, #b0413e); margin: 0 0 10px; font-size: 13px; }
+.rcw-panel { display: flex; flex-direction: column; gap: 10px; }
+.rcw-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rcw-rec { background: #b0413e; color: #fff; font-weight: 700; padding: 6px 16px; border-radius: 6px; }
+.rcw-rec:disabled { opacity: 0.6; }
+.rcw-stop { font-weight: 700; }
+.rcw-recstate { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.rcw-recstate .rcw-time { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; }
+.rcw-dot { width: 12px; height: 12px; border-radius: 50%; background: #888; }
+.rcw-dot.live { background: #e23b3b; animation: rcwBlink 1s steps(1) infinite; }
+@keyframes rcwBlink { 50% { opacity: 0.25; } }
+.rcw-meter { height: 12px; border-radius: 999px; background: rgba(127,127,127,0.22); overflow: hidden; }
+.rcw-meter-fill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #2e9d4f, #d9a441 70%, #e23b3b); transition: width 60ms linear; }
+.rcw-wave { position: relative; }
+.rcw-wave canvas { display: block; width: 100%; height: 72px; color: var(--accent, #3a86ff); background: #0b0b0e; border-radius: 6px; }
+.rcw-wave-cut { position: absolute; top: 0; bottom: 0; background: rgba(10,10,14,0.66); pointer-events: none; }
+.rcw-wave-cut.left { left: 0; border-right: 1px solid #d9a441; }
+.rcw-wave-cut.right { right: 0; border-left: 1px solid #d9a441; }
+.rcw-trim { display: flex; flex-direction: column; gap: 6px; }
+.rcw-trim label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--status-fg); }
+.rcw-trim input[type=range] { flex: 1; }
+
 /* Notes & annotation suite */
 .note-add { margin-bottom: 10px; }
 .note-add textarea { width: 100%; resize: vertical; }
