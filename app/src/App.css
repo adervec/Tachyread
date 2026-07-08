@@ -489,6 +489,14 @@
 .wg-fallback .field-section { margin-top: 0; }
 
 /* HTML structure picker: rendered preview (click to choose a region) beside candidates + extraction preview. */
+.hsw-nav { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; outline: none; }
+.hsw-nav:focus-visible { box-shadow: 0 0 0 2px var(--toggle-active-bg); border-radius: 6px; }
+.hsw-navbtns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.hsw-navbtns button { padding: 3px 9px; }
+.hsw-crumbs { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.hsw-crumb { font-family: var(--mono-family, monospace); font-size: 11px; padding: 1px 7px; border: 1px solid var(--divider); border-radius: 999px; background: transparent; color: var(--status-fg); cursor: pointer; }
+.hsw-crumb.on { border-color: var(--toggle-active-bg); background: var(--menu-highlight); color: inherit; font-weight: 600; }
+.hsw-crumbs .hsw-crumb + .hsw-crumb::before { content: '›'; margin-right: 4px; margin-left: -3px; color: var(--status-fg); }
 .hsw { display: grid; grid-template-columns: 1fr 300px; gap: 12px; align-items: stretch; }
 .hsw-preview { border: 1px solid var(--divider); border-radius: 6px; overflow: hidden; background: #fff; min-height: 340px; }
 .hsw-preview iframe { width: 100%; height: 62vh; border: none; display: block; background: #fff; }
