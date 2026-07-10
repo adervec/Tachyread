@@ -1,6 +1,7 @@
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { groupForChecksum, masterOf } from '../features/bookGroups.js';
+import { getBinding } from '../state/storage.js';
 
 // Short labels for the dialog tabs (menus use longer "…" titles). Fallback is the raw kind.
 const PANEL_LABELS = {
@@ -21,6 +22,19 @@ export default function TabBar() {
   const noDocs = tabs.length === 0;
   const dragId = useRef(null);                 // document tab being dragged
   const [dropId, setDropId] = useState(null);  // tab the drop indicator is on
+
+  // Trackyread link status per tab: the `binding` map (checksum → tracker book id). Loaded once and
+  // refreshed when a link changes (setBinding / library import fire tachyread-bindings-changed). The
+  // dot only appears once you've linked at least one document, so it's silent for non-tracker users.
+  const [bindings, setBindings] = useState({});
+  useEffect(() => {
+    let live = true;
+    const load = () => getBinding().then((m) => { if (live) setBindings(m || {}); }).catch(() => {});
+    load();
+    window.addEventListener('tachyread-bindings-changed', load);
+    return () => { live = false; window.removeEventListener('tachyread-bindings-changed', load); };
+  }, []);
+  const hasBindings = Object.keys(bindings).length > 0;
 
   // A doc-scoped panel (its docTabId names a file tab) renders in a GROUP right after that file's
   // tab, titled with the file / book-group name; unscoped panels stay leftmost.
@@ -84,6 +98,12 @@ export default function TabBar() {
             onDragEnd={() => { dragId.current = null; setDropId(null); }}
             title={named ? `${named.name} — ${fileName}${cs === masterOf(named) ? ' (master)' : ''}` : (tab.lazy ? `${fileName} — tap to load` : fileName)}
           >
+            {hasBindings && (
+              <span
+                className={`tab-track ${cs && bindings[cs] ? 'in' : 'out'}`}
+                title={cs && bindings[cs] ? 'Tracked in Trackyread' : 'Not in Trackyread'}
+              />
+            )}
             <span className="name">{label}{mark && <sup className="tab-grp-mark">{mark}</sup>}</span>
             <button
               className="close"

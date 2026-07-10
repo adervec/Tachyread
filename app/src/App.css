@@ -222,6 +222,10 @@
   white-space: nowrap;
   margin-right: 8px;
 }
+/* Trackyread link status: filled accent dot = this document is tracked; hollow = open but not linked. */
+.tab-bar .tab .tab-track { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+.tab-bar .tab .tab-track.in { background: var(--toggle-active-bg); }
+.tab-bar .tab .tab-track.out { background: transparent; box-shadow: inset 0 0 0 1px var(--status-fg); opacity: 0.55; }
 .tab-bar .tab .name .tab-grp-mark { font-size: 9px; vertical-align: super; margin-left: 1px; color: var(--toggle-active-bg); font-weight: 700; }
 .tab-bar .tab .close {
   border: none;
