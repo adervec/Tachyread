@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
-import { allFiles, allDocMeta, allFocusSessions } from '../state/storage.js';
+import { allFiles, allDocMeta, allFocusSessions, getBinding, getLibraryBooks } from '../state/storage.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────────────────────
 function fmtInt(n) { return (Math.round(n) || 0).toLocaleString(); }
@@ -86,6 +86,7 @@ export function HistoryView() {
   const { state, updateGlobal } = useApp();
   const [files, setFiles] = useState(null);
   const [nameMap, setNameMap] = useState({});
+  const [linkMap, setLinkMap] = useState({}); // checksum → { id, title } of the linked Trackyread book
   const [focus, setFocus] = useState(null);
   const [tab, setTab] = useState('overview'); // overview | calendar | library
   const [selected, setSelected] = useState(null); // checksum of the book being inspected
@@ -100,6 +101,13 @@ export function HistoryView() {
       setNameMap(map);
     }).catch(() => {});
     allFocusSessions().then(setFocus).catch(() => setFocus([]));
+    // Which files are linked to a Trackyread book (checksum → book title), so the history can show it.
+    Promise.all([getBinding().catch(() => ({})), getLibraryBooks().catch(() => [])]).then(([bind, lib]) => {
+      const byId = Object.fromEntries(lib.map((b) => [b.id, b]));
+      const map = {};
+      for (const [cs, id] of Object.entries(bind || {})) if (byId[id]) map[cs] = { id, title: byId[id].title || 'Tracked book' };
+      setLinkMap(map);
+    }).catch(() => {});
   }, []);
 
   const focusAgg = useMemo(() => {
@@ -374,6 +382,9 @@ export function HistoryView() {
                       <div className="rh-book-title">
                         <span className="rh-shelf-dot" title={SHELF_BY_ID[b.shelf]?.label}>{SHELF_BY_ID[b.shelf]?.icon}</span>
                         {b.name}
+                        {linkMap[b.checksum]
+                          ? <span className="rh-link-chip on" title={`Linked to Trackyread: ${linkMap[b.checksum].title}`}>🔗 {linkMap[b.checksum].title}</span>
+                          : <span className="rh-link-chip" title="Not linked to a Trackyread book">○ not in Trackyread</span>}
                       </div>
                       <div className="rh-book-sub">
                         {Math.round(b.posFrac * 100)}% · {fmtInt(b.wordsRead)} words · {fmtDur(b.activeSecs)} · {b.avgWpm} WPM
@@ -396,6 +407,11 @@ export function HistoryView() {
             <div className="rh-detail">
               <button className="rh-back" onClick={() => setSelected(null)}>← Library</button>
               <h3 className="rh-detail-title">{selBook.name}</h3>
+              <p className="rh-detail-link">
+                {linkMap[selBook.checksum]
+                  ? <span className="rh-link-chip on" title="This file is linked to a book in your Trackyread tracker">🔗 Linked to Trackyread: <b>{linkMap[selBook.checksum].title}</b></span>
+                  : <span className="rh-link-chip" title="Link this file from the Trackyread Library (open a book → Linked document)">○ Not linked to Trackyread</span>}
+              </p>
 
               <div className="rh-shelf-pick">
                 {SHELVES.map((s) => (
