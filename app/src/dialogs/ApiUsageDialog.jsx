@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { fmtDateTime } from '../features/dateFmt.js';
 import { getApiUsage, clearApiUsage } from '../state/storage.js';
 import { summarizeUsage, fmtUsd, fmtTokens } from '../features/apiPricing.js';
 
@@ -7,7 +8,7 @@ const SOURCE_LABEL = {
   'notes-summary': 'Notes — summary', 'notes-analysis': 'Notes — analysis', 'notes-chat': 'Notes — chat',
   'trackyread-ai': 'Trackyread AI', audiobook: 'Audiobook (ElevenLabs)', ai: 'AI',
 };
-const fmtWhen = (ts) => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const fmtWhen = (ts) => fmtDateTime(ts);
 
 // A dashboard reviewing what the optional AI features have spent through your own API keys — Anthropic
 // tokens and ElevenLabs characters — with rough cost estimates, a per-day trend, and a per-call log.

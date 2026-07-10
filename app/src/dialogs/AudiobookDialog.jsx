@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { fmtDateTime } from '../features/dateFmt.js';
 import { useApp } from '../state/AppContext.jsx';
 import {
   getAudiobookManifest, getAudioClip, getAudioClipById, entryClips,
@@ -21,7 +22,7 @@ const estMs = (blob) => (/mpe?g|mp3/i.test(blob.type)
   : Math.max(200, Math.round(((blob.size - 44) / (22050 * 2)) * 1000)));
 const fmtBytes = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 const fmtDur = (ms) => `${(Math.round((ms || 0) / 100) / 10).toFixed(1)}s`;
-const fmtWhen = (ts) => (ts ? new Date(ts).toLocaleString() : '—');
+const fmtWhen = (ts) => (ts ? fmtDateTime(ts) : '—');
 
 // A tiny oscilloscope of one clip's waveform (decodes the WAV blob → downsamples → draws).
 function ClipWave({ checksum, line, clipId }) {

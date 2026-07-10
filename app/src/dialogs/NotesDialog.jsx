@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { fmtDateTime } from '../features/dateFmt.js';
 import { useApp } from '../state/AppContext.jsx';
 import { getNotes, saveNote, deleteNote } from '../state/storage.js';
 import { askClaude, anthropicConfigured, ANTHROPIC_MODELS } from '../features/anthropic.js';
 
 const MAX_CONTEXT = 14000; // chars of document text sent to the AI (keeps token use in check)
-const when = (ts) => (ts ? new Date(ts).toLocaleString() : '');
+const when = (ts) => (ts ? fmtDateTime(ts) : '');
 
 // Notes & annotation suite for a document: free-form and position-anchored notes (synced by content
 // checksum across devices), plus optional AI (Anthropic) to summarize/analyze the text and discuss

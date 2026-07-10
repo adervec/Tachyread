@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { fmtDateTime } from '../features/dateFmt.js';
 import { useApp } from '../state/AppContext.jsx';
 import {
   exportAllData, exportSummary, importAllData,
@@ -191,7 +192,7 @@ export default function DataDialog({ onClose }) {
           <div className="data-row">
             <button className="toggle-on" onClick={cloudBackup} disabled={busy || !providerOk} title={providerOk ? '' : 'Set up a sync target on the Cloud sync tab'}>☁ Back up now</button>
             <button onClick={() => { setTab('backup'); doExport(); }} disabled={busy}>⬇ Export to file</button>
-            {sync.lastSync > 0 && <span className="settings-note" style={{ margin: 0 }}>Last cloud sync: {new Date(sync.lastSync).toLocaleString()}</span>}
+            {sync.lastSync > 0 && <span className="settings-note" style={{ margin: 0 }}>Last cloud sync: {fmtDateTime(sync.lastSync)}</span>}
           </div>
         </>
       )}
@@ -297,7 +298,7 @@ export default function DataDialog({ onClose }) {
             <button onClick={cloudRestore} disabled={busy || !providerOk}>⬇ Restore from sync</button>
             {!providerOk && providerReason && providerReason.reason && <span className="settings-note" style={{ margin: 0 }}>{providerReason.reason}</span>}
             {!providerOk && provider && !provider.supported() && <span className="settings-note" style={{ margin: 0 }}>Needs a Chromium browser.</span>}
-            {sync.lastSync > 0 && <span className="settings-note" style={{ margin: 0 }}>Last sync: {new Date(sync.lastSync).toLocaleString()}</span>}
+            {sync.lastSync > 0 && <span className="settings-note" style={{ margin: 0 }}>Last sync: {fmtDateTime(sync.lastSync)}</span>}
           </div>
           <div className="data-row">
             <label className="inline-check">
@@ -365,7 +366,7 @@ export default function DataDialog({ onClose }) {
           <div className="app-log">
             {(logEntries || []).map((e, i) => (
               <div key={i} className="app-log-row">
-                <span className="app-log-ts">{new Date(e.ts).toLocaleString()}</span>
+                <span className="app-log-ts">{fmtDateTime(e.ts, true)}</span>
                 <span className={`app-log-tag tag-${e.tag}`}>{e.tag}</span>
                 <span className="app-log-msg">{e.message}</span>
               </div>
