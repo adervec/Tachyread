@@ -604,6 +604,7 @@ export async function setBinding(checksum, bookId) {
   if (bookId) rec.map[checksum] = bookId; else delete rec.map[checksum];
   rec.updatedAt = Date.now();
   await db.put('library', rec, 'binding');
+  try { window.dispatchEvent(new Event('tachyread-bindings-changed')); } catch { /* non-DOM */ }
   return rec.map;
 }
 
@@ -696,6 +697,7 @@ export async function importLibraryData(bundle, opts = {}) {
     await store.put({ map: { ...existing.map, ...bundle.binding }, updatedAt: Date.now() }, 'binding');
   }
   await tx.done;
+  try { window.dispatchEvent(new Event('tachyread-bindings-changed')); } catch { /* non-DOM */ }
   return { added, merged, total: bundle.books.length };
 }
 
