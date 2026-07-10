@@ -97,6 +97,56 @@ export function recommenderBreakdown(books) {
   }).sort((a, b) => b.total - a.total);
 }
 
+// Yearly reading-goal progress. `target` books for the year containing `now`; returns the finished
+// count so far, where the year-fraction says you "should" be, and a projection at the current rate.
+export function yearGoal(books, target, now = Date.now()) {
+  const d = new Date(now);
+  const year = d.getUTCFullYear();
+  const y0 = Date.UTC(year, 0, 1), y1 = Date.UTC(year + 1, 0, 1);
+  const yearFrac = Math.min(1, Math.max(0, (now - y0) / (y1 - y0)));
+  const finished = books.filter((b) => { const t = finishMs(b); return readStatus(b) === 'finished' && t != null && t >= y0 && t < now + 1; }).length;
+  const expected = target > 0 ? target * yearFrac : 0;
+  const projected = yearFrac > 0.02 ? Math.round(finished / yearFrac) : null; // too early in Jan → no projection
+  const daysLeft = Math.max(0, Math.round((y1 - now) / 86400000));
+  const remaining = Math.max(0, (target || 0) - finished);
+  return {
+    year, finished, target: target || 0, yearFrac,
+    onTrack: target > 0 ? finished >= Math.floor(expected) : null,
+    projected, daysLeft, remaining,
+    // books/month needed from here to land the goal (null when done or no goal)
+    needPerMonth: target > 0 && remaining > 0 && daysLeft > 0 ? round1(remaining / (daysLeft / 30.44)) : null,
+  };
+}
+
+// Per-series progress: which series you're in, how far through, and the next unread volume (by
+// seriesNum, else import order). Sorted: in-progress series first (some but not all finished),
+// then most-recently finished. Single-book "series" are dropped — they're just a labelled novel.
+export function seriesProgress(books) {
+  const by = new Map();
+  for (const b of books || []) {
+    const s = String(b.series || '').trim();
+    if (!s) continue;
+    if (!by.has(s)) by.set(s, []);
+    by.get(s).push(b);
+  }
+  const out = [];
+  for (const [series, arr] of by) {
+    if (arr.length < 2) continue;
+    const sorted = [...arr].sort((a, b) => (Number(a.seriesNum) || 999) - (Number(b.seriesNum) || 999));
+    const finished = sorted.filter((b) => readStatus(b) === 'finished');
+    const reading = sorted.filter((b) => readStatus(b) === 'reading');
+    const next = sorted.find((b) => ['toread', 'queue'].includes(readStatus(b))) || null;
+    const lastFinish = Math.max(0, ...finished.map((b) => finishMs(b) || 0));
+    out.push({
+      series, author: sorted[0].author || '', books: sorted,
+      total: sorted.length, finished: finished.length, reading: reading.length,
+      next, lastFinish, done: finished.length === sorted.length,
+      active: finished.length > 0 && finished.length < sorted.length,
+    });
+  }
+  return out.sort((a, b) => (b.active - a.active) || (b.lastFinish - a.lastFinish) || (b.finished - a.finished));
+}
+
 // Rough time-to-read. Prefer word count; fall back to pages (~275 words/page). null when unknown.
 export function estHours(book, wpm = 250) {
   const words = Number(book.words) || (Number(book.pages) ? Number(book.pages) * 275 : 0);

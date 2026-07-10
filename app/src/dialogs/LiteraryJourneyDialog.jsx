@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import {
-  getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef,
+  getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef, saveLibraryRef,
   getJourneyAi, saveJourneyAi, exportLibraryData, importLibraryData, librarySize, clearLibrary,
   getBinding, setBinding, allDocMeta, allFiles, getFsHandle, setFsHandle,
 } from '../state/storage.js';
@@ -17,6 +17,7 @@ import {
 } from '../features/journeyLibrary.js';
 import {
   cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, queueWithEstimates, estHours,
+  yearGoal, seriesProgress,
 } from '../features/journeyAnalytics.js';
 import { findDuplicates, finishedDateIssues } from '../features/journeyCleanup.js';
 import { normTitle } from '../document/tocWizard.js';
@@ -48,12 +49,62 @@ function Stat({ v, l, sub }) {
   return <div className="rh-stat"><b className="rh-stat-v">{v}</b><span className="rh-stat-l">{l}</span>{sub && <em className="rh-stat-sub">{sub}</em>}</div>;
 }
 
+// Yearly reading-goal card: progress bar with a "today" pace marker, on-track/behind badge, and an
+// inline target editor. The goal map is a synced tracker ref, so it follows the library across devices.
+function GoalCard({ books, goals, onSetGoal }) {
+  const now = useMemo(() => Date.now(), []); // eslint-disable-line react-hooks/purity
+  const year = new Date(now).getUTCFullYear();
+  const target = Number(goals?.[year]) || 0;
+  const g = useMemo(() => yearGoal(books, target, now), [books, target, now]);
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState('');
+  const pct = g.target ? Math.min(100, (g.finished / g.target) * 100) : 0;
+  return (
+    <div className="lj-goal">
+      {g.target > 0 ? (
+        <>
+          <div className="lj-goal-head">
+            <b>{g.year} goal</b>
+            <span>{g.finished} of {g.target} books</span>
+            <span className={`lj-goal-badge ${g.finished >= g.target ? 'won' : g.onTrack ? 'on' : 'off'}`}>
+              {g.finished >= g.target ? '🏆 goal hit!' : g.onTrack ? '✓ on track' : '⚠ behind pace'}
+            </span>
+            <span className="lj-spacer" />
+            <button className="link-btn" onClick={() => { setVal(String(g.target)); setEditing(true); }}>edit</button>
+          </div>
+          <div className="lj-goal-bar" title={`${g.finished}/${g.target} · the tick marks where today sits in the year`}>
+            <i style={{ width: `${pct}%` }} />
+            <em style={{ left: `${g.yearFrac * 100}%` }} />
+          </div>
+          <p className="settings-note lj-goal-note">
+            {g.finished >= g.target
+              ? `Done with ${g.daysLeft} days to spare — raise the bar?`
+              : `${g.remaining} to go · need ~${g.needPerMonth ?? '—'}/month · current pace projects ${g.projected ?? '—'} by year-end`}
+          </p>
+        </>
+      ) : (
+        <button onClick={() => { setVal('12'); setEditing(true); }}>🎯 Set a {year} reading goal…</button>
+      )}
+      {editing && (
+        <div className="lj-inline">
+          <label className="settings-note" style={{ margin: 0 }}>Books in {year}:</label>
+          <input className="lj-goal-num" type="number" min="1" max="1000" value={val} onChange={(e) => setVal(e.target.value)} />
+          <button className="toggle-on" onClick={() => { onSetGoal(year, Math.max(0, Math.round(Number(val) || 0))); setEditing(false); }}>Set goal</button>
+          {g.target > 0 && <button onClick={() => { onSetGoal(year, 0); setEditing(false); }}>Remove</button>}
+          <button onClick={() => setEditing(false)}>Cancel</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onClose }) {
   const [books, setBooks] = useState(null);
   const [refs, setRefs] = useState({ authors: null, genres: null, subgenres: null });
   const [ai, setAi] = useState(null);
   const [size, setSize] = useState(null);
   const [bindMap, setBindMap] = useState(null);
+  const [goals, setGoals] = useState(null); // { [year]: target } — the yearly reading goals
   const [docMeta, setDocMeta] = useState([]);
   const [fileStats, setFileStats] = useState({}); // checksum → { firstRead, activeSecs, words, coverage } for auto-fill
   const [tab, setTab] = useState(initialTab || 'dashboard');
@@ -79,11 +130,12 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
   const [cleanMsg, setCleanMsg] = useState('');
 
   async function reload() {
-    const [bs, a, g, sg, aiRec, sz, bind, docs, files] = await Promise.all([
-      getLibraryBooks(), getLibraryRef('authors'), getLibraryRef('genres'), getLibraryRef('subgenres'),
+    const [bs, a, g, sg, goalsRec, aiRec, sz, bind, docs, files] = await Promise.all([
+      getLibraryBooks(), getLibraryRef('authors'), getLibraryRef('genres'), getLibraryRef('subgenres'), getLibraryRef('goals'),
       getJourneyAi(), librarySize(), getBinding(), allDocMeta(), allFiles().catch(() => []),
     ]);
     setBooks(bs); setRefs({ authors: a, genres: g, subgenres: sg }); setAi(aiRec); setSize(sz);
+    setGoals(goalsRec || {});
     setBindMap(bind); setDocMeta(docs);
     // Per-document reading facts so a bound book can auto-fill its start date + reading time.
     const stats = {};
@@ -194,6 +246,12 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
   }
 
   async function saveBook(patch) { await saveLibraryBook(patch); await reload(); }
+  async function setGoalTarget(year, target) {
+    const next = { ...(goals || {}) };
+    if (target > 0) next[year] = target; else delete next[year];
+    await saveLibraryRef('goals', next);
+    setGoals(next);
+  }
   // One-tap reshelving (queue / start reading / abandon / finish / back to to-read) from any list row.
   async function shelve(book, status) { await saveLibraryBook(setReadStatus(book, status, todayISO())); await reload(); }
   async function removeBook(id) {
@@ -255,6 +313,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'library', label: `Library${books ? ` (${books.length})` : ''}` },
     { id: 'queue', label: `Queue${queueCount ? ` (${queueCount})` : ''}` },
+    { id: 'series', label: 'Series' },
     { id: 'timeline', label: 'Timeline' },
     { id: 'rhistory', label: 'Reading History' },
     { id: 'analytics', label: 'Analytics' },
@@ -280,6 +339,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
 
           {tab === 'dashboard' && stats && (
             <div className="lj-dash">
+              <GoalCard books={books} goals={goals} onSetGoal={setGoalTarget} />
               <div className="rh-stat-grid">
                 <Stat v={stats.total} l="books" />
                 <Stat v={stats.finished} l="finished" sub={`${stats.reading} reading${stats.abandoned ? ` · ${stats.abandoned} abandoned` : ''}`} />
@@ -376,6 +436,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
           )}
 
           {tab === 'queue' && <QueueView books={books} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
+          {tab === 'series' && <SeriesView books={books} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
           {tab === 'timeline' && <TimelineView books={books} />}
           {tab === 'rhistory' && <HistoryView />}
           {tab === 'analytics' && <AnalyticsView books={books} />}
@@ -886,6 +947,11 @@ function QueueView({ books, onShelve, onOpen }) {
         {queue.wordsPerDay
           ? <span className="settings-note" title="From your recently finished books (paper entries included)"> · finish dates assume ~{queue.wordsPerDay.toLocaleString()} words/day</span>
           : <span className="settings-note"> · finish dates need a few recent finishes to estimate your pace</span>}
+        <span className="lj-spacer" />
+        <button title="Open a random pick — from the queue, or the to-read pile when the queue is empty" onClick={() => {
+          const pool = queue.items.length ? queue.items.map((i) => i.book) : recs;
+          if (pool.length) onOpen(pool[Math.floor(Math.random() * pool.length)].id);
+        }}>🎲 Surprise me</button>
       </div>
       {queue.count === 0 ? <p className="settings-note">Nothing queued yet. Pull books from your recommendations below, or tap 📋 on any Library row.</p> : (
         <ol className="lj-queue-list">
@@ -923,6 +989,51 @@ function QueueView({ books, onShelve, onOpen }) {
         ))}
         {recs.length === 0 && <p className="settings-note">No matching to-read books.</p>}
       </div>
+    </div>
+  );
+}
+
+// ── Series view ──────────────────────────────────────────────────────────────────────────────────
+// Every multi-book series: volume chips coloured by read status, progress count, and the next unread
+// volume with a one-tap queue. Active series (started, unfinished) sort first.
+function SeriesView({ books, onShelve, onOpen }) {
+  const series = useMemo(() => seriesProgress(books), [books]);
+  if (!series.length) return <p className="settings-note">No multi-book series in your tracker yet — set the <b>Series</b> field (and #) on books to group them here.</p>;
+  const active = series.filter((s) => s.active).length;
+  const done = series.filter((s) => s.done).length;
+  return (
+    <div className="lj-series">
+      <p className="settings-note">{series.length} series · {active} in progress · {done} completed. Click a volume to open it.</p>
+      {series.map((s) => (
+        <div key={s.series} className={`lj-series-row${s.done ? ' done' : ''}`}>
+          <div className="lj-series-head">
+            <b>{s.series}</b><em>{s.author}</em>
+            <span className="lj-spacer" />
+            <span className="lj-series-count">{s.finished}/{s.total}{s.done ? ' ✅' : ''}</span>
+          </div>
+          <div className="lj-series-vols">
+            {s.books.map((b) => {
+              const st = readStatus(b);
+              return (
+                <button key={b.id} className={`lj-vol lj-vol-${st}`}
+                  title={`${b.seriesNum ? `#${b.seriesNum} · ` : ''}${b.title} — ${STATUS_LABEL[st]}`}
+                  onClick={() => onOpen(b.id)}>
+                  {b.seriesNum || '·'}
+                </button>
+              );
+            })}
+            <span className="lj-series-bar"><i style={{ width: `${(s.finished / s.total) * 100}%` }} /></span>
+          </div>
+          {s.next && !s.done && (
+            <div className="lj-series-next">
+              <span className="settings-note" style={{ margin: 0 }}>Next up:</span> <b>{s.next.title}</b>
+              {readStatus(s.next) === 'queue'
+                ? <span className="settings-note" style={{ margin: 0 }}>· on deck 📋</span>
+                : <button onClick={() => onShelve(s.next, 'queue')}>📋 Queue it</button>}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
