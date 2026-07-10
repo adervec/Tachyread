@@ -28,4 +28,15 @@ d.note('scroll', T); d.note('scroll', T + 50); d.note('nonsense', T + 60);
 assert.equal(d.current({ now: T + 100 }), 'scroll', 'unknown kinds fold into jump, not crash');
 
 for (const k of Object.keys(MODES)) assert(MODES[k].icon && MODES[k].label && MODES[k].hint, `${k}: display entry complete`);
+
+// idleAt: newest non-auto event + window; auto ticks and drained windows → null
+d = createModeDetector();
+assert.equal(d.idleAt(T), null, 'no events → no countdown');
+d.note('line', T);
+assert.equal(d.idleAt(T + 1000), T + 10000, 'counts down from the newest event');
+d.note('word', T + 4000);
+assert.equal(d.idleAt(T + 5000), T + 14000, 'a new event restarts the countdown');
+d.note('auto', T + 6000);
+assert.equal(d.idleAt(T + 7000), T + 14000, 'auto ticks don\'t extend it');
+assert.equal(d.idleAt(T + 30000), null, 'drained window → null');
 console.log('ok');

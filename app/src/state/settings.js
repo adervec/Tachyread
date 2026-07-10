@@ -52,6 +52,8 @@ export function defaultFileSettings() {
     lineBreakPauseMs: 0,
     contentChecksum: '',
     highlightORP: false,
+    orpColor: '', // ORP letter colour in the Lines pane ('' = theme default, usually red)
+    statsChip: {}, // stats-chip block toggles (see STATS_CHIP_ITEMS; {} = the default layout)
     orpHorizontalPercent: 0.5,
     rsvpFocus: 'none', // eye-focuser at the ORP: none | fisheye | pulse | converge
     wpmWave: false, // let the pace breathe: sinusoidally fluctuate WPM around the setpoint

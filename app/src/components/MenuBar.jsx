@@ -58,6 +58,7 @@ const MENUS = {
     { label: 'Attention Check...', action: 'attention' },
     { label: 'Reading History...', shortcut: 'Ctrl+H', action: 'history' },
     { label: 'Trackyread (Reading Tracker)...', action: 'literary-journey' },
+    { label: 'This Book in Trackyread...', action: 'trackyread-book' },
     { label: 'API Usage & Spend...', action: 'api-usage' },
   ],
   // Document-resource generators.

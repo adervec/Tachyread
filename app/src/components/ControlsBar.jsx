@@ -16,7 +16,7 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, onJumpToFrontier, moreOpen = false }) {
+export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', modeIdleFrac = null, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, onJumpToFrontier, onJumpToGap, moreOpen = false }) {
   const { patchSettings, state, updateGlobal } = useApp();
   const isCompact = useIsCompact();
   // On phones the full playback row (10 nav buttons + speed unit + 4 mode toggles + goal) wraps into a
@@ -87,13 +87,15 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
         </div>
         <button className="jump-current-btn" title="Jump to the current word — scroll the Lines pane back to where you're reading" aria-label="Jump to current word" onClick={onJumpToCurrent}>⌖</button>
         {onJumpToFrontier && <button className="jump-current-btn" title="Jump to the latest unread word — the first word after everything you've ever read" aria-label="Jump to latest unread" onClick={onJumpToFrontier}>⇥</button>}
+        {onJumpToGap && <button className="jump-current-btn" title="Jump to the first unread word (skipped sections excluded). Click again from there to hop to the next read/unread boundary — backfill the patchy sections." aria-label="Jump to first unread gap" onClick={onJumpToGap}>↷</button>}
         <div className="progress-meta" title={skipRanges.length ? 'Percent of the countable book read (flagged front/back matter excluded)' : 'Percent of the book actually read'}>📖 {coverage.toFixed(1)}%{skipRanges.length ? '*' : ''}</div>
         <div className="progress-meta" title="Estimated time remaining at your measured pace">⏱ {formatTime(secs)}</div>
         <div
           className={`progress-meta reading-mode${readingMode === 'idle' ? ' rm-idle' : ''}`}
-          title={`How the app thinks you're reading right now — ${MODES[readingMode]?.hint || ''}`}
+          title={`How the app thinks you're reading right now — ${MODES[readingMode]?.hint || ''}${modeIdleFrac != null ? ' (the underline drains as this decays to idle)' : ''}`}
         >
           {MODES[readingMode]?.icon} {MODES[readingMode]?.label}
+          {modeIdleFrac != null && <i className="rm-underline" style={{ width: `${modeIdleFrac * 100}%` }} />}
         </div>
         {atEnd && (
           <button

@@ -503,10 +503,31 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     return Math.sqrt(variance) / mean;
   }
 
+  // Start of the first unread run (skipped ranges excluded — their words are invisible to the scan).
+  // If `fromIdx` already sits on a boundary, returns the NEXT one (wrapping), so repeated clicks
+  // cycle through every read/unread boundary — the backfill tour of patchy sections.
+  // ponytail: O(words × ranges) scan per click; interval-walk it if books get huge.
+  function nextUnreadBoundary(fromIdx, ranges = []) {
+    const inSkip = (i) => ranges.some((r) => i >= r.start && i < Math.max(r.start, r.end));
+    const starts = [];
+    let prevRead = true; // doc start counts as a boundary when word 0 is unread
+    for (let i = 0; i < wordCount; i++) {
+      if (inSkip(i)) continue; // skipped words neither open nor close a run
+      const unread = !mask[i];
+      if (unread && prevRead) starts.push(i);
+      prevRead = !unread;
+    }
+    if (!starts.length) return -1;
+    const atIdx = starts.findIndex((s) => Math.abs(s - fromIdx) <= 1);
+    if (atIdx === -1) return starts[0];
+    return starts[(atIdx + 1) % starts.length];
+  }
+
   return {
     recordMove,
     noteScrollAdvance,
     setHidden,
+    nextUnreadBoundary,
     markPrefixRead,
     markRangeRead,
     markRangeReadAtPace,

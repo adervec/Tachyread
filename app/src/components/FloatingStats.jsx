@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import ReadingStats from './ReadingStats.jsx';
+import ReadingStats, { statsChipShow } from './ReadingStats.jsx';
 import { getSpark, sparkBuckets, sparkPoints, SPARK_MAX_WPM } from '../features/wpmSpark.js';
 
 // Normalized WPM sparkline for the stats chip: 15s-averaged WPM over the trailing 8 minutes on a
@@ -72,7 +72,7 @@ export default function FloatingStats({ tab, pos, onMove, onDrop }) {
         <>
           <button className="chip-mini-btn" title="Minimize" onClick={() => setMin(true)}>–</button>
           <ReadingStats tab={tab} />
-          <WpmSparkline tabId={tab.id} />
+          {statsChipShow(settings).spark && <WpmSparkline tabId={tab.id} />}
         </>
       )}
     </div>

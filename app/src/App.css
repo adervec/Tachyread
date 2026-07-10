@@ -1017,8 +1017,10 @@
 }
 
 /* Reading-mode chip (controls bar): how the app currently classifies your reading */
-.reading-mode { white-space: nowrap; }
+.reading-mode { white-space: nowrap; position: relative; }
 .reading-mode.rm-idle { opacity: 0.45; }
+/* Time-until-idle countdown: drains leftward as the stepping-mode window empties. */
+.reading-mode .rm-underline { position: absolute; left: 0; bottom: -1px; height: 2px; background: var(--toggle-active-bg); border-radius: 1px; transition: width 1s linear; }
 
 /* Eye warmup */
 .eye-warmup { display: flex; flex-direction: column; gap: 10px; }
@@ -1480,7 +1482,7 @@
 .line-row .word.current.style-Box { outline: 1.5px solid var(--cw-color, var(--orp-fg)); border-radius: 3px; padding: 0 2px; }
 .line-row .word.current.style-Glow { text-shadow: 0 0 6px var(--cw-color, var(--orp-fg)), 0 0 10px var(--cw-color, var(--orp-fg)); }
 .line-row .word.hidden-word { visibility: hidden; }
-.line-row .orp-char { color: var(--orp-fg); font-weight: bold; }
+.line-row .orp-char { color: var(--lines-orp, var(--orp-fg)); font-weight: bold; }
 .line-row .bionic-bold { font-weight: 700; }
 .line-row .proper-name { font-style: italic; }
 
@@ -3335,6 +3337,13 @@
 .lj-goal-bar em { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--menu-fg); opacity: 0.7; }
 .lj-goal-note { margin: 0; }
 .lj-goal-num { width: 70px; }
+
+/* Stats-chip content picker (Tab Settings) */
+.stats-chip-picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 2px 12px; }
+.stats-chip-picks .inline-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+
+/* Link-a-document banner (via Stats → This Book in Trackyread) */
+.lj-linkbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; border: 1px solid var(--toggle-active-bg); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; background: color-mix(in srgb, var(--toggle-active-bg) 7%, transparent); }
 
 /* Year in Books wrap-up (Analytics) */
 .lj-wrap { border: 1px solid var(--divider); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
