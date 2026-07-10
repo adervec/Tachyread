@@ -18,6 +18,7 @@ import {
 import {
   cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, queueWithEstimates, estHours,
 } from '../features/journeyAnalytics.js';
+import { findDuplicates, finishedDateIssues } from '../features/journeyCleanup.js';
 import { normTitle } from '../document/tocWizard.js';
 import { groupForChecksum } from '../features/bookGroups.js';
 import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordCount } from '../features/readingTime.js';
@@ -74,6 +75,8 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
   const [limit, setLimit] = useState(60);
   const [selected, setSelected] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [cleanup, setCleanup] = useState(null); // scan preview: { dups, datable, undatable, contradictory }
+  const [cleanMsg, setCleanMsg] = useState('');
 
   async function reload() {
     const [bs, a, g, sg, aiRec, sz, bind, docs, files] = await Promise.all([
@@ -90,6 +93,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
       const daily = (f.dailyHistory || []).filter((d) => (d.wordsRead || 0) > 0 || (d.activeTimeSecs || 0) > 0).sort((x, y) => (x.date < y.date ? -1 : 1));
       stats[cs] = {
         firstRead: daily[0]?.date || null,
+        lastRead: daily.length ? daily[daily.length - 1].date : null,
         activeSecs: f.persistentActiveTimeSecs || 0,
         words: f.totalWords || 0,
         coverage: f.totalWords ? Math.min(1, (f.persistentWordsRead || 0) / f.totalWords) : 0,
@@ -199,6 +203,50 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
   async function wipe() {
     if (!window.confirm('Delete the ENTIRE reading tracker from this device? Export first if you want a copy.')) return;
     await clearLibrary(); await reload();
+  }
+
+  // ── Reconcile / cleanup ──────────────────────────────────────────────────────────────────────
+  // Source a finish date for an undated-but-finished book from its LINKED document's last-read day.
+  function bookIdToCheckum() {
+    const m = {};
+    for (const [cs, id] of Object.entries(bindMap || {})) m[id] = cs;
+    return m;
+  }
+  function scanCleanup() {
+    const csForBook = bookIdToCheckum();
+    const dateFor = (b) => fileStats[csForBook[b.id]]?.lastRead || null;
+    const { datable, undatable, contradictory } = finishedDateIssues(books, dateFor);
+    const dups = findDuplicates(books);
+    setCleanup({ dups, datable, undatable, contradictory });
+    const nothing = !dups.length && !datable.length && !undatable.length && !contradictory.length;
+    setCleanMsg(nothing ? 'No issues found — the tracker looks consistent. ✅' : '');
+  }
+  // Safe pass: stamp sourced finish dates, clear contradictory in-progress flags, merge duplicates
+  // (repointing any document links from the dropped copy to the keeper). Never un-finishes a book.
+  async function applySafeCleanup() {
+    if (!cleanup) return;
+    let n = 0;
+    for (const it of cleanup.datable) { await saveLibraryBook(it.fix); n++; }
+    for (const it of cleanup.contradictory) { await saveLibraryBook(it.fix); n++; }
+    for (const g of cleanup.dups) {
+      await saveLibraryBook(g.merged);
+      for (const dropId of g.dropIds) {
+        for (const [cs, id] of Object.entries(bindMap || {})) if (id === dropId) await setBinding(cs, g.keepId);
+        await deleteLibraryBook(dropId);
+      }
+      n++;
+    }
+    setCleanMsg(`Applied ${n} fix${n === 1 ? '' : 'es'}${cleanup.undatable.length ? ` · ${cleanup.undatable.length} undated finish(es) left as-is` : ''}.`);
+    setCleanup(null); await reload();
+  }
+  // Opt-in destructive pass: the finished books no date could be found for are un-finished (→ To read),
+  // for when they were mis-flagged. Kept separate so a real off-app read is never silently cleared.
+  async function clearUndatedFinishes() {
+    if (!cleanup?.undatable.length) return;
+    if (!window.confirm(`Un-finish ${cleanup.undatable.length} book(s) that have no finish date and no reading history to date them from? They move to “To read”. (Export first if unsure.)`)) return;
+    for (const it of cleanup.undatable) await saveLibraryBook(it.fix);
+    setCleanMsg(`Un-finished ${cleanup.undatable.length} undated book(s).`);
+    setCleanup(null); await reload();
   }
 
   const empty = books && books.length === 0;
@@ -362,6 +410,43 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
                 {sync.lastLibrarySync ? <span className="settings-note">Last: {new Date(sync.lastLibrarySync).toLocaleString()}</span> : null}
               </div>
               {syncMsg && <p className="settings-note">{syncMsg}</p>}
+
+              <div className="rh-section-h">Reconcile &amp; clean up</div>
+              <p className="settings-note">Find finished books missing a date and duplicate records, then fix them in one pass. Nothing changes until you apply.</p>
+              <div className="lj-inline">
+                <button onClick={scanCleanup}>Scan for issues</button>
+                {cleanMsg && <span className="settings-note">{cleanMsg}</span>}
+              </div>
+              {cleanup && (
+                <div className="lj-cleanup">
+                  {cleanup.datable.length > 0 && (
+                    <details open><summary><b>{cleanup.datable.length}</b> finished, dated from reading history</summary>
+                      <ul className="lj-clean-list">{cleanup.datable.map((it) => <li key={it.id}>{it.title} → <em>{it.date}</em></li>)}</ul>
+                    </details>
+                  )}
+                  {cleanup.contradictory.length > 0 && (
+                    <details><summary><b>{cleanup.contradictory.length}</b> marked both finished &amp; reading — clear “reading”</summary>
+                      <ul className="lj-clean-list">{cleanup.contradictory.map((it) => <li key={it.id}>{it.title}</li>)}</ul>
+                    </details>
+                  )}
+                  {cleanup.dups.length > 0 && (
+                    <details open><summary><b>{cleanup.dups.length}</b> duplicate group(s) — merge into one record</summary>
+                      <ul className="lj-clean-list">{cleanup.dups.map((g) => <li key={g.keepId}>{g.titles.join(' + ')} <em>({g.dropIds.length} folded in)</em></li>)}</ul>
+                    </details>
+                  )}
+                  {cleanup.undatable.length > 0 && (
+                    <details><summary><b>{cleanup.undatable.length}</b> finished with no date and no reading history</summary>
+                      <p className="settings-note">These may be books you read elsewhere (keep them) or mis-flagged. Left untouched by the safe pass.</p>
+                      <ul className="lj-clean-list">{cleanup.undatable.map((it) => <li key={it.id}>{it.title}{it.author ? ` — ${it.author}` : ''}</li>)}</ul>
+                    </details>
+                  )}
+                  <div className="lj-inline">
+                    <button className="toggle-on" disabled={!cleanup.datable.length && !cleanup.contradictory.length && !cleanup.dups.length} onClick={applySafeCleanup}>Apply safe fixes</button>
+                    {cleanup.undatable.length > 0 && <button className="lj-danger" onClick={clearUndatedFinishes}>Un-finish the {cleanup.undatable.length} undated…</button>}
+                    <button onClick={() => { setCleanup(null); setCleanMsg(''); }}>Dismiss</button>
+                  </div>
+                </div>
+              )}
 
               <div className="rh-section-h">Storage</div>
               <p className="settings-note">{size ? `${size.books.toLocaleString()} books · ~${(size.bytes / 1024 / 1024).toFixed(2)} MB on this device.` : ''} The tracker is excluded from the local full backup — it moves via these exports and (once set up) its own cloud file.</p>

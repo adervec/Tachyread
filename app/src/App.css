@@ -3349,6 +3349,18 @@
 .lj-ab-pct input { width: 64px; }
 .lj-editor-buttons { display: flex; gap: 6px; margin-top: 10px; }
 .lj-danger { color: #f85149; border-color: #f85149 !important; }
+
+/* Reconcile / cleanup preview */
+.lj-cleanup { border: 1px solid var(--divider); border-radius: 6px; padding: 10px 12px; margin: 6px 0; }
+.lj-cleanup details { margin: 4px 0; }
+.lj-cleanup summary { cursor: pointer; font-size: 13px; padding: 2px 0; }
+.lj-clean-list { margin: 4px 0 8px; padding-left: 18px; font-size: 12px; color: var(--status-fg); max-height: 180px; overflow: auto; }
+.lj-clean-list li { margin: 2px 0; }
+
+/* Trackyread link chip in the reading-history view */
+.rh-link-chip { font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 10px; white-space: nowrap; opacity: 0.6; border: 1px solid var(--divider); }
+.rh-link-chip.on { opacity: 1; color: var(--toggle-active-bg); border-color: var(--toggle-active-bg); }
+.rh-detail-link { margin: -4px 0 10px; }
 .lj-bind { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--divider); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .lj-bind label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--status-fg); }
 
