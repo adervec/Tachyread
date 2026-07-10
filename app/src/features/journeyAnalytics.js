@@ -147,6 +147,35 @@ export function seriesProgress(books) {
   return out.sort((a, b) => (b.active - a.active) || (b.lastFinish - a.lastFinish) || (b.finished - a.finished));
 }
 
+// "Year in Books" wrap-up: superlatives + totals for one year's dated finishes. null when empty.
+export function yearInBooks(books, year) {
+  const done = books.filter((b) => readStatus(b) === 'finished' && yearOf(b) === year);
+  if (!done.length) return null;
+  const genres = {};
+  const authors = {};
+  for (const b of done) {
+    if (b.genre) genres[b.genre] = (genres[b.genre] || 0) + 1;
+    if (b.author) authors[b.author] = (authors[b.author] || 0) + 1;
+  }
+  const top = (m) => Object.entries(m).sort((a, b) => b[1] - a[1])[0] || null;
+  const withPages = done.filter((b) => Number(b.pages) > 0);
+  const rated = done.filter((b) => bookRating(b) > 0);
+  const hard = done.filter((b) => Number(b.difficultyLevel) >= 1);
+  return {
+    year, books: done.length,
+    pages: done.reduce((s, b) => s + (Number(b.pages) || 0), 0),
+    words: done.reduce((s, b) => s + (Number(b.words) || 0), 0),
+    fiction: done.filter((b) => b.fnf === 'F').length,
+    nonfiction: done.filter((b) => b.fnf === 'NF').length,
+    topGenre: top(genres), topAuthor: top(authors),
+    longest: withPages.sort((a, b) => Number(b.pages) - Number(a.pages))[0] || null,
+    hardest: hard.sort((a, b) => Number(b.difficultyLevel) - Number(a.difficultyLevel))[0] || null,
+    favorite: rated.sort((a, b) => bookRating(b) - bookRating(a))[0] || null,
+    avgRating: rated.length ? round1(rated.reduce((s, b) => s + bookRating(b), 0) / rated.length) : null,
+    avgDifficulty: hard.length ? round1(hard.reduce((s, b) => s + Number(b.difficultyLevel), 0) / hard.length) : null,
+  };
+}
+
 // Rough time-to-read. Prefer word count; fall back to pages (~275 words/page). null when unknown.
 export function estHours(book, wpm = 250) {
   const words = Number(book.words) || (Number(book.pages) ? Number(book.pages) * 275 : 0);
