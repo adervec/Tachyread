@@ -611,6 +611,30 @@ export async function setBinding(checksum, bookId) {
   return rec.map;
 }
 
+// Anthology/collection support: a tracker book can bind to a SECTION of a document instead of the
+// whole file — `sections: { [checksum]: { [bookId]: { title, start, end } } }` on the binding
+// record (word-index span captured from the ToC at link time). Rides the same sync/export.
+export async function getSectionBindings() {
+  const db = await getDB();
+  return (await db.get('library', 'binding'))?.sections || {};
+}
+export async function setSectionBinding(checksum, bookId, span) {
+  if (!checksum || !bookId) return;
+  const db = await getDB();
+  const rec = (await db.get('library', 'binding')) || { map: {} };
+  const sections = { ...(rec.sections || {}) };
+  const forDoc = { ...(sections[checksum] || {}) };
+  if (span) forDoc[bookId] = { title: span.title || '', start: span.start | 0, end: span.end | 0 };
+  else delete forDoc[bookId];
+  if (Object.keys(forDoc).length) sections[checksum] = forDoc; else delete sections[checksum];
+  rec.sections = sections;
+  rec.updatedAt = Date.now();
+  await db.put('library', rec, 'binding');
+  await markLibraryChanged();
+  try { window.dispatchEvent(new Event('tachyread-bindings-changed')); } catch { /* non-DOM */ }
+  return sections;
+}
+
 export async function getJourneyAi() {
   const db = await getDB();
   return (await db.get('library', 'ai')) || null;
@@ -683,6 +707,7 @@ export async function exportLibraryData(opts = {}) {
     goals: (await db.get('library', 'refs:goals'))?.data || null,
     ai: includeAi ? (await db.get('library', 'ai')) || null : null,
     binding: includeBinding ? (await db.get('library', 'binding'))?.map || null : null,
+    bindingSections: includeBinding ? (await db.get('library', 'binding'))?.sections || null : null,
   };
 }
 
@@ -721,9 +746,11 @@ export async function importLibraryData(bundle, opts = {}) {
     const existing = await store.get('ai');
     if (!existing || (bundle.ai.updatedAt || 0) >= (existing.updatedAt || 0)) await store.put(bundle.ai, 'ai');
   }
-  if (bundle.binding) {
+  if (bundle.binding || bundle.bindingSections) {
     const existing = (await store.get('binding')) || { map: {} };
-    await store.put({ map: { ...existing.map, ...bundle.binding }, updatedAt: Date.now() }, 'binding');
+    const sections = { ...(existing.sections || {}) };
+    for (const [cs, byBook] of Object.entries(bundle.bindingSections || {})) sections[cs] = { ...(sections[cs] || {}), ...byBook };
+    await store.put({ map: { ...existing.map, ...(bundle.binding || {}) }, sections, updatedAt: Date.now() }, 'binding');
   }
   await tx.done;
   // A user-driven import is a local change to push; a sync's own merge is not (it IS the remote).
