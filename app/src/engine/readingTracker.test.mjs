@@ -94,4 +94,17 @@ assert.deepEqual(t6.readRuns(30, 40), [], 'no reads → no runs');
 const t7 = createReadingTracker({ wordCount: 100 });
 t7.markRangeRead(95, 100);
 assert.deepEqual(t7.readRuns(90, 100), [[95, 100]]);
+
+// markRangeReadAtPace: impute an unread span read at a pace — coverage + honest time credit.
+const t8 = createReadingTracker({ wordCount: 1000 });
+const r8 = t8.markRangeReadAtPace(0, 200, 250); // 200 words @ 250 wpm → 48s
+assert.equal(r8.added, 200, 'credits the unread words');
+assert.equal(t8.readCount, 200);
+assert.equal(t8.lifetimeWpm(), 250, 'lifetime wpm matches the imputed pace (no spike)');
+assert.equal(t8.rangeStats(0, 200).wpm, 250, 'per-word pace tagged');
+// Overlapping re-apply only credits the genuinely-new words, and leaves prior pace alone.
+const r8b = t8.markRangeReadAtPace(100, 400, 300);
+assert.equal(r8b.added, 200, 'only new words counted');
+assert.equal(t8.readCount, 400);
+assert.equal(t8.rangeStats(0, 100).wpm, 250, 'earlier words keep their original pace');
 console.log('ok');

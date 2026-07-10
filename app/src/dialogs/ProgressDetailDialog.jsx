@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
-import { getTocEntries, sectionSpan } from '../document/toc.js';
-import { loadFile, loadReadState, saveReadState, getReadSections, loadDocPayload, allFiles } from '../state/storage.js';
+import { getTocEntries, sectionSpan, mergeSkipRanges, removeSkipRange } from '../document/toc.js';
+import { loadFile, loadReadState, saveReadState, saveFile, getReadSections, loadDocPayload, allFiles } from '../state/storage.js';
 import { createReadingTracker } from '../engine/readingTracker.js';
 import { sectionChecksum } from '../document/sectionHash.js';
 import { readerDocFromText } from '../document/readerDocument.js';
@@ -15,6 +15,19 @@ import { readerDocFromText } from '../document/readerDocument.js';
 // Click anywhere on the bar (or a section row) to jump there and close.
 
 const COLS = 320;
+
+// Typical paces for crediting the unread remainder of a section you finished elsewhere. Audiobook
+// narration runs ~155 wpm at 1×; the multiples scale from that. Silent-reading figures are the usual
+// adult ranges. (Rough by nature — the point is a believable time credit, not a precise measurement.)
+const PACE_PRESETS = [
+  { label: 'Average reading', wpm: 250 },
+  { label: 'Careful reading', wpm: 180 },
+  { label: 'Fast reading', wpm: 400 },
+  { label: 'Audiobook 1×', wpm: 155 },
+  { label: 'Audiobook 1.2×', wpm: 185 },
+  { label: 'Audiobook 1.5×', wpm: 230 },
+  { label: 'Audiobook 2×', wpm: 310 },
+];
 
 function fmtDuration(ms) {
   const s = Math.floor((ms || 0) / 1000);
@@ -46,7 +59,7 @@ function steadiness(cv) {
 // Works from a LIVE tab (tab prop) or from STORED reading state (storedChecksum prop) — the latter
 // rebuilds a tracker from the synced files/readstate records, so Trackyread can show a bound book's
 // progress even when the file itself was never opened on this device.
-export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, onClose }) {
+export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, onPatchSettings, onClose }) {
   const [storedTab, setStoredTab] = useState(null);
   useEffect(() => {
     if (!storedChecksum) return undefined;
@@ -74,8 +87,10 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
   const wrapRef = useRef(null);
   const [hover, setHover] = useState(null); // { col, px }
   const [pendingJump, setPendingJump] = useState(null); // { wi, label } — jumps need a confirm click
-  const [selSecs, setSelSecs] = useState(() => new Set()); // section indices staged for mark-unread
+  const [selSecs, setSelSecs] = useState(() => new Set()); // section indices selected for a batch action
   const [unreadArm, setUnreadArm] = useState(false);
+  const [paceSel, setPaceSel] = useState('250');    // read-remainder pace: a preset wpm or 'custom'
+  const [customWpm, setCustomWpm] = useState('250');
   // "Read elsewhere" scan (successive editions): matched section indices → the prior read's meta.
   const [scanMatches, setScanMatches] = useState(null); // null = not scanned; Map(index → meta)
   const [readSel, setReadSel] = useState(() => new Set());
@@ -207,16 +222,58 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
   // unattended playback. Live tabs persist via the app's readstate flush (the tracker is dirty);
   // stored mode writes the readstate back directly.
   const selWords = [...selSecs].reduce((n, i) => n + (sections[i]?.readWords || 0), 0);
+  // Words a "mark read" would newly credit across the selection (its unread remainder).
+  const remainderWords = [...selSecs].reduce((n, i) => n + Math.max(0, (sections[i]?.total || 0) - (sections[i]?.readWords || 0)), 0);
+  const effWpm = paceSel === 'custom' ? Math.max(1, Math.round(Number(customWpm) || 0)) : Number(paceSel);
+
+  // Stored mode has no live tab to flush it, so read-state changes are written straight to the
+  // readstate store here, plus the file-record aggregates the History / Trackyread views read.
+  async function persistStored() {
+    if (!storedChecksum || !tracker) return;
+    await saveReadState(storedChecksum, {
+      maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(),
+      lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(), paraTsB64: tracker.serializeParaTs(),
+    }).catch(() => {});
+    const dailyHistory = tracker.dailyArray().map((d) => ({ date: d.date, wordsRead: d.words, activeTimeSecs: Math.round(d.ms / 1000) }));
+    await saveFile({
+      ...(storedTab?.settings || {}), contentChecksum: storedChecksum,
+      persistentWordsRead: tracker.readCount, persistentActiveTimeSecs: Math.round(tracker.lifetimeActiveMs / 1000), dailyHistory,
+    }).catch(() => {});
+  }
+
   async function markSelectedUnread() {
     if (!tracker) return;
     for (const i of selSecs) { const s = sections[i]; if (s) tracker.unmarkRangeRead(s.start, s.end); }
-    if (storedChecksum) {
-      await saveReadState(storedChecksum, {
-        maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(),
-        lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(), paraTsB64: tracker.serializeParaTs(),
-      }).catch(() => {});
-    }
+    if (storedChecksum) await persistStored();
     setSelSecs(new Set()); setUnreadArm(false); setTick((n) => n + 1);
+  }
+
+  // Credit the unread remainder of each selected section as read at the chosen pace (audiobook/reading
+  // speed). Live tabs persist via the app's periodic readstate flush (the tracker is now dirty).
+  async function markSelectedReadAtPace() {
+    if (!tracker || !effWpm) return;
+    for (const i of selSecs) { const s = sections[i]; if (s) tracker.markRangeReadAtPace(s.start, s.end, effWpm); }
+    if (storedChecksum) await persistStored();
+    setSelSecs(new Set()); setUnreadArm(false); setTick((n) => n + 1);
+  }
+
+  // Persist a new skip-range list: live tabs patch tab settings; stored mode writes the file record.
+  async function persistSkip(ranges) {
+    if (storedChecksum) {
+      setStoredTab((st) => (st ? { ...st, settings: { ...st.settings, skipRanges: ranges } } : st));
+      await saveFile({ ...(storedTab?.settings || {}), contentChecksum: storedChecksum, skipRanges: ranges }).catch(() => {});
+    } else {
+      onPatchSettings?.({ skipRanges: ranges });
+    }
+  }
+  async function toggleSkipSelected(on) {
+    let ranges = skipRanges;
+    for (const i of selSecs) {
+      const s = sections[i]; if (!s) continue;
+      ranges = on ? mergeSkipRanges(ranges, [{ start: s.start, end: s.end, label: s.title }]) : removeSkipRange(ranges, s.start, s.end);
+    }
+    await persistSkip(ranges);
+    setSelSecs(new Set()); setUnreadArm(false);
   }
 
   // Scan this file's sections against the registry of sections finished in ANY file — so a successive
@@ -311,6 +368,16 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
     tip = { a, b, li, sec, pct, rs, stateLabel };
   }
 
+  // Fraction of a section's words currently inside a skip range (≥0.5 ⇒ shown/treated as "skipped").
+  const secSkipFrac = (s) => {
+    const n = s.end - s.start;
+    if (n <= 0) return 0;
+    let cov = 0;
+    for (const r of skipRanges) { const a = Math.max(s.start, r.start), b = Math.min(s.end, Math.max(r.start, r.end)); if (b > a) cov += b - a; }
+    return cov / n;
+  };
+  const allSelSkipped = selSecs.size > 0 && [...selSecs].every((i) => sections[i] && secSkipFrac(sections[i]) >= 0.5);
+
   const card = (num, label, title) => (
     <div className="pd-card" title={title}>
       <span className="pd-card-num">{num}</span>
@@ -389,40 +456,65 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
 
           {sections.length > 0 && (
             <>
-              <div className="field-section">By section — where, how much, how fast · tick sections to mark them unread</div>
+              <div className="field-section">By section — where, how much, how fast · tick sections, then mark read / skipped / unread below</div>
               <div className="pd-sections">
-                {sections.map((s, i) => (
-                  <div key={i} className={`pd-sec-row${selSecs.has(i) ? ' pd-sec-sel' : ''}`} style={{ paddingLeft: 8 + (s.level || 0) * 14 }}
-                    title={onJumpWord ? 'Click to jump to this section (asks to confirm)' : s.title}
-                    onClick={() => stageJump(s.start, s.title)}>
-                    <input
-                      type="checkbox"
-                      className="pd-sec-check"
-                      checked={selSecs.has(i)}
-                      disabled={!s.readWords}
-                      title="Select this section to mark it unread"
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => { e.stopPropagation(); setSelSecs((prev) => { const n = new Set(prev); e.target.checked ? n.add(i) : n.delete(i); return n; }); setUnreadArm(false); }}
-                    />
-                    <span className="pd-sec-title">{s.title}</span>
-                    <span className="pd-sec-bar"><i style={{ width: `${Math.round(s.readFrac * 100)}%` }} /></span>
-                    <span className="pd-sec-pct">{Math.round(s.readFrac * 100)}%</span>
-                    <span className="pd-sec-wpm">{s.wpm ? `${s.wpm} wpm` : '—'}</span>
-                    <span className="pd-sec-words">{s.readWords}/{s.total}</span>
-                  </div>
-                ))}
+                {sections.map((s, i) => {
+                  const skipped = secSkipFrac(s) >= 0.5;
+                  return (
+                    <div key={i} className={`pd-sec-row${selSecs.has(i) ? ' pd-sec-sel' : ''}${skipped ? ' pd-sec-skipped' : ''}`} style={{ paddingLeft: 8 + (s.level || 0) * 14 }}
+                      title={onJumpWord ? 'Click to jump to this section (asks to confirm)' : s.title}
+                      onClick={() => stageJump(s.start, s.title)}>
+                      <input
+                        type="checkbox"
+                        className="pd-sec-check"
+                        checked={selSecs.has(i)}
+                        title="Select this section for a batch action below"
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => { e.stopPropagation(); setSelSecs((prev) => { const n = new Set(prev); e.target.checked ? n.add(i) : n.delete(i); return n; }); setUnreadArm(false); }}
+                      />
+                      <span className="pd-sec-title">{skipped && <span className="pd-sec-skipmark" title="Excluded from % read">⏭ </span>}{s.title}</span>
+                      <span className="pd-sec-bar"><i style={{ width: `${Math.round(s.readFrac * 100)}%` }} /></span>
+                      <span className="pd-sec-pct">{Math.round(s.readFrac * 100)}%</span>
+                      <span className="pd-sec-wpm">{s.wpm ? `${s.wpm} wpm` : '—'}</span>
+                      <span className="pd-sec-words">{s.readWords}/{s.total}</span>
+                    </div>
+                  );
+                })}
               </div>
               {selSecs.size > 0 && (
-                <div className="pd-unread-bar">
-                  {!unreadArm ? (
-                    <button onClick={() => setUnreadArm(true)}>↩ Mark {selSecs.size} section{selSecs.size === 1 ? '' : 's'} unread…</button>
-                  ) : (
-                    <>
-                      <button className="grab-trash" onClick={markSelectedUnread}>⚠ Confirm — clear {selWords.toLocaleString()} read word{selWords === 1 ? '' : 's'}</button>
-                      <button onClick={() => setUnreadArm(false)}>Cancel</button>
-                    </>
-                  )}
-                  <span className="settings-note" style={{ margin: 0 }}>For text accidentally “read” by unattended playback. Coverage drops; recorded time is kept.</span>
+                <div className="pd-secbar">
+                  <div className="pd-secbar-row">
+                    <span className="pd-secbar-lbl">{selSecs.size} selected</span>
+                    <label className="pd-pace-pick">read remainder at
+                      <select value={paceSel} onChange={(e) => setPaceSel(e.target.value)}>
+                        {PACE_PRESETS.map((p) => <option key={p.label} value={String(p.wpm)}>{p.label} · {p.wpm} wpm</option>)}
+                        <option value="custom">Custom…</option>
+                      </select>
+                    </label>
+                    {paceSel === 'custom' && <input className="pd-pace-num" type="number" min="30" max="2000" value={customWpm} onChange={(e) => setCustomWpm(e.target.value)} title="Words per minute" />}
+                    <button className="toggle-on" disabled={!remainderWords || !effWpm} onClick={markSelectedReadAtPace}
+                      title="Mark the unread words in these sections read, crediting the time at this pace">
+                      ✓ Mark read{remainderWords ? ` · +${remainderWords.toLocaleString()} words @ ${effWpm} wpm` : ''}
+                    </button>
+                  </div>
+                  <div className="pd-secbar-row">
+                    {allSelSkipped
+                      ? <button onClick={() => toggleSkipSelected(false)} title="Count these sections toward % read again">↺ Un-skip {selSecs.size}</button>
+                      : <button onClick={() => toggleSkipSelected(true)} title="Exclude these sections from % read (front/back matter, an appendix you won't read, …)">⏭ Skip {selSecs.size}</button>}
+                    {selWords > 0 && (!unreadArm
+                      ? <button onClick={() => setUnreadArm(true)} title="Clear the read coverage of these sections">↩ Mark unread…</button>
+                      : (
+                        <>
+                          <button className="grab-trash" onClick={markSelectedUnread}>⚠ Confirm — clear {selWords.toLocaleString()} read word{selWords === 1 ? '' : 's'}</button>
+                          <button onClick={() => setUnreadArm(false)}>Cancel</button>
+                        </>
+                      ))}
+                    <button onClick={() => { setSelSecs(new Set()); setUnreadArm(false); }}>Clear selection</button>
+                  </div>
+                  <span className="settings-note" style={{ margin: 0 }}>
+                    <b>Mark read</b> credits the unread remainder at the chosen pace (its time counts toward WPM) — for a section you finished on audiobook or paper.
+                    <b> Skip</b> excludes a section from % read. <b>Mark unread</b> clears coverage.
+                  </span>
                 </div>
               )}
 
