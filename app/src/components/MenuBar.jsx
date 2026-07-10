@@ -258,22 +258,27 @@ export default function MenuBar({ onFileOpen, onAction }) {
                 </div>
 
                 <div className="menu-drawer-section">Menus</div>
-                {MENU_ORDER.map(([key, title]) => (
-                  <div key={key} className="item menu-cat" onClick={() => setSub(key)}>
-                    <span>{title}</span>
-                    <span className="menu-cat-caret">›</span>
+                {/* Tap-friendly tile grid (not a list) — bigger targets, two per row. */}
+                <div className="menu-cat-grid">
+                  {MENU_ORDER.map(([key, title]) => (
+                    <div key={key} className="item menu-cat" onClick={() => setSub(key)}>
+                      <span>{title}</span>
+                      <span className="menu-cat-caret">›</span>
+                    </div>
+                  ))}
+                  <div className="item menu-cat" onClick={() => { closeDrawer(); onAction('data'); }}>
+                    <span>☁ Data</span>
                   </div>
-                ))}
-                <div className="item menu-cat" onClick={() => { closeDrawer(); onAction('data'); }}>
-                  <span>☁ Data management…</span>
                 </div>
               </>
             ) : (
-              // Drilled into one menu: back header + that menu's items only.
+              // Drilled into one menu: back header + that menu's items only, as a tile grid.
               <>
                 <div className="menu-drawer-back" onClick={() => setSub(null)}>‹ All menus</div>
                 <div className="menu-drawer-section">{MENU_TITLE[sub] || sub}</div>
-                {MENUS[sub].map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
+                <div className="menu-item-grid">
+                  {MENUS[sub].map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
+                </div>
                 {sub === 'file' && <RecentFiles recent={recent} onPick={(cs) => handle('open-recent:' + cs)} />}
               </>
             )}

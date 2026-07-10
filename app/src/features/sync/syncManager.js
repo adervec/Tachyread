@@ -3,7 +3,7 @@
 // travel are progress-only (reading history keyed by file checksum + grab markers + book groups);
 // file bodies and grab images never leave the device. See storage.exportProgressData.
 
-import { exportProgressData, importProgressData, exportLibraryData, importLibraryData } from '../../state/storage.js';
+import { exportProgressData, importProgressData, exportLibraryData, importLibraryData, getLibraryChangedAt, getLibrarySyncState, setLibrarySyncState } from '../../state/storage.js';
 import { getSyncProvider, PROGRESS_FILE_NAME, LIBRARY_FILE_NAME } from './syncProviders.js';
 
 export async function backupToProvider(providerId, cfg, opts = {}) {
@@ -60,8 +60,39 @@ export async function restoreLibraryFromProvider(providerId, cfg, opts = {}) {
   return importLibraryData(bundle, { mode: 'merge' });
 }
 
+// Diff-aware read-merge-write. A cheap stat (mtime / one Drive metadata query) decides whether the
+// remote changed, and a local change stamp decides whether we have anything to say — steady-state
+// sync compares two numbers and moves NO payload instead of shipping ~3,000 books each way.
 export async function syncLibraryWithProvider(providerId, cfg, opts = {}) {
-  try { await restoreLibraryFromProvider(providerId, cfg, opts); }
-  catch (e) { if (!/No Tachyread library sync/.test(e?.message || '')) throw e; }
-  return backupLibraryToProvider(providerId, cfg, opts);
+  const p = getSyncProvider(providerId);
+  if (!p) throw new Error('Unknown sync target.');
+  if (!p.supported()) throw new Error('This browser can’t use that sync target.');
+  const conn = await p.connect(cfg, opts);
+  const [state, changedAt] = await Promise.all([getLibrarySyncState(), getLibraryChangedAt()]);
+  const remoteStamp = p.stat ? await p.stat(conn, LIBRARY_FILE_NAME) : undefined; // undefined = provider can't stat
+  const localDirty = changedAt > (state?.localChange || 0);
+  const remoteNew = remoteStamp === undefined || (remoteStamp != null && remoteStamp !== (state?.remoteStamp || 0));
+
+  if (!localDirty && !remoteNew && remoteStamp != null) {
+    return { at: Date.now(), skipped: true, bytes: 0, books: null };
+  }
+
+  // Pull + merge only when the remote actually changed (per-book LWW; tombstones win deletes).
+  let pulled = false;
+  if (remoteNew && remoteStamp !== null) {
+    const blob = await p.download(conn, LIBRARY_FILE_NAME);
+    if (blob) { await importLibraryData(JSON.parse(await blob.text()), { mode: 'merge', fromSync: true }); pulled = true; }
+  }
+
+  // Push only when we have local changes (or the remote file doesn't exist yet).
+  let bytes = 0, books = null, newStamp = remoteStamp ?? null;
+  if (localDirty || remoteStamp === null) {
+    const bundle = await exportLibraryData();
+    const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
+    await p.upload(conn, LIBRARY_FILE_NAME, blob);
+    bytes = blob.size; books = bundle.books.length;
+    newStamp = p.stat ? await p.stat(conn, LIBRARY_FILE_NAME) : null;
+  }
+  await setLibrarySyncState({ remoteStamp: newStamp, localChange: changedAt, syncedAt: Date.now() });
+  return { at: Date.now(), skipped: false, pulled, pushed: bytes > 0, bytes, books };
 }

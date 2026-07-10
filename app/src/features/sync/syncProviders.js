@@ -67,6 +67,15 @@ export const localFolderProvider = {
       return null;
     }
   },
+  // Cheap change probe: the file's mtime without reading its bytes. null = no file yet.
+  async stat(dir, name) {
+    try {
+      const fh = await dir.getFileHandle(name);
+      return (await fh.getFile()).lastModified || null;
+    } catch {
+      return null;
+    }
+  },
 };
 
 // ---- Google Drive (private appDataFolder) -------------------------------------------------------
@@ -146,14 +155,17 @@ function requestToken(clientId, prompt = '') {
     client.requestAccessToken({ prompt });
   });
 }
-async function driveFindId(token, name) {
+async function driveFind(token, name) {
   const q = encodeURIComponent(`name='${name}' and trashed=false`);
-  const r = await fetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name)`, {
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime)`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!r.ok) throw new Error(`Drive list failed (${r.status}).`);
   const j = await r.json();
-  return j.files?.[0]?.id || null;
+  return j.files?.[0] || null;
+}
+async function driveFindId(token, name) {
+  return (await driveFind(token, name))?.id || null;
 }
 
 export const googleDriveProvider = {
@@ -218,6 +230,11 @@ export const googleDriveProvider = {
     if (!id) return null;
     const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, { headers: { Authorization: `Bearer ${conn.token}` } });
     return r.ok ? await r.blob() : null;
+  },
+  // Cheap change probe: one metadata query (no file body). null = no file yet.
+  async stat(conn, name) {
+    const f = await driveFind(conn.token, name);
+    return f?.modifiedTime ? Date.parse(f.modifiedTime) : null;
   },
 };
 
