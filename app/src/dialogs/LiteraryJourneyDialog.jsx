@@ -27,7 +27,7 @@ import {
 } from '../features/journeyAnalytics.js';
 import { findDuplicates, finishedDateIssues } from '../features/journeyCleanup.js';
 import { normTitle } from '../document/tocWizard.js';
-import { groupForChecksum, masterOf } from '../features/bookGroups.js';
+import { groupForChecksum, masterOf, makeGroup } from '../features/bookGroups.js';
 import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordCount } from '../features/readingTime.js';
 import { olFetch, bookCoverUrl } from '../features/openLibrary.js';
 import { HistoryView } from './HistoryDialog.jsx';
@@ -1268,6 +1268,16 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
     })
     .filter((g) => (g.members || []).length >= 2));
   const forgetGrp = (id) => { onGroups(groups.filter((g) => g.id !== id)); setEditGrp(null); setMsg('Group forgotten on this device — its files keep their own progress.'); };
+  // Create a group right here (same makeGroup as Settings → Book Groups).
+  const [newSel, setNewSel] = useState(() => new Set());
+  const [newName, setNewName] = useState('');
+  function createGroup() {
+    const g = makeGroup(newName, [...newSel], Date.now());
+    if (!g) { setMsg('Pick at least two files to group as one book.'); return; }
+    onGroups([...groups, g]);
+    setNewSel(new Set()); setNewName('');
+    setMsg(`Grouped ${g.members.length} files as “${g.name}”.`);
+  }
   const qMatches = useMemo(() => {
     if (!q.trim()) return [];
     const s = q.trim().toLowerCase();
@@ -1334,6 +1344,25 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
           </div>
         );
       })}
+
+      {ungroupedFiles.length >= 2 && (
+        <details className="lj-newgrp">
+          <summary>＋ New group — pick 2+ files that are the same book</summary>
+          <div className="lj-newgrp-list">
+            {ungroupedFiles.map(([cs, f]) => (
+              <label key={cs} className="inline-check">
+                <input type="checkbox" checked={newSel.has(cs)} onChange={(e) => setNewSel((prev) => { const n = new Set(prev); e.target.checked ? n.add(cs) : n.delete(cs); return n; })} />
+                {f.fileName || cs.slice(0, 8)}
+              </label>
+            ))}
+          </div>
+          <div className="lj-inline">
+            <input placeholder="Book name" value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <button className="toggle-on" disabled={newSel.size < 2} onClick={createGroup}>Group {newSel.size >= 2 ? newSel.size : ''} as one book</button>
+          </div>
+        </details>
+      )}
+      {msg && !anth && <p className="settings-note">{msg}</p>}
 
       <div className="rh-section-h">Anthologies &amp; collections — components map to sections</div>
       <p className="settings-note">Pick a stored document (the anthology file); each ToC section can bind to its own tracker book. Reading a section fully lets you mark that component finished.</p>
