@@ -106,10 +106,31 @@ export function distinctValues(books, field) {
   return [...new Set(books.map((b) => b[field]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
 }
 
+// A book's user tags, normalized. Accepts an array or the editor's comma-separated string.
+export function bookTags(b) {
+  const raw = b?.tags;
+  const arr = Array.isArray(raw) ? raw : String(raw || '').split(',');
+  return [...new Set(arr.map((t) => String(t).trim()).filter(Boolean))];
+}
+export function allTags(books) {
+  return [...new Set((books || []).flatMap(bookTags))].sort((a, b) => a.localeCompare(b));
+}
+
+// Re-reads: `finishHistory` keeps every PRIOR finish date; `finishTime` is always the latest one.
+export function finishCount(b) {
+  return (readStatus(b) === 'finished' ? 1 : 0) + (Array.isArray(b?.finishHistory) ? b.finishHistory.length : 0);
+}
+// Log a re-read: the current finish date moves into history, today becomes the finish. Pure.
+export function logReread(b, today) {
+  const hist = [...(Array.isArray(b.finishHistory) ? b.finishHistory : []), b.finishTime].filter(Boolean);
+  return { ...b, finishHistory: hist, finishTime: today, completion: true, inProgress: false, shelf: null };
+}
+
 // readState: all | finished | reading | toread(=unread) · fnf: all|F|NF · difficulty: array of levels
-// (empty = any) · recMin: recScore floor · genre: exact | all · search: title/author/series substring.
+// (empty = any) · recMin: recScore floor · genre: exact | all · search: title/author/series substring
+// · tag: exact user tag | all.
 export function filterBooks(books, f = {}) {
-  const { readState = 'all', fnf = 'all', difficulty = [], recMin = 0, genre = 'all', search = '', recBy = 'all' } = f;
+  const { readState = 'all', fnf = 'all', difficulty = [], recMin = 0, genre = 'all', search = '', recBy = 'all', tag = 'all' } = f;
   const q = search.trim().toLowerCase();
   const diffSet = difficulty && difficulty.length ? new Set(difficulty.map(Number)) : null;
   return books.filter((b) => {
@@ -122,6 +143,7 @@ export function filterBooks(books, f = {}) {
     if (recMin && !(Number(b.recScore) >= recMin)) return false;
     if (genre !== 'all' && (b.genre || '') !== genre) return false;
     if (recBy !== 'all' && recommender(b) !== recBy) return false;
+    if (tag !== 'all' && !bookTags(b).includes(tag)) return false;
     if (q && !`${b.title || ''} ${b.author || ''} ${b.series || ''}`.toLowerCase().includes(q)) return false;
     return true;
   });

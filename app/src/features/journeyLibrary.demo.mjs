@@ -1,6 +1,6 @@
 // Self-check for journeyLibrary.js — run: node app/src/features/journeyLibrary.demo.mjs
 import assert from 'node:assert';
-import { deriveId, parseDifficulty, pubYear, readStatus, setReadStatus, recommender, normalizeSeed, filterBooks, sortBooks, libraryStats, exportJourneyMarkdown } from './journeyLibrary.js';
+import { deriveId, parseDifficulty, pubYear, readStatus, setReadStatus, recommender, normalizeSeed, filterBooks, sortBooks, libraryStats, exportJourneyMarkdown, bookTags, allTags, finishCount, logReread } from './journeyLibrary.js';
 
 // id: ISBN wins; else author|title; stable across re-derive.
 assert.equal(deriveId({ isbn: '978-0-14-044913-6', title: 'X', author: 'Y' }), 'isbn:9780140449136');
@@ -84,5 +84,23 @@ assert.ok(md.includes('## Finished (2)'));
 assert.ok(md.includes('Crime and Punishment'));
 assert.ok(md.includes('finished 2024-01-05'));
 assert.ok(!/tech.?tree|vector/i.test(md)); // human-readable only
+
+// tags: array or comma string, normalized + deduped; tag filter matches exactly
+assert.deepEqual(bookTags({ tags: ' epic , sad, epic ' }), ['epic', 'sad']);
+assert.deepEqual(bookTags({ tags: ['a', ' b '] }), ['a', 'b']);
+assert.deepEqual(allTags([{ tags: 'x' }, { tags: ['y', 'x'] }, {}]), ['x', 'y']);
+assert.equal(filterBooks([{ tags: 'epic' }, { tags: 'sad' }, {}], { tag: 'epic' }).length, 1);
+
+// re-reads: logReread moves the old date into history; finishCount = 1 + history
+const once = { id: 'r', title: 'R', completion: true, finishTime: '2020-01-01' };
+assert.equal(finishCount(once), 1);
+const twice = logReread(once, '2026-07-09');
+assert.equal(twice.finishTime, '2026-07-09');
+assert.deepEqual(twice.finishHistory, ['2020-01-01']);
+assert.equal(finishCount(twice), 2);
+const thrice = logReread(twice, '2026-12-01');
+assert.deepEqual(thrice.finishHistory, ['2020-01-01', '2026-07-09']);
+assert.equal(finishCount(thrice), 3);
+assert.equal(finishCount({ title: 'unread' }), 0);
 
 console.log('journeyLibrary.demo: all assertions passed ✅');
