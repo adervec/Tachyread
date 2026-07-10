@@ -23,6 +23,7 @@ import { findDuplicates, finishedDateIssues } from '../features/journeyCleanup.j
 import { normTitle } from '../document/tocWizard.js';
 import { groupForChecksum } from '../features/bookGroups.js';
 import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordCount } from '../features/readingTime.js';
+import { olFetch, bookCoverUrl } from '../features/openLibrary.js';
 import { HistoryView } from './HistoryDialog.jsx';
 import ProgressDetailDialog from './ProgressDetailDialog.jsx';
 import { getSyncProvider } from '../features/sync/syncProviders.js';
@@ -542,6 +543,24 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, fileStats
   useEffect(() => { setB(book); }, [book]);
   const status = readStatus(b);
   const set = (p) => setB({ ...b, ...p });
+  // Open Library lookup: explicit click only (sends the title/author or ISBN there). Fills BLANK
+  // fields into the form — nothing is saved until the user hits Save.
+  const [olBusy, setOlBusy] = useState(false);
+  const [olMsg, setOlMsg] = useState('');
+  const cover = bookCoverUrl(b);
+  async function fetchOl() {
+    setOlBusy(true); setOlMsg('');
+    try {
+      const { doc, patch } = await olFetch(b);
+      if (!doc) setOlMsg('No confident match on Open Library.');
+      else {
+        const got = Object.keys(patch);
+        set(patch);
+        setOlMsg(got.length ? `Filled: ${got.join(', ')} — review, then Save.` : 'Matched, but every field is already filled.');
+      }
+    } catch (e) { setOlMsg('Lookup failed: ' + (e?.message || e)); }
+    setOlBusy(false);
+  }
   const currentLink = !isNew && Object.entries(bindMap || {}).find(([, id]) => id === b.id)?.[0];
   const linkedGroup = currentLink ? groupForChecksum(groups, currentLink) : null;
   const suggested = !isNew && !currentLink ? suggestDoc(b, docMeta) : null;
@@ -553,6 +572,7 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, fileStats
   const totalSecs = estimateTotalSecs({ readSecs: b.readSecs, words: bookWordCount(b), audiobookFinish: b.audiobookFinish, eyeFrac });
   return (
     <div className="lj-editor">
+      {cover && <img className="lj-cover" src={cover} alt="" loading="lazy" onError={(e) => { e.target.style.display = 'none'; }} />}
       <div className="lj-editor-grid">
         <label>Title<input value={b.title || ''} onChange={(e) => set({ title: e.target.value })} /></label>
         <label>Author<input value={b.author || ''} onChange={(e) => set({ author: e.target.value })} /></label>
@@ -568,6 +588,14 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, fileStats
         <label>Pages<input type="number" value={b.pages || ''} onChange={(e) => set({ pages: Number(e.target.value) })} /></label>
         <label>Words<input type="number" value={b.words || ''} placeholder={b.pages ? `~${bookWordCount({ pages: b.pages })}` : ''} onChange={(e) => set({ words: Number(e.target.value) })} /></label>
         <label>Published<input value={b.pubDate || ''} onChange={(e) => set({ pubDate: e.target.value })} /></label>
+        <label>ISBN<input value={b.isbn || ''} onChange={(e) => set({ isbn: e.target.value })} /></label>
+      </div>
+      <div className="lj-inline">
+        <button type="button" disabled={olBusy || (!b.title && !b.isbn)} onClick={fetchOl}
+          title="Search Open Library by ISBN (or title + author) and fill the blank fields — sends that query to openlibrary.org">
+          {olBusy ? 'Searching…' : '🔎 Fetch details (Open Library)'}
+        </button>
+        {olMsg && <span className="settings-note" style={{ margin: 0 }}>{olMsg}</span>}
       </div>
       <div className="lj-readtime">
         <div className="field-section" style={{ marginTop: 0 }}>Reading time</div>

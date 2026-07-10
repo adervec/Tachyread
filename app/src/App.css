@@ -3375,6 +3375,7 @@
 .lj-more { margin-top: 8px; }
 
 .lj-editor { background: var(--panel-bg, rgba(127,127,127,0.06)); border: 1px solid var(--accent, #3a86ff); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+.lj-cover { float: right; width: 72px; max-height: 110px; object-fit: cover; border-radius: 4px; margin: 0 0 6px 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
 .lj-editor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
 .lj-editor label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--status-fg); }
 .lj-editor-notes { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--status-fg); margin-top: 8px; }
