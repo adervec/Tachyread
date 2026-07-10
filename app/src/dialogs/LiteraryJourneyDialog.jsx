@@ -14,6 +14,7 @@ import {
   normalizeSeed, filterBooks, sortBooks, libraryStats, exportJourneyMarkdown,
   readStatus, setReadStatus, recommender, STATUS_LABEL,
   distinctValues, pubYear, finishMs, deriveId, bookRating,
+  bookTags, allTags, finishCount, logReread,
 } from '../features/journeyLibrary.js';
 import {
   cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, queueWithEstimates, estHours,
@@ -122,7 +123,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
   const providerOk = provider && provider.supported() && provider.available(sync) === true;
 
   // Library view controls
-  const [flt, setFlt] = useState({ readState: 'all', fnf: 'all', difficulty: [], recMin: 0, genre: 'all', search: '', recBy: 'all' });
+  const [flt, setFlt] = useState({ readState: 'all', fnf: 'all', difficulty: [], recMin: 0, genre: 'all', search: '', recBy: 'all', tag: 'all' });
   const [sort, setSort] = useState('rec');
   const [limit, setLimit] = useState(60);
   const [selected, setSelected] = useState(null);
@@ -214,6 +215,8 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
   const stats = useMemo(() => (books ? libraryStats(books) : null), [books]);
   const genreOptions = useMemo(() => (books ? distinctValues(books, 'genre') : []), [books]);
   const recOptions = useMemo(() => (books ? [...new Set(books.map(recommender))].sort((a, b) => a.localeCompare(b)) : []), [books]);
+  const tagOptions = useMemo(() => (books ? allTags(books) : []), [books]);
+  const showCovers = !!global?.ljCovers; // Library-list cover thumbnails (hotlinks Open Library — opt-in)
   const filtered = useMemo(() => (books ? sortBooks(filterBooks(books, flt), sort) : []), [books, flt, sort]);
   const shown = filtered.slice(0, limit);
   const selBook = useMemo(() => books?.find((b) => b.id === selected) || null, [books, selected]);
@@ -394,6 +397,11 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
                 <select value={flt.recMin} onChange={(e) => setFlt({ ...flt, recMin: Number(e.target.value) })}>
                   <option value={0}>Any rec</option><option value={9}>Rec 9+</option><option value={8}>Rec 8+</option>
                 </select>
+                {tagOptions.length > 0 && (
+                  <select value={flt.tag} onChange={(e) => setFlt({ ...flt, tag: e.target.value })} title="Filter by tag">
+                    <option value="all">All tags</option>{tagOptions.map((t) => <option key={t} value={t}>🏷 {t}</option>)}
+                  </select>
+                )}
                 <select value={sort} onChange={(e) => setSort(e.target.value)}>
                   <option value="rec">Sort: Rec</option><option value="title">Title</option><option value="author">Author</option><option value="pages">Pages</option><option value="pub">Published</option><option value="finished">Recently finished</option>
                 </select>
@@ -403,6 +411,9 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
               </div>
               <div className="lj-toolbar2">
                 <span className="settings-note">{filtered.length} match{filtered.length === 1 ? '' : 'es'}</span>
+                <label className="inline-check" title="Show cover thumbnails in the list — loads them from covers.openlibrary.org for visible books with an ISBN or fetched cover">
+                  <input type="checkbox" checked={showCovers} onChange={(e) => onPatch?.({ ljCovers: e.target.checked })} /> Covers
+                </label>
                 <span className="lj-spacer" />
                 <button onClick={() => setAdding(true)}>+ Add book</button>
                 <button onClick={() => exportView('json')}>Export view (JSON)</button>
@@ -415,12 +426,18 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
               <div className="lj-list">
                 {shown.map((b) => {
                   const st = readStatus(b);
+                  const rc = finishCount(b);
+                  const tgs = bookTags(b);
+                  const cov = showCovers ? bookCoverUrl(b, 'S') : null;
                   return (
                     <div key={b.id} className={`lj-row${selected === b.id ? ' on' : ''}`}>
-                      <button className="lj-row-hit" onClick={() => { setSelected(selected === b.id ? null : b.id); setAdding(false); }}>
+                      <button className={`lj-row-hit${showCovers ? ' with-cover' : ''}`} onClick={() => { setSelected(selected === b.id ? null : b.id); setAdding(false); }}>
                         <span className={`lj-status lj-${st}`}>{STATUS_LABEL[st].split(' ')[0]}</span>
+                        {showCovers && (cov
+                          ? <img className="lj-row-cover" src={cov} alt="" loading="lazy" onError={(e) => { e.target.style.visibility = 'hidden'; }} />
+                          : <span className="lj-row-cover lj-row-cover-none" />)}
                         <span className="lj-row-main"><b>{b.title}</b><em>{b.author}{b.series ? ` · ${b.series}${b.seriesNum ? ' #' + b.seriesNum : ''}` : ''}</em></span>
-                        <span className="lj-row-meta">{b.genre || ''}{b.difficultyLevel ? ` · D${b.difficultyLevel}` : ''}{b.recScore ? ` · ★${b.recScore}` : ''}{pubYear(b) ? ` · ${pubYear(b)}` : ''}{recommender(b) !== 'Claude' ? ` · ✦${recommender(b)}` : ''}</span>
+                        <span className="lj-row-meta">{b.genre || ''}{b.difficultyLevel ? ` · D${b.difficultyLevel}` : ''}{b.recScore ? ` · ★${b.recScore}` : ''}{pubYear(b) ? ` · ${pubYear(b)}` : ''}{rc > 1 ? ` · ↻×${rc}` : ''}{tgs.length ? ` · 🏷${tgs.slice(0, 2).join(', ')}` : ''}{recommender(b) !== 'Claude' ? ` · ✦${recommender(b)}` : ''}</span>
                       </button>
                       <span className="lj-row-acts">
                         <button title="On deck (queue)" className={st === 'queue' ? 'on' : ''} onClick={() => shelve(b, st === 'queue' ? 'toread' : 'queue')}>📋</button>
@@ -589,12 +606,17 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, fileStats
         <label>Words<input type="number" value={b.words || ''} placeholder={b.pages ? `~${bookWordCount({ pages: b.pages })}` : ''} onChange={(e) => set({ words: Number(e.target.value) })} /></label>
         <label>Published<input value={b.pubDate || ''} onChange={(e) => set({ pubDate: e.target.value })} /></label>
         <label>ISBN<input value={b.isbn || ''} onChange={(e) => set({ isbn: e.target.value })} /></label>
+        <label>Tags<input value={Array.isArray(b.tags) ? b.tags.join(', ') : (b.tags || '')} placeholder="comma, separated" onChange={(e) => set({ tags: e.target.value })} /></label>
       </div>
       <div className="lj-inline">
         <button type="button" disabled={olBusy || (!b.title && !b.isbn)} onClick={fetchOl}
           title="Search Open Library by ISBN (or title + author) and fill the blank fields — sends that query to openlibrary.org">
           {olBusy ? 'Searching…' : '🔎 Fetch details (Open Library)'}
         </button>
+        {status === 'finished' && (
+          <button type="button" title="Finished it again? The current finish date moves into history and today becomes the finish" onClick={() => setB(logReread(b, todayISO()))}>↻ Log re-read</button>
+        )}
+        {finishCount(b) > 1 && <span className="settings-note" style={{ margin: 0 }}>Read ×{finishCount(b)} · previously {b.finishHistory.join(', ')}</span>}
         {olMsg && <span className="settings-note" style={{ margin: 0 }}>{olMsg}</span>}
       </div>
       <div className="lj-readtime">
@@ -644,7 +666,7 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, fileStats
         </div>
       )}
       <div className="lj-editor-buttons">
-        <button className="primary" disabled={!b.title} onClick={() => onSave(b)}>{isNew ? 'Add' : 'Save'}</button>
+        <button className="primary" disabled={!b.title} onClick={() => onSave({ ...b, tags: bookTags(b) })}>{isNew ? 'Add' : 'Save'}</button>
         <button onClick={onCancel}>Cancel</button>
         {!isNew && onDelete && <button className="lj-danger" onClick={onDelete}>Delete</button>}
       </div>
