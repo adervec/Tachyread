@@ -5,8 +5,9 @@ import {
   getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef, saveLibraryRef,
   getJourneyAi, saveJourneyAi, exportLibraryData, importLibraryData, librarySize, clearLibrary,
   getBinding, setBinding, getSectionBindings, setSectionBinding, allDocMeta, allFiles, getFsHandle, setFsHandle,
-  loadFile, loadReadState,
+  loadFile, loadReadState, loadDocPayload,
 } from '../state/storage.js';
+import { extractTextMeta } from '../features/textMeta.js';
 import { createReadingTracker } from '../engine/readingTracker.js';
 import { sectionSpan } from '../document/toc.js';
 import { askClaude, anthropicConfigured } from '../features/anthropic.js';
@@ -47,6 +48,7 @@ function download(name, text, mime = 'application/json') {
 }
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+const clean = (v) => String(v || '').trim();
 
 // Map the Library editor's status pill back onto the book's completion/inProgress/shelf fields.
 const applyStatus = (book, status) => setReadStatus(book, status, todayISO());
@@ -527,6 +529,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               docMeta={docMeta} fileStats={fileStats}
               onBind={bind} onSecBind={async (cs, id, span) => { await setSectionBinding(cs, id, span); setSecBind(await getSectionBindings()); }}
               onSaveBook={saveBook} onOpen={(id) => { setTab('library'); setSelected(id); }}
+              onGroups={(next) => onPatch?.({ bookGroups: next })}
             />
           )}
           {tab === 'timeline' && <TimelineView books={books} />}
@@ -638,6 +641,7 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, fileStats
   // fields into the form — nothing is saved until the user hits Save.
   const [olBusy, setOlBusy] = useState(false);
   const [olMsg, setOlMsg] = useState('');
+  const [txtBusy, setTxtBusy] = useState(false);
   const cover = bookCoverUrl(b);
   async function fetchOl() {
     setOlBusy(true); setOlMsg('');
@@ -653,6 +657,29 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, fileStats
     setOlBusy(false);
   }
   const currentLink = !isNew && Object.entries(bindMap || {}).find(([, id]) => id === b.id)?.[0];
+  // Fill blanks from the LINKED DOCUMENT itself: exact word count (→ pages estimate) from the file
+  // record, and author / publish year / ISBN / title scraped from the text's front matter.
+  async function pullFromText() {
+    setTxtBusy(true); setOlMsg('');
+    try {
+      const payload = await loadDocPayload(currentLink).catch(() => null);
+      const meta = extractTextMeta((payload?.fullText || '').slice(0, 9000));
+      const words = fileStats[currentLink]?.words || 0;
+      const p = {};
+      if (!b.words && words) p.words = words;
+      if (!b.pages && words) p.pages = Math.round(words / 275);
+      if (!clean(b.author) && meta.author) p.author = meta.author;
+      if (!clean(b.pubDate) && meta.year) p.pubDate = String(meta.year);
+      if (!clean(b.isbn) && meta.isbn) p.isbn = meta.isbn;
+      if (!clean(b.title) && meta.title) p.title = meta.title;
+      const got = Object.keys(p);
+      set(p);
+      if (got.length) setOlMsg(`From the document: ${got.join(', ')} — review, then Save.`);
+      else if (!payload?.fullText && !words) setOlMsg('The linked file’s text isn’t stored on this device — open it once, then retry.');
+      else setOlMsg('Nothing new found in the document’s front matter.');
+    } catch (e) { setOlMsg('Text scan failed: ' + (e?.message || e)); }
+    setTxtBusy(false);
+  }
   const linkedGroup = currentLink ? groupForChecksum(groups, currentLink) : null;
   const suggested = !isNew && !currentLink ? suggestDoc(b, docMeta) : null;
   // Reading facts from the linked document, for the "auto" fills below.
@@ -687,6 +714,12 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, fileStats
           title="Search Open Library by ISBN (or title + author) and fill the blank fields — sends that query to openlibrary.org">
           {olBusy ? 'Searching…' : '🔎 Fetch details (Open Library)'}
         </button>
+        {currentLink && (
+          <button type="button" disabled={txtBusy} onClick={pullFromText}
+            title="Fill blank fields from the linked document itself: exact word count (and a pages estimate), plus author / publish year / ISBN scraped from its front matter. Nothing leaves the device.">
+            {txtBusy ? 'Scanning…' : '📄 Fill from linked document'}
+          </button>
+        )}
         {status === 'finished' && (
           <button type="button" title="Finished it again? The current finish date moves into history and today becomes the finish" onClick={() => setB(logReread(b, todayISO()))}>↻ Log re-read</button>
         )}
@@ -1167,8 +1200,9 @@ function SeriesView({ books, onShelve, onOpen }) {
 // linked library book, one-tap link/new/unlink; (2) anthologies/collections — a document's ToC
 // sections each map to a COMPONENT tracker book (Hamlet inside "Complete Works"), with per-section
 // read progress and a reconcile that marks fully-read components finished.
-function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBind, onSecBind, onSaveBook, onOpen }) {
+function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBind, onSecBind, onSaveBook, onOpen, onGroups }) {
   const [msg, setMsg] = useState('');
+  const [editGrp, setEditGrp] = useState(null); // group id being edited (rename/master/members/forget)
   const [anthCs, setAnthCs] = useState('');
   const [anth, setAnth] = useState(null); // { fileName, total, sections:[{title,level,start,end,frac}] }
   const [linkFor, setLinkFor] = useState(null); // section start being linked to an existing book
@@ -1219,6 +1253,21 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
     }
     setMsg(n ? `Marked ${n} fully-read component(s) finished. ✅` : 'No fully-read unfinished components to mark.');
   }
+
+  // Group management (rename / master / members / forget) — mutates global.bookGroups in place.
+  const groupedSet = new Set(groups.flatMap((g) => g.members || []));
+  const ungroupedFiles = Object.entries(fileStats).filter(([cs]) => !groupedSet.has(cs));
+  const renameGrp = (id, name) => onGroups(groups.map((g) => (g.id === id ? { ...g, name } : g)));
+  const setGrpMaster = (id, cs) => onGroups(groups.map((g) => (g.id === id ? { ...g, master: cs } : g)));
+  const addGrpMember = (id, cs) => cs && onGroups(groups.map((g) => (g.id === id ? { ...g, members: [...new Set([...(g.members || []), cs])] } : g)));
+  const removeGrpMember = (id, cs) => onGroups(groups
+    .map((g) => {
+      if (g.id !== id) return g;
+      const members = (g.members || []).filter((m) => m !== cs);
+      return { ...g, members, master: g.master === cs ? members[0] : g.master };
+    })
+    .filter((g) => (g.members || []).length >= 2));
+  const forgetGrp = (id) => { onGroups(groups.filter((g) => g.id !== id)); setEditGrp(null); setMsg('Group forgotten on this device — its files keep their own progress.'); };
   const qMatches = useMemo(() => {
     if (!q.trim()) return [];
     const s = q.trim().toLowerCase();
@@ -1234,9 +1283,15 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
         const linkedId = bindMap[master] || (g.members || []).map((m) => bindMap[m]).find(Boolean);
         const linked = linkedId ? books.find((b) => b.id === linkedId) : null;
         const sugg = !linked ? suggestFor(g.name) : null;
+        const editing = editGrp === g.id;
         return (
           <div key={g.id || g.name} className="lj-grp-row">
-            <span className="lj-grp-name"><b>{g.name}</b><em>{(g.members || []).length} file(s) · master: {nameOf(master)}</em></span>
+            <span className="lj-grp-name">
+              {editing
+                ? <input value={g.name} onChange={(e) => renameGrp(g.id, e.target.value)} aria-label="Group name" />
+                : <b>{g.name}</b>}
+              <em>{(g.members || []).length} file(s) · master: {nameOf(master)}</em>
+            </span>
             {linked ? (
               <span className="lj-grp-acts">
                 <span className="rh-link-chip on">🔗 {linked.title}</span>
@@ -1249,6 +1304,32 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
                 {sugg && <button className="toggle-on" onClick={() => onBind(master, sugg.id)}>Link “{sugg.title}”</button>}
                 <button title="Create a tracker book named after the group and link it" onClick={async () => { const book = { id: deriveId({ title: g.name }), title: g.name }; await onSaveBook(book); await onBind(master, book.id); }}>＋ New book</button>
               </span>
+            )}
+            <span className="lj-grp-acts">
+              <button title="Rename, change the master, add/remove files, or forget this group" onClick={() => setEditGrp(editing ? null : g.id)}>{editing ? 'Done' : '✎ Edit'}</button>
+            </span>
+            {editing && (
+              <div className="lj-grp-edit">
+                {(g.members || []).map((cs) => (
+                  <div key={cs} className="lj-grp-member">
+                    <label title={cs === master ? 'Master (canonical) copy' : 'Make this the master copy'}>
+                      <input type="radio" name={`ljm-${g.id}`} checked={cs === master} onChange={() => setGrpMaster(g.id, cs)} />
+                      <span>{cs === master ? '★' : '☆'}</span>
+                    </label>
+                    <span className="lj-grp-member-name" title={cs}>{nameOf(cs)}</span>
+                    <button title="Remove this file from the group" onClick={() => removeGrpMember(g.id, cs)}>×</button>
+                  </div>
+                ))}
+                <div className="lj-inline" style={{ margin: '4px 0 0' }}>
+                  {ungroupedFiles.length > 0 && (
+                    <select value="" onChange={(e) => addGrpMember(g.id, e.target.value)} title="Add another edition/file to this group">
+                      <option value="">＋ Add a file…</option>
+                      {ungroupedFiles.map(([cs, f]) => <option key={cs} value={cs}>{f.fileName || cs.slice(0, 8)}</option>)}
+                    </select>
+                  )}
+                  <button className="lj-danger" title="Delete the group (files keep their own progress)" onClick={() => forgetGrp(g.id)}>🗑 Forget group</button>
+                </div>
+              </div>
             )}
           </div>
         );
