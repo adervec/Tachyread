@@ -353,7 +353,14 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
                       </>
                     )}
                     {visibleCols.map((c) => (
-                      <td key={c.key} className={`toc-stat${c.key === 'pctRead' && done ? ' done' : ''}`}>{c.get(ctx)}</td>
+                      <td
+                        key={c.key}
+                        className={`toc-stat${c.key === 'pctRead' && done ? ' done' : ''}`}
+                        // Read %: a progress-bar fill behind the number, so scanning the column shows shape at a glance.
+                        style={c.key === 'pctRead' && ctx.readFrac > 0
+                          ? { background: `linear-gradient(to right, color-mix(in srgb, var(--toggle-active-bg) 26%, transparent) ${(ctx.readFrac * 100).toFixed(1)}%, transparent 0)` }
+                          : undefined}
+                      >{c.get(ctx)}</td>
                     ))}
                   </tr>
                 );

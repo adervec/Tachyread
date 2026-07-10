@@ -107,4 +107,16 @@ const r8b = t8.markRangeReadAtPace(100, 400, 300);
 assert.equal(r8b.added, 200, 'only new words counted');
 assert.equal(t8.readCount, 400);
 assert.equal(t8.rangeStats(0, 100).wpm, 250, 'earlier words keep their original pace');
+
+// nextUnreadBoundary: first gap, cycle on repeat clicks, skips excluded, wrap-around
+const t9 = createReadingTracker({ wordCount: 100 });
+t9.markRangeRead(0, 20);   // gap A: 20–39
+t9.markRangeRead(40, 60);  // gap B: 60–99
+assert.equal(t9.nextUnreadBoundary(5), 20, 'first gap from anywhere off-boundary');
+assert.equal(t9.nextUnreadBoundary(20), 60, 'clicking at a boundary hops to the next');
+assert.equal(t9.nextUnreadBoundary(60), 20, 'wraps back to the first gap');
+assert.equal(t9.nextUnreadBoundary(5, [{ start: 20, end: 40 }]), 60, 'a skipped gap is invisible');
+const t10 = createReadingTracker({ wordCount: 10 });
+t10.markRangeRead(0, 10);
+assert.equal(t10.nextUnreadBoundary(0), -1, 'fully read → no boundary');
 console.log('ok');

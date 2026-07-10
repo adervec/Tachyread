@@ -101,7 +101,7 @@ function GoalCard({ books, goals, onSetGoal }) {
   );
 }
 
-export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onClose }) {
+export default function LiteraryJourneyDialog({ global, onPatch, initialTab, focusBookId, linkChecksum, linkFileName, onClose }) {
   const [books, setBooks] = useState(null);
   const [refs, setRefs] = useState({ authors: null, genres: null, subgenres: null });
   const [ai, setAi] = useState(null);
@@ -131,6 +131,9 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
   const [adding, setAdding] = useState(false);
   const [cleanup, setCleanup] = useState(null); // scan preview: { dups, datable, undatable, contradictory }
   const [cleanMsg, setCleanMsg] = useState('');
+  // "This Book in Trackyread" entry points: focus an already-linked book, or run the link flow.
+  const [linkCs, setLinkCs] = useState(linkChecksum || null);
+  useEffect(() => { if (focusBookId) { setTab('library'); setSelected(focusBookId); } }, [focusBookId]);
 
   async function reload() {
     const [bs, a, g, sg, goalsRec, aiRec, sz, bind, docs, files] = await Promise.all([
@@ -189,6 +192,30 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
     if (prev && prev !== checksum) await setBinding(prev, null);
     if (checksum) await setBinding(checksum, bookId);
     setBindMap(await getBinding());
+  }
+
+  // Link-flow (from the "This Book in Trackyread" menu item): best library match for the file name.
+  const linkSuggestion = useMemo(() => {
+    if (!linkCs || !books) return null;
+    const tokens = new Set(normTitle(linkFileName || '').split(' ').filter((w) => w.length > 2));
+    if (!tokens.size) return null;
+    let best = null, bestScore = 0;
+    for (const b of books) {
+      const score = normTitle(`${b.title || ''} ${b.author || ''}`).split(' ').filter((w) => tokens.has(w)).length;
+      if (score > bestScore) { best = b; bestScore = score; }
+    }
+    return bestScore >= 1 ? best : null;
+  }, [linkCs, books, linkFileName]);
+  async function linkTo(bookId) {
+    await bind(linkCs, bookId);
+    setSelected(bookId); setLinkCs(null);
+  }
+  async function linkAsNewBook() {
+    const title = String(linkFileName || 'Untitled').replace(/\.[a-z0-9]+$/i, '');
+    const book = { id: deriveId({ title }), title };
+    await saveLibraryBook(book);
+    await bind(linkCs, book.id);
+    setSelected(book.id); setLinkCs(null); await reload();
   }
 
   async function syncTracker() {
@@ -381,6 +408,15 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
 
           {tab === 'library' && (
             <div className="lj-lib">
+              {linkCs && (
+                <div className="lj-linkbar">
+                  <span>🔗 Link <b>{linkFileName}</b> to a tracker book:</span>
+                  {linkSuggestion && <button className="toggle-on" onClick={() => linkTo(linkSuggestion.id)}>Link “{linkSuggestion.title}”</button>}
+                  <button onClick={linkAsNewBook}>＋ New book from this file</button>
+                  <span className="settings-note" style={{ margin: 0 }}>…or open any book below and set its “Linked document”.</span>
+                  <button onClick={() => setLinkCs(null)}>Dismiss</button>
+                </div>
+              )}
               <div className="lj-toolbar">
                 <input className="lj-search" placeholder="Search title / author / series…" value={flt.search} onChange={(e) => { setFlt({ ...flt, search: e.target.value }); setLimit(60); }} />
                 <select value={flt.readState} onChange={(e) => setFlt({ ...flt, readState: e.target.value })}>

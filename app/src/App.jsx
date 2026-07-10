@@ -44,7 +44,7 @@ import ResourceWizard from './dialogs/ResourceWizard.jsx';
 import IndexPane from './components/IndexPane.jsx';
 import { buildProperNamesFromList } from './document/resourceWizard.js';
 import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
-import { createModeDetector } from './engine/readingMode.js';
+import { createModeDetector, WINDOW_MS as MODE_WINDOW_MS } from './engine/readingMode.js';
 import { startMediaSession, updateMediaSession, stopMediaSession, armMediaKeepAlive, nudgeMediaKeepAlive, getSpeechAudio } from './features/mediaSession.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import AdaptiveProbe from './components/AdaptiveProbe.jsx';
@@ -84,7 +84,7 @@ import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding } from './state/storage.js';
 import { sectionChecksum } from './document/sectionHash.js';
 import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
@@ -157,6 +157,7 @@ function AppInner() {
   const modeDetRef = useRef(null);
   if (!modeDetRef.current) modeDetRef.current = createModeDetector();
   const [readingMode, setReadingMode] = useState('idle');
+  const [modeIdleFrac, setModeIdleFrac] = useState(null); // 1→0 as a stepping mode drains to idle
   // Draggable floating-chip positions (seeded from the last-saved spot; persisted on drop).
   const [facePos, setFacePos] = useState(() => state.global.mobileFacePos || null);
   const [statsPos, setStatsPos] = useState(() => state.global.mobileStatsPos || null);
@@ -249,11 +250,18 @@ function AppInner() {
     setTocFlash((s) => ({ index, token: s.token + 1 }));
   }, [dispatch, state.showToc]);
 
-  // Poll the mode detector (1 Hz + immediately on state flips) into a stable string for the chip.
+  // Poll the mode detector (1 Hz + immediately on state flips) into a stable string for the chip,
+  // plus the time-until-idle fraction that drives the chip's countdown underline (null when the
+  // mode is idle / a live override like auto/TTS/peek, which don't drain to idle).
   useEffect(() => {
     const listening = playing && !!activeTab?.settings.readAloud;
     const peeking = peek.line >= 0;
-    const compute = () => setReadingMode(modeDetRef.current.current({ playing, listening, peeking }));
+    const compute = () => {
+      const m = modeDetRef.current.current({ playing, listening, peeking });
+      setReadingMode(m);
+      const at = ['idle', 'auto', 'listen', 'peek', 'speak'].includes(m) ? null : modeDetRef.current.idleAt();
+      setModeIdleFrac(at ? Math.max(0, Math.min(1, (at - Date.now()) / MODE_WINDOW_MS)) : null);
+    };
     compute();
     const id = setInterval(compute, 1000);
     return () => clearInterval(id);
@@ -1702,6 +1710,21 @@ function AppInner() {
     if (action === 'data') return openDialog({ kind: 'data' });
     if (action === 'book-groups') return openDialog({ kind: 'book-groups' });
     if (action === 'literary-journey') return openDialog({ kind: 'literary-journey' });
+    if (action === 'trackyread-book') {
+      // Jump to the ACTIVE document's tracker book — or start linking it if it isn't tracked yet.
+      const cs = activeTab?.doc?.contentChecksum;
+      if (!cs) return openDialog({ kind: 'literary-journey' });
+      getBinding().then((map) => {
+        const bookId = map[cs] || null;
+        openDialog({
+          kind: 'literary-journey', tab: 'library',
+          focusBookId: bookId,
+          linkChecksum: bookId ? null : cs,
+          linkFileName: activeTab.doc.fileName || '',
+        });
+      }).catch(() => openDialog({ kind: 'literary-journey' }));
+      return;
+    }
     if (action === 'def-settings') return openDialog({ kind: 'def-settings' });
     if (action === 'tab-settings' && activeTab) return openDialog({ kind: 'tab-settings' });
     if (action === 'reset-tab' && activeTab) {
@@ -1768,8 +1791,10 @@ function AppInner() {
     if (which === 'source' && !state.showSource) dispatch({ type: 'TOGGLE_SOURCE' });
   };
   // "Jump to current word": close any aux pane so a reader shows, then snap it to the current line.
+  // Also drops any active peek — the trendline's peek marker must not linger once you've snapped back.
   const jumpToCurrent = () => {
     if (auxOpen) { showAuxOnly(null); setMobileView('lines'); }
+    clearPeek();
     setRecenterKey((k) => k + 1);
   };
   // Jump to the first unread word after everything ever read (the reading frontier).
@@ -1777,6 +1802,14 @@ function AppInner() {
     if (!activeTab?.tracker) return;
     jumpWord(activeTab.tracker.frontierIndex(), { nav: true, src: 'jump' });
     jumpToCurrent();
+  };
+  // Jump to the FIRST unread gap (skipped sections excluded); clicking again from that boundary hops
+  // to the next read/unread boundary — a backfill cycle over the patchy sections.
+  const jumpToGap = () => {
+    const t = activeTabRef.current;
+    if (!t?.tracker) return;
+    const wi = t.tracker.nextUnreadBoundary(t.settings.wordIndex, t.settings.skipRanges || []);
+    if (wi >= 0) { jumpWord(wi, { nav: true, src: 'jump' }); jumpToCurrent(); }
   };
   // Skip to the previous/next SOURCE page (a PDF page / EPUB·HTML section / grabbed image) — moves
   // the reading position to that segment's first word. Distinct from page-up/down (viewport lines).
@@ -2222,6 +2255,7 @@ function AppInner() {
             tab={activeTab}
             playing={playing}
             readingMode={readingMode}
+            modeIdleFrac={modeIdleFrac}
             onJumpWord={jumpWord}
             onPeek={(wi) => peekToLine(getLineIndex(activeTab.doc, wi))}
             peekIdx={peek.line >= 0 ? (activeTab.doc.lines[peek.line]?.startWordIndex ?? -1) : -1}
@@ -2246,6 +2280,7 @@ function AppInner() {
             onTocIcon={onTocIcon}
             onJumpToCurrent={jumpToCurrent}
             onJumpToFrontier={jumpToFrontier}
+            onJumpToGap={jumpToGap}
             moreOpen={moreOpen}
           />
         ) : (
@@ -2375,7 +2410,7 @@ function AppInner() {
         <StatisticsDialog tabs={state.tabs} activeTabId={state.activeTabId} onClose={closeDialog} />
       )}
       {dialog?.kind === 'literary-journey' && (
-        <LiteraryJourneyDialog global={state.global} onPatch={(p) => updateGlobal(p)} initialTab={dialog.tab} onClose={closeDialog} />
+        <LiteraryJourneyDialog global={state.global} onPatch={(p) => updateGlobal(p)} initialTab={dialog.tab} focusBookId={dialog.focusBookId} linkChecksum={dialog.linkChecksum} linkFileName={dialog.linkFileName} onClose={closeDialog} />
       )}
       {dialog?.kind === 'proper-names' && dlgTab && (
         <ProperNamesDialog

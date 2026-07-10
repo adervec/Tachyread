@@ -4,21 +4,21 @@
 // scrolling doesn't flap the label. States that aren't advancement events — peeking, read-aloud,
 // auto-play — override live, since they describe the present, not the recent past.
 
-const WINDOW_MS = 10000;
+export const WINDOW_MS = 10000;
 const CAP = 60;
 
 export const MODES = {
-  peek: { icon: '👁', label: 'peeking', hint: 'Previewing elsewhere — the progress tick is not moving' },
+  peek: { icon: '👀', label: 'peeking', hint: 'Previewing elsewhere — the progress tick is not moving' },
   listen: { icon: '🔊', label: 'listening', hint: 'Read-aloud (TTS) is driving the pace' },
-  auto: { icon: '▶', label: 'auto', hint: 'Auto-advance (word/line player) is driving the pace' },
+  auto: { icon: '⏩', label: 'auto', hint: 'Auto-advance (word/line player) is driving the pace' },
   speak: { icon: '🎤', label: 'speaking', hint: 'Advancing by reading aloud (speech recognition follows you)' },
-  word: { icon: '·', label: 'word-by-word', hint: 'Stepping one word at a time' },
-  line: { icon: '↵', label: 'line-by-line', hint: 'Advancing a line at a time' },
-  para: { icon: '¶', label: 'by paragraph', hint: 'Hopping paragraph to paragraph' },
-  page: { icon: '⇟', label: 'by page', hint: 'Paging through the text' },
-  scroll: { icon: '⇅', label: 'scroll-reading', hint: 'Scrolling the pane; text passing the top edge counts as read' },
-  jump: { icon: '⤳', label: 'navigating', hint: 'Jumping around (ToC / Find / clicks) — not counted as reading' },
-  idle: { icon: '…', label: 'idle', hint: 'No reading activity in the last few seconds' },
+  word: { icon: '🔤', label: 'word-by-word', hint: 'Stepping one word at a time' },
+  line: { icon: '↩️', label: 'line-by-line', hint: 'Advancing a line at a time' },
+  para: { icon: '📃', label: 'by paragraph', hint: 'Hopping paragraph to paragraph' },
+  page: { icon: '📄', label: 'by page', hint: 'Paging through the text' },
+  scroll: { icon: '📜', label: 'scroll-reading', hint: 'Scrolling the pane; text passing the top edge counts as read' },
+  jump: { icon: '🧭', label: 'navigating', hint: 'Jumping around (ToC / Find / clicks) — not counted as reading' },
+  idle: { icon: '💤', label: 'idle', hint: 'No reading activity in the last few seconds' },
 };
 
 export function createModeDetector() {
@@ -48,5 +48,16 @@ export function createModeDetector() {
     return best;
   }
 
-  return { note, current };
+  // Epoch-ms when the current event window drains to idle (newest non-auto event + WINDOW_MS),
+  // or null when there's nothing live — drives the time-until-idle underline on the mode chip.
+  function idleAt(now = Date.now()) {
+    const cutoff = now - WINDOW_MS;
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (events[i].kind === 'auto') continue;
+      return events[i].ts >= cutoff ? events[i].ts + WINDOW_MS : null;
+    }
+    return null;
+  }
+
+  return { note, current, idleAt };
 }

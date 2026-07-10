@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
 import Face from './Face.jsx';
 import ReadingStats from './ReadingStats.jsx';
+import { useLineSweep } from './useLineSweep.js';
 
 // Desktop dock: the animated reader faces and/or the live reading stats, each shown independently
 // (showFaces / showStats). On mobile these both float as separate draggable popups instead — see
@@ -9,17 +9,11 @@ export default function DashboardPane({ tab, dock = false, showFaces = true, sho
   const { settings, doc } = tab;
   const idx = settings.wordIndex;
 
-  const lineProgress = useMemo(() => {
-    const li = doc.wordToLine[idx] ?? 0;
-    const start = doc.lines[li]?.startWordIndex ?? 0;
-    const end = li + 1 < doc.lines.length ? doc.lines[li + 1].startWordIndex : doc.words.length;
-    const count = Math.max(2, end - start);
-    return (idx - start) / (count - 1);
-  }, [doc, idx]);
-
   const count = Math.max(1, Math.min(3, settings.faceCount || 1));
   const styles = settings.faceStyles || ['Man', 'Owl', 'Robot'];
   const wpm = (tab.tracker && tab.tracker.recentWpm()) || settings.wpm;
+  // Sweeps the eyes along the line in line-at-a-time modes (line/scroll/page) instead of snapping.
+  const lineProgress = useLineSweep(doc, idx, wpm);
 
   return (
     <div className={`dashboard-pane${dock ? ' dock' : ''}`}>

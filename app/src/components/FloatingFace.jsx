@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import Face from './Face.jsx';
+import { useLineSweep } from './useLineSweep.js';
 
 // Mobile: the reader face(s) as a floating, draggable overlay with adjustable transparency —
 // so it can sit anywhere over the reading area instead of taking a slice of a small screen. The
@@ -12,14 +13,9 @@ export default function FloatingFace({ tab, pos, onMove, onDrop }) {
   const styles = settings.faceStyles || ['Man', 'Owl', 'Robot'];
   const opacity = Math.max(0.15, Math.min(1, settings.faceOpacity ?? 0.9));
 
-  const lineProgress = useMemo(() => {
-    const li = doc.wordToLine[idx] ?? 0;
-    const start = doc.lines[li]?.startWordIndex ?? 0;
-    const end = li + 1 < doc.lines.length ? doc.lines[li + 1].startWordIndex : doc.words.length;
-    const cnt = Math.max(2, end - start);
-    return (idx - start) / (cnt - 1);
-  }, [doc, idx]);
   const wpm = (tracker && tracker.recentWpm()) || settings.wpm;
+  // Sweeps the eyes along the line in line-at-a-time modes (line/scroll/page) instead of snapping.
+  const lineProgress = useLineSweep(doc, idx, wpm);
 
   const elRef = useRef(null);
   const drag = useRef(null);

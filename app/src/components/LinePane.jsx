@@ -872,6 +872,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   const paneStyle = {};
   if (settings.fontFamily) paneStyle.fontFamily = settings.fontFamily;
   if (settings.currentWordColor) paneStyle['--cw-color'] = settings.currentWordColor;
+  if (settings.orpColor) paneStyle['--lines-orp'] = settings.orpColor;
   return (
     <div
       className={`line-pane${headingPack ? ` hsp-${headingPack}` : ''}`}

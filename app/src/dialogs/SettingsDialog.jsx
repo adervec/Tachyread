@@ -7,6 +7,7 @@ import { createMetronome } from '../features/metronome.js';
 import { DEFAULT_METRONOME } from '../engine/metronome.js';
 import { LINE_SOUNDS, playLineSound } from '../features/clickSound.js';
 import { FACE_STYLES } from '../components/faceDecor3d.js';
+import { STATS_CHIP_ITEMS } from '../components/ReadingStats.jsx';
 
 const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel'];
 // Reading-pointer options archived with its Settings section (see below). Restore alongside it.
@@ -222,6 +223,21 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       </Field>
       <Field label="Highlight ORP character">
         <input type="checkbox" checked={s.highlightORP} onChange={(e) => patch({ highlightORP: e.target.checked })} />
+      </Field>
+      <Field label="ORP highlight colour (Lines)">
+        <div className="swatch-row">
+          {HIGHLIGHT_COLORS.map(([hex, label]) => (
+            <button
+              key={hex || 'theme'}
+              type="button"
+              className={`swatch${(s.orpColor || '') === hex ? ' on' : ''}`}
+              style={hex ? { background: hex } : undefined}
+              title={hex ? label : 'Theme default (usually red)'}
+              onClick={() => patch({ orpColor: hex })}
+            >{hex ? '' : 'A'}</button>
+          ))}
+          <input type="color" className="swatch-custom" value={s.orpColor || '#d24a43'} onChange={(e) => patch({ orpColor: e.target.value })} title="Custom colour" />
+        </div>
       </Field>
       <Field label="ORP horizontal position (%)">
         <input
@@ -549,6 +565,20 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
         them anywhere over the page; these set how see-through each is. Toggle them from the menu’s
         Faces / Stats panel chips.
       </p>
+
+      <Section>Stats chip</Section>
+      <p className="settings-note" style={{ margin: '2px 0 4px' }}>Choose what the reading-stats block (dock &amp; floating chip) shows. Defaults match the original layout; the rest are extras.</p>
+      <div className="stats-chip-picks">
+        {STATS_CHIP_ITEMS.map(([key, label, def]) => (
+          <label key={key} className="inline-check">
+            <input
+              type="checkbox"
+              checked={s.statsChip?.[key] ?? def}
+              onChange={(e) => patch({ statsChip: { ...(s.statsChip || {}), [key]: e.target.checked } })}
+            /> {label}
+          </label>
+        ))}
+      </div>
 
       {/* Reading-pointer settings archived — the feature isn't useful right now. Re-enable by
           restoring this block and flipping POINTER_ENABLED in LinePane.jsx.
