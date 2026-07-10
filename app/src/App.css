@@ -3323,6 +3323,36 @@
 .lj-toolbar2 { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
 .lj-spacer { flex: 1; }
 
+/* Yearly reading goal card (Dashboard) */
+.lj-goal { border: 1px solid var(--divider); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+.lj-goal-head { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+.lj-goal-badge { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--divider); }
+.lj-goal-badge.on { color: #2a9d4a; border-color: #2a9d4a; }
+.lj-goal-badge.off { color: #d08700; border-color: #d08700; }
+.lj-goal-badge.won { color: var(--toggle-active-bg); border-color: var(--toggle-active-bg); }
+.lj-goal-bar { position: relative; height: 10px; border-radius: 5px; background: var(--divider); margin: 8px 0 4px; }
+.lj-goal-bar i { position: absolute; inset: 0 auto 0 0; background: var(--toggle-active-bg); border-radius: 5px; }
+.lj-goal-bar em { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--menu-fg); opacity: 0.7; }
+.lj-goal-note { margin: 0; }
+.lj-goal-num { width: 70px; }
+
+/* Series view */
+.lj-series-row { border: 1px solid var(--divider); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; }
+.lj-series-row.done { opacity: 0.75; }
+.lj-series-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.lj-series-head em { font-style: normal; color: var(--status-fg); font-size: 12px; }
+.lj-series-count { font-weight: 700; font-size: 12px; }
+.lj-series-vols { display: flex; align-items: center; gap: 4px; margin: 6px 0; flex-wrap: wrap; }
+.lj-vol { min-width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--divider); background: transparent; cursor: pointer; font-size: 11px; font-weight: 700; padding: 0 4px; color: inherit; }
+.lj-vol-finished { background: var(--toggle-active-bg); color: #fff; border-color: var(--toggle-active-bg); }
+.lj-vol-reading { border-color: var(--toggle-active-bg); color: var(--toggle-active-bg); }
+.lj-vol-queue { border-style: dashed; border-color: var(--toggle-active-bg); }
+.lj-vol-abandoned { text-decoration: line-through; opacity: 0.6; }
+.lj-vol-toread { opacity: 0.65; }
+.lj-series-bar { flex: 1; min-width: 60px; height: 5px; border-radius: 3px; background: var(--divider); overflow: hidden; margin-left: 6px; }
+.lj-series-bar i { display: block; height: 100%; background: var(--toggle-active-bg); }
+.lj-series-next { display: flex; align-items: center; gap: 8px; font-size: 12px; flex-wrap: wrap; }
+
 .lj-list { display: flex; flex-direction: column; gap: 2px; max-height: 48vh; overflow-y: auto; }
 .lj-row { display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--divider); }
 .lj-row-hit { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: 74px 1fr auto; gap: 8px; align-items: center; text-align: left; background: transparent; border: none; padding: 6px 4px; cursor: pointer; color: inherit; font: inherit; }

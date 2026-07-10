@@ -1,6 +1,6 @@
 // Self-check for journeyAnalytics.js — run: node app/src/features/journeyAnalytics.demo.mjs
 import assert from 'node:assert';
-import { cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, estHours, queueWithEstimates, recentWordsPerDay } from './journeyAnalytics.js';
+import { cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, estHours, queueWithEstimates, recentWordsPerDay, yearGoal, seriesProgress } from './journeyAnalytics.js';
 
 const books = [
   { id: 'a', title: 'A', author: 'X', genre: 'Literary', fnf: 'F', completion: true, finishTime: '2023-02-10', pages: 300, words: 90000, difficultyLevel: 4, rating: 5, recBy: 'Sam' },
@@ -99,5 +99,39 @@ const qNone = queueWithEstimates(books, 250, { now: FUTURE });
 assert.equal(qNone.wordsPerDay, null);
 assert.equal(qNone.items[0].etc, null);
 assert.ok(qNone.items[0].hours > 0);
+
+// yearGoal: mid-year with 6 of 12 done → on the expected pace, projection ≈ 12
+{
+  const MID = Date.parse('2026-07-02T12:00:00Z'); // ~50.4% through 2026
+  const lib = Array.from({ length: 6 }, (_, i) => ({ id: `g${i}`, title: `G${i}`, completion: true, finishTime: `2026-0${(i % 6) + 1}-15` }));
+  lib.push({ id: 'old', title: 'Old', completion: true, finishTime: '2024-01-01' }); // prior year: excluded
+  const g = yearGoal(lib, 12, MID);
+  assert.equal(g.year, 2026);
+  assert.equal(g.finished, 6);
+  assert.equal(g.onTrack, true);
+  assert.ok(g.projected >= 11 && g.projected <= 13, `projected ≈ 12, got ${g.projected}`);
+  assert.ok(g.needPerMonth > 0.9 && g.needPerMonth < 1.15, `need ≈ 1/mo, got ${g.needPerMonth}`);
+  const behind = yearGoal(lib.slice(0, 2), 12, MID); // 2 of 12 at mid-year
+  assert.equal(behind.onTrack, false);
+  assert.equal(yearGoal(lib, 0, MID).onTrack, null); // no goal set
+}
+
+// seriesProgress: groups, orders by seriesNum, finds the next unread, drops 1-book series
+{
+  const lib = [
+    { id: 's1', title: 'A Game', series: 'Ice & Fire', seriesNum: 1, author: 'GRRM', completion: true, finishTime: '2025-01-01' },
+    { id: 's2', title: 'A Clash', series: 'Ice & Fire', seriesNum: 2 },
+    { id: 's3', title: 'A Storm', series: 'Ice & Fire', seriesNum: 3 },
+    { id: 'd1', title: 'Dune', series: 'Dune Saga', seriesNum: 1, completion: true, finishTime: '2020-01-01' },
+    { id: 'd2', title: 'Messiah', series: 'Dune Saga', seriesNum: 2, completion: true, finishTime: '2020-02-01' },
+    { id: 'solo', title: 'One-off', series: 'Lonely' },
+  ];
+  const sp = seriesProgress(lib);
+  assert.equal(sp.length, 2, 'single-book series dropped');
+  assert.equal(sp[0].series, 'Ice & Fire', 'active series first');
+  assert.equal(sp[0].next.title, 'A Clash', 'next = lowest unread seriesNum');
+  assert.equal(sp[0].finished, 1);
+  assert.equal(sp[1].done, true, 'Dune Saga complete');
+}
 
 console.log('journeyAnalytics.demo: all assertions passed ✅');
