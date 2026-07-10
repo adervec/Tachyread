@@ -165,6 +165,15 @@
 /* Two-level mobile menu: category rows drill into a submenu, with a back header. */
 .menu-cat { font-weight: 600; }
 .menu-cat-caret { color: var(--status-fg); font-size: 18px; }
+/* Drawer menus as tap-friendly TILE GRIDS instead of full-width list rows. */
+.menu-cat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 4px 12px 10px; }
+.menu-cat-grid .item.menu-cat { flex-direction: column; justify-content: center; text-align: center; gap: 0; padding: 14px 4px; border: 1px solid var(--divider); border-radius: 10px; }
+.menu-cat-grid .menu-cat-caret { display: none; }
+.menu-item-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 4px 12px 10px; }
+.menu-item-grid .item { flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 4px; padding: 12px 8px; min-height: 56px; border: 1px solid var(--divider); border-radius: 10px; font-size: 13px; }
+.menu-item-grid .item > span:first-child { overflow-wrap: anywhere; }
+.menu-item-grid .separator { grid-column: 1 / -1; margin: 2px 0; }
+.menu-item-grid .shortcut { font-size: 10px; opacity: 0.65; }
 .menu-drawer-back {
   padding: 11px 16px; font-size: 13px; font-weight: 600; color: var(--toggle-active-bg);
   cursor: pointer; border-bottom: 1px solid var(--divider); position: sticky; top: 0;

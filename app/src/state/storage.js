@@ -575,13 +575,14 @@ export async function saveLibraryBook(book) {
   const db = await getDB();
   const rec = { ...book, updatedAt: Date.now(), deleted: !!book.deleted };
   try { await db.put('library', rec, `book:${book.id}`); } catch { /* quota — skip */ }
+  await markLibraryChanged();
   return rec;
 }
 
 export async function deleteLibraryBook(id) {
   const db = await getDB();
   const rec = await db.get('library', `book:${id}`);
-  if (rec) await db.put('library', { ...rec, deleted: true, updatedAt: Date.now() }, `book:${id}`);
+  if (rec) { await db.put('library', { ...rec, deleted: true, updatedAt: Date.now() }, `book:${id}`); await markLibraryChanged(); }
 }
 
 export async function getLibraryRef(kind) {
@@ -591,6 +592,7 @@ export async function getLibraryRef(kind) {
 export async function saveLibraryRef(kind, data) {
   const db = await getDB();
   await db.put('library', { data, updatedAt: Date.now() }, `refs:${kind}`);
+  await markLibraryChanged();
 }
 
 export async function getBinding() {
@@ -604,6 +606,7 @@ export async function setBinding(checksum, bookId) {
   if (bookId) rec.map[checksum] = bookId; else delete rec.map[checksum];
   rec.updatedAt = Date.now();
   await db.put('library', rec, 'binding');
+  await markLibraryChanged();
   try { window.dispatchEvent(new Event('tachyread-bindings-changed')); } catch { /* non-DOM */ }
   return rec.map;
 }
@@ -615,6 +618,7 @@ export async function getJourneyAi() {
 export async function saveJourneyAi(ai) {
   const db = await getDB();
   await db.put('library', { ...ai, updatedAt: Date.now() }, 'ai');
+  await markLibraryChanged();
 }
 
 // Rough on-disk footprint + live book count for the storage-details readout (cheap cursor walk).
@@ -631,6 +635,30 @@ export async function librarySize() {
 export async function clearLibrary() {
   const db = await getDB();
   await db.clear('library');
+  await markLibraryChanged(); // a wipe is a change the next sync should push
+}
+
+// ── Diff-aware library sync bookkeeping ──────────────────────────────────────────────────────────
+// `changedAt` stamps every local mutation; `syncState` remembers what the last sync saw (the remote
+// file's stamp + the local change stamp it pushed). Steady-state sync then compares two numbers and
+// moves NOTHING when neither side changed — instead of shipping ~3,000 books back and forth.
+export async function markLibraryChanged() {
+  try {
+    const db = await getDB();
+    await db.put('library', { at: Date.now() }, 'changedAt');
+  } catch { /* bookkeeping only */ }
+}
+export async function getLibraryChangedAt() {
+  const db = await getDB();
+  return (await db.get('library', 'changedAt'))?.at || 0;
+}
+export async function getLibrarySyncState() {
+  const db = await getDB();
+  return (await db.get('library', 'syncState')) || null;
+}
+export async function setLibrarySyncState(state) {
+  const db = await getDB();
+  await db.put('library', state, 'syncState');
 }
 
 // A versioned bundle of the whole tracker. Defaults (full: tombstones + refs + ai + binding) feed the
@@ -662,7 +690,7 @@ export async function exportLibraryData(opts = {}) {
 // updatedAt (tombstones win a delete); refs/meta/ai LWW; binding unions. The dialog normalizes a raw
 // library.json into this envelope shape first (deriveId), so here we only require a books[] with ids.
 export async function importLibraryData(bundle, opts = {}) {
-  const { mode = 'merge' } = opts;
+  const { mode = 'merge', fromSync = false } = opts;
   if (!bundle || !Array.isArray(bundle.books)) throw new Error('Not a Tachyread library file.');
   const db = await getDB();
   const tx = db.transaction('library', 'readwrite');
@@ -698,6 +726,8 @@ export async function importLibraryData(bundle, opts = {}) {
     await store.put({ map: { ...existing.map, ...bundle.binding }, updatedAt: Date.now() }, 'binding');
   }
   await tx.done;
+  // A user-driven import is a local change to push; a sync's own merge is not (it IS the remote).
+  if (!fromSync) await markLibraryChanged();
   try { window.dispatchEvent(new Event('tachyread-bindings-changed')); } catch { /* non-DOM */ }
   return { added, merged, total: bundle.books.length };
 }

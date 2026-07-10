@@ -29,7 +29,7 @@ import { olFetch, bookCoverUrl } from '../features/openLibrary.js';
 import { HistoryView } from './HistoryDialog.jsx';
 import ProgressDetailDialog from './ProgressDetailDialog.jsx';
 import { getSyncProvider } from '../features/sync/syncProviders.js';
-import { syncLibraryWithProvider, backupLibraryToProvider } from '../features/sync/syncManager.js';
+import { syncLibraryWithProvider } from '../features/sync/syncManager.js';
 import { AXES, READER_ARCHETYPES, readerProfile, matchArchetype, currentArchetype, archetypeTrend, archetypeAxes } from '../features/readerArchetype.js';
 import { constellationLayout, CONSTELLATION_R } from '../features/bookConstellation.js';
 
@@ -218,22 +218,45 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     setSelected(book.id); setLinkCs(null); await reload();
   }
 
+  const syncResultMsg = (r) => (r.skipped
+    ? 'Already in sync — nothing needed to move. ✅'
+    : `Synced — ${r.pulled ? 'pulled updates' : 'nothing to pull'}${r.pushed ? ` · pushed ${r.books} books (${Math.round(r.bytes / 1024)} KB)` : ' · nothing to push'}.`);
+
   async function syncTracker() {
     setSyncBusy(true); setSyncMsg('Syncing tracker…');
     try {
       const r = await syncLibraryWithProvider(sync.provider, sync);
       onPatch?.({ sync: { ...sync, lastLibrarySync: Date.now() } });
-      reconciled.current = false; await reload();
-      setSyncMsg(`Synced — ${r.books} books (${Math.round(r.bytes / 1024)} KB).`);
+      if (!r.skipped) { reconciled.current = false; await reload(); }
+      setSyncMsg(syncResultMsg(r));
     } catch (e) { setSyncMsg('Sync failed: ' + (e?.message || e)); }
     setSyncBusy(false);
   }
 
-  // Best-effort silent push on close — only when a live connection already exists (no OAuth popup).
+  // Auto-pull on open: when a live provider connection already exists, run the diff-aware sync
+  // silently. Steady-state cost is one stat call — no payload moves unless something changed.
+  const autoSynced = useRef(false);
+  useEffect(() => {
+    if (autoSynced.current || !providerOk) return;
+    autoSynced.current = true;
+    (async () => {
+      try {
+        if (!(await provider.isConnected?.())) return;
+        const r = await syncLibraryWithProvider(sync.provider, sync, { silent: true });
+        onPatch?.({ sync: { ...sync, lastLibrarySync: Date.now() } });
+        if (r.pulled) { reconciled.current = false; await reload(); }
+        setSyncMsg(syncResultMsg(r));
+      } catch { /* best effort */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providerOk]);
+
+  // Best-effort silent sync on close — only when a live connection already exists (no OAuth popup),
+  // and diff-aware, so closing an untouched tracker moves nothing.
   async function handleClose() {
     try {
       if (sync.auto && provider && (await provider.isConnected?.())) {
-        await backupLibraryToProvider(sync.provider, sync, { silent: true });
+        await syncLibraryWithProvider(sync.provider, sync, { silent: true });
         onPatch?.({ sync: { ...sync, lastLibrarySync: Date.now() } });
       }
     } catch { /* best effort */ }
