@@ -98,6 +98,18 @@ export function mergeSkipRanges(...lists) {
   return out;
 }
 
+// Remove the span [start,end) from a skip-range list, trimming or splitting any ranges it overlaps
+// (the inverse of merging one in) — used to un-skip a section from the progress view.
+export function removeSkipRange(ranges, start, end) {
+  const out = [];
+  for (const r of ranges || []) {
+    if (r.end <= start || r.start >= end) { out.push({ ...r }); continue; } // untouched
+    if (r.start < start) out.push({ ...r, end: start });                      // left remnant
+    if (r.end > end) out.push({ ...r, start: end });                          // right remnant
+  }
+  return out;
+}
+
 // Highest word index that still counts toward completion (skip trailing flagged matter, e.g. an
 // index/notes section at the back), so "finished" can trigger when the real content ends.
 export function lastCountableWord(totalWords, ranges) {

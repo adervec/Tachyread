@@ -329,6 +329,25 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     if (b > a) { stampParas(a, b, Date.now()); dirty = true; }
   }
 
+  // Impute reading of a span's UNREAD words at a chosen pace: mark them read, tag their per-word wpm,
+  // and credit the implied active time (words ÷ wpm) to lifetime + today — for finishing a section you
+  // covered elsewhere at a known speed (e.g. the audiobook at 1.5×). Already-read words keep their real
+  // recorded pace. Crediting the time is the point: it keeps lifetime WPM honest instead of spiking.
+  function markRangeReadAtPace(from, to, pace) {
+    const a = Math.max(0, from | 0);
+    const b = Math.min(wordCount, to | 0);
+    const p = Math.max(1, Math.round(pace) || 1);
+    let added = 0;
+    for (let i = a; i < b; i++) if (!mask[i]) { mask[i] = 1; readCount++; wpm[i] = Math.min(65535, p); added++; }
+    if (added <= 0) return { added: 0, ms: 0 };
+    const ms = Math.round((added / p) * 60000);
+    lifetimeMs += ms;
+    bumpDay(added, ms);
+    stampParas(a, b, Date.now());
+    dirty = true;
+    return { added, ms };
+  }
+
   // Un-mark a span's coverage (the inverse of markRangeRead) — e.g. a ToC section credited as
   // "read on paper" being toggled back off. Clears the mask and per-word pace; session counters
   // are untouched (they record this session's activity, not coverage).
@@ -490,6 +509,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     setHidden,
     markPrefixRead,
     markRangeRead,
+    markRangeReadAtPace,
     unmarkRangeRead,
     recentWpm,
     sampleTrend,

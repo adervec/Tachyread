@@ -2413,7 +2413,7 @@ function AppInner() {
         <RegressionDialog tab={dlgTab} onJumpWord={jumpWord} onClose={closeDialog} />
       )}
       {dialog?.kind === 'progress-detail' && dlgTab && (
-        <ProgressDetailDialog tab={dlgTab} onJumpWord={jumpWord} onClose={closeDialog} />
+        <ProgressDetailDialog tab={dlgTab} onJumpWord={jumpWord} onPatchSettings={(patch) => patchSettings(dlgTab.id, patch)} onClose={closeDialog} />
       )}
       {dialog?.kind === 'attention' && dlgTab && (
         <AttentionDialog tab={dlgTab} recentScores={probeScoresRef.current} onClose={closeDialog} />
