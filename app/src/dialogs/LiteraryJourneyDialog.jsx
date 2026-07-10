@@ -4,8 +4,11 @@ import { fmtDateTime } from '../features/dateFmt.js';
 import {
   getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef, saveLibraryRef,
   getJourneyAi, saveJourneyAi, exportLibraryData, importLibraryData, librarySize, clearLibrary,
-  getBinding, setBinding, allDocMeta, allFiles, getFsHandle, setFsHandle,
+  getBinding, setBinding, getSectionBindings, setSectionBinding, allDocMeta, allFiles, getFsHandle, setFsHandle,
+  loadFile, loadReadState,
 } from '../state/storage.js';
+import { createReadingTracker } from '../engine/readingTracker.js';
+import { sectionSpan } from '../document/toc.js';
 import { askClaude, anthropicConfigured } from '../features/anthropic.js';
 import {
   getInstruction, LIGHT_INSTRUCTION, HEAVY_PLACEHOLDER, KNOWLEDGE_GRAPH_INSTRUCTION, buildDataset, buildDigest,
@@ -23,7 +26,7 @@ import {
 } from '../features/journeyAnalytics.js';
 import { findDuplicates, finishedDateIssues } from '../features/journeyCleanup.js';
 import { normTitle } from '../document/tocWizard.js';
-import { groupForChecksum } from '../features/bookGroups.js';
+import { groupForChecksum, masterOf } from '../features/bookGroups.js';
 import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordCount } from '../features/readingTime.js';
 import { olFetch, bookCoverUrl } from '../features/openLibrary.js';
 import { HistoryView } from './HistoryDialog.jsx';
@@ -107,6 +110,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   const [ai, setAi] = useState(null);
   const [size, setSize] = useState(null);
   const [bindMap, setBindMap] = useState(null);
+  const [secBind, setSecBind] = useState({}); // { checksum: { bookId: {title,start,end} } } — anthology components
   const [goals, setGoals] = useState(null); // { [year]: target } — the yearly reading goals
   const [docMeta, setDocMeta] = useState([]);
   const [fileStats, setFileStats] = useState({}); // checksum → { firstRead, activeSecs, words, coverage } for auto-fill
@@ -136,13 +140,13 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   useEffect(() => { if (focusBookId) { setTab('library'); setSelected(focusBookId); } }, [focusBookId]);
 
   async function reload() {
-    const [bs, a, g, sg, goalsRec, aiRec, sz, bind, docs, files] = await Promise.all([
+    const [bs, a, g, sg, goalsRec, aiRec, sz, bind, secs, docs, files] = await Promise.all([
       getLibraryBooks(), getLibraryRef('authors'), getLibraryRef('genres'), getLibraryRef('subgenres'), getLibraryRef('goals'),
-      getJourneyAi(), librarySize(), getBinding(), allDocMeta(), allFiles().catch(() => []),
+      getJourneyAi(), librarySize(), getBinding(), getSectionBindings(), allDocMeta(), allFiles().catch(() => []),
     ]);
     setBooks(bs); setRefs({ authors: a, genres: g, subgenres: sg }); setAi(aiRec); setSize(sz);
     setGoals(goalsRec || {});
-    setBindMap(bind); setDocMeta(docs);
+    setBindMap(bind); setSecBind(secs); setDocMeta(docs);
     // Per-document reading facts so a bound book can auto-fill its start date + reading time.
     const stats = {};
     for (const f of files) {
@@ -150,6 +154,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
       if (!cs) continue;
       const daily = (f.dailyHistory || []).filter((d) => (d.wordsRead || 0) > 0 || (d.activeTimeSecs || 0) > 0).sort((x, y) => (x.date < y.date ? -1 : 1));
       stats[cs] = {
+        fileName: f.fileName || '',
         firstRead: daily[0]?.date || null,
         lastRead: daily.length ? daily[daily.length - 1].date : null,
         activeSecs: f.persistentActiveTimeSecs || 0,
@@ -369,6 +374,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     { id: 'library', label: `Library${books ? ` (${books.length})` : ''}` },
     { id: 'queue', label: `Queue${queueCount ? ` (${queueCount})` : ''}` },
     { id: 'series', label: 'Series' },
+    { id: 'groups', label: 'Groups' },
     { id: 'timeline', label: 'Timeline' },
     { id: 'rhistory', label: 'Reading History' },
     { id: 'analytics', label: 'Analytics' },
@@ -515,6 +521,14 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
 
           {tab === 'queue' && <QueueView books={books} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
           {tab === 'series' && <SeriesView books={books} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
+          {tab === 'groups' && (
+            <GroupsView
+              books={books} groups={global?.bookGroups || []} bindMap={bindMap || {}} secBind={secBind}
+              docMeta={docMeta} fileStats={fileStats}
+              onBind={bind} onSecBind={async (cs, id, span) => { await setSectionBinding(cs, id, span); setSecBind(await getSectionBindings()); }}
+              onSaveBook={saveBook} onOpen={(id) => { setTab('library'); setSelected(id); }}
+            />
+          )}
           {tab === 'timeline' && <TimelineView books={books} />}
           {tab === 'rhistory' && <HistoryView />}
           {tab === 'analytics' && <AnalyticsView books={books} />}
@@ -1144,6 +1158,148 @@ function SeriesView({ books, onShelve, onOpen }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Groups & anthologies view ────────────────────────────────────────────────────────────────────
+// Two managers in one tab: (1) book-group ↔ tracker-book links — every app book group with its
+// linked library book, one-tap link/new/unlink; (2) anthologies/collections — a document's ToC
+// sections each map to a COMPONENT tracker book (Hamlet inside "Complete Works"), with per-section
+// read progress and a reconcile that marks fully-read components finished.
+function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBind, onSecBind, onSaveBook, onOpen }) {
+  const [msg, setMsg] = useState('');
+  const [anthCs, setAnthCs] = useState('');
+  const [anth, setAnth] = useState(null); // { fileName, total, sections:[{title,level,start,end,frac}] }
+  const [linkFor, setLinkFor] = useState(null); // section start being linked to an existing book
+  const [q, setQ] = useState('');
+  const nameOf = (cs) => docMeta.find((d) => d.checksum === cs)?.fileName || fileStats[cs]?.fileName || `${String(cs).slice(0, 8)}…`;
+
+  // Best library match for a name (group name / section title) by title-token overlap.
+  const suggestFor = (name) => {
+    const tokens = new Set(normTitle(name || '').split(' ').filter((w) => w.length > 2));
+    if (!tokens.size) return null;
+    let best = null, bestScore = 0;
+    for (const b of books) {
+      const score = normTitle(`${b.title || ''} ${b.author || ''}`).split(' ').filter((w) => tokens.has(w)).length;
+      if (score > bestScore) { best = b; bestScore = score; }
+    }
+    return bestScore >= 1 ? best : null;
+  };
+
+  async function pickDoc(cs) {
+    setAnthCs(cs); setAnth(null); setLinkFor(null);
+    if (!cs) return;
+    const [fsRec, rs] = await Promise.all([loadFile(cs), loadReadState(cs).catch(() => null)]);
+    const total = fsRec?.totalWords || 0;
+    const entries = [...(fsRec?.tocEntries || [])].sort((a, b) => a.wordIndex - b.wordIndex);
+    const tracker = createReadingTracker({ wordCount: total, maskB64: rs?.maskB64 || '' });
+    const sections = entries.map((e, i) => {
+      const span = sectionSpan(entries, i, total);
+      return { title: e.title, level: e.level || 0, start: span.start, end: span.end, frac: total ? tracker.rangeStats(span.start, span.end).readFrac : 0 };
+    });
+    setAnth({ fileName: fsRec?.fileName || nameOf(cs), total, sections });
+  }
+  const mappedFor = (sec) => Object.entries(secBind[anthCs] || {}).find(([, sp]) => sp.start === sec.start || (sp.title && sp.title === sec.title)) || null;
+
+  async function newBookForSection(sec) {
+    const book = { id: deriveId({ title: sec.title }), title: sec.title };
+    await onSaveBook(book);
+    await onSecBind(anthCs, book.id, sec);
+  }
+  async function finishComponents() {
+    let n = 0;
+    for (const sec of anth?.sections || []) {
+      const m = mappedFor(sec);
+      if (!m || sec.frac < 0.99) continue;
+      const book = books.find((b) => b.id === m[0]);
+      if (!book || book.completion === true) continue;
+      await onSaveBook({ ...book, completion: true, inProgress: false, finishTime: book.finishTime || fileStats[anthCs]?.lastRead || todayISO() });
+      n++;
+    }
+    setMsg(n ? `Marked ${n} fully-read component(s) finished. ✅` : 'No fully-read unfinished components to mark.');
+  }
+  const qMatches = useMemo(() => {
+    if (!q.trim()) return [];
+    const s = q.trim().toLowerCase();
+    return books.filter((b) => `${b.title || ''} ${b.author || ''}`.toLowerCase().includes(s)).slice(0, 8);
+  }, [q, books]);
+
+  return (
+    <div className="lj-groupsview">
+      <div className="rh-section-h">Book groups ↔ tracker books</div>
+      {groups.length === 0 && <p className="settings-note">No book groups yet — group edition files under <b>Settings → Book Groups</b>, then link each group to its tracker book here.</p>}
+      {groups.map((g) => {
+        const master = masterOf(g);
+        const linkedId = bindMap[master] || (g.members || []).map((m) => bindMap[m]).find(Boolean);
+        const linked = linkedId ? books.find((b) => b.id === linkedId) : null;
+        const sugg = !linked ? suggestFor(g.name) : null;
+        return (
+          <div key={g.id || g.name} className="lj-grp-row">
+            <span className="lj-grp-name"><b>{g.name}</b><em>{(g.members || []).length} file(s) · master: {nameOf(master)}</em></span>
+            {linked ? (
+              <span className="lj-grp-acts">
+                <span className="rh-link-chip on">🔗 {linked.title}</span>
+                <button onClick={() => onOpen(linked.id)}>↗ Open</button>
+                <button title="Remove the link between this group's master file and the tracker book" onClick={() => onBind(null, linked.id)}>Unlink</button>
+              </span>
+            ) : (
+              <span className="lj-grp-acts">
+                <span className="rh-link-chip">○ not linked</span>
+                {sugg && <button className="toggle-on" onClick={() => onBind(master, sugg.id)}>Link “{sugg.title}”</button>}
+                <button title="Create a tracker book named after the group and link it" onClick={async () => { const book = { id: deriveId({ title: g.name }), title: g.name }; await onSaveBook(book); await onBind(master, book.id); }}>＋ New book</button>
+              </span>
+            )}
+          </div>
+        );
+      })}
+
+      <div className="rh-section-h">Anthologies &amp; collections — components map to sections</div>
+      <p className="settings-note">Pick a stored document (the anthology file); each ToC section can bind to its own tracker book. Reading a section fully lets you mark that component finished.</p>
+      <div className="lj-inline">
+        <select value={anthCs} onChange={(e) => pickDoc(e.target.value)}>
+          <option value="">Pick a document…</option>
+          {docMeta.map((d) => <option key={d.checksum} value={d.checksum}>{d.fileName}</option>)}
+        </select>
+        {anth && anth.sections.some((s) => mappedFor(s)) && <button className="toggle-on" onClick={finishComponents}>✓ Mark fully-read components finished</button>}
+        {msg && <span className="settings-note" style={{ margin: 0 }}>{msg}</span>}
+      </div>
+      {anth && anth.sections.length === 0 && <p className="settings-note">“{anth.fileName}” has no stored Table of Contents — open it and run the ToC wizard first.</p>}
+      {anth && anth.sections.length > 0 && (
+        <div className="lj-anth">
+          {anth.sections.map((sec) => {
+            const m = mappedFor(sec);
+            const book = m ? books.find((b) => b.id === m[0]) : null;
+            return (
+              <div key={sec.start} className="lj-anth-row" style={{ paddingLeft: 8 + sec.level * 14 }}>
+                <span className="lj-anth-title">{sec.title}</span>
+                <span className="lj-series-bar" title={`${Math.round(sec.frac * 100)}% of this section read`}><i style={{ width: `${sec.frac * 100}%` }} /></span>
+                <span className="lj-anth-pct">{Math.round(sec.frac * 100)}%</span>
+                {m ? (
+                  <span className="lj-grp-acts">
+                    <span className="rh-link-chip on" title={book ? STATUS_LABEL[readStatus(book)] : ''}>🔗 {book?.title || m[0]}{book && readStatus(book) === 'finished' ? ' ✅' : ''}</span>
+                    {book && <button onClick={() => onOpen(book.id)}>↗</button>}
+                    <button title="Unlink this section" onClick={() => onSecBind(anthCs, m[0], null)}>✕</button>
+                  </span>
+                ) : (
+                  <span className="lj-grp-acts">
+                    <button title="Create a tracker book named after this section and bind it" onClick={() => newBookForSection(sec)}>＋ Book</button>
+                    <button title="Bind an existing tracker book to this section" onClick={() => { setLinkFor(linkFor === sec.start ? null : sec.start); setQ(''); }}>🔗 Link…</button>
+                  </span>
+                )}
+                {linkFor === sec.start && (
+                  <span className="lj-anth-pick">
+                    <input autoFocus placeholder="Search your library…" value={q} onChange={(e) => setQ(e.target.value)} />
+                    {qMatches.map((b) => (
+                      <button key={b.id} onClick={async () => { await onSecBind(anthCs, b.id, sec); setLinkFor(null); }}>{b.title}{b.author ? ` — ${b.author}` : ''}</button>
+                    ))}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

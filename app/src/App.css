@@ -3354,6 +3354,18 @@
 /* Link-a-document banner (via Stats → This Book in Trackyread) */
 .lj-linkbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; border: 1px solid var(--toggle-active-bg); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; background: color-mix(in srgb, var(--toggle-active-bg) 7%, transparent); }
 
+/* Groups & anthologies view */
+.lj-grp-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--divider); padding: 7px 2px; font-size: 13px; }
+.lj-grp-name { display: flex; flex-direction: column; min-width: 160px; }
+.lj-grp-name em { font-style: normal; font-size: 11px; color: var(--status-fg); }
+.lj-grp-acts { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.lj-anth-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid var(--divider); padding: 5px 2px; font-size: 12px; }
+.lj-anth-title { flex: 0 1 260px; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.lj-anth-row .lj-series-bar { flex: 1 1 80px; margin-left: 0; }
+.lj-anth-pct { width: 38px; text-align: right; color: var(--status-fg); }
+.lj-anth-pick { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; flex-basis: 100%; padding: 4px 0 2px; }
+.lj-anth-pick input { width: 180px; }
+
 /* Year in Books wrap-up (Analytics) */
 .lj-wrap { border: 1px solid var(--divider); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
 .lj-wrap-head { display: flex; align-items: center; gap: 10px; font-size: 14px; margin-bottom: 8px; }
