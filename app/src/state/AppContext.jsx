@@ -322,6 +322,7 @@ export function AppProvider({ children }) {
       wordCount: doc.words.length,
       maskB64: rs?.maskB64 || '',
       wpmB64: rs?.wpmB64 || '',
+      srcB64: rs?.srcB64 || '',
       lifetimeActiveMs: rs?.lifetimeActiveMs || 0,
       daily: rs?.daily || [],
       paragraphStarts,
@@ -345,7 +346,7 @@ export function AppProvider({ children }) {
         tracker.markPrefixRead(target); // keep "% read" consistent with the resumed position
         if (!stateRef.current.incognito) {
           saveReadState(doc.contentChecksum, {
-            maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(),
+            maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(), srcB64: tracker.serializeSrc(),
             lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(),
             paraTsB64: tracker.serializeParaTs(),
           }).catch(() => {});
@@ -454,6 +455,7 @@ export function AppProvider({ children }) {
     saveReadState(tab.doc.contentChecksum, {
       maskB64: tr.serializeMask(),
       wpmB64: tr.serializeWpm(),
+      srcB64: tr.serializeSrc(),
       lifetimeActiveMs: tr.lifetimeActiveMs,
       daily: tr.dailyArray(),
       paraTsB64: tr.serializeParaTs(),

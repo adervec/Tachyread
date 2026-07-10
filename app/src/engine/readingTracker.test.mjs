@@ -119,4 +119,19 @@ assert.equal(t9.nextUnreadBoundary(5, [{ start: 20, end: 40 }]), 60, 'a skipped 
 const t10 = createReadingTracker({ wordCount: 10 });
 t10.markRangeRead(0, 10);
 assert.equal(t10.nextUnreadBoundary(0), -1, 'fully read → no boundary');
+
+// Read-source trace: tagged by kind, first-read wins, survives serialize→restore (RLE)
+const t11 = createReadingTracker({ wordCount: 100 });
+t11.recordMove(0, 0, T);
+for (let i = 0; i < 10; i++) t11.recordMove(i, i + 1, T + 300 * (i + 1)); // untagged steps
+t11.markRangeRead(10, 30, 'line');
+t11.markRangeRead(30, 50, 'typing');
+t11.markRangeRead(10, 50, 'scroll'); // re-cover: first-read source must win
+const s11 = t11.sampleSrc(10); // 10 words per bucket
+assert.equal(s11[1], 3, 'bucket 1 = line');    // READ_SRC.line
+assert.equal(s11[3], 9, 'bucket 3 = typing');  // READ_SRC.typing
+const t12 = createReadingTracker({ wordCount: 100, maskB64: t11.serializeMask(), srcB64: t11.serializeSrc() });
+assert.deepEqual(t12.sampleSrc(10), s11, 'src trace round-trips through RLE serialize/restore');
+t12.unmarkRangeRead(10, 30);
+assert.equal(t12.sampleSrc(10)[1], 0, 'unmark clears the source too');
 console.log('ok');
