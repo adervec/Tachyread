@@ -3,7 +3,7 @@ import Dialog from './Dialog.jsx';
 import { fmtDate, fmtDateTime } from '../features/dateFmt.js';
 import { getTocEntries, sectionSpan, mergeSkipRanges, removeSkipRange } from '../document/toc.js';
 import { loadFile, loadReadState, saveReadState, saveFile, getReadSections, loadDocPayload, allFiles } from '../state/storage.js';
-import { createReadingTracker } from '../engine/readingTracker.js';
+import { createReadingTracker, READ_SRC_INFO } from '../engine/readingTracker.js';
 import { sectionChecksum } from '../document/sectionHash.js';
 import { readerDocFromText } from '../document/readerDocument.js';
 
@@ -71,7 +71,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
       const wordCount = fsRec?.totalWords || 0;
       if (!wordCount) { setStoredTab({ missing: true }); return; }
       const tracker = createReadingTracker({
-        wordCount, maskB64: rs?.maskB64 || '', wpmB64: rs?.wpmB64 || '',
+        wordCount, maskB64: rs?.maskB64 || '', wpmB64: rs?.wpmB64 || '', srcB64: rs?.srcB64 || '',
         lifetimeActiveMs: rs?.lifetimeActiveMs || 0, daily: rs?.daily || [], paraTsB64: rs?.paraTsB64 || '',
       });
       setStoredTab({ doc: { words: { length: wordCount } }, settings: fsRec, tracker });
@@ -122,6 +122,8 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
   }, []);
 
   const cols = useMemo(() => (tracker ? tracker.sampleTrend(COLS) : []), [tracker, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  const srcCols = useMemo(() => (tracker ? tracker.sampleSrc(COLS) : []), [tracker, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  const srcUsed = useMemo(() => [...new Set(srcCols.filter(Boolean))], [srcCols]);
   const maxWpm = useMemo(() => Math.max(300, ...cols.map((c) => c.wpm)), [cols]);
 
   const reg = tracker ? tracker.regressionStats() : { count: 0, short: 0, long: 0, ratePer100: 0, recent: [] };
@@ -174,7 +176,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
   const maxDayWords = Math.max(1, ...daily.map((d) => d.words));
 
   // ── geometry (viewBox units; the SVG stretches to the container width) ──
-  const W = 1000, H = 140;
+  const W = 1000, H = 152; // extra rows: coverage strip + the read-mode strip under it
   const top = 16, bottom = 104, chartH = bottom - top;
   const colW = W / COLS;
   const posX = total ? (idx / total) * W : 0;
@@ -232,7 +234,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
   async function persistStored() {
     if (!storedChecksum || !tracker) return;
     await saveReadState(storedChecksum, {
-      maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(),
+      maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(), srcB64: tracker.serializeSrc(),
       lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(), paraTsB64: tracker.serializeParaTs(),
     }).catch(() => {});
     const dailyHistory = tracker.dailyArray().map((d) => ({ date: d.date, wordsRead: d.words, activeTimeSecs: Math.round(d.ms / 1000) }));
@@ -430,10 +432,14 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
               <line x1="0" y1={bottom} x2={W} y2={bottom} className="pd-base" />
               {/* coverage strip: what / how it was read */}
               {cols.map((col, c) => <rect key={`cv${c}`} x={c * colW} y={bottom + 4} width={colW + 0.5} height={12} className={coverClass(c)} />)}
+              {/* read-mode strip: HOW each slice was first read (auto/line/scroll/typing/…) */}
+              {srcCols.map((code, c) => (code
+                ? <rect key={`sr${c}`} x={c * colW} y={bottom + 18} width={colW + 0.5} height={7} fill={READ_SRC_INFO[code]?.color || 'transparent'} />
+                : null))}
               {/* regression ticks */}
               {reg.recent.map((r, i) => total ? <line key={`rg${i}`} x1={(r.at / total) * W} y1="0" x2={(r.at / total) * W} y2="10" className="pd-reg-tick" /> : null)}
               {/* current position */}
-              <line x1={posX} y1="11" x2={posX} y2={bottom + 18} className="pd-pos" />
+              <line x1={posX} y1="11" x2={posX} y2={bottom + 27} className="pd-pos" />
             </svg>
             {hover && <div className="pd-cursor" style={{ left: hover.px }} />}
             {tip && (
@@ -441,7 +447,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
                 <div className="pd-tip-row"><b>{tip.pct}%</b> · words {tip.a + 1}–{tip.b} · line {tip.li}</div>
                 {tip.sec && <div className="pd-tip-sec">§ {tip.sec.title}</div>}
                 <div className="pd-tip-row">{tip.stateLabel}{tip.rs.readFrac > 0.05 ? ` · ${Math.round(tip.rs.readFrac * 100)}% read` : ''}</div>
-                <div className="pd-tip-row">{tip.rs.wpm ? `${tip.rs.wpm} wpm` : 'no recorded pace'}</div>
+                <div className="pd-tip-row">{tip.rs.wpm ? `${tip.rs.wpm} wpm` : 'no recorded pace'}{srcCols[hover.col] ? ` · read by ${READ_SRC_INFO[srcCols[hover.col]]?.label}` : ''}</div>
               </div>
             )}
           </div>
@@ -454,6 +460,14 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
             <span><i className="pd-sw pd-reg-sw" /> re-read</span>
             <span className="pd-heat">slow <i className="pd-heatbar" /> fast</span>
           </div>
+          {srcUsed.length > 0 && (
+            <div className="pd-legend pd-src-legend" title="The lower strip on the bar: how each part was first read">
+              <span className="pd-src-label">How it was read:</span>
+              {srcUsed.map((code) => (
+                <span key={code}><i className="pd-sw" style={{ background: READ_SRC_INFO[code]?.color }} /> {READ_SRC_INFO[code]?.label}</span>
+              ))}
+            </div>
+          )}
 
           {sections.length > 0 && (
             <>

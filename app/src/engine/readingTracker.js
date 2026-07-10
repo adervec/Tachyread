@@ -135,9 +135,54 @@ function popcount(mask) {
   return n;
 }
 
-export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lifetimeActiveMs = 0, daily = [], paragraphStarts = [], paraTsB64 = '' } = {}) {
+// ── per-word read-SOURCE trace: HOW each word was first read ────────────────
+// Sources change rarely along the text, so run-length encoding ((value, count16) triples) keeps a
+// whole book to a few hundred bytes instead of one byte per word.
+export const READ_SRC = { auto: 1, word: 2, line: 3, para: 4, page: 5, scroll: 6, listen: 7, speak: 8, typing: 9, marked: 10 };
+export const READ_SRC_INFO = {
+  1: { label: 'auto-play', color: '#5e60ce' },
+  2: { label: 'word-by-word', color: '#3a86ff' },
+  3: { label: 'line-by-line', color: '#2a9d8f' },
+  4: { label: 'by paragraph', color: '#90be6d' },
+  5: { label: 'by page', color: '#f4a261' },
+  6: { label: 'scroll-reading', color: '#e76f51' },
+  7: { label: 'listening (TTS)', color: '#b5179e' },
+  8: { label: 'speaking', color: '#ff5c8a' },
+  9: { label: 'typing', color: '#ffd166' },
+  10: { label: 'marked read', color: '#8d99ae' },
+};
+function encodeRuns(arr) {
+  const bytes = [];
+  let i = 0;
+  while (i < arr.length) {
+    const v = arr[i];
+    let n = 1;
+    while (i + n < arr.length && arr[i + n] === v && n < 0xffff) n++;
+    bytes.push(v & 0xff, n & 0xff, (n >> 8) & 0xff);
+    i += n;
+  }
+  return toBase64(Uint8Array.from(bytes));
+}
+function decodeRuns(b64, count) {
+  const arr = new Uint8Array(count);
+  if (!b64) return arr;
+  try {
+    const bin = atob(b64);
+    let i = 0;
+    for (let p = 0; p + 2 < bin.length && i < count; p += 3) {
+      const v = bin.charCodeAt(p);
+      const n = bin.charCodeAt(p + 1) | (bin.charCodeAt(p + 2) << 8);
+      if (v) for (let k = 0; k < n && i + k < count; k++) arr[i + k] = v;
+      i += n;
+    }
+  } catch { /* corrupt → fresh */ }
+  return arr;
+}
+
+export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', srcB64 = '', lifetimeActiveMs = 0, daily = [], paragraphStarts = [], paraTsB64 = '' } = {}) {
   const mask = decodeMask(maskB64, wordCount); // 1 = read (cumulative, all sessions)
   const wpm = decodeWpm(wpmB64, wordCount); // per-word recorded reading pace
+  const srcTrace = decodeRuns(srcB64, wordCount); // per-word READ_SRC code — how it was FIRST read
   // Paragraph-resolution reading timeline: first-read clock time per paragraph (0 = unread).
   const paraStart = paragraphStarts && paragraphStarts.length ? paragraphStarts : [0];
   const paraCount = paraStart.length;
@@ -179,8 +224,8 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     for (; i < paraCount && paraStart[i] < to; i++) if (!paraTs[i]) { paraTs[i] = ts; dirty = true; }
   }
 
-  // Mark [from,to) as read at the given pace; record per-word wpm + session flag.
-  function markReading(from, to, pace) {
+  // Mark [from,to) as read at the given pace; record per-word wpm + session flag + first-read source.
+  function markReading(from, to, pace, srcCode = 0) {
     let added = 0;
     for (let i = Math.max(0, from); i < Math.min(wordCount, to); i++) {
       if (!mask[i]) {
@@ -188,6 +233,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
         added++;
       }
       if (pace > 0) wpm[i] = Math.min(65535, pace);
+      if (srcCode && !srcTrace[i]) srcTrace[i] = srcCode; // how it was FIRST read; re-reads keep it
       sessionMask[i] = 1;
     }
     return added;
@@ -198,7 +244,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     while (events.length && events[0].ts < cutoff) events.shift();
   }
 
-  function recordMove(prev, next, now = Date.now()) {
+  function recordMove(prev, next, now = Date.now(), srcKind = '') {
     if (next === prev || prev == null || next == null) {
       lastTs = now;
       return;
@@ -217,7 +263,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
       const isSkim = d <= SKIP_WORDS && activeMs > 0 && msPerWord < MIN_MS_PER_WORD;
       if (d <= SKIP_WORDS && !isSkim) {
         const pace = activeMs > 0 ? Math.round((60000 * d) / activeMs) : 0;
-        newWords = markReading(prev, next, pace);
+        newWords = markReading(prev, next, pace, READ_SRC[srcKind] || 0);
         processed = d;
       }
     } else {
@@ -262,12 +308,12 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     if (d > 0) {
       if (ms > 0 && (60000 * d) / ms <= SCROLL_MAX_WPM) {
         const pace = Math.round((60000 * d) / ms);
-        newWords = markReading(g.from, g.to, pace);
+        newWords = markReading(g.from, g.to, pace, READ_SRC.scroll);
         stampParas(g.from, g.to, now);
         processed = d;
         lastScroll = { ts: now, pace };
       } else {
-        markRangeRead(g.from, g.to); // fling: covered, not "read at a pace"
+        markRangeRead(g.from, g.to, 'scroll'); // fling: covered, not "read at a pace"
         lastScroll = { ts: now, pace: 0 }; // a fling honestly zeroes the live readout
       }
     }
@@ -314,7 +360,10 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
   // mask is advanced to match the new cursor so "% read" stays consistent with "% position".
   function markPrefixRead(n) {
     const to = Math.min(wordCount, Math.max(0, n | 0));
-    for (let i = 0; i < to; i++) if (!mask[i]) { mask[i] = 1; readCount++; }
+    for (let i = 0; i < to; i++) {
+      if (!mask[i]) { mask[i] = 1; readCount++; }
+      if (!srcTrace[i]) srcTrace[i] = READ_SRC.marked;
+    }
     if (to > 0) dirty = true;
   }
 
@@ -322,10 +371,15 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
   // WPM/efficiency credit. Used when the user deliberately navigates forward (end of line/paragraph,
   // page down, a short forward jump) and counts that text as read. recordMove still runs alongside to
   // account dwell time honestly; this only ensures the spanned words show as read in "% read".
-  function markRangeRead(from, to) {
+  // `srcKind` tags HOW ('line'/'page'/'typing'/…); untagged bulk credits read as 'marked'.
+  function markRangeRead(from, to, srcKind = 'marked') {
     const a = Math.max(0, from | 0);
     const b = Math.min(wordCount, to | 0);
-    for (let i = a; i < b; i++) if (!mask[i]) { mask[i] = 1; readCount++; sessionMask[i] = 1; }
+    const code = READ_SRC[srcKind] || READ_SRC.marked;
+    for (let i = a; i < b; i++) {
+      if (!mask[i]) { mask[i] = 1; readCount++; sessionMask[i] = 1; }
+      if (!srcTrace[i]) srcTrace[i] = code;
+    }
     if (b > a) { stampParas(a, b, Date.now()); dirty = true; }
   }
 
@@ -338,7 +392,10 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     const b = Math.min(wordCount, to | 0);
     const p = Math.max(1, Math.round(pace) || 1);
     let added = 0;
-    for (let i = a; i < b; i++) if (!mask[i]) { mask[i] = 1; readCount++; wpm[i] = Math.min(65535, p); added++; }
+    for (let i = a; i < b; i++) {
+      if (!mask[i]) { mask[i] = 1; readCount++; wpm[i] = Math.min(65535, p); added++; }
+      if (!srcTrace[i]) srcTrace[i] = READ_SRC.marked;
+    }
     if (added <= 0) return { added: 0, ms: 0 };
     const ms = Math.round((added / p) * 60000);
     lifetimeMs += ms;
@@ -357,6 +414,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     for (let i = a; i < b; i++) {
       if (mask[i]) { mask[i] = 0; readCount--; }
       wpm[i] = 0;
+      srcTrace[i] = 0;
       sessionMask[i] = 0;
     }
     if (b > a) dirty = true;
@@ -588,7 +646,23 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', lif
     },
     serializeMask: () => encodeMask(mask),
     serializeWpm: () => encodeWpm(wpm),
+    serializeSrc: () => encodeRuns(srcTrace),
     serializeParaTs: () => encodeU32(paraTs),
+    // Dominant read-source per bucket for the progress bar's mode strip (0 = untagged/unread).
+    sampleSrc: (cols) => {
+      const out = new Array(cols).fill(0);
+      if (!wordCount) return out;
+      for (let c = 0; c < cols; c++) {
+        const a = Math.floor((c * wordCount) / cols);
+        const b = Math.max(a + 1, Math.floor(((c + 1) * wordCount) / cols));
+        const counts = {};
+        for (let i = a; i < b && i < wordCount; i++) if (srcTrace[i]) counts[srcTrace[i]] = (counts[srcTrace[i]] || 0) + 1;
+        let best = 0, bestN = 0;
+        for (const [k, n] of Object.entries(counts)) if (n > bestN) { best = Number(k); bestN = n; }
+        out[c] = best;
+      }
+      return out;
+    },
     // Paragraph-resolution reading timeline: [{ para, startWord, ts(ms) }] for paragraphs read,
     // oldest first by paragraph order. Backs the "when & where" session view.
     paraTimeline: () => {

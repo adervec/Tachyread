@@ -455,7 +455,7 @@ function AppInner() {
     const cur = tab.settings.wordIndex;
     if (wi === cur) return;
     const inc = incognitoRef.current;
-    if (!inc) tab.tracker?.recordMove(cur, wi, Date.now());
+    if (!inc) tab.tracker?.recordMove(cur, wi, Date.now(), 'listen');
     const prevLine = getLineIndex(tab.doc, cur);
     const newLine = getLineIndex(tab.doc, wi);
     if (!inc && wi > cur && newLine !== prevLine) {
@@ -613,14 +613,15 @@ function AppInner() {
       }
     }
     if (next === cur) return;
-    modeDetRef.current.note(opts.src || 'auto'); // untagged steps come from the playback engine
+    const srcKind = opts.src || 'auto'; // untagged steps come from the playback engine
+    modeDetRef.current.note(srcKind);
     const inc = incognitoRef.current;
     // Reading-efficiency tracking (classifies read / skip / re-read / revisit + active time).
-    if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now());
+    if (!inc) activeTab.tracker?.recordMove(cur, next, Date.now(), srcKind);
     // Forward motion (playback, a forward word step, scrolling forward) means you read the text you
     // passed — credit those words for coverage even on a multi-word step the move-classifier treats
     // as a skim/skip. recordMove above keeps the time/WPM accounting honest.
-    if (!inc && next > cur) activeTab.tracker?.markRangeRead(cur, next);
+    if (!inc && next > cur) activeTab.tracker?.markRangeRead(cur, next, srcKind);
     // Line status coloring for the right pane.
     const prevLine = getLineIndex(activeTab.doc, cur);
     const newLine = getLineIndex(activeTab.doc, next);
@@ -672,8 +673,8 @@ function AppInner() {
         // skims (burst of tiny gaps) after an idle-capped dwell.
         activeTab.tracker?.noteScrollAdvance(cur, next, Date.now());
       } else {
-        activeTab.tracker?.recordMove(cur, next, Date.now());
-        if (fwdRead) activeTab.tracker?.markRangeRead(cur, next);
+        activeTab.tracker?.recordMove(cur, next, Date.now(), opts.src);
+        if (fwdRead) activeTab.tracker?.markRangeRead(cur, next, opts.src);
       }
     }
     const prevLine = getLineIndex(activeTab.doc, cur);
@@ -2136,7 +2137,13 @@ function AppInner() {
                 tab={activeTab}
                 onPatch={(p) => patchSettings(activeTab.id, p)}
                 onExitDiscard={planState ? exitPlan : () => patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } })}
-                onExitContinue={planState ? undefined : (wi) => { jumpWord(wi); patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } }); }}
+                onExitContinue={planState ? undefined : (wi) => {
+                  // Typed-through text counts as read, tagged as typing (no pace/efficiency credit).
+                  const cur = activeTab.settings.wordIndex;
+                  if (wi > cur && !incognitoRef.current) activeTab.tracker?.markRangeRead(cur, wi, 'typing');
+                  jumpWord(wi);
+                  patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } });
+                }}
                 onSaveRun={onSaveTypingRun}
                 sessionRuns={typingRuns}
                 endFanfare={state.global.typingEndFanfare !== false}
