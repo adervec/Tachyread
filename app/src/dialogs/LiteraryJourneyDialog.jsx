@@ -17,7 +17,7 @@ import {
 } from '../features/journeyLibrary.js';
 import {
   cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, queueWithEstimates, estHours,
-  yearGoal, seriesProgress,
+  yearGoal, seriesProgress, yearInBooks,
 } from '../features/journeyAnalytics.js';
 import { findDuplicates, finishedDateIssues } from '../features/journeyCleanup.js';
 import { normTitle } from '../document/tocWizard.js';
@@ -1134,6 +1134,33 @@ function TimelineView({ books }) {
   );
 }
 
+// One year's wrap-up card — Goodreads-style "Year in Books" superlatives, per selectable year.
+function YearWrap({ books, years }) {
+  const [year, setYear] = useState(years[years.length - 1]);
+  const w = useMemo(() => yearInBooks(books, year), [books, year]);
+  if (!w) return null;
+  return (
+    <div className="lj-wrap">
+      <div className="lj-wrap-head">
+        <b>Your {year} in books</b>
+        <select value={year} onChange={(e) => setYear(Number(e.target.value))}>{years.map((y) => <option key={y} value={y}>{y}</option>)}</select>
+      </div>
+      <div className="rh-stat-grid">
+        <Stat v={w.books} l="finished" sub={`${w.fiction} fiction · ${w.nonfiction} non-fiction`} />
+        <Stat v={w.pages ? w.pages.toLocaleString() : '—'} l="pages" sub={w.words ? `${(w.words / 1e6).toFixed(1)}M words` : null} />
+        <Stat v={w.topGenre ? w.topGenre[0] : '—'} l="top genre" sub={w.topGenre ? `${w.topGenre[1]} book(s)` : null} />
+        <Stat v={w.topAuthor ? w.topAuthor[0] : '—'} l="top author" sub={w.topAuthor ? `${w.topAuthor[1]} book(s)` : null} />
+        {w.avgRating != null && <Stat v={`★${w.avgRating}`} l="avg rating" sub={w.avgDifficulty ? `avg difficulty ${w.avgDifficulty}` : null} />}
+      </div>
+      <div className="lj-wrap-superls">
+        {w.longest && <span title={`${w.longest.pages} pages`}>📏 Longest: <b>{w.longest.title}</b></span>}
+        {w.hardest && <span title={`Difficulty ${w.hardest.difficultyLevel}`}>🧗 Hardest: <b>{w.hardest.title}</b></span>}
+        {w.favorite && <span title={`Rated ${bookRating(w.favorite)}★`}>❤️ Favorite: <b>{w.favorite.title}</b></span>}
+      </div>
+    </div>
+  );
+}
+
 // ── Analytics view ───────────────────────────────────────────────────────────────────────────────
 function AnalyticsView({ books }) {
   const pace = useMemo(() => paceByYear(books), [books]);
@@ -1145,6 +1172,7 @@ function AnalyticsView({ books }) {
   const maxRec = Math.max(1, ...rb.map((r) => r.total));
   return (
     <div className="lj-analytics">
+      {pace.length > 0 && <YearWrap books={books} years={pace.map((p) => p.year)} />}
       <div className="rh-section-h">Pace by year</div>
       {pace.length === 0 ? <p className="settings-note">No dated finishes.</p> : (
         <div className="lj-bars">

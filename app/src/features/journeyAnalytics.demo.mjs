@@ -1,6 +1,6 @@
 // Self-check for journeyAnalytics.js — run: node app/src/features/journeyAnalytics.demo.mjs
 import assert from 'node:assert';
-import { cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, estHours, queueWithEstimates, recentWordsPerDay, yearGoal, seriesProgress } from './journeyAnalytics.js';
+import { cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, estHours, queueWithEstimates, recentWordsPerDay, yearGoal, seriesProgress, yearInBooks } from './journeyAnalytics.js';
 
 const books = [
   { id: 'a', title: 'A', author: 'X', genre: 'Literary', fnf: 'F', completion: true, finishTime: '2023-02-10', pages: 300, words: 90000, difficultyLevel: 4, rating: 5, recBy: 'Sam' },
@@ -132,6 +132,24 @@ assert.ok(qNone.items[0].hours > 0);
   assert.equal(sp[0].next.title, 'A Clash', 'next = lowest unread seriesNum');
   assert.equal(sp[0].finished, 1);
   assert.equal(sp[1].done, true, 'Dune Saga complete');
+}
+
+// yearInBooks: superlatives for one year's finishes
+{
+  const lib = [
+    { id: 'y1', title: 'Big', author: 'A', genre: 'Epic', fnf: 'F', completion: true, finishTime: '2023-02-01', pages: 900, difficultyLevel: 3, rating: 4 },
+    { id: 'y2', title: 'Hard', author: 'A', genre: 'Phil', fnf: 'NF', completion: true, finishTime: '2023-06-01', pages: 300, difficultyLevel: 5, rating: 5 },
+    { id: 'y3', title: 'Other Year', author: 'B', completion: true, finishTime: '2022-01-01', pages: 100 },
+  ];
+  const w = yearInBooks(lib, 2023);
+  assert.equal(w.books, 2);
+  assert.equal(w.pages, 1200);
+  assert.equal(w.topAuthor[0], 'A');
+  assert.equal(w.longest.title, 'Big');
+  assert.equal(w.hardest.title, 'Hard');
+  assert.equal(w.favorite.title, 'Hard');
+  assert.equal(w.fiction, 1);
+  assert.equal(yearInBooks(lib, 1999), null);
 }
 
 console.log('journeyAnalytics.demo: all assertions passed ✅');

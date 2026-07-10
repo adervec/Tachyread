@@ -3336,6 +3336,11 @@
 .lj-goal-note { margin: 0; }
 .lj-goal-num { width: 70px; }
 
+/* Year in Books wrap-up (Analytics) */
+.lj-wrap { border: 1px solid var(--divider); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+.lj-wrap-head { display: flex; align-items: center; gap: 10px; font-size: 14px; margin-bottom: 8px; }
+.lj-wrap-superls { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; margin-top: 8px; }
+
 /* Series view */
 .lj-series-row { border: 1px solid var(--divider); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; }
 .lj-series-row.done { opacity: 0.75; }
