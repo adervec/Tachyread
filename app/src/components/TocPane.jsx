@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getLineIndex } from '../document/readerDocument.js';
+import { fmtDateTime } from '../features/dateFmt.js';
 import { autoDetectToc, getTocEntries, buildTocTree, sectionSpan, currentChapter, mergeSkipRanges } from '../document/toc.js';
 
 // Optional stat columns (the name column is always shown). `get` receives a per-row context.
@@ -20,7 +21,7 @@ const STAT_COLUMNS = [
 function fmtTs(ts) {
   if (!ts) return '—';
   try {
-    return new Date(ts).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return fmtDateTime(ts);
   } catch {
     return '—';
   }

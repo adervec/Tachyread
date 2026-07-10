@@ -7,6 +7,7 @@ import { transformToken, isExotic } from '../engine/typingText.js';
 import { letterGrade, playGradeSound, GRADE_STATEMENTS } from '../features/gradeChime.js';
 import { createReadAloud } from '../features/readAloud.js';
 import { rateFromIndex } from '../features/tts.js';
+import { fmtTime } from '../features/dateFmt.js';
 
 const DEFAULT_SOUNDS = {
   charCorrect: 'off', charWrong: 'off', wordPerfect: 'click', wordError: 'hiss',
@@ -708,7 +709,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         <div className="tr-killfeed" title="Typing runs this session">
           <span className="tr-kf-label">🏁 Runs:</span>
           {sessionRuns.map((r, i) => (
-            <span key={i} className="tr-kf-item">{r.netWpm}wpm · {r.accuracy}% <span className="tr-kf-ts">{new Date(r.ts).toLocaleTimeString()}</span></span>
+            <span key={i} className="tr-kf-item">{r.netWpm}wpm · {r.accuracy}% <span className="tr-kf-ts">{fmtTime(r.ts, true)}</span></span>
           ))}
         </div>
       )}

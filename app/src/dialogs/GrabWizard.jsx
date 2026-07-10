@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { fmtDate, fmtTime, fmtDateTime } from '../features/dateFmt.js';
 import { useApp } from '../state/AppContext.jsx';
 import {
   displayCaptureSupported,
@@ -281,7 +282,7 @@ export default function GrabWizard({ onClose }) {
   const voiceWordRef = useRef(voiceWord);
   voiceWordRef.current = voiceWord;
   const pushVoiceLog = (text, matched = false, error = false) =>
-    setVoiceLog((l) => [...l.slice(-11), { id: ++voiceLogId.current, text, matched, error, t: new Date().toLocaleTimeString() }]);
+    setVoiceLog((l) => [...l.slice(-11), { id: ++voiceLogId.current, text, matched, error, t: fmtTime(Date.now(), true) }]);
 
   // Resumable / abandoned grab sessions + accidental-close protection
   const [sessions, setSessions] = useState([]);
@@ -887,7 +888,7 @@ export default function GrabWizard({ onClose }) {
     closingRef.current = true; // stop the auto-save from re-creating the session
     try {
       const keep = segments.filter((s) => (s.text || '').trim() || s.image);
-      const name = `Grab — ${new Date().toLocaleString()}`;
+      const name = `Grab — ${fmtDateTime(Date.now())}`;
       const doc = await buildGrabbedDoc(keep, name);
       // Persist so the grab reopens later without re-capturing / re-OCR.
       await saveGrabbed({
@@ -1072,7 +1073,7 @@ export default function GrabWizard({ onClose }) {
                 <div key={s.id} className="grab-recent-row">
                   <button className="grab-recent-open" onClick={() => resumeSession(s)} title="Resume this session">
                     ▶ {(s.pageCount ?? s.segments?.length) || 0} page(s)
-                    <span className="settings-note" style={{ margin: 0 }}> · {s.updatedAt ? new Date(s.updatedAt).toLocaleString() : ''}</span>
+                    <span className="settings-note" style={{ margin: 0 }}> · {s.updatedAt ? fmtDateTime(s.updatedAt) : ''}</span>
                   </button>
                   <button onClick={() => discardSession(s)} title="Discard this session">🗑</button>
                 </div>
@@ -1106,7 +1107,7 @@ export default function GrabWizard({ onClose }) {
                   <span className="bg-member-name">📄 {rg.name || 'Grab'}</span>
                   <span className="settings-note" style={{ margin: 0 }}>{rg.pageCount || 0} page(s)</span>
                   {rg.device && <span className="rg-dev">· {rg.device}</span>}
-                  {rg.createdAt ? <span className="settings-note" style={{ margin: 0 }}>· {new Date(rg.createdAt).toLocaleDateString()}</span> : null}
+                  {rg.createdAt ? <span className="settings-note" style={{ margin: 0 }}>· {fmtDate(rg.createdAt)}</span> : null}
                 </div>
               ))}
             </div>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { allTypingRuns, clearTypingRuns } from '../state/storage.js';
 import { TYPING_MODE_BY_ID } from '../engine/typingModes.js';
+import { fmtDateTime } from '../features/dateFmt.js';
 
 function fmtDur(ms) {
   const s = Math.round((ms || 0) / 1000);
@@ -103,7 +104,7 @@ export default function TypingProgressDialog({ onClose }) {
               <tbody>
                 {[...runs].reverse().slice(0, 50).map((r, i) => (
                   <tr key={i}>
-                    <td>{new Date(r.ts).toLocaleString()}</td>
+                    <td>{fmtDateTime(r.ts)}</td>
                     <td>{r.mode ? (TYPING_MODE_BY_ID[r.mode]?.label || r.mode) : '—'}</td>
                     <td>{r.device ? <span className={`tp-dev tp-dev-${String(r.device).toLowerCase()}`}>{r.device === 'Mobile' ? '📱' : '🖥'} {r.device}</span> : '—'}</td>
                     <td>{r.netWpm}</td>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { fmtDateTime } from '../features/dateFmt.js';
 import {
   getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef, saveLibraryRef,
   getJourneyAi, saveJourneyAi, exportLibraryData, importLibraryData, librarySize, clearLibrary,
@@ -486,7 +487,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, onC
               <p className="settings-note">Syncs the entire tracker as its own file ({provider?.label || 'no target set'}) — separate from reading-progress sync. Set up / sign in to the target under <b>Settings → Data Management → Cloud sync</b>.</p>
               <div className="lj-inline">
                 <button disabled={!providerOk || syncBusy} onClick={syncTracker}>Sync tracker now</button>
-                {sync.lastLibrarySync ? <span className="settings-note">Last: {new Date(sync.lastLibrarySync).toLocaleString()}</span> : null}
+                {sync.lastLibrarySync ? <span className="settings-note">Last: {fmtDateTime(sync.lastLibrarySync)}</span> : null}
               </div>
               {syncMsg && <p className="settings-note">{syncMsg}</p>}
 

@@ -62,6 +62,7 @@ import FlowWriterDialog from './dialogs/FlowWriterDialog.jsx';
 import VocabDialog from './dialogs/VocabDialog.jsx';
 import RegressionDialog from './dialogs/RegressionDialog.jsx';
 import ProgressDetailDialog from './dialogs/ProgressDetailDialog.jsx';
+import { fmtTime, fmtDateTime } from './features/dateFmt.js';
 import DictationDialog from './dialogs/DictationDialog.jsx';
 import AttentionDialog from './dialogs/AttentionDialog.jsx';
 import AmbientDialog from './dialogs/AmbientDialog.jsx';
@@ -188,12 +189,12 @@ function AppInner() {
   const [closing, setClosing] = useState(null); // null | 'disconnect' | 'shutdown'
   const [goalKills, setGoalKills] = useState([]); // session-only killfeed of completed goals
   const onGoalComplete = useCallback((label) => {
-    setGoalKills((k) => [...k, { label, time: new Date().toLocaleTimeString() }]);
+    setGoalKills((k) => [...k, { label, time: fmtTime(Date.now(), true) }]);
   }, []);
   const [audioLog, setAudioLog] = useState([]); // ephemeral audio-command transcript
   const audioLogId = useRef(0);
   const pushAudioLog = useCallback((entry) => {
-    setAudioLog((l) => [...l.slice(-49), { id: ++audioLogId.current, time: new Date().toLocaleTimeString(), ...entry }]);
+    setAudioLog((l) => [...l.slice(-49), { id: ++audioLogId.current, time: fmtTime(Date.now(), true), ...entry }]);
   }, []);
   const [typingRuns, setTypingRuns] = useState([]); // session killfeed of completed typing runs
   const onSaveTypingRun = useCallback((run) => {
@@ -797,7 +798,7 @@ function AppInner() {
   const [cameraLog, setCameraLog] = useState([]);
   const cameraLogId = useRef(0);
   const pushCameraLog = useCallback((e) => {
-    setCameraLog((l) => [...l.slice(-49), { id: ++cameraLogId.current, time: new Date().toLocaleTimeString(), ...e }]);
+    setCameraLog((l) => [...l.slice(-49), { id: ++cameraLogId.current, time: fmtTime(Date.now(), true), ...e }]);
   }, []);
 
   const evalBlock = useCallback(() => {
@@ -2507,7 +2508,7 @@ function AppInner() {
               </p>
               {syncConflicts.map((c, i) => {
                 const pct = (p) => (c.total ? `${Math.round((p / c.total) * 100)}%` : `word ${p + 1}`);
-                const when = (t) => (t ? new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
+                const when = (t) => (t ? fmtDateTime(t) : '—');
                 return (
                   <div key={i} className="sync-conflict">
                     <div className="sync-conflict-name">{c.name || 'Untitled book'}</div>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { fmtDate, fmtDateTime } from '../features/dateFmt.js';
 import { getTocEntries, sectionSpan, mergeSkipRanges, removeSkipRange } from '../document/toc.js';
 import { loadFile, loadReadState, saveReadState, saveFile, getReadSections, loadDocPayload, allFiles } from '../state/storage.js';
 import { createReadingTracker } from '../engine/readingTracker.js';
@@ -40,7 +41,7 @@ function fmtDuration(ms) {
 }
 
 function fmtWhen(ts) {
-  return new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return fmtDateTime(ts);
 }
 
 // Reading-pace heat: slow = blue, through green/yellow, fast = red.
@@ -535,7 +536,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
                         <label key={i} className="pd-scan-row">
                           <input type="checkbox" checked={readSel.has(i)} onChange={(e) => setReadSel((prev) => { const n = new Set(prev); if (e.target.checked) n.add(i); else n.delete(i); return n; })} />
                           <span className="pd-scan-title">{sections[i].title}</span>
-                          <span className="settings-note" style={{ margin: 0 }}>{sections[i].readWords}/{sections[i].total} here · read {m.file ? `in “${m.file}”` : 'earlier'}{m.at ? ` · ${new Date(m.at).toLocaleDateString()}` : ''}</span>
+                          <span className="settings-note" style={{ margin: 0 }}>{sections[i].readWords}/{sections[i].total} here · read {m.file ? `in “${m.file}”` : 'earlier'}{m.at ? ` · ${fmtDate(m.at)}` : ''}</span>
                         </label>
                       ))}
                       <div className="pd-unread-bar">
