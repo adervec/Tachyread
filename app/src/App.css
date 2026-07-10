@@ -3369,6 +3369,11 @@
 .lj-grp-member { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 2px 0; }
 .lj-grp-member label { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
 .lj-grp-member-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-day-empty td { opacity: 0.45; }
+.lj-newgrp { margin: 6px 0; }
+.lj-newgrp summary { cursor: pointer; font-size: 13px; padding: 4px 0; }
+.lj-newgrp-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 2px 12px; padding: 4px 0; }
+.lj-newgrp-list .inline-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
 
 /* Year in Books wrap-up (Analytics) */
 .lj-wrap { border: 1px solid var(--divider); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }

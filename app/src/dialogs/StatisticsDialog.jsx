@@ -80,6 +80,14 @@ export default function StatisticsDialog({ tabs = [], activeTabId, onClose }) {
   const all = aggregate(() => true);
   const todayAgg = aggregate((d) => d === today);
 
+  // Per-day breakdown for the trailing week (today first). Zero days still show, so gaps are visible.
+  const last7 = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    last7.push({ date: key, ...aggregate((x) => x === key) });
+  }
+
   function wpm({ words, secs }) {
     return secs > 0 ? Math.round((words / secs) * 60) : 0;
   }
@@ -103,6 +111,28 @@ export default function StatisticsDialog({ tabs = [], activeTabId, onClose }) {
           <tr><td>This week</td><td>{week.words}</td><td>{fmtTime(week.secs)}</td><td>{wpm(week)}</td></tr>
           <tr><td>This month</td><td>{month.words}</td><td>{fmtTime(month.secs)}</td><td>{wpm(month)}</td></tr>
           <tr><td>All time</td><td>{all.words}</td><td>{fmtTime(all.secs)}</td><td>{wpm(all)}</td></tr>
+        </tbody>
+      </table>
+
+      <div className="field-section">Last 7 days</div>
+      <table className="history-table">
+        <thead>
+          <tr>
+            <th>Day</th>
+            <th>Words read</th>
+            <th>Active time</th>
+            <th>Effective WPM</th>
+          </tr>
+        </thead>
+        <tbody>
+          {last7.map((d) => (
+            <tr key={d.date} className={d.words || d.secs ? '' : 'stat-day-empty'}>
+              <td>{d.date}{d.date === today ? ' · today' : ''}</td>
+              <td>{d.words}</td>
+              <td>{fmtTime(d.secs)}</td>
+              <td>{wpm(d)}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
 
