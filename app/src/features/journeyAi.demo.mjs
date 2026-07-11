@@ -1,6 +1,6 @@
 // Self-check for journeyAi.js — run: node app/src/features/journeyAi.demo.mjs
 import assert from 'node:assert';
-import { buildDataset, buildDigest, buildApiMessages, parseAiOutput, applyAiOutput, contentHash, getInstruction, LIGHT_INSTRUCTION } from './journeyAi.js';
+import { buildDataset, buildDigest, buildProgress, buildApiMessages, parseAiOutput, applyAiOutput, contentHash, getInstruction, LIGHT_INSTRUCTION } from './journeyAi.js';
 
 const books = [
   { id: 'a', title: 'A', author: 'X', genre: 'SciFi', fnf: 'F', difficultyLevel: 3, recScore: 6, completion: true, finishTime: '2024-01-01', rating: 4 },
@@ -49,5 +49,44 @@ assert.equal(aiPatch.recommendations.length, 1);
 // ledger hash stable + differs by content
 assert.equal(contentHash('hello'), contentHash('hello'));
 assert.notEqual(contentHash('hello'), contentHash('world'));
+
+// buildProgress: day + week rollups, streak, in-flight books — the cowork daily/weekly summary feed
+{
+  const NOW = Date.parse('2026-07-11T12:00:00Z'); // a Saturday
+  const files = [
+    { checksum: 'A', fileName: 'Alpha.txt', totalWords: 1000, persistentWordsRead: 400, persistentActiveTimeSecs: 300, dailyHistory: [
+      { date: '2026-07-10', wordsRead: 300, activeTimeSecs: 200 },   // Friday
+      { date: '2026-07-06', wordsRead: 100, activeTimeSecs: 100 },   // Monday (prior part of week)
+    ] },
+    { checksum: 'B', fileName: 'Beta.txt', totalWords: 2000, persistentWordsRead: 2000, persistentActiveTimeSecs: 900, dailyHistory: [
+      { date: '2026-07-10', wordsRead: 500, activeTimeSecs: 100 },
+      { date: '2026-07-11', wordsRead: 200, activeTimeSecs: 60 },    // today
+      { date: '2020-01-01', wordsRead: 999, activeTimeSecs: 999 },   // ancient — outside the window
+    ] },
+  ];
+  const p = buildProgress(files, { books: [{ id: 'bk:x', title: 'Alpha (Book)' }], bindMap: { A: 'bk:x' }, days: 35, now: NOW });
+  assert.equal(p.days.length, 3, 'three active days in window (ancient one excluded)');
+  const fri = p.days.find((d) => d.date === '2026-07-10');
+  assert.equal(fri.wordsRead, 800, 'days aggregate across files');
+  assert.equal(fri.wpm, Math.round((800 / 300) * 60));
+  assert.equal(p.weeks.length, 1, 'Mon 07-06 .. Sat 07-11 all one week');
+  assert.equal(p.weeks[0].weekStart, '2026-07-06');
+  assert.equal(p.weeks[0].wordsRead, 1100);
+  assert.equal(p.weeks[0].daysActive, 3);
+  assert.equal(p.currentStreakDays, 2, 'today + yesterday');
+  assert.equal(p.activeBooks.length, 2);
+  assert.equal(p.activeBooks[0].lastRead, '2026-07-11', 'most recently read first');
+  const alpha = p.activeBooks.find((b) => b.fileName === 'Alpha.txt');
+  assert.equal(alpha.title, 'Alpha (Book)', 'linked tracker book names the entry');
+  assert.equal(alpha.coveragePct, 40);
+  // rides into the dataset + the digest calls it out
+  const ds = buildDataset([], { light: true, progress: p });
+  assert.ok(ds.progress.days.length === 3);
+  const digest = buildDigest(ds, getInstruction(null));
+  assert.ok(/daily or weekly reading-summary/i.test(digest), 'digest tells the agent the progress data is there');
+  assert.ok(digest.includes('"currentStreakDays": 2'));
+  const noProg = buildDigest(buildDataset([], { light: true }), getInstruction(null));
+  assert.ok(!/reading-summary task/i.test(noProg), 'no note when no progress attached');
+}
 
 console.log('journeyAi.demo: all assertions passed ✅');

@@ -12,7 +12,7 @@ import { createReadingTracker } from '../engine/readingTracker.js';
 import { sectionSpan } from '../document/toc.js';
 import { askClaude, anthropicConfigured } from '../features/anthropic.js';
 import {
-  getInstruction, LIGHT_INSTRUCTION, HEAVY_PLACEHOLDER, KNOWLEDGE_GRAPH_INSTRUCTION, buildDataset, buildDigest,
+  getInstruction, LIGHT_INSTRUCTION, HEAVY_PLACEHOLDER, KNOWLEDGE_GRAPH_INSTRUCTION, buildDataset, buildDigest, buildProgress,
   buildCoworkRequest, buildApiMessages, parseAiOutput, applyAiOutput, contentHash,
 } from '../features/journeyAi.js';
 import {
@@ -539,7 +539,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
           {tab === 'genres' && <RefList kind="genre" items={refs.genres} subitems={refs.subgenres} books={books} />}
           {tab === 'archetype' && <ArchetypeView books={books} />}
           {tab === 'constellation' && <ConstellationView books={books} ai={ai} />}
-          {tab === 'ai' && <AiView books={books} ai={ai} global={global} onReload={reload} />}
+          {tab === 'ai' && <AiView books={books} ai={ai} global={global} bindMap={bindMap || {}} onReload={reload} />}
 
           {tab === 'data' && (
             <div className="lj-data">
@@ -1576,7 +1576,13 @@ async function readFromDir(dir, name) {
   try { const fh = await dir.getFileHandle(name); return await (await fh.getFile()).text(); } catch { return null; }
 }
 
-function AiView({ books, ai, global, onReload }) {
+function AiView({ books, ai, global, bindMap = {}, onReload }) {
+  // Reading-progress bundle (daily/weekly totals, streak, in-flight books) attached to every export,
+  // so cowork daily/weekly summary tasks have the data. Built fresh at call time from the file records.
+  const datasetWithProgress = async (light) => buildDataset(books, {
+    light,
+    progress: buildProgress(await allFiles().catch(() => []), { books, bindMap }),
+  });
   const instr = getInstruction(ai);
   const [mode, setMode] = useState(instr.mode);
   const [text, setText] = useState(instr.text);
@@ -1619,7 +1625,7 @@ function AiView({ books, ai, global, onReload }) {
   async function runApi() {
     setBusy(true); setMsg('Asking Claude…');
     try {
-      const dataset = buildDataset(books, { light: true }); // API path is always the compact subset
+      const dataset = await datasetWithProgress(true); // API path is always the compact subset
       const { system, messages } = buildApiMessages(dataset, { mode, text });
       const reply = await askClaude(messages, { key: global.anthropicKey, model, system, maxTokens: 2048, source: 'trackyread-ai' });
       await applyOutput(parseAiOutput(reply), reply);
@@ -1634,7 +1640,7 @@ function AiView({ books, ai, global, onReload }) {
   async function writeRequest() {
     if (!dir) return; setBusy(true); setMsg('Writing request…');
     try {
-      const dataset = buildDataset(books, { light: mode === 'light' });
+      const dataset = await datasetWithProgress(mode === 'light');
       await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(buildCoworkRequest(dataset, { mode, text }), null, 2));
       await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, { mode, text }));
       setMsg('Wrote journey-cowork-request.json + journey-instructions.md. Drop the reply as journey-cowork-response.json, then Read response.');
@@ -1651,7 +1657,7 @@ function AiView({ books, ai, global, onReload }) {
     setBusy(false);
   }
   async function copyDigest() {
-    try { await navigator.clipboard.writeText(buildDigest(buildDataset(books, { light: mode === 'light' }), { mode, text })); setMsg('Digest copied — paste it into a Claude chat, then paste the JSON reply below.'); }
+    try { await navigator.clipboard.writeText(buildDigest(await datasetWithProgress(mode === 'light'), { mode, text })); setMsg('Digest copied — paste it into a Claude chat, then paste the JSON reply below.'); }
     catch { setMsg('Clipboard blocked — use the cowork folder instead.'); }
   }
   async function applyPasted() {
