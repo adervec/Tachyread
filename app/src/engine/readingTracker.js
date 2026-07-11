@@ -20,7 +20,10 @@
 // "session/lifetime WPM" (unique new words read per active minute = reading efficiency). A
 // per-word WPM trace + read mask back the coverage stat and the mountain-graph trendline.
 
-const IDLE_CAP_MS = 12000; // max active time credited to a single gap between moves
+const DEFAULT_IDLE_CAP_MS = 60000; // max active time credited to a single gap between moves.
+// The cap is the AFK guard: a bathroom break can't tank WPM, because only this much of the gap is
+// credited as active reading. Configurable (Application Settings → idle grace) via getIdleCapMs —
+// slow line-by-line readers need a generous grace or every thoughtful pause reads as idle.
 const SKIP_WORDS = 50; // forward jump larger than this (when not contiguous) is a skip
 // Scroll-to-read accounting. Scroll reading inverts the timing model: the user reads the visible
 // pane for a while (the dwell), THEN scrolls what they finished past the top edge in a burst of
@@ -179,7 +182,7 @@ function decodeRuns(b64, count) {
   return arr;
 }
 
-export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', srcB64 = '', lifetimeActiveMs = 0, daily = [], paragraphStarts = [], paraTsB64 = '' } = {}) {
+export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', srcB64 = '', lifetimeActiveMs = 0, daily = [], paragraphStarts = [], paraTsB64 = '', getIdleCapMs = () => DEFAULT_IDLE_CAP_MS } = {}) {
   const mask = decodeMask(maskB64, wordCount); // 1 = read (cumulative, all sessions)
   const wpm = decodeWpm(wpmB64, wordCount); // per-word recorded reading pace
   const srcTrace = decodeRuns(srcB64, wordCount); // per-word READ_SRC code — how it was FIRST read
@@ -250,7 +253,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
       return;
     }
     let activeMs = 0;
-    if (lastTs != null && !hidden) activeMs = Math.min(Math.max(0, now - lastTs), IDLE_CAP_MS);
+    if (lastTs != null && !hidden) activeMs = Math.min(Math.max(0, now - lastTs), getIdleCapMs());
     lastTs = now;
     if (hidden) return;
 

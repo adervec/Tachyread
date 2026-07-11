@@ -303,6 +303,9 @@ export function defaultGlobalSettings() {
     // Pause non-TTS playback when the reading text scrolls off-screen (you can't read what you can't
     // see). Read-aloud / typing are exempt. Default on.
     pauseWhenTextHidden: true,
+    // AFK guard: the longest pause (seconds) still credited as active reading. Gaps beyond this stop
+    // counting toward active time/WPM, and the reading-mode chip drains to idle after it.
+    idleGraceSecs: 60,
     // Webcam attention (opt-in, experimental): pause non-TTS reading when the camera can't see you
     // facing the screen with eyes open. Processed entirely on-device; nothing leaves the machine.
     webcamAttention: false,
