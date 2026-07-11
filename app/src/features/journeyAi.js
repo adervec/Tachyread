@@ -35,10 +35,80 @@ export const PATCH_FIELDS = ['recScore', 'difficultyLevel', 'difficulty', 'genre
 
 function compact(b, fields) { const o = {}; for (const f of fields) if (b[f] !== undefined && b[f] !== null && b[f] !== '') o[f] = b[f]; return o; }
 
+// Reading-PROGRESS bundle for the cowork export: per-day and per-week totals across every tracked
+// file, the reading streak, and the books currently in flight — everything a cowork daily/weekly
+// summary task needs. Pure (files in, `now` injected); see journeyAi.demo.mjs.
+export function buildProgress(files, { books = [], bindMap = {}, days = 35, now = Date.now() } = {}) {
+  const cutoff = now - days * 86400000;
+  const bookById = Object.fromEntries(books.map((b) => [b.id, b]));
+  const byDay = new Map();
+  const allDates = new Set(); // full history, for the streak
+  const active = [];
+  for (const f of files || []) {
+    const cs = f.checksum || f.contentChecksum;
+    const dated = (f.dailyHistory || []).filter((e) => e.date && ((e.wordsRead || 0) > 0 || (e.activeTimeSecs || 0) > 0));
+    for (const e of dated) {
+      allDates.add(e.date);
+      if (Date.parse(e.date) < cutoff) continue;
+      const cur = byDay.get(e.date) || { date: e.date, wordsRead: 0, activeSecs: 0 };
+      cur.wordsRead += e.wordsRead || 0;
+      cur.activeSecs += e.activeTimeSecs || 0;
+      byDay.set(e.date, cur);
+    }
+    const last = dated.map((e) => e.date).sort().pop() || null;
+    if (last && Date.parse(last) >= cutoff) {
+      const linked = bindMap[cs];
+      active.push({
+        title: (linked && bookById[linked]?.title) || f.fileName || 'Untitled',
+        fileName: f.fileName || '',
+        ...(linked ? { linkedBookId: linked } : {}),
+        totalWords: f.totalWords || 0,
+        wordsRead: f.persistentWordsRead || 0,
+        coveragePct: f.totalWords ? Math.round(((f.persistentWordsRead || 0) / f.totalWords) * 1000) / 10 : 0,
+        activeSecs: f.persistentActiveTimeSecs || 0,
+        lastRead: last,
+      });
+    }
+  }
+  const wpmOf = (w, s) => (s > 0 ? Math.round((w / s) * 60) : 0);
+  const daysArr = [...byDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
+    .map((d) => ({ ...d, wpm: wpmOf(d.wordsRead, d.activeSecs) }));
+  // Weekly rollups (weeks start Monday).
+  const weekOf = (dateStr) => {
+    const d = new Date(dateStr + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return d.toISOString().slice(0, 10);
+  };
+  const byWeek = new Map();
+  for (const d of daysArr) {
+    const w = weekOf(d.date);
+    const cur = byWeek.get(w) || { weekStart: w, wordsRead: 0, activeSecs: 0, daysActive: 0 };
+    cur.wordsRead += d.wordsRead; cur.activeSecs += d.activeSecs; cur.daysActive += 1;
+    byWeek.set(w, cur);
+  }
+  const weeks = [...byWeek.values()].sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1))
+    .map((w) => ({ ...w, wpm: wpmOf(w.wordsRead, w.activeSecs) }));
+  // Current streak: walk back from today (today itself may still be unread without breaking it).
+  const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
+  let cursor = now;
+  if (!allDates.has(dayKey(cursor))) cursor -= 86400000;
+  let streak = 0;
+  while (allDates.has(dayKey(cursor))) { streak++; cursor -= 86400000; }
+  return {
+    note: 'Per-day and per-week reading totals across all tracked files — use for daily/weekly reading summaries. activeSecs = attentive reading time; wpm = effective words per active minute.',
+    windowDays: days,
+    days: daysArr,
+    weeks,
+    currentStreakDays: streak,
+    activeBooks: active.sort((a, b) => (a.lastRead < b.lastRead ? 1 : -1)).slice(0, 12),
+  };
+}
+
 // Compact projection sent to the model. Light = summary + recent finishes + top unread candidates
 // (small enough for the API's context). Heavy additionally carries every book (cowork only — too big
-// for the API, which is why heavy tree-rebuilds go through the folder round-trip).
-export function buildDataset(books, { light = true } = {}) {
+// for the API, which is why heavy tree-rebuilds go through the folder round-trip). `progress`
+// (buildProgress) rides along so cowork daily/weekly summary tasks have the reading history.
+export function buildDataset(books, { light = true, progress = null } = {}) {
   const stats = libraryStats(books);
   const recent = sortBooks(books.filter((b) => readStatus(b) === 'finished' && finishMs(b) != null), 'finished')
     .slice(0, 20).map((b) => compact(b, ['id', 'title', 'author', 'genre', 'subgenre', 'difficultyLevel', 'finishTime', 'rating']));
@@ -48,6 +118,7 @@ export function buildDataset(books, { light = true } = {}) {
     summary: { total: stats.total, finished: stats.finished, fiction: stats.fiction, nonfiction: stats.nonfiction, byGenre: stats.byGenre },
     recentFinishes: recent, unreadCandidates: unread,
   };
+  if (progress) ds.progress = progress;
   if (!light) ds.allBooks = books.map((b) => compact(b, ['id', 'title', 'author', 'genre', 'subgenre', 'fnf', 'difficultyLevel', 'recScore', 'completion', 'finishTime', 'pages', 'pubDate']));
   return ds;
 }
@@ -61,6 +132,13 @@ export function buildDigest(dataset, instruction) {
   return [
     '# Trackyread — reading-tracker cowork request',
     `Task (${instruction.mode}): ${instruction.text}`,
+    ...(dataset.progress ? [
+      '',
+      'The dataset includes a `progress` section — per-day and per-week reading totals (words, active',
+      'seconds, effective WPM), the current reading streak, and the books currently in flight with their',
+      'coverage. Use it for any DAILY or WEEKLY reading-summary task, and to ground the analysis in what',
+      'is actually being read right now.',
+    ] : []),
     '',
     '## Reply with ONE ```json block, no prose, using the exact ids below:',
     '```',
