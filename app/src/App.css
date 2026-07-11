@@ -3408,6 +3408,20 @@
 .lj-qcat { font-size: 12px; padding: 4px 10px; border: 1px solid var(--divider); border-radius: 14px; background: transparent; cursor: pointer; color: inherit; }
 .lj-qcat.on { border-color: var(--toggle-active-bg); color: var(--toggle-active-bg); font-weight: 700; }
 
+/* All-notes manager (Trackyread → Notes) */
+.an-list { display: flex; flex-direction: column; gap: 8px; max-height: 62vh; overflow-y: auto; }
+.an-card { border: 1px solid var(--divider); border-radius: 8px; padding: 8px 10px; font-size: 12px; }
+.an-card.lj-spoiler { cursor: pointer; border-color: #d08700; }
+.an-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 3px; }
+.an-kind { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--status-fg); }
+.an-where { font-size: 12px; }
+.an-sub { font-style: normal; font-size: 11px; color: var(--status-fg); }
+.an-when { margin-left: auto; font-size: 10px; color: var(--status-fg); font-family: Consolas, monospace; }
+.an-text { white-space: pre-wrap; }
+.an-text.an-blur { filter: blur(5px); user-select: none; max-height: 3.6em; overflow: hidden; }
+.an-actions { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.an-card textarea { width: 100%; box-sizing: border-box; }
+
 /* Section-attached document notes */
 .note-sec { margin: 2px 0; }
 .note-sec-orphan { display: inline-block; font-size: 11px; color: #d08700; margin: 2px 0; }

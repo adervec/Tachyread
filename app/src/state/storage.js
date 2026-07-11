@@ -528,6 +528,18 @@ export async function getNotes(checksum, includeDeleted = false) {
   return includeDeleted ? list : list.filter((n) => !n.deleted);
 }
 
+// Every live document note across every file — the all-notes manager's feed.
+export async function allNotes() {
+  const db = await getDB();
+  const out = [];
+  let cursor = await db.transaction('notes').store.openCursor();
+  while (cursor) {
+    for (const n of cursor.value?.notes || []) if (!n.deleted) out.push({ checksum: cursor.key, ...n });
+    cursor = await cursor.continue();
+  }
+  return out;
+}
+
 export async function saveNote(checksum, note) {
   if (!checksum) return null;
   const db = await getDB();

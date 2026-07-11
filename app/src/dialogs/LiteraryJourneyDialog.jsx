@@ -32,6 +32,7 @@ import { groupForChecksum, masterOf, makeGroup } from '../features/bookGroups.js
 import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordCount } from '../features/readingTime.js';
 import { olFetch, bookCoverUrl } from '../features/openLibrary.js';
 import { HistoryView } from './HistoryDialog.jsx';
+import AllNotesView from './AllNotesView.jsx';
 import ProgressDetailDialog from './ProgressDetailDialog.jsx';
 import { getSyncProvider } from '../features/sync/syncProviders.js';
 import { syncLibraryWithProvider } from '../features/sync/syncManager.js';
@@ -382,6 +383,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     { id: 'groups', label: 'Groups' },
     { id: 'timeline', label: 'Timeline' },
     { id: 'rhistory', label: 'Reading History' },
+    { id: 'notes', label: 'Notes' },
     { id: 'analytics', label: 'Analytics' },
     { id: 'authors', label: 'Authors' },
     { id: 'genres', label: 'Genres' },
@@ -540,6 +542,13 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
           )}
           {tab === 'timeline' && <TimelineView books={books} />}
           {tab === 'rhistory' && <HistoryView />}
+          {tab === 'notes' && (
+            <AllNotesView
+              books={books} crossNotes={crossNotes} fileStats={fileStats}
+              onSaveBook={saveBook}
+              onReloadCross={async () => setCrossNotes(await getCrossNotes())}
+            />
+          )}
           {tab === 'analytics' && <AnalyticsView books={books} />}
           {tab === 'authors' && <RefList kind="author" items={refs.authors} books={books} />}
           {tab === 'genres' && <RefList kind="genre" items={refs.genres} subitems={refs.subgenres} books={books} />}
