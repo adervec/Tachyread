@@ -1326,7 +1326,8 @@ function AppInner() {
       if (e.key === '=' || e.key === '+') { k.adjustWpm(25); return; }
       if (e.key >= '1' && e.key <= '6') { k.togglePane(Number(e.key)); return; }
       if (key === 'j') { k.jumpToCurrent(); return; }
-    if (key === 'u') { k.jumpToFrontier(); return; }
+      if (key === 'u') { k.jumpToFrontier(); return; }
+      if (key === 'g') { k.jumpToGap(); return; }
       if (key === 'a') { k.toggleReadAloud(); return; }
       if (key === 's') { k.toggleScrollRead(); return; }
       if (key === 'v') { k.toggleAudioCtrl(); return; }
@@ -1881,9 +1882,9 @@ function AppInner() {
 
   // Refresh the key handler's live context every render (handler is bound once, reads from this ref).
   kbdRef.current = {
-    activeTab, state, showFootnote, playPause, nav, pageLines, jumpToCurrent, triggerOpen,
+    activeTab, state, showFootnote, playPause, nav, pageLines, jumpToCurrent, jumpToGap, triggerOpen,
     openClipboard, openDialog, closeDialog, setShowFootnote, toggleFocusMode, dispatch,
-    toggleReadAloud, toggleAudioCtrl, toggleScrollRead, adjustWpm, cycleTabs, togglePane, jumpToFrontier,
+    toggleReadAloud, toggleAudioCtrl, toggleScrollRead, adjustWpm, cycleTabs, togglePane, jumpToFrontier, jumpToGap,
   };
 
   // Maximise the text on a phone. The Lines view is for immersive (often thumb-scrolled) reading, so

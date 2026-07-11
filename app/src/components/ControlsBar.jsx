@@ -40,8 +40,11 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
 
   // One nav button, so the desktop (single interleaved row) and mobile (transport + fine rows)
   // layouts share button definitions instead of duplicating them.
-  const navBtn = (title, onClick, label) => (
-    <button className="ctrl-btn" title={title} onClick={onClick}>{label}</button>
+  const navBtn = (title, onClick, label, keyHint) => (
+    <button className="ctrl-btn" title={title} onClick={onClick}>
+      <span>{label}</span>
+      {!isCompact && keyHint && <kbd className="key-hint">{keyHint}</kbd>}
+    </button>
   );
   // The play button reflects the active reading modes, not just scroll-to-read: read-aloud swaps the
   // glyph to a speaker (offline voice → headphones, since it survives a screen lock), and the title
@@ -64,18 +67,19 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
       onClick={pv.disabled ? undefined : onPlayPause}
     >
       {pv.glyph}
+      {!isCompact && <kbd className="key-hint play-kbd">Space</kbd>}
     </button>
   );
   const B = {
-    restart: () => navBtn('Restart (Home)', onRestart, '|<'),
-    pageUp: () => navBtn('Page up — current line jumps to the top visible line (PgUp)', onPageUp, '⇞'),
-    prevPara: () => navBtn('Previous paragraph (Ctrl+Up)', onPrevPara, '⇈'),
-    prevLine: () => navBtn('Previous line (Up)', onPrevLine, '↑'),
-    prevWord: () => navBtn('Previous word (Left)', onPrevWord, '‹'),
-    nextWord: () => navBtn('Next word (Right)', onNextWord, '›'),
-    nextLine: () => navBtn('Next line (Down)', onNextLine, '↓'),
-    nextPara: () => navBtn('Next paragraph (Ctrl+Down)', onNextPara, '⇊'),
-    pageDown: () => navBtn('Page down — current line jumps to the bottom visible line (PgDn)', onPageDown, '⇟'),
+    restart: () => navBtn('Restart (Home)', onRestart, '|<', 'Home'),
+    pageUp: () => navBtn('Page up — current line jumps to the top visible line (PgUp)', onPageUp, '⇞', 'PgUp'),
+    prevPara: () => navBtn('Previous paragraph (Ctrl+Up)', onPrevPara, '⇈', 'Ctrl↑'),
+    prevLine: () => navBtn('Previous line (Up)', onPrevLine, '↑', '↑'),
+    prevWord: () => navBtn('Previous word (Left)', onPrevWord, '‹', '←'),
+    nextWord: () => navBtn('Next word (Right)', onNextWord, '›', '→'),
+    nextLine: () => navBtn('Next line (Down)', onNextLine, '↓', '↓'),
+    nextPara: () => navBtn('Next paragraph (Ctrl+Down)', onNextPara, '⇊', 'Ctrl↓'),
+    pageDown: () => navBtn('Page down — current line jumps to the bottom visible line (PgDn)', onPageDown, '⇟', 'PgDn'),
   };
 
   return (
@@ -85,9 +89,9 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
         <div className="progress-meta">
           {idx + 1} / {totalWords}
         </div>
-        <button className="jump-current-btn" title="Jump to the current word — scroll the Lines pane back to where you're reading" aria-label="Jump to current word" onClick={onJumpToCurrent}>⌖</button>
-        {onJumpToFrontier && <button className="jump-current-btn" title="Jump to the latest unread word — the first word after everything you've ever read" aria-label="Jump to latest unread" onClick={onJumpToFrontier}>⇥</button>}
-        {onJumpToGap && <button className="jump-current-btn" title="Jump to the first unread word (skipped sections excluded). Click again from there to hop to the next read/unread boundary — backfill the patchy sections." aria-label="Jump to first unread gap" onClick={onJumpToGap}>↷</button>}
+        <button className="jump-current-btn" title="Jump to the current word — scroll the Lines pane back to where you're reading (J)" aria-label="Jump to current word" onClick={onJumpToCurrent}>⌖{!isCompact && <kbd className="key-hint">J</kbd>}</button>
+        {onJumpToFrontier && <button className="jump-current-btn" title="Jump to the latest unread word — the first word after everything you've ever read (U)" aria-label="Jump to latest unread" onClick={onJumpToFrontier}>⇥{!isCompact && <kbd className="key-hint">U</kbd>}</button>}
+        {onJumpToGap && <button className="jump-current-btn" title="Jump to the first unread word (skipped sections excluded). Click again from there to hop to the next read/unread boundary — backfill the patchy sections. (G)" aria-label="Jump to first unread gap" onClick={onJumpToGap}>↷{!isCompact && <kbd className="key-hint">G</kbd>}</button>}
         <div className="progress-meta" title={skipRanges.length ? 'Percent of the countable book read (flagged front/back matter excluded)' : 'Percent of the book actually read'}>📖 {coverage.toFixed(1)}%{skipRanges.length ? '*' : ''}</div>
         <div className="progress-meta" title="Estimated time remaining at your measured pace">⏱ {formatTime(secs)}</div>
         <div
@@ -174,7 +178,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
 
         <div className="mode-block">
           <div className="mode-pair">
-            <span>TTS</span>
+            <span>TTS{!isCompact && <kbd className="key-hint">A</kbd>}</span>
             <button
               className={readAloud ? 'toggle-on' : ''}
               onClick={onToggleReadAloud}
@@ -218,7 +222,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             </select>
           </div>
           <div className="mode-pair">
-            <span title="Focus mode: fullscreen the app, fade the controls, and (Chrome/Edge) black out your other monitors">FOCUS</span>
+            <span title="Focus mode: fullscreen the app, fade the controls, and (Chrome/Edge) black out your other monitors">FOCUS{!isCompact && <kbd className="key-hint">F</kbd>}</span>
             <button
               className={state.global.focusMode ? 'toggle-on' : ''}
               onClick={onToggleFocus}
@@ -240,7 +244,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             )}
           </div>
           <div className="mode-pair">
-            <span title="Scroll-to-read (Lines pane): scroll the text normally and whatever passes the top edge counts as read — your reading position follows the topmost visible line.">SCROLL</span>
+            <span title="Scroll-to-read (Lines pane): scroll the text normally and whatever passes the top edge counts as read — your reading position follows the topmost visible line.">SCROLL{!isCompact && <kbd className="key-hint">S</kbd>}</span>
             <button
               className={state.global.scrollAdvances ? 'toggle-on' : ''}
               onClick={() => {
@@ -264,7 +268,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             )}
           </div>
           <div className="mode-pair">
-            <span>VOICE COMMAND</span>
+            <span>VOICE COMMAND{!isCompact && <kbd className="key-hint">V</kbd>}</span>
             <button className={audioCtrl ? 'toggle-on' : ''} onClick={onToggleAudioCtrl} title="Voice / clap commands">{audioCtrl ? 'On' : 'Off'}</button>
           </div>
           <div className="mode-pair">
