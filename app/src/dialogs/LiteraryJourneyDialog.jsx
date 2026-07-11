@@ -12,7 +12,7 @@ import { createReadingTracker } from '../engine/readingTracker.js';
 import { sectionSpan } from '../document/toc.js';
 import { askClaude, anthropicConfigured } from '../features/anthropic.js';
 import {
-  getInstruction, LIGHT_INSTRUCTION, HEAVY_PLACEHOLDER, KNOWLEDGE_GRAPH_INSTRUCTION, buildDataset, buildDigest, buildProgress,
+  getInstruction, LIGHT_INSTRUCTION, HEAVY_PLACEHOLDER, KNOWLEDGE_GRAPH_INSTRUCTION, buildDataset, buildDigest, buildProgress, AI_NOTE_TYPES,
   buildCoworkRequest, buildApiMessages, parseAiOutput, applyAiOutput, contentHash,
 } from '../features/journeyAi.js';
 import {
@@ -631,6 +631,42 @@ function suggestDoc(book, docMeta) {
   return bestScore >= 1 ? best : null;
 }
 
+// Categorized notes the AI attached to this book (cowork/API output). Summaries of a book you
+// haven't finished — and section summaries of sections you may not have reached — are SPOILER-
+// protected: blurred until clicked. Reveals are per-open, not persisted.
+function AiNotesBlock({ book }) {
+  const [revealed, setRevealed] = useState(() => new Set());
+  const notes = Array.isArray(book.aiNotes) ? book.aiNotes : [];
+  if (!notes.length) return null;
+  const finished = readStatus(book) === 'finished';
+  const byType = {};
+  for (const n of notes) (byType[n.type || 'other'] ||= []).push(n);
+  return (
+    <div className="lj-ainotes">
+      <div className="field-section" style={{ marginTop: 8 }}>AI notes ({notes.length})</div>
+      {Object.entries(byType).map(([type, list]) => (
+        <div key={type} className="lj-ainote-group">
+          <div className="lj-ainote-type">{AI_NOTE_TYPES[type] || 'Note'}</div>
+          {list.map((n, i) => {
+            const key = `${type}:${i}`;
+            const spoilery = (type === 'summary' || type === 'section-summary') && !finished;
+            const hidden = spoilery && !revealed.has(key);
+            return (
+              <div key={key} className={`lj-ainote${hidden ? ' lj-spoiler' : ''}`}
+                title={hidden ? 'Spoiler-protected — this summarizes something you haven’t finished reading. Click to reveal.' : undefined}
+                onClick={hidden ? () => setRevealed((r) => new Set(r).add(key)) : undefined}>
+                {n.sectionTitle && <span className="lj-ainote-sec">§ {n.sectionTitle}</span>}
+                {hidden ? <span className="lj-spoiler-label">🙈 Spoiler — unfinished {type === 'section-summary' ? 'section' : 'book'}. Click to reveal.</span> : null}
+                <div className="lj-ainote-text">{n.text}</div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Inline add/edit card for one book.
 function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, fileStats = {}, groups = [], onBind, onProgress, onSave, onCancel, onDelete }) {
   const [b, setB] = useState(book);
@@ -758,6 +794,7 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, fileStats
       </div>
 
       <label className="lj-editor-notes">Notes<textarea rows={3} value={b.notes || ''} onChange={(e) => set({ notes: e.target.value })} /></label>
+      <AiNotesBlock book={b} />
       {!isNew && onBind && (
         <div className="lj-bind">
           <label>Linked document
@@ -941,15 +978,29 @@ const EDGE_KINDS = {
   theme: { color: '#7209b7', label: 'shared theme' },
   contrast: { color: '#ef476f', label: 'contrast / rebuttal' },
   responds: { color: '#2a9d8f', label: 'responds to' },
+  similarity: { color: '#4cc9f0', label: 'similar work' },
+  opposed: { color: '#d00000', label: 'opposed pair' },
+  'same-universe': { color: '#ffb703', label: 'same universe' },
   link: { color: '#8d99ae', label: 'related' },
 };
 const edgeColor = (k) => (EDGE_KINDS[k] || EDGE_KINDS.link).color;
 const BOOK_LINKS = [['isbnUrl', 'Find'], ['goodreadsUrl', 'Goodreads'], ['wikipediaUrl', 'Wikipedia'], ['platformUrl', 'Read']];
 
+// The tree view remembers itself between opens (pan/zoom + every filter) — device-local view state.
+const TREE_VIEW_KEY = 'tachyread-tree-view';
+function loadTreeView() {
+  try { return JSON.parse(localStorage.getItem(TREE_VIEW_KEY)) || {}; } catch { return {}; }
+}
+
 function ConstellationView({ books, ai }) {
-  const [genre, setGenre] = useState('all');
-  const [status, setStatus] = useState('all');
-  const [view, setView] = useState(FULL_VIEW);
+  const saved = useMemo(() => loadTreeView(), []);
+  const [genre, setGenre] = useState(saved.genre || 'all');
+  const [status, setStatus] = useState(saved.status || 'all');
+  const [search, setSearch] = useState('');
+  const [labels, setLabels] = useState(saved.labels !== false); // quick toggle: star labels
+  const [hideUntouched, setHideUntouched] = useState(!!saved.hideUntouched); // hide the to-read recommends
+  const [kindOff, setKindOff] = useState(() => new Set(saved.kindOff || [])); // edge kinds toggled off
+  const [view, setView] = useState(saved.view && saved.view.w ? saved.view : FULL_VIEW);
   const [openIds, setOpenIds] = useState([]); // several detail cards can be open at once
   const [chooser, setChooser] = useState(null); // { nodes } — click hit several stacked stars
   const drag = useRef(null);
@@ -957,11 +1008,23 @@ function ConstellationView({ books, ai }) {
   const layout = useMemo(() => constellationLayout(books, ai?.treeMeta), [books, ai]);
   const booksById = useMemo(() => Object.fromEntries(books.map((b) => [b.id, b])), [books]);
   const nodeById = useMemo(() => Object.fromEntries(layout.nodes.map((n) => [n.id, n])), [layout]);
-  const shown = layout.nodes.filter((n) => (genre === 'all' || n.genre === genre) && (status === 'all' || n.status === status));
+  const q = search.trim().toLowerCase();
+  const shown = layout.nodes.filter((n) => (genre === 'all' || n.genre === genre)
+    && (status === 'all' || n.status === status)
+    && (!hideUntouched || n.status !== 'toread')
+    && (!q || `${n.title || ''} ${n.author || ''}`.toLowerCase().includes(q)));
+  const shownIds = new Set(shown.map((n) => n.id));
   const edgeKinds = useMemo(() => [...new Set(layout.edges.map((e) => e.kind))], [layout]);
+  // Edges follow the node filter (both ends visible) and the per-kind toggles.
+  const shownEdges = layout.edges.filter((e) => !kindOff.has(e.kind) && shownIds.has(e.a) && shownIds.has(e.b));
+
+  // Persist the whole view state (pan/zoom + filters) so the tree reopens where you left it.
+  useEffect(() => {
+    try { localStorage.setItem(TREE_VIEW_KEY, JSON.stringify({ view, genre, status, labels, hideUntouched, kindOff: [...kindOff] })); } catch { /* full/blocked */ }
+  }, [view, genre, status, labels, hideUntouched, kindOff]);
 
   // Labels come in as you zoom: titles once you're past ~1.5×, authors too when deep in.
-  const showTitles = view.w < CONSTELLATION_R * 1.3;
+  const showTitles = labels && view.w < CONSTELLATION_R * 1.3;
   const showAuthors = view.w < CONSTELLATION_R * 0.6;
   const labelSize = view.w / 46; // in viewBox units → roughly constant on screen across zoom levels
 
@@ -985,30 +1048,45 @@ function ConstellationView({ books, ai }) {
   // No pointer capture on purpose: capturing the SVG would retarget the click off the star and break
   // click-to-select (the SVG fills the area and onPointerLeave ends a stray drag). `movedRef` tells a
   // click from a pan so panning onto a star doesn't open its card.
-  function onDown(e) { drag.current = { x: e.clientX, y: e.clientY, view }; movedRef.current = false; }
+  // PERFORMANCE: pans/zooms write the viewBox attribute directly (no React re-render of thousands of
+  // stars per pointermove); the view STATE commits once, when the gesture ends.
+  const svgRef = useRef(null);
+  const liveView = useRef(view);
+  liveView.current = drag.current ? liveView.current : view;
+  const applyView = (v) => { liveView.current = v; svgRef.current?.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`); };
+  const wheelCommit = useRef(0);
+  function onDown(e) { drag.current = { x: e.clientX, y: e.clientY, view: liveView.current }; movedRef.current = false; }
   function onMove(e) {
     if (!drag.current) return;
     movedRef.current = true;
-    const scale = view.w / (e.currentTarget.clientWidth || 1);
-    setView({ ...drag.current.view, x: drag.current.view.x - (e.clientX - drag.current.x) * scale, y: drag.current.view.y - (e.clientY - drag.current.y) * scale });
+    const scale = drag.current.view.w / (e.currentTarget.clientWidth || 1);
+    applyView({ ...drag.current.view, x: drag.current.view.x - (e.clientX - drag.current.x) * scale, y: drag.current.view.y - (e.clientY - drag.current.y) * scale });
   }
-  function onUp() { drag.current = null; }
-  function zoom(f) { setView((v) => ({ x: v.x + (v.w - v.w * f) / 2, y: v.y + (v.h - v.h * f) / 2, w: v.w * f, h: v.h * f })); }
+  function onUp() { if (drag.current) { drag.current = null; setView(liveView.current); } }
+  function zoom(f) {
+    const v = liveView.current;
+    applyView({ x: v.x + (v.w - v.w * f) / 2, y: v.y + (v.h - v.h * f) / 2, w: v.w * f, h: v.h * f });
+    clearTimeout(wheelCommit.current);
+    wheelCommit.current = setTimeout(() => setView(liveView.current), 160); // one re-render per burst
+  }
 
   return (
     <div className="lj-constellation">
       <div className="lj-toolbar">
         <select value={genre} onChange={(e) => setGenre(e.target.value)}><option value="all">All genres</option>{layout.genres.map((g) => <option key={g} value={g}>{g}</option>)}</select>
         <select value={status} onChange={(e) => setStatus(e.target.value)}><option value="all">All statuses</option><option value="finished">Finished</option><option value="reading">Reading</option><option value="queue">On deck</option><option value="toread">To read</option><option value="abandoned">Abandoned</option></select>
+        <input className="lj-tree-search" placeholder="Search title / author…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <button className={labels ? 'toggle-on' : ''} title="Show star labels (titles appear as you zoom in)" onClick={() => setLabels((v) => !v)}>🏷 Labels</button>
+        <button className={hideUntouched ? 'toggle-on' : ''} title="Hide everything you haven't touched yet — all the to-read recommendations" onClick={() => setHideUntouched((v) => !v)}>👣 Touched only</button>
         <span className="lj-spacer" />
         <button title="Zoom in" onClick={() => zoom(0.8)}>＋</button>
         <button title="Zoom out" onClick={() => zoom(1.25)}>－</button>
-        <button onClick={() => setView(FULL_VIEW)}>Reset</button>
+        <button onClick={() => { applyView(FULL_VIEW); setView(FULL_VIEW); }}>Reset</button>
       </div>
       <p className="settings-note">{shown.length} of {layout.nodes.length} books · size = rec score · distance from centre = difficulty · brightness = read status{layout.edges.length ? ` · ${layout.edges.length} knowledge-graph links` : ' · no links yet (build the knowledge graph from AI / Cowork)'}. Drag to pan, scroll to zoom, click a star for details (open several; tightly stacked stars show a chooser).</p>
       <div className="lj-sky-wrap">
-        <svg className="lj-sky" viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp} onWheel={(e) => zoom(e.deltaY > 0 ? 1.1 : 0.9)}>
-          {layout.edges.map((e, i) => {
+        <svg ref={svgRef} className="lj-sky" viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp} onWheel={(e) => zoom(e.deltaY > 0 ? 1.1 : 0.9)}>
+          {shownEdges.map((e, i) => {
             const on = openSet.has(e.a) || openSet.has(e.b);
             return <line key={i} className={`lj-edge${on ? ' lj-edge-on' : ''}`} x1={e.ax} y1={e.ay} x2={e.bx} y2={e.by} stroke={edgeColor(e.kind)} strokeWidth={(on ? 2.2 : 1) * (view.w / FULL_VIEW.w)} opacity={openIds.length ? (on ? 0.95 : 0.15) : 0.5} />;
           })}
@@ -1020,7 +1098,12 @@ function ConstellationView({ books, ai }) {
           ))}
         </svg>
         {edgeKinds.length > 0 && (
-          <div className="lj-edge-legend">{edgeKinds.map((k) => <span key={k} className="lj-legend-item"><i style={{ background: edgeColor(k) }} />{(EDGE_KINDS[k] || EDGE_KINDS.link).label}</span>)}</div>
+          <div className="lj-edge-legend" title="Click a connection type to hide/show those links">{edgeKinds.map((k) => (
+            <button key={k} className={`lj-legend-item lj-legend-btn${kindOff.has(k) ? ' off' : ''}`}
+              onClick={() => setKindOff((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; })}>
+              <i style={{ background: edgeColor(k) }} />{(EDGE_KINDS[k] || EDGE_KINDS.link).label}
+            </button>
+          ))}</div>
         )}
         {chooser && (
           <div className="lj-chooser">

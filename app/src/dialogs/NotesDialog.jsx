@@ -3,6 +3,7 @@ import Dialog from './Dialog.jsx';
 import { fmtDateTime } from '../features/dateFmt.js';
 import { useApp } from '../state/AppContext.jsx';
 import { getNotes, saveNote, deleteNote } from '../state/storage.js';
+import { getTocEntries, currentChapter } from '../document/toc.js';
 import { askClaude, anthropicConfigured, ANTHROPIC_MODELS } from '../features/anthropic.js';
 
 const MAX_CONTEXT = 14000; // chars of document text sent to the AI (keeps token use in check)
@@ -18,19 +19,37 @@ export default function NotesDialog({ tab, onJumpWord, onClose }) {
   const [notes, setNotes] = useState([]);
   const [draft, setDraft] = useState('');
   const [anchor, setAnchor] = useState(true); // anchor the new note to the current reading position
+  const [secPick, setSecPick] = useState('current'); // 'none' | 'current' | a section start index
   const [editing, setEditing] = useState(null); // { id, text }
+
+  // ToC sections for attaching notes. A note keeps { title, start } verbatim — if the section is
+  // later renamed or removed, the note shows as orphaned (⚠) but is never deleted.
+  const entries = tab ? getTocEntries(tab) : [];
+  const curSec = entries.length ? currentChapter(entries, tab.settings.wordIndex, tab.doc.words.length) : null;
+  const sectionForPick = () => {
+    if (secPick === 'none' || !entries.length) return null;
+    if (secPick === 'current') return curSec ? { title: curSec.title, start: curSec.start } : null;
+    const e = entries.find((x) => String(x.wordIndex) === String(secPick));
+    return e ? { title: e.title, start: e.wordIndex } : null;
+  };
+  // Resolve a stored section attachment against the CURRENT ToC: by title first (survives spans
+  // shifting), then by start. null = orphaned.
+  const resolveSection = (sec) => {
+    if (!sec) return null;
+    return entries.find((e) => e.title === sec.title) || entries.find((e) => e.wordIndex === sec.start) || null;
+  };
 
   async function refresh() { if (checksum) setNotes((await getNotes(checksum)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))); }
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [checksum]);
 
   async function addNote(text, wordIndex) {
     if (!(text || '').trim()) return;
-    await saveNote(checksum, { text: text.trim(), wordIndex: wordIndex ?? null });
+    await saveNote(checksum, { text: text.trim(), wordIndex: wordIndex ?? null, section: sectionForPick() });
     setDraft(''); refresh();
   }
   async function saveEdit() {
     if (!editing) return;
-    await saveNote(checksum, { id: editing.id, text: editing.text, wordIndex: editing.wordIndex });
+    await saveNote(checksum, { id: editing.id, text: editing.text, wordIndex: editing.wordIndex, section: editing.section || null });
     setEditing(null); refresh();
   }
   async function remove(id) { await deleteNote(checksum, id); refresh(); }
@@ -92,6 +111,13 @@ export default function NotesDialog({ tab, onJumpWord, onClose }) {
               <label className="inline-check" title="Link this note to your current reading position so you can jump back to it">
                 <input type="checkbox" checked={anchor} onChange={(e) => setAnchor(e.target.checked)} /> Anchor to current position (word {tab.settings.wordIndex + 1})
               </label>
+              {entries.length > 0 && (
+                <select value={secPick} onChange={(e) => setSecPick(e.target.value)} title="Attach this note to a ToC section — it stays with the section (orphaned, not deleted, if the ToC changes)">
+                  <option value="none">§ no section</option>
+                  {curSec && <option value="current">§ current: {curSec.title}</option>}
+                  {entries.map((e) => <option key={e.wordIndex} value={String(e.wordIndex)}>§ {e.title}</option>)}
+                </select>
+              )}
               <button className="toggle-on" disabled={!draft.trim()} onClick={() => addNote(draft, anchor ? tab.settings.wordIndex : null)}>Add note</button>
             </div>
           </div>
@@ -110,11 +136,17 @@ export default function NotesDialog({ tab, onJumpWord, onClose }) {
                 ) : (
                   <>
                     <div className="note-text">{n.text}</div>
+                    {n.section && (() => {
+                      const live = resolveSection(n.section);
+                      return live
+                        ? <button className="note-anchor note-sec" title="Jump to this section" onClick={() => onJumpWord(live.wordIndex)}>§ {n.section.title}</button>
+                        : <span className="note-sec-orphan" title="The section this note was attached to was renamed or removed — the note is kept">⚠ § {n.section.title} (section changed)</span>;
+                    })()}
                     <div className="note-card-actions">
                       {n.wordIndex != null && <button className="note-anchor" title="Jump to this position" onClick={() => { onJumpWord(n.wordIndex); }}>↪ word {n.wordIndex + 1}</button>}
                       <span className="note-when">{when(n.updatedAt)}</span>
                       <span style={{ flex: 1 }} />
-                      <button onClick={() => setEditing({ id: n.id, text: n.text, wordIndex: n.wordIndex })}>Edit</button>
+                      <button onClick={() => setEditing({ id: n.id, text: n.text, wordIndex: n.wordIndex, section: n.section })}>Edit</button>
                       <button className="grab-trash" onClick={() => remove(n.id)}>🗑</button>
                     </div>
                   </>
