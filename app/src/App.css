@@ -3393,6 +3393,16 @@
 .lj-ainote.lj-spoiler { cursor: pointer; border-left-color: #d08700; }
 .lj-ainote.lj-spoiler .lj-ainote-text { filter: blur(5px); user-select: none; max-height: 3.6em; overflow: hidden; }
 .lj-spoiler-label { display: block; font-size: 11px; font-weight: 600; color: #d08700; }
+/* Shared (multi-book / series) notes */
+.lj-xnote { border-left-color: #7209b7; }
+.lj-xnote-span { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 2px; }
+.lj-xnote-chip { font-style: normal; font-size: 11px; font-weight: 600; border: 1px solid var(--divider); border-radius: 8px; padding: 0 6px; display: inline-flex; align-items: center; gap: 2px; }
+.lj-xnote-series { border-color: #7209b7; color: #7209b7; }
+.lj-xnote-type { font-style: normal; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--status-fg); margin-left: auto; }
+.lj-xnote .close-x { font-size: 12px; line-height: 1; }
+.lj-xnote-editor { border: 1px dashed var(--divider); border-radius: 8px; padding: 8px; margin-top: 4px; }
+.lj-xnote-editor textarea { width: 100%; box-sizing: border-box; }
+.lj-xnote-editor input { width: 160px; }
 
 /* Section-attached document notes */
 .note-sec { margin: 2px 0; }

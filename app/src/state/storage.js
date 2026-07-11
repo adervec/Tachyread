@@ -638,6 +638,62 @@ export async function setSectionBinding(checksum, bookId, span) {
   return sections;
 }
 
+// Cross-book / series notes: one note spanning several books (bookIds) and/or a whole series
+// (series name). Kept as a single keyed list with per-item LWW merge on import, tombstoned deletes.
+export async function getCrossNotes(includeDeleted = false) {
+  const db = await getDB();
+  const list = (await db.get('library', 'crossNotes'))?.list || [];
+  return includeDeleted ? list : list.filter((n) => !n.deleted);
+}
+export async function saveCrossNote(note) {
+  const db = await getDB();
+  const rec = (await db.get('library', 'crossNotes')) || { list: [] };
+  const now = Date.now();
+  const id = note.id || `xn_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const idx = rec.list.findIndex((n) => n.id === id);
+  const merged = {
+    id,
+    bookIds: [...new Set(note.bookIds || [])],
+    series: note.series || null,
+    type: note.type || 'other',
+    text: String(note.text || ''),
+    source: note.source || 'user',
+    createdAt: idx >= 0 ? rec.list[idx].createdAt : now,
+    updatedAt: now,
+    deleted: !!note.deleted,
+  };
+  if (idx >= 0) rec.list[idx] = merged; else rec.list.push(merged);
+  rec.updatedAt = now;
+  await db.put('library', rec, 'crossNotes');
+  await markLibraryChanged();
+  return merged;
+}
+export async function deleteCrossNote(id) {
+  const db = await getDB();
+  const rec = (await db.get('library', 'crossNotes')) || { list: [] };
+  const i = rec.list.findIndex((n) => n.id === id);
+  if (i >= 0) {
+    rec.list[i] = { ...rec.list[i], deleted: true, updatedAt: Date.now() };
+    await db.put('library', rec, 'crossNotes');
+    await markLibraryChanged();
+  }
+}
+// AI additions: dedupe by text against everything already there (incl. tombstones — a deleted note
+// must not resurrect on the next apply).
+export async function addCrossNotes(adds) {
+  const existing = await getCrossNotes(true);
+  const seen = new Set(existing.map((n) => n.text));
+  let added = 0;
+  for (const n of adds || []) {
+    const text = String(n.text || '').trim();
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    await saveCrossNote({ ...n, text, source: 'ai' });
+    added++;
+  }
+  return added;
+}
+
 export async function getJourneyAi() {
   const db = await getDB();
   return (await db.get('library', 'ai')) || null;
@@ -708,6 +764,7 @@ export async function exportLibraryData(opts = {}) {
     genres: (await db.get('library', 'refs:genres'))?.data || null,
     subgenres: (await db.get('library', 'refs:subgenres'))?.data || null,
     goals: (await db.get('library', 'refs:goals'))?.data || null,
+    crossNotes: (await db.get('library', 'crossNotes'))?.list || null,
     ai: includeAi ? (await db.get('library', 'ai')) || null : null,
     binding: includeBinding ? (await db.get('library', 'binding'))?.map || null : null,
     bindingSections: includeBinding ? (await db.get('library', 'binding'))?.sections || null : null,
@@ -748,6 +805,16 @@ export async function importLibraryData(bundle, opts = {}) {
   if (bundle.ai) {
     const existing = await store.get('ai');
     if (!existing || (bundle.ai.updatedAt || 0) >= (existing.updatedAt || 0)) await store.put(bundle.ai, 'ai');
+  }
+  if (Array.isArray(bundle.crossNotes)) {
+    const rec = (await store.get('crossNotes')) || { list: [] };
+    const byId = new Map(rec.list.map((n) => [n.id, n]));
+    for (const n of bundle.crossNotes) {
+      if (!n?.id) continue;
+      const cur = byId.get(n.id);
+      if (!cur || (n.updatedAt || 0) >= (cur.updatedAt || 0)) byId.set(n.id, n);
+    }
+    await store.put({ list: [...byId.values()], updatedAt: Date.now() }, 'crossNotes');
   }
   if (bundle.binding || bundle.bindingSections) {
     const existing = (await store.get('binding')) || { map: {} };
