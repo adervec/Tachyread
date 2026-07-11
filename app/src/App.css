@@ -3421,6 +3421,14 @@
 .an-text.an-blur { filter: blur(5px); user-select: none; max-height: 3.6em; overflow: hidden; }
 .an-actions { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .an-card textarea { width: 100%; box-sizing: border-box; }
+/* Author/genre rows: completion bar + library crosslink */
+.lj-ref-bar { flex: 0 1 120px; margin-left: auto; }
+.lj-ref-jump { padding: 0 6px; color: var(--toggle-active-bg); font-weight: 700; cursor: pointer; }
+.lj-refhead { display: flex; align-items: center; gap: 8px; width: 100%; }
+/* Archived AI analyses */
+.lj-hist { border: 1px solid var(--divider); border-radius: 6px; padding: 4px 8px; margin: 4px 0; }
+.lj-hist summary { cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.lj-hist summary .grab-trash { margin-left: auto; }
 
 /* Section-attached document notes */
 .note-sec { margin: 2px 0; }
