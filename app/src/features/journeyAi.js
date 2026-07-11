@@ -39,13 +39,20 @@ export const AI_NOTE_TYPES = {
   other: 'Note',
 };
 
+// Dedicated heavy task: audit every book's content-type classification.
+export const CLASSIFY_INSTRUCTION =
+  'CLASSIFY CONTENT TYPES (heavy). Audit every book’s `type` and fix wrong or missing ones via ' +
+  'bookPatches with a `type` field ∈ "long" (long-form book) | "short" (short-form: novella, story ' +
+  'collection) | "article" (essay / article / paper) | "ai-gen" (AI-generated content) | "poetry" | ' +
+  '"reference". Patch ONLY books whose current type is missing or clearly wrong, and change nothing else.';
+
 export function getInstruction(ai) {
   return ai?.instruction || { mode: 'light', text: LIGHT_INSTRUCTION, updatedAt: 0 };
 }
 
 // Only these fields may be changed by an AI patch — identity (id/title/author) and the user's own
 // completion/rating state are never overwritten.
-export const PATCH_FIELDS = ['recScore', 'difficultyLevel', 'difficulty', 'genre', 'subgenre', 'description', 'synopsis', 'criticalConsensus', 'recommended'];
+export const PATCH_FIELDS = ['recScore', 'difficultyLevel', 'difficulty', 'genre', 'subgenre', 'description', 'synopsis', 'criticalConsensus', 'recommended', 'type'];
 
 function compact(b, fields) { const o = {}; for (const f of fields) if (b[f] !== undefined && b[f] !== null && b[f] !== '') o[f] = b[f]; return o; }
 
@@ -132,13 +139,13 @@ export function buildDataset(books, { light = true, progress = null } = {}) {
   const recent = sortBooks(books.filter((b) => readStatus(b) === 'finished' && finishMs(b) != null), 'finished')
     .slice(0, 20).map((b) => compact(b, ['id', 'title', 'author', 'genre', 'subgenre', 'difficultyLevel', 'finishTime', 'rating']));
   const unread = sortBooks(books.filter((b) => readStatus(b) === 'toread'), 'rec')
-    .slice(0, 40).map((b) => compact(b, ['id', 'title', 'author', 'genre', 'difficultyLevel', 'recScore']));
+    .slice(0, 40).map((b) => compact(b, ['id', 'title', 'author', 'genre', 'difficultyLevel', 'recScore', 'type']));
   const ds = {
     summary: { total: stats.total, finished: stats.finished, fiction: stats.fiction, nonfiction: stats.nonfiction, byGenre: stats.byGenre },
     recentFinishes: recent, unreadCandidates: unread,
   };
   if (progress) ds.progress = progress;
-  if (!light) ds.allBooks = books.map((b) => compact(b, ['id', 'title', 'author', 'genre', 'subgenre', 'fnf', 'difficultyLevel', 'recScore', 'completion', 'finishTime', 'pages', 'pubDate']));
+  if (!light) ds.allBooks = books.map((b) => compact(b, ['id', 'title', 'author', 'genre', 'subgenre', 'fnf', 'type', 'difficultyLevel', 'recScore', 'completion', 'finishTime', 'pages', 'pubDate']));
   return ds;
 }
 

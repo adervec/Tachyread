@@ -58,6 +58,22 @@ export function readStatus(b) {
 }
 
 export const READ_STATUSES = ['reading', 'queue', 'toread', 'finished', 'abandoned'];
+
+// Content categories — each gets its own queue. `type` historically held 'long'/'short' (from the
+// library.json longForm/shortForm split); the vocabulary now covers more shapes of reading.
+export const CONTENT_TYPES = {
+  long: 'Long-form',
+  short: 'Short-form',
+  article: 'Articles',
+  'ai-gen': 'AI-generated',
+  poetry: 'Poetry',
+  reference: 'Reference',
+  other: 'Other',
+};
+// A book's content category (untyped legacy records read as long-form books).
+export function contentType(b) {
+  return CONTENT_TYPES[b?.type] ? b.type : 'long';
+}
 export const STATUS_LABEL = { finished: '✅ Finished', reading: '📖 Reading', queue: '📋 On deck', toread: '· To read', abandoned: '✕ Abandoned' };
 
 // Pure status setter — clears the fields a status doesn't own so transitions never leave a book in two
@@ -130,7 +146,7 @@ export function logReread(b, today) {
 // (empty = any) · recMin: recScore floor · genre: exact | all · search: title/author/series substring
 // · tag: exact user tag | all.
 export function filterBooks(books, f = {}) {
-  const { readState = 'all', fnf = 'all', difficulty = [], recMin = 0, genre = 'all', search = '', recBy = 'all', tag = 'all' } = f;
+  const { readState = 'all', fnf = 'all', difficulty = [], recMin = 0, genre = 'all', search = '', recBy = 'all', tag = 'all', ctype = 'all' } = f;
   const q = search.trim().toLowerCase();
   const diffSet = difficulty && difficulty.length ? new Set(difficulty.map(Number)) : null;
   return books.filter((b) => {
@@ -144,6 +160,7 @@ export function filterBooks(books, f = {}) {
     if (genre !== 'all' && (b.genre || '') !== genre) return false;
     if (recBy !== 'all' && recommender(b) !== recBy) return false;
     if (tag !== 'all' && !bookTags(b).includes(tag)) return false;
+    if (ctype !== 'all' && contentType(b) !== ctype) return false;
     if (q && !`${b.title || ''} ${b.author || ''} ${b.series || ''}`.toLowerCase().includes(q)) return false;
     return true;
   });

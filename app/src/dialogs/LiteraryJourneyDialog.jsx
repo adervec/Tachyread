@@ -13,14 +13,14 @@ import { createReadingTracker } from '../engine/readingTracker.js';
 import { sectionSpan } from '../document/toc.js';
 import { askClaude, anthropicConfigured } from '../features/anthropic.js';
 import {
-  getInstruction, LIGHT_INSTRUCTION, HEAVY_PLACEHOLDER, KNOWLEDGE_GRAPH_INSTRUCTION, buildDataset, buildDigest, buildProgress, AI_NOTE_TYPES,
+  getInstruction, LIGHT_INSTRUCTION, HEAVY_PLACEHOLDER, KNOWLEDGE_GRAPH_INSTRUCTION, CLASSIFY_INSTRUCTION, buildDataset, buildDigest, buildProgress, AI_NOTE_TYPES,
   buildCoworkRequest, buildApiMessages, parseAiOutput, applyAiOutput, contentHash,
 } from '../features/journeyAi.js';
 import {
   normalizeSeed, filterBooks, sortBooks, libraryStats, exportJourneyMarkdown,
   readStatus, setReadStatus, recommender, STATUS_LABEL,
   distinctValues, pubYear, finishMs, deriveId, bookRating,
-  bookTags, allTags, finishCount, logReread,
+  bookTags, allTags, finishCount, logReread, CONTENT_TYPES, contentType,
 } from '../features/journeyLibrary.js';
 import {
   cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, queueWithEstimates, estHours,
@@ -132,7 +132,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   const providerOk = provider && provider.supported() && provider.available(sync) === true;
 
   // Library view controls
-  const [flt, setFlt] = useState({ readState: 'all', fnf: 'all', difficulty: [], recMin: 0, genre: 'all', search: '', recBy: 'all', tag: 'all' });
+  const [flt, setFlt] = useState({ readState: 'all', fnf: 'all', difficulty: [], recMin: 0, genre: 'all', search: '', recBy: 'all', tag: 'all', ctype: 'all' });
   const [sort, setSort] = useState('rec');
   const [limit, setLimit] = useState(60);
   const [selected, setSelected] = useState(null);
@@ -458,6 +458,9 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                 </select>
                 <select value={flt.fnf} onChange={(e) => setFlt({ ...flt, fnf: e.target.value })}>
                   <option value="all">Fiction + NF</option><option value="F">Fiction</option><option value="NF">Non-fiction</option>
+                </select>
+                <select value={flt.ctype} onChange={(e) => setFlt({ ...flt, ctype: e.target.value })} title="Content type">
+                  <option value="all">All types</option>{Object.entries(CONTENT_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                 </select>
                 <select value={flt.genre} onChange={(e) => setFlt({ ...flt, genre: e.target.value })}>
                   <option value="all">All genres</option>{genreOptions.map((g) => <option key={g} value={g}>{g}</option>)}
@@ -809,6 +812,7 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
         <label>Genre<input value={b.genre || ''} onChange={(e) => set({ genre: e.target.value })} /></label>
         <label>Subgenre<input value={b.subgenre || ''} onChange={(e) => set({ subgenre: e.target.value })} /></label>
         <label>Fiction?<select value={b.fnf || ''} onChange={(e) => set({ fnf: e.target.value })}><option value="F">Fiction</option><option value="NF">Non-fiction</option></select></label>
+        <label>Content type<select value={contentType(b)} onChange={(e) => set({ type: e.target.value })}>{Object.entries(CONTENT_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
         <label>Status<select value={status} onChange={(e) => setB(applyStatus(b, e.target.value))}><option value="toread">To read</option><option value="queue">On deck</option><option value="reading">Reading</option><option value="finished">Finished</option><option value="abandoned">Abandoned</option></select></label>
         <label>Finished<input type="date" value={(finishMs(b) ? new Date(finishMs(b)).toISOString().slice(0, 10) : '')} onChange={(e) => set({ finishTime: e.target.value })} /></label>
         <label>Rec. by<input value={b.recBy || ''} placeholder="Claude" onChange={(e) => set({ recBy: e.target.value })} /></label>
@@ -1250,13 +1254,28 @@ function QueueView({ books, onShelve, onOpen }) {
   const [wpm, setWpm] = useState(250);
   const [q, setQ] = useState('');
   const [recBy, setRecBy] = useState('all');
-  const queue = useMemo(() => queueWithEstimates(books, wpm), [books, wpm]);
-  const recs = useMemo(() => sortBooks(filterBooks(books, { readState: 'toread', search: q, recBy }), 'rec').slice(0, 30), [books, q, recBy]);
+  const [cat, setCat] = useState('all'); // separate queue per content category
+  // Category pills with live counts — every content type that has anything on deck.
+  const queuedAll = useMemo(() => books.filter((b) => readStatus(b) === 'queue'), [books]);
+  const catCounts = useMemo(() => {
+    const c = {};
+    for (const b of queuedAll) c[contentType(b)] = (c[contentType(b)] || 0) + 1;
+    return c;
+  }, [queuedAll]);
+  const catBooks = useMemo(() => (cat === 'all' ? books : books.filter((b) => contentType(b) === cat)), [books, cat]);
+  const queue = useMemo(() => queueWithEstimates(catBooks, wpm), [catBooks, wpm]);
+  const recs = useMemo(() => sortBooks(filterBooks(books, { readState: 'toread', search: q, recBy, ctype: cat }), 'rec').slice(0, 30), [books, q, recBy, cat]);
   const recOptions = useMemo(() => [...new Set(books.map(recommender))].sort((a, b) => a.localeCompare(b)), [books]);
 
   return (
     <div className="lj-queue">
-      <div className="rh-section-h">On deck ({queue.count})</div>
+      <div className="lj-queue-cats">
+        <button className={`lj-qcat${cat === 'all' ? ' on' : ''}`} onClick={() => setCat('all')}>All ({queuedAll.length})</button>
+        {Object.entries(CONTENT_TYPES).map(([k, label]) => (
+          <button key={k} className={`lj-qcat${cat === k ? ' on' : ''}`} onClick={() => setCat(k)}>{label} ({catCounts[k] || 0})</button>
+        ))}
+      </div>
+      <div className="rh-section-h">On deck — {cat === 'all' ? 'everything' : CONTENT_TYPES[cat]} ({queue.count})</div>
       <div className="lj-inline">
         <span className="settings-note">≈ {queue.totalHours} h total at</span>
         <input type="number" className="lj-wpm" min="100" max="800" step="10" value={wpm} onChange={(e) => setWpm(Number(e.target.value) || 250)} />
@@ -1270,7 +1289,7 @@ function QueueView({ books, onShelve, onOpen }) {
           if (pool.length) onOpen(pool[Math.floor(Math.random() * pool.length)].id);
         }}>🎲 Surprise me</button>
       </div>
-      {queue.count === 0 ? <p className="settings-note">Nothing queued yet. Pull books from your recommendations below, or tap 📋 on any Library row.</p> : (
+      {queue.count === 0 ? <p className="settings-note">Nothing queued in this category yet. Pull items from the recommendations below, or tap 📋 on any Library row.</p> : (
         <ol className="lj-queue-list">
           {queue.items.map(({ book: b, hours, etc }, i) => (
             <li key={b.id} className="lj-queue-item">
@@ -1849,6 +1868,7 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
             <span className="settings-note">Presets:</span>
             <button onClick={() => { setText(HEAVY_PLACEHOLDER); saveInstruction('heavy', HEAVY_PLACEHOLDER); }}>🌳 Tech tree</button>
             <button onClick={() => { setText(KNOWLEDGE_GRAPH_INSTRUCTION); saveInstruction('heavy', KNOWLEDGE_GRAPH_INSTRUCTION); }}>🕸 Knowledge graph</button>
+            <button title="Audit every book's content-type (long-form / short-form / article / AI-generated / poetry / reference) and fix wrong or missing classifications" onClick={() => { setText(CLASSIFY_INSTRUCTION); saveInstruction('heavy', CLASSIFY_INSTRUCTION); }}>🗂 Classify content types</button>
           </div>
           <textarea className="lj-instr" rows={5} value={text} onChange={(e) => setText(e.target.value)} />
           <div className="lj-inline"><button onClick={() => saveInstruction('heavy', text)}>Save instruction</button><span className="settings-note">Full tech-tree / knowledge-graph rebuilds go through the cowork folder (the whole library). Resets to Light once applied.</span></div>
