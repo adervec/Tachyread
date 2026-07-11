@@ -1748,14 +1748,27 @@
 }
 
 /* Mountain-graph trendline */
+.tl-wrap { flex: 1; min-width: 0; position: relative; }
 .trendline {
-  flex: 1;
+  display: block;
+  width: 100%;
   height: 46px;
   cursor: pointer;
   touch-action: none;
   background: var(--track-bg);
   border-radius: 4px;
 }
+/* Faint seam where a new reading session began (>25 min lull between reads). */
+.trendline .tl-sess-break { stroke: var(--menu-fg); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0.28; }
+/* Hover tooltip: the segment's pace + when it was first read (desktop mouse only). */
+.tl-tip {
+  position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%);
+  background: var(--menu-bg); color: var(--menu-fg); border: 1px solid var(--divider);
+  border-radius: 6px; padding: 4px 8px; font-size: 11px; white-space: nowrap;
+  pointer-events: none; z-index: 30; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+}
+.tl-tip-when { color: var(--status-fg); font-family: Consolas, monospace; font-size: 10px; }
 .trendline .tl-base { stroke: var(--divider); stroke-width: 1; }
 .trendline .tl-unread { fill: var(--line-number-fg); opacity: 0.4; }
 .trendline .tl-history { fill: var(--session-read-fg); opacity: 0.55; }
