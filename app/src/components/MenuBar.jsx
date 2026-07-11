@@ -3,6 +3,8 @@ import { useApp } from '../state/AppContext.jsx';
 import { THEME_CATEGORIES } from '../state/themes.js';
 import { countOffDefaultSettings, defaultFileSettings } from '../state/settings.js';
 import { useIsCompact } from '../state/device.js';
+import { allFiles } from '../state/storage.js';
+import { finishedNotRereading } from '../features/recentFilter.js';
 
 // Theme <select> options grouped by category (shared by the desktop and compact theme pickers).
 function ThemeOptions() {
@@ -159,7 +161,10 @@ function RecentFiles({ recent, onPick }) {
 
 export default function MenuBar({ onFileOpen, onAction }) {
   const { state, dispatch, activeTab, patchSettings, updateGlobal } = useApp();
-  const recent = state.global.recentFiles || [];
+  // Open Recent drops finished books that aren't being reread. Finished state lives in per-file
+  // records (IndexedDB), so the hide-set loads when a menu opens; until then the list is unfiltered.
+  const [hiddenRecent, setHiddenRecent] = useState(null);
+  const recent = (state.global.recentFiles || []).filter((r) => !hiddenRecent?.has(r.checksum));
   const isCompact = useIsCompact();
   const themeName =
     activeTab?.settings?.themeName || (activeTab?.settings?.darkMode ? 'Dark' : 'Light');
@@ -183,6 +188,21 @@ export default function MenuBar({ onFileOpen, onAction }) {
     }
     if (openMenu) document.addEventListener('pointerdown', onDoc);
     return () => document.removeEventListener('pointerdown', onDoc);
+  }, [openMenu]);
+
+  // Refresh the finished-book hide-set each time a menu opens (finishing/rereading happens
+  // between opens, not during one).
+  useEffect(() => {
+    if (!openMenu) return;
+    let alive = true;
+    allFiles().then((files) => {
+      if (!alive) return;
+      const shelves = state.global.readingList?.shelves || {};
+      setHiddenRecent(new Set(
+        files.filter((f) => finishedNotRereading(f, shelves[f.checksum])).map((f) => f.checksum)));
+    }).catch(() => {}); // storage unavailable → keep list unfiltered
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openMenu]);
 
   function chooseFile() {
