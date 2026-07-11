@@ -429,7 +429,34 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               {ai?.analysis && (<><div className="rh-section-h">AI analysis</div><p className="lj-analysis">{ai.analysis}</p></>)}
               {ai?.recommendations?.length > 0 && (
                 <><div className="rh-section-h">Recommended next</div>
-                  <ul className="lj-recs">{ai.recommendations.slice(0, 8).map((r, i) => <li key={i}>{typeof r === 'string' ? r : `${r.title || ''}${r.author ? ' — ' + r.author : ''}${r.why ? ' · ' + r.why : ''}`}</li>)}</ul></>
+                  <ul className="lj-recs">{ai.recommendations.slice(0, 8).map((r, i) => {
+                    const rec = typeof r === 'string' ? { title: r } : r;
+                    const label = `${rec.title || ''}${rec.author ? ' — ' + rec.author : ''}${rec.why ? ' · ' + rec.why : ''}`;
+                    // Match the recommendation to a library book by title tokens, so "queue it" reuses
+                    // the existing record instead of duplicating it.
+                    const tokens = new Set(normTitle(rec.title || '').split(' ').filter(Boolean));
+                    const match = tokens.size ? books.find((b) => {
+                      const bt = normTitle(b.title || '').split(' ').filter(Boolean);
+                      return bt.length > 0 && bt.every((w) => tokens.has(w)) && tokens.size <= bt.length + 1;
+                    }) : null;
+                    const st = match ? readStatus(match) : null;
+                    return (
+                      <li key={i}>
+                        {label}{' '}
+                        {st === 'queue' ? <span className="settings-note" style={{ margin: 0 }}>· on deck 📋</span>
+                          : st === 'finished' ? <span className="settings-note" style={{ margin: 0 }}>· finished ✅</span>
+                          : (
+                            <button className="link-btn" title={match ? 'Add this library book to the queue' : 'Create it as a book and add it to the queue'}
+                              onClick={async () => {
+                                if (match) { await shelve(match, 'queue'); return; }
+                                const book = setReadStatus({ id: deriveId({ title: rec.title, author: rec.author }), title: rec.title, author: rec.author || '', recBy: 'Claude', notes: rec.why || '' }, 'queue');
+                                await saveLibraryBook(book); await reload();
+                              }}>📋 Queue{match ? '' : ' (new)'}</button>
+                          )}
+                        {match && st !== 'queue' && <button className="link-btn" onClick={() => { setTab('library'); setSelected(match.id); }}>↗</button>}
+                      </li>
+                    );
+                  })}</ul></>
               )}
 
               <div className="rh-section-h">Recently finished</div>
@@ -550,8 +577,8 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
             />
           )}
           {tab === 'analytics' && <AnalyticsView books={books} />}
-          {tab === 'authors' && <RefList kind="author" items={refs.authors} books={books} />}
-          {tab === 'genres' && <RefList kind="genre" items={refs.genres} subitems={refs.subgenres} books={books} />}
+          {tab === 'authors' && <RefList kind="author" items={refs.authors} books={books} onOpen={(name) => { setFlt({ ...flt, search: name, genre: 'all' }); setLimit(60); setTab('library'); }} />}
+          {tab === 'genres' && <RefList kind="genre" items={refs.genres} subitems={refs.subgenres} books={books} onOpen={(name) => { setFlt({ ...flt, genre: name, search: '' }); setLimit(60); setTab('library'); }} />}
           {tab === 'archetype' && <ArchetypeView books={books} />}
           {tab === 'constellation' && <ConstellationView books={books} ai={ai} />}
           {tab === 'ai' && <AiView books={books} ai={ai} global={global} bindMap={bindMap || {}} onBind={bind} onReload={reload} />}
@@ -910,7 +937,7 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
 
 // Authors / Genres reference tab — shows the imported reference records with a live count, plus a
 // search. Falls back to book-derived genre counts when no reference data was imported.
-function RefList({ kind, items, subitems, books }) {
+function RefList({ kind, items, subitems, books, onOpen }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(null);
   const nameKey = kind === 'author' ? 'author' : 'genre';
@@ -930,9 +957,18 @@ function RefList({ kind, items, subitems, books }) {
           const name = it[nameKey] || '—';
           return (
             <div key={name + i} className="lj-refitem">
-              <button className="lj-refhead" onClick={() => setOpen(open === i ? null : i)}>
-                <b>{name}</b>{it.count != null && <em>{it.count} book(s)</em>}{it.lifespan && <em>{it.lifespan}</em>}{it.emerged && <em>{it.emerged}</em>}
-              </button>
+              {(() => {
+                const mine = books.filter((b) => (b[nameKey] || '') === name);
+                const fin = mine.filter((b) => readStatus(b) === 'finished').length;
+                const pct = mine.length ? (fin / mine.length) * 100 : 0;
+                return (
+                  <button className="lj-refhead" onClick={() => setOpen(open === i ? null : i)}>
+                    <b>{name}</b>{(it.count != null || mine.length > 0) && <em>{fin}/{mine.length || it.count} finished</em>}{it.lifespan && <em>{it.lifespan}</em>}{it.emerged && <em>{it.emerged}</em>}
+                    <span className="lj-series-bar lj-ref-bar" title={`${fin} of ${mine.length} finished`}><i style={{ width: `${pct}%` }} /></span>
+                    <span className="lj-ref-jump" role="link" title={`Show ${name} in the Library`} onClick={(e) => { e.stopPropagation(); onOpen?.(name); }}>↗</span>
+                  </button>
+                );
+              })()}
               {open === i && (
                 <div className="lj-refbody">
                   {Object.entries(it).filter(([k, v]) => v && k !== nameKey && typeof v !== 'object').map(([k, v]) => (
@@ -1479,6 +1515,40 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
     return books.filter((b) => `${b.title || ''} ${b.author || ''}`.toLowerCase().includes(s)).slice(0, 8);
   }, [q, books]);
 
+  // Bulk-link scan: every opened file with NO tracker link, split into fuzzy matches against
+  // existing books vs. strangers — the strangers are typically AI-generated one-offs, so the bulk
+  // action creates them as 'ai-gen' books and links them in one pass.
+  const [bulk, setBulk] = useState(null); // { matched:[{cs,fileName,book}], fresh:[{cs,title}], sel:Set }
+  function scanUnlinked() {
+    const matched = [], fresh = [];
+    for (const [cs, f] of Object.entries(fileStats)) {
+      if (bindMap[cs] || !f.fileName) continue;
+      const title = String(f.fileName).replace(/\.[a-z0-9]+$/i, '');
+      const sugg = suggestFor(title);
+      if (sugg) matched.push({ cs, fileName: f.fileName, book: sugg });
+      else fresh.push({ cs, title });
+    }
+    setBulk({ matched, fresh, sel: new Set(fresh.map((x) => x.cs)) });
+    if (!matched.length && !fresh.length) { setBulk(null); setMsg('Every opened file is already linked. ✅'); }
+  }
+  async function linkAllMatched() {
+    for (const m of bulk.matched) await onBind(m.cs, m.book.id);
+    setMsg(`Linked ${bulk.matched.length} file(s) to their matching books.`);
+    setBulk(null);
+  }
+  async function createAiGenBooks() {
+    let n = 0;
+    for (const x of bulk.fresh) {
+      if (!bulk.sel.has(x.cs)) continue;
+      const book = { id: deriveId({ title: x.title }), title: x.title, type: 'ai-gen', tags: ['ai-gen'], recBy: 'Claude' };
+      await onSaveBook(book);
+      await onBind(x.cs, book.id);
+      n++;
+    }
+    setMsg(`Created ${n} AI-generated book(s) and linked their files.`);
+    setBulk(null);
+  }
+
   return (
     <div className="lj-groupsview">
       <div className="rh-section-h">Book groups ↔ tracker books</div>
@@ -1558,6 +1628,29 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
         </details>
       )}
       {msg && !anth && <p className="settings-note">{msg}</p>}
+
+      <div className="rh-section-h">Unlinked files — bulk link</div>
+      <p className="settings-note">Find every opened file with no tracker book. Fuzzy matches link to their existing books; the rest (typically AI-generated one-offs) can be created as <b>AI-generated</b> books and linked in one pass.</p>
+      <div className="lj-inline"><button onClick={scanUnlinked}>🔍 Scan opened files</button></div>
+      {bulk && (
+        <div className="lj-cleanup">
+          {bulk.matched.length > 0 && (
+            <details open><summary><b>{bulk.matched.length}</b> match existing books</summary>
+              <ul className="lj-clean-list">{bulk.matched.map((m) => <li key={m.cs}>{m.fileName} → <b>{m.book.title}</b></li>)}</ul>
+              <button className="toggle-on" onClick={linkAllMatched}>🔗 Link all {bulk.matched.length}</button>
+            </details>
+          )}
+          {bulk.fresh.length > 0 && (
+            <details open><summary><b>{bulk.fresh.length}</b> with no matching book — create as AI-generated</summary>
+              <ul className="lj-clean-list">{bulk.fresh.map((x) => (
+                <li key={x.cs}><label className="inline-check"><input type="checkbox" checked={bulk.sel.has(x.cs)} onChange={(e) => setBulk((b) => { const sel = new Set(b.sel); e.target.checked ? sel.add(x.cs) : sel.delete(x.cs); return { ...b, sel }; })} /> {x.title}</label></li>
+              ))}</ul>
+              <button className="toggle-on" disabled={![...bulk.sel].length} onClick={createAiGenBooks}>＋ Create {[...bulk.sel].length} as AI-generated + link</button>
+            </details>
+          )}
+          <div className="lj-inline"><button onClick={() => setBulk(null)}>Dismiss</button></div>
+        </div>
+      )}
 
       <div className="rh-section-h">Anthologies &amp; collections — components map to sections</div>
       <p className="settings-note">Pick a stored document (the anthology file); each ToC section can bind to its own tracker book. Reading a section fully lets you mark that component finished.</p>
@@ -1812,6 +1905,10 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
     for (const bd of bindingAdds || []) await onBind?.(bd.checksum, bd.bookId);
     const wasHeavy = getInstruction(ai).mode === 'heavy';
     const nextAi = { ...(ai || {}), ...aiPatch, ledger: [...ledger, hash].slice(-50) };
+    // A new analysis ARCHIVES the previous one instead of silently overwriting it (capped 20).
+    if (aiPatch.analysis && ai?.analysis && ai.analysis !== aiPatch.analysis) {
+      nextAi.analysisHistory = [{ text: ai.analysis, at: ai.updatedAt || Date.now() }, ...(ai.analysisHistory || [])].slice(0, 20);
+    }
     if (wasHeavy) nextAi.instruction = { mode: 'light', text: LIGHT_INSTRUCTION, updatedAt: Date.now() };
     await saveJourneyAi(nextAi);
     if (wasHeavy) { setMode('light'); setText(LIGHT_INSTRUCTION); }
@@ -1901,6 +1998,22 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
       <div className="lj-inline"><button onClick={copyDigest}>Copy digest to clipboard</button></div>
       <textarea className="lj-instr" rows={3} placeholder="Paste Claude's JSON reply here…" value={pasted} onChange={(e) => setPasted(e.target.value)} />
       <div className="lj-inline"><button disabled={busy || !pasted.trim()} onClick={applyPasted}>Apply pasted output</button></div>
+
+      {(ai?.analysisHistory || []).length > 0 && (
+        <>
+          <div className="rh-section-h">Previous AI analyses ({ai.analysisHistory.length})</div>
+          <p className="settings-note">Each new analysis archives the one it replaced — review or delete them here (the current one lives on the Dashboard).</p>
+          {ai.analysisHistory.map((h, i) => (
+            <details key={`${h.at}-${i}`} className="lj-hist">
+              <summary>
+                <span>{fmtDateTime(h.at)}</span>
+                <button className="grab-trash" title="Delete this archived analysis" onClick={async (e) => { e.preventDefault(); e.stopPropagation(); await saveJourneyAi({ ...ai, analysisHistory: ai.analysisHistory.filter((_, j) => j !== i) }); onReload(); }}>🗑</button>
+              </summary>
+              <p className="lj-analysis">{h.text}</p>
+            </details>
+          ))}
+        </>
+      )}
 
       {msg && <p className="settings-note lj-aimsg">{msg}</p>}
     </div>
