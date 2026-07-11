@@ -3403,6 +3403,10 @@
 .lj-xnote-editor { border: 1px dashed var(--divider); border-radius: 8px; padding: 8px; margin-top: 4px; }
 .lj-xnote-editor textarea { width: 100%; box-sizing: border-box; }
 .lj-xnote-editor input { width: 160px; }
+/* Per-category queue pills */
+.lj-queue-cats { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 6px; }
+.lj-qcat { font-size: 12px; padding: 4px 10px; border: 1px solid var(--divider); border-radius: 14px; background: transparent; cursor: pointer; color: inherit; }
+.lj-qcat.on { border-color: var(--toggle-active-bg); color: var(--toggle-active-bg); font-weight: 700; }
 
 /* Section-attached document notes */
 .note-sec { margin: 2px 0; }
