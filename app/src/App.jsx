@@ -1882,7 +1882,7 @@ function AppInner() {
 
   // Refresh the key handler's live context every render (handler is bound once, reads from this ref).
   kbdRef.current = {
-    activeTab, state, showFootnote, playPause, nav, pageLines, jumpToCurrent, jumpToGap, triggerOpen,
+    activeTab, state, showFootnote, playPause, nav, pageLines, jumpToCurrent, triggerOpen,
     openClipboard, openDialog, closeDialog, setShowFootnote, toggleFocusMode, dispatch,
     toggleReadAloud, toggleAudioCtrl, toggleScrollRead, adjustWpm, cycleTabs, togglePane, jumpToFrontier, jumpToGap,
   };
