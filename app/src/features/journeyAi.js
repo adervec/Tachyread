@@ -35,6 +35,7 @@ export const AI_NOTE_TYPES = {
   insight: 'Insight',
   critique: 'Critique',
   parallel: 'Parallels to other works',
+  comparison: 'Comparison across books',
   other: 'Note',
 };
 
@@ -108,8 +109,13 @@ export function buildProgress(files, { books = [], bindMap = {}, days = 35, now 
   let streak = 0;
   while (allDates.has(dayKey(cursor))) { streak++; cursor -= 86400000; }
   return {
-    note: 'Per-day and per-week reading totals across all tracked files — use for daily/weekly reading summaries. activeSecs = attentive reading time; wpm = effective words per active minute.',
+    note: 'Per-day and per-week reading totals across all tracked files — use for daily/weekly reading summaries. activeSecs = attentive reading time; wpm = effective words per active minute. `files` lists every tracked file (checksum + name + current link) so you can propose file→book bindings.',
     windowDays: days,
+    files: (files || []).map((f) => {
+      const cs = f.checksum || f.contentChecksum;
+      const linked = bindMap[cs];
+      return { checksum: cs, fileName: f.fileName || '', ...(linked ? { linkedBookId: linked } : {}) };
+    }).filter((f) => f.checksum),
     days: daysArr,
     weeks,
     currentStreakDays: streak,
@@ -136,8 +142,8 @@ export function buildDataset(books, { light = true, progress = null } = {}) {
   return ds;
 }
 
-const SCHEMA_LIGHT = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?,"notes"?}], "aiNotes"?: [{"bookId","type":"summary|section-summary|insight|critique|parallel|other","sectionTitle"?,"text"}] }';
-const SCHEMA_HEAVY = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?}], "aiNotes"?: [{"bookId","type":"summary|section-summary|insight|critique|parallel|other","sectionTitle"?,"text"}], "treeMeta": {"pos": {"<id>": {"x","y"}}, "edges": [["<idA>","<idB>","influence|prereq|series|same-author|theme|contrast|responds|similarity|opposed|same-universe"]]} }';
+const SCHEMA_LIGHT = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?,"notes"?}], "aiNotes"?: [{"bookId","type":"summary|section-summary|insight|critique|parallel|comparison|other","sectionTitle"?,"text"}], "crossNotes"?: [{"bookIds":["<id>",…],"series"?,"type","text"}], "bindings"?: [{"checksum","bookId"}] }';
+const SCHEMA_HEAVY = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?}], "aiNotes"?: [{"bookId","type":"summary|section-summary|insight|critique|parallel|comparison|other","sectionTitle"?,"text"}], "crossNotes"?: [{"bookIds":["<id>",…],"series"?,"type","text"}], "bindings"?: [{"checksum","bookId"}], "treeMeta": {"pos": {"<id>": {"x","y"}}, "edges": [["<idA>","<idB>","influence|prereq|series|same-author|theme|contrast|responds|similarity|opposed|same-universe"]]} }';
 
 // Human-readable Markdown for pasting into any Claude chat (also written as the cowork instructions).
 export function buildDigest(dataset, instruction) {
@@ -150,7 +156,9 @@ export function buildDigest(dataset, instruction) {
       'The dataset includes a `progress` section — per-day and per-week reading totals (words, active',
       'seconds, effective WPM), the current reading streak, and the books currently in flight with their',
       'coverage. Use it for any DAILY or WEEKLY reading-summary task, and to ground the analysis in what',
-      'is actually being read right now.',
+      'is actually being read right now. `progress.files` lists every tracked file with its checksum and',
+      'current link — you may return `bindings` pairing a file checksum with the tracker book it is (the',
+      'app applies them), plus `crossNotes` spanning several bookIds and/or a whole `series`.',
     ] : []),
     '',
     '## Reply with ONE ```json block, no prose, using the exact ids below:',
@@ -218,12 +226,27 @@ export function applyAiOutput(output, booksById, now = Date.now()) {
     cur.aiNotes = list.slice(-40); // ponytail: hard cap per book; oldest fall off
   }
   const bookUpdates = [...updated.values()];
+  // Cross-book / series notes: validated (needs text + at least one KNOWN book or a series name).
+  const crossNoteAdds = [];
+  for (const n of output.crossNotes || []) {
+    const text = String(n?.text || '').trim();
+    if (!text) continue;
+    const bookIds = (Array.isArray(n.bookIds) ? n.bookIds : []).filter((id) => booksById[id]);
+    const series = n.series ? String(n.series) : null;
+    if (!bookIds.length && !series) continue;
+    crossNoteAdds.push({ bookIds, series, type: AI_NOTE_TYPES[n.type] ? n.type : 'other', text });
+  }
+  // File ↔ tracker-book links the model proposes (checksums come from progress.files).
+  const bindingAdds = [];
+  for (const b of output.bindings || []) {
+    if (b?.checksum && typeof b.checksum === 'string' && booksById[b.bookId]) bindingAdds.push({ checksum: b.checksum, bookId: b.bookId });
+  }
   const aiPatch = {};
   if (output.recommendations) aiPatch.recommendations = output.recommendations;
   if (output.analysis) aiPatch.analysis = output.analysis;
   if (output.treeMeta) aiPatch.treeMeta = output.treeMeta;
   if (output.archetypeMeta) aiPatch.archetypeMeta = output.archetypeMeta;
-  return { bookUpdates, aiPatch };
+  return { bookUpdates, aiPatch, crossNoteAdds, bindingAdds };
 }
 
 // djb2 hash for the idempotency ledger (don't apply the same response twice).

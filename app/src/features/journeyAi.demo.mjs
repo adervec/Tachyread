@@ -109,4 +109,28 @@ assert.notEqual(contentHash('hello'), contentHash('world'));
   assert.equal(notes[3].createdAt, 999);
 }
 
+// crossNotes + bindings: validated against known books; junk dropped
+{
+  const byId = { a: { id: 'a', title: 'A' }, b: { id: 'b', title: 'B' } };
+  const out = {
+    crossNotes: [
+      { bookIds: ['a', 'b'], type: 'comparison', text: 'A vs B.' },
+      { series: 'Saga', type: 'insight', text: 'Across the saga.' },
+      { bookIds: ['ghost'], type: 'insight', text: 'No known books, no series.' },
+      { bookIds: ['a'], type: 'insight', text: '   ' },
+    ],
+    bindings: [
+      { checksum: 'CS1', bookId: 'a' },
+      { checksum: 'CS2', bookId: 'ghost' },
+      { bookId: 'b' },
+    ],
+  };
+  const { crossNoteAdds, bindingAdds } = applyAiOutput(out, byId, 5);
+  assert.equal(crossNoteAdds.length, 2, 'junk cross notes dropped');
+  assert.deepEqual(crossNoteAdds[0].bookIds, ['a', 'b']);
+  assert.equal(crossNoteAdds[1].series, 'Saga');
+  assert.equal(bindingAdds.length, 1, 'only bindings to known books');
+  assert.deepEqual(bindingAdds[0], { checksum: 'CS1', bookId: 'a' });
+}
+
 console.log('journeyAi.demo: all assertions passed ✅');

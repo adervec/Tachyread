@@ -6,6 +6,7 @@ import {
   getJourneyAi, saveJourneyAi, exportLibraryData, importLibraryData, librarySize, clearLibrary,
   getBinding, setBinding, getSectionBindings, setSectionBinding, allDocMeta, allFiles, getFsHandle, setFsHandle,
   loadFile, loadReadState, loadDocPayload,
+  getCrossNotes, saveCrossNote, deleteCrossNote, addCrossNotes,
 } from '../state/storage.js';
 import { extractTextMeta } from '../features/textMeta.js';
 import { createReadingTracker } from '../engine/readingTracker.js';
@@ -113,6 +114,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   const [size, setSize] = useState(null);
   const [bindMap, setBindMap] = useState(null);
   const [secBind, setSecBind] = useState({}); // { checksum: { bookId: {title,start,end} } } — anthology components
+  const [crossNotes, setCrossNotes] = useState([]); // notes spanning multiple books / a series
   const [goals, setGoals] = useState(null); // { [year]: target } — the yearly reading goals
   const [docMeta, setDocMeta] = useState([]);
   const [fileStats, setFileStats] = useState({}); // checksum → { firstRead, activeSecs, words, coverage } for auto-fill
@@ -142,10 +144,11 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   useEffect(() => { if (focusBookId) { setTab('library'); setSelected(focusBookId); } }, [focusBookId]);
 
   async function reload() {
-    const [bs, a, g, sg, goalsRec, aiRec, sz, bind, secs, docs, files] = await Promise.all([
+    const [bs, a, g, sg, goalsRec, aiRec, sz, bind, secs, xNotes, docs, files] = await Promise.all([
       getLibraryBooks(), getLibraryRef('authors'), getLibraryRef('genres'), getLibraryRef('subgenres'), getLibraryRef('goals'),
-      getJourneyAi(), librarySize(), getBinding(), getSectionBindings(), allDocMeta(), allFiles().catch(() => []),
+      getJourneyAi(), librarySize(), getBinding(), getSectionBindings(), getCrossNotes(), allDocMeta(), allFiles().catch(() => []),
     ]);
+    setCrossNotes(xNotes);
     setBooks(bs); setRefs({ authors: a, genres: g, subgenres: sg }); setAi(aiRec); setSize(sz);
     setGoals(goalsRec || {});
     setBindMap(bind); setSecBind(secs); setDocMeta(docs);
@@ -489,7 +492,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               </div>
 
               {adding && <BookEditor book={{ id: '', title: '', author: '', genre: '', fnf: 'F', type: 'long' }} isNew onCancel={() => setAdding(false)} onSave={async (b) => { await saveBook({ ...b, id: deriveId(b) }); setAdding(false); }} />}
-              {selBook && <BookEditor book={selBook} docMeta={docMeta} bindMap={bindMap} fileStats={fileStats} groups={global?.bookGroups} onBind={bind} onProgress={setProgressFor} onCancel={() => setSelected(null)} onSave={saveBook} onDelete={() => removeBook(selBook.id)} />}
+              {selBook && <BookEditor book={selBook} books={books} docMeta={docMeta} bindMap={bindMap} fileStats={fileStats} groups={global?.bookGroups} crossNotes={crossNotes} onSaveCross={async (n) => { await saveCrossNote(n); setCrossNotes(await getCrossNotes()); }} onDeleteCross={async (id) => { await deleteCrossNote(id); setCrossNotes(await getCrossNotes()); }} onBind={bind} onProgress={setProgressFor} onCancel={() => setSelected(null)} onSave={saveBook} onDelete={() => removeBook(selBook.id)} />}
 
               <div className="lj-list">
                 {shown.map((b) => {
@@ -522,7 +525,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
           )}
 
           {tab === 'queue' && <QueueView books={books} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
-          {tab === 'series' && <SeriesView books={books} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
+          {tab === 'series' && <SeriesView books={books} crossNotes={crossNotes} onDeleteCross={async (id) => { await deleteCrossNote(id); setCrossNotes(await getCrossNotes()); }} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
           {tab === 'groups' && (
             <GroupsView
               books={books} groups={global?.bookGroups || []} bindMap={bindMap || {}} secBind={secBind}
@@ -539,7 +542,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
           {tab === 'genres' && <RefList kind="genre" items={refs.genres} subitems={refs.subgenres} books={books} />}
           {tab === 'archetype' && <ArchetypeView books={books} />}
           {tab === 'constellation' && <ConstellationView books={books} ai={ai} />}
-          {tab === 'ai' && <AiView books={books} ai={ai} global={global} bindMap={bindMap || {}} onReload={reload} />}
+          {tab === 'ai' && <AiView books={books} ai={ai} global={global} bindMap={bindMap || {}} onBind={bind} onReload={reload} />}
 
           {tab === 'data' && (
             <div className="lj-data">
@@ -667,8 +670,81 @@ function AiNotesBlock({ book }) {
   );
 }
 
+// Notes spanning MULTIPLE books and/or a whole series — shown on every book they touch, with the
+// same spoiler rule as AI notes (summary types blur until every spanned book is finished). The AI
+// cowork output can add these too (crossNotes); user-created ones get a book picker + series tick.
+function CrossNotesBlock({ book, books, crossNotes, onSaveCross, onDeleteCross }) {
+  const [revealed, setRevealed] = useState(() => new Set());
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState('');
+  const [type, setType] = useState('comparison');
+  const [span, setSpan] = useState(() => [book.id]);
+  const [asSeries, setAsSeries] = useState(false);
+  const [q, setQ] = useState('');
+  useEffect(() => { setSpan([book.id]); setAdding(false); setQ(''); setText(''); }, [book.id]);
+  const relevant = crossNotes.filter((n) => (n.bookIds || []).includes(book.id) || (n.series && book.series && n.series === book.series));
+  const titleOf = (id) => books.find((x) => x.id === id)?.title || id;
+  const allSpanFinished = (n) => (n.bookIds || []).every((id) => { const x = books.find((y) => y.id === id); return x && readStatus(x) === 'finished'; });
+  const matches = q.trim()
+    ? books.filter((x) => !span.includes(x.id) && `${x.title || ''} ${x.author || ''}`.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 6)
+    : [];
+  async function save() {
+    if (!text.trim()) return;
+    await onSaveCross?.({ bookIds: span, series: asSeries && book.series ? book.series : null, type, text: text.trim() });
+    setAdding(false); setText(''); setSpan([book.id]); setQ('');
+  }
+  return (
+    <div className="lj-ainotes">
+      <div className="field-section" style={{ marginTop: 8 }}>Shared notes — multi-book / series{relevant.length ? ` (${relevant.length})` : ''}</div>
+      {relevant.map((n) => {
+        const spoilery = (n.type === 'summary' || n.type === 'section-summary') && !allSpanFinished(n);
+        const hidden = spoilery && !revealed.has(n.id);
+        return (
+          <div key={n.id} className={`lj-ainote lj-xnote${hidden ? ' lj-spoiler' : ''}`}
+            onClick={hidden ? () => setRevealed((r) => new Set(r).add(n.id)) : undefined}>
+            <span className="lj-xnote-span">
+              {(n.bookIds || []).map((id) => <i key={id} className="lj-xnote-chip">{titleOf(id)}</i>)}
+              {n.series && <i className="lj-xnote-chip lj-xnote-series">📚 {n.series}</i>}
+              <em className="lj-xnote-type">{AI_NOTE_TYPES[n.type] || 'Note'}{n.source === 'ai' ? ' · AI' : ''}</em>
+              <button className="close-x" title="Delete this shared note" onClick={(e) => { e.stopPropagation(); onDeleteCross?.(n.id); }}>×</button>
+            </span>
+            {hidden ? <span className="lj-spoiler-label">🙈 Spoiler — spans unfinished book(s). Click to reveal.</span> : null}
+            <div className="lj-ainote-text">{n.text}</div>
+          </div>
+        );
+      })}
+      {!adding ? (
+        <button onClick={() => setAdding(true)}>＋ Shared note…</button>
+      ) : (
+        <div className="lj-xnote-editor">
+          <div className="lj-inline">
+            <select value={type} onChange={(e) => setType(e.target.value)}>
+              {Object.entries(AI_NOTE_TYPES).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+            </select>
+            {book.series && (
+              <label className="inline-check"><input type="checkbox" checked={asSeries} onChange={(e) => setAsSeries(e.target.checked)} /> Attach to series “{book.series}”</label>
+            )}
+          </div>
+          <div className="lj-xnote-span" style={{ margin: '4px 0' }}>
+            {span.map((id) => (
+              <i key={id} className="lj-xnote-chip">{titleOf(id)}{span.length > 1 && <button className="close-x" onClick={() => setSpan((sp) => sp.filter((x) => x !== id))}>×</button>}</i>
+            ))}
+            <input placeholder="＋ add another book…" value={q} onChange={(e) => setQ(e.target.value)} />
+            {matches.map((x) => <button key={x.id} className="link-btn" onClick={() => { setSpan((sp) => [...sp, x.id]); setQ(''); }}>{x.title}</button>)}
+          </div>
+          <textarea rows={3} placeholder="A note about these books together…" value={text} onChange={(e) => setText(e.target.value)} />
+          <div className="lj-inline">
+            <button className="toggle-on" disabled={!text.trim()} onClick={save}>Save shared note</button>
+            <button onClick={() => setAdding(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Inline add/edit card for one book.
-function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, fileStats = {}, groups = [], onBind, onProgress, onSave, onCancel, onDelete }) {
+function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {}, fileStats = {}, groups = [], crossNotes = [], onSaveCross, onDeleteCross, onBind, onProgress, onSave, onCancel, onDelete }) {
   const [b, setB] = useState(book);
   useEffect(() => { setB(book); }, [book]);
   const status = readStatus(b);
@@ -795,6 +871,7 @@ function BookEditor({ book, isNew = false, docMeta = [], bindMap = {}, fileStats
 
       <label className="lj-editor-notes">Notes<textarea rows={3} value={b.notes || ''} onChange={(e) => set({ notes: e.target.value })} /></label>
       <AiNotesBlock book={b} />
+      {!isNew && <CrossNotesBlock book={b} books={books} crossNotes={crossNotes} onSaveCross={onSaveCross} onDeleteCross={onDeleteCross} />}
       {!isNew && onBind && (
         <div className="lj-bind">
           <label>Linked document
@@ -1236,7 +1313,7 @@ function QueueView({ books, onShelve, onOpen }) {
 // ── Series view ──────────────────────────────────────────────────────────────────────────────────
 // Every multi-book series: volume chips coloured by read status, progress count, and the next unread
 // volume with a one-tap queue. Active series (started, unfinished) sort first.
-function SeriesView({ books, onShelve, onOpen }) {
+function SeriesView({ books, crossNotes = [], onDeleteCross, onShelve, onOpen }) {
   const series = useMemo(() => seriesProgress(books), [books]);
   if (!series.length) return <p className="settings-note">No multi-book series in your tracker yet — set the <b>Series</b> field (and #) on books to group them here.</p>;
   const active = series.filter((s) => s.active).length;
@@ -1272,6 +1349,13 @@ function SeriesView({ books, onShelve, onOpen }) {
                 : <button onClick={() => onShelve(s.next, 'queue')}>📋 Queue it</button>}
             </div>
           )}
+          {crossNotes.filter((n) => n.series === s.series).map((n) => (
+            <div key={n.id} className="lj-ainote lj-xnote">
+              <span className="lj-xnote-span"><em className="lj-xnote-type">{AI_NOTE_TYPES[n.type] || 'Note'}{n.source === 'ai' ? ' · AI' : ''} · series note</em>
+                <button className="close-x" title="Delete this series note" onClick={() => onDeleteCross?.(n.id)}>×</button></span>
+              <div className="lj-ainote-text">{n.text}</div>
+            </div>
+          ))}
         </div>
       ))}
     </div>
@@ -1659,7 +1743,7 @@ async function readFromDir(dir, name) {
   try { const fh = await dir.getFileHandle(name); return await (await fh.getFile()).text(); } catch { return null; }
 }
 
-function AiView({ books, ai, global, bindMap = {}, onReload }) {
+function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
   // Reading-progress bundle (daily/weekly totals, streak, in-flight books) attached to every export,
   // so cowork daily/weekly summary tasks have the data. Built fresh at call time from the file records.
   const datasetWithProgress = async (light) => buildDataset(books, {
@@ -1694,14 +1778,16 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
     const hash = contentHash(sourceText || JSON.stringify(output));
     const ledger = ai?.ledger || [];
     if (ledger.includes(hash)) { setMsg('That output was already applied.'); return; }
-    const { bookUpdates, aiPatch } = applyAiOutput(output, booksById);
+    const { bookUpdates, aiPatch, crossNoteAdds, bindingAdds } = applyAiOutput(output, booksById);
     for (const b of bookUpdates) await saveLibraryBook(b);
+    const crossAdded = crossNoteAdds?.length ? await addCrossNotes(crossNoteAdds) : 0;
+    for (const bd of bindingAdds || []) await onBind?.(bd.checksum, bd.bookId);
     const wasHeavy = getInstruction(ai).mode === 'heavy';
     const nextAi = { ...(ai || {}), ...aiPatch, ledger: [...ledger, hash].slice(-50) };
     if (wasHeavy) nextAi.instruction = { mode: 'light', text: LIGHT_INSTRUCTION, updatedAt: Date.now() };
     await saveJourneyAi(nextAi);
     if (wasHeavy) { setMode('light'); setText(LIGHT_INSTRUCTION); }
-    setMsg(`Applied — ${bookUpdates.length} book patch(es)${aiPatch.analysis ? ', analysis' : ''}${aiPatch.recommendations ? ', recommendations' : ''}${aiPatch.treeMeta ? ', tech tree' : ''}.${wasHeavy ? ' Instruction reset to light.' : ''}`);
+    setMsg(`Applied — ${bookUpdates.length} book patch(es)${crossAdded ? `, ${crossAdded} shared note(s)` : ''}${bindingAdds?.length ? `, ${bindingAdds.length} file link(s)` : ''}${aiPatch.analysis ? ', analysis' : ''}${aiPatch.recommendations ? ', recommendations' : ''}${aiPatch.treeMeta ? ', tech tree' : ''}.${wasHeavy ? ' Instruction reset to light.' : ''}`);
     onReload();
   }
 
