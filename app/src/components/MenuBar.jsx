@@ -84,7 +84,7 @@ const MENUS = {
     { label: 'Audio Settings...', action: 'audio-settings' },
   ],
   settings: [
-    { label: 'Tab Settings...', action: 'tab-settings' },
+    { label: 'Tab Settings...', shortcut: 'Ctrl+,', action: 'tab-settings' },
     { label: 'Application Settings...', action: 'app-settings' },
     { label: 'Default Tab Settings...', action: 'def-settings' },
     { label: 'Reset Tab to Default Settings', action: 'reset-tab' },
@@ -310,21 +310,21 @@ export default function MenuBar({ onFileOpen, onAction }) {
         onClick={() => dispatch({ type: 'TOGGLE_TOC' })}
         title="Toggle Table of Contents panel"
       >
-        {state.showToc ? '☑ ' : '☐ '}ToC
+        {state.showToc ? '☑ ' : '☐ '}ToC<kbd className="key-hint">3</kbd>
       </div>
       <div
         className={`menu-item ${activeTab?.settings?.showEyes ? 'open' : ''}`}
         onClick={() => activeTab && patchSettings(activeTab.id, { showEyes: !activeTab.settings.showEyes })}
         title="Toggle the animated reader faces"
       >
-        {activeTab?.settings?.showEyes ? '☑ ' : '☐ '}Faces
+        {activeTab?.settings?.showEyes ? '☑ ' : '☐ '}Faces<kbd className="key-hint">6</kbd>
       </div>
       <div
         className={`menu-item ${state.showStats ? 'open' : ''}`}
         onClick={() => dispatch({ type: 'TOGGLE_STATS' })}
         title="Toggle the reading-stats panel"
       >
-        {state.showStats ? '☑ ' : '☐ '}Stats
+        {state.showStats ? '☑ ' : '☐ '}Stats<kbd className="key-hint">4</kbd>
       </div>
       <div
         className={`menu-item ${state.global.chipMode ? 'open' : ''}`}
@@ -347,28 +347,28 @@ export default function MenuBar({ onFileOpen, onAction }) {
         onClick={() => dispatch({ type: 'TOGGLE_INDEX' })}
         title="Toggle Index panel"
       >
-        {state.showIndex ? '☑ ' : '☐ '}Index
+        {state.showIndex ? '☑ ' : '☐ '}Index<kbd className="key-hint">5</kbd>
       </div>
       <div
         className={`menu-item ${state.showRsvp ? 'open' : ''}`}
         onClick={() => dispatch({ type: 'TOGGLE_SHOW_RSVP' })}
         title="Show the Fast Reader pane"
       >
-        {state.showRsvp ? '☑ ' : '☐ '}Fast Reader
+        {state.showRsvp ? '☑ ' : '☐ '}Fast Reader<kbd className="key-hint">1</kbd>
       </div>
       <div
         className={`menu-item ${state.showLines !== false ? 'open' : ''}`}
         onClick={() => dispatch({ type: 'TOGGLE_LINES' })}
         title="Show the Lines pane"
       >
-        {state.showLines !== false ? '☑ ' : '☐ '}Lines
+        {state.showLines !== false ? '☑ ' : '☐ '}Lines<kbd className="key-hint">2</kbd>
       </div>
       <div
         className={`menu-item incognito-menu ${state.incognito ? 'open' : ''}`}
         onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}
         title="Incognito reading — pause all tracking and persistence"
       >
-        {state.incognito ? '🕶 ' : '☐ '}Incognito
+        {state.incognito ? '🕶 ' : '☐ '}Incognito<kbd className="key-hint">I</kbd>
       </div>
       <div className="grow" />
       <div

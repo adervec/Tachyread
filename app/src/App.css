@@ -3371,6 +3371,16 @@
 .lj-grp-member-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stat-day-empty td { opacity: 0.45; }
 .pd-src-legend { margin-top: 2px; }
+
+/* Hotkey hints: visible on desktop, none on mobile. */
+.key-hint { font: 600 8px/1 Consolas, monospace; color: var(--status-fg); opacity: 0.8; background: transparent; margin-left: 4px; letter-spacing: 0; }
+.ctrl-btn { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; }
+.ctrl-btn .key-hint { margin-left: 0; }
+.play-btn { position: relative; }
+.play-btn .play-kbd { position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); margin: 0; opacity: 0.6; }
+.jump-current-btn .key-hint { margin-left: 2px; }
+/* Mobile drawer: no shortcut chips at all (no keyboard). */
+.menu-drawer .shortcut { display: none; }
 .pd-src-label { font-weight: 700; font-size: 11px; color: var(--status-fg); }
 .lj-newgrp { margin: 6px 0; }
 .lj-newgrp summary { cursor: pointer; font-size: 13px; padding: 4px 0; }
