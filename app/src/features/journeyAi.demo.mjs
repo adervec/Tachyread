@@ -89,4 +89,24 @@ assert.notEqual(contentHash('hello'), contentHash('world'));
   assert.ok(!/reading-summary task/i.test(noProg), 'no note when no progress attached');
 }
 
+// aiNotes: categorized notes append to the book, dedupe, unknown types fold to 'other'
+{
+  const byId = { b1: { id: 'b1', title: 'One', aiNotes: [{ type: 'insight', text: 'old', createdAt: 1 }] } };
+  const out = { aiNotes: [
+    { bookId: 'b1', type: 'summary', text: 'A tidy summary.' },
+    { bookId: 'b1', type: 'section-summary', sectionTitle: 'Ch 2', text: 'Sec two happens.' },
+    { bookId: 'b1', type: 'weird-type', text: 'Folded.' },
+    { bookId: 'b1', type: 'insight', text: 'old' },       // duplicate text → dropped
+    { bookId: 'missing', type: 'insight', text: 'nope' }, // unknown book → ignored
+  ] };
+  const { bookUpdates } = applyAiOutput(out, byId, 999);
+  assert.equal(bookUpdates.length, 1);
+  const notes = bookUpdates[0].aiNotes;
+  assert.equal(notes.length, 4, 'old + 3 new (dupe dropped)');
+  assert.equal(notes[1].type, 'summary');
+  assert.equal(notes[2].sectionTitle, 'Ch 2');
+  assert.equal(notes[3].type, 'other', 'unknown type folded');
+  assert.equal(notes[3].createdAt, 999);
+}
+
 console.log('journeyAi.demo: all assertions passed ✅');

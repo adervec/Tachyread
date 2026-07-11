@@ -22,9 +22,21 @@ export const HEAVY_PLACEHOLDER =
 export const KNOWLEDGE_GRAPH_INSTRUCTION =
   'KNOWLEDGE GRAPH (heavy). Rebuild the constellation as a knowledge graph. Return treeMeta.pos (x,y in ' +
   '-500..500 per book id) AND treeMeta.edges as [idA, idB, kind], where kind ∈ "influence" | "prereq" | ' +
-  '"series" | "same-author" | "theme" | "contrast" | "responds". Add an edge only for a real, specific ' +
+  '"series" | "same-author" | "theme" | "contrast" | "responds" | "similarity" (strongly similar works) | ' +
+  '"opposed" (opposed pair — thesis vs antithesis) | "same-universe" (shared fictional universe/setting). Add an edge only for a real, specific ' +
   'relationship between two books that are actually in the library; aim for 1–4 edges per book. Do NOT ' +
   'change titles/authors/ids or the reading/completion state.';
+
+// Categorized AI note types the cowork/API output may attach to books. Summaries are spoiler-
+// protected in the UI until the book (or section) is actually read.
+export const AI_NOTE_TYPES = {
+  summary: 'Book summary',
+  'section-summary': 'Section summary',
+  insight: 'Insight',
+  critique: 'Critique',
+  parallel: 'Parallels to other works',
+  other: 'Note',
+};
 
 export function getInstruction(ai) {
   return ai?.instruction || { mode: 'light', text: LIGHT_INSTRUCTION, updatedAt: 0 };
@@ -124,8 +136,8 @@ export function buildDataset(books, { light = true, progress = null } = {}) {
   return ds;
 }
 
-const SCHEMA_LIGHT = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?,"notes"?}] }';
-const SCHEMA_HEAVY = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?}], "treeMeta": {"pos": {"<id>": {"x","y"}}, "edges": [["<idA>","<idB>","influence|prereq|series|same-author|theme|contrast|responds"]]} }';
+const SCHEMA_LIGHT = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?,"notes"?}], "aiNotes"?: [{"bookId","type":"summary|section-summary|insight|critique|parallel|other","sectionTitle"?,"text"}] }';
+const SCHEMA_HEAVY = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?}], "aiNotes"?: [{"bookId","type":"summary|section-summary|insight|critique|parallel|other","sectionTitle"?,"text"}], "treeMeta": {"pos": {"<id>": {"x","y"}}, "edges": [["<idA>","<idB>","influence|prereq|series|same-author|theme|contrast|responds|similarity|opposed|same-universe"]]} }';
 
 // Human-readable Markdown for pasting into any Claude chat (also written as the cowork instructions).
 export function buildDigest(dataset, instruction) {
@@ -182,15 +194,30 @@ export function parseAiOutput(text) {
 }
 
 // Resolve an AI output against the current books → book records to save + an ai patch to merge. Pure.
-export function applyAiOutput(output, booksById) {
-  const bookUpdates = [];
+export function applyAiOutput(output, booksById, now = Date.now()) {
+  const updated = new Map(); // id → working record, so field patches and notes compose
+  const working = (id) => { if (!updated.has(id) && booksById[id]) updated.set(id, { ...booksById[id] }); return updated.get(id); };
   for (const p of output.bookPatches || []) {
-    const cur = booksById[p.id];
+    const cur = working(p.id);
     if (!cur) continue;
-    const patch = {};
-    for (const f of PATCH_FIELDS) if (p[f] !== undefined) patch[f] = p[f];
-    if (Object.keys(patch).length) bookUpdates.push({ ...cur, ...patch });
+    for (const f of PATCH_FIELDS) if (p[f] !== undefined) cur[f] = p[f];
   }
+  // Categorized AI notes: appended to the book's aiNotes (deduped by text, capped) — never touching
+  // the user's own notes field. Unknown types fold into 'other'.
+  for (const n of output.aiNotes || []) {
+    const cur = working(n.bookId);
+    if (!cur || !n.text || !String(n.text).trim()) continue;
+    const list = Array.isArray(cur.aiNotes) ? [...cur.aiNotes] : [];
+    const text = String(n.text).trim();
+    if (list.some((x) => x.text === text)) continue;
+    list.push({
+      type: AI_NOTE_TYPES[n.type] ? n.type : 'other',
+      ...(n.sectionTitle ? { sectionTitle: String(n.sectionTitle) } : {}),
+      text, createdAt: now,
+    });
+    cur.aiNotes = list.slice(-40); // ponytail: hard cap per book; oldest fall off
+  }
+  const bookUpdates = [...updated.values()];
   const aiPatch = {};
   if (output.recommendations) aiPatch.recommendations = output.recommendations;
   if (output.analysis) aiPatch.analysis = output.analysis;

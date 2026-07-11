@@ -3383,6 +3383,25 @@
 .lj-grp-member label { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
 .lj-grp-member-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stat-day-empty td { opacity: 0.45; }
+
+/* AI notes on a book (categorized, spoiler-protected) */
+.lj-ainote-group { margin: 4px 0 8px; }
+.lj-ainote-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--status-fg); margin-bottom: 2px; }
+.lj-ainote { border-left: 3px solid var(--toggle-active-bg); padding: 4px 8px; margin: 3px 0; font-size: 12px; background: color-mix(in srgb, var(--toggle-active-bg) 4%, transparent); border-radius: 0 6px 6px 0; }
+.lj-ainote-sec { display: block; font-size: 11px; font-weight: 600; color: var(--status-fg); }
+.lj-ainote-text { white-space: pre-wrap; }
+.lj-ainote.lj-spoiler { cursor: pointer; border-left-color: #d08700; }
+.lj-ainote.lj-spoiler .lj-ainote-text { filter: blur(5px); user-select: none; max-height: 3.6em; overflow: hidden; }
+.lj-spoiler-label { display: block; font-size: 11px; font-weight: 600; color: #d08700; }
+
+/* Section-attached document notes */
+.note-sec { margin: 2px 0; }
+.note-sec-orphan { display: inline-block; font-size: 11px; color: #d08700; margin: 2px 0; }
+
+/* Tech-tree toolbar extras + legend filter buttons */
+.lj-tree-search { width: 160px; }
+.lj-legend-btn { background: transparent; border: none; cursor: pointer; font: inherit; color: inherit; display: inline-flex; align-items: center; gap: 4px; padding: 1px 4px; border-radius: 4px; }
+.lj-legend-btn.off { opacity: 0.35; text-decoration: line-through; }
 .pd-src-legend { margin-top: 2px; }
 
 /* Hotkey hints: visible on desktop, none on mobile. */

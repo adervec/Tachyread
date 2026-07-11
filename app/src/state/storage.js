@@ -537,6 +537,9 @@ export async function saveNote(checksum, note) {
   const idx = rec.notes.findIndex((n) => n.id === id);
   const merged = {
     id, wordIndex: note.wordIndex ?? null, text: note.text || '', color: note.color || null,
+    // Optional ToC-section attachment { title, start }. Kept verbatim: if the section is later
+    // renamed/removed the note shows as orphaned, never deleted.
+    section: note.section || (idx >= 0 ? rec.notes[idx].section : null) || null,
     createdAt: idx >= 0 ? rec.notes[idx].createdAt : now, updatedAt: now, deleted: !!note.deleted,
   };
   if (idx >= 0) rec.notes[idx] = merged; else rec.notes.push(merged);
