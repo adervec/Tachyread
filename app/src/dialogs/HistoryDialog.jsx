@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { allFiles, allDocMeta, allFocusSessions, getBinding, getLibraryBooks } from '../state/storage.js';
+import { MAX_REAL_WPM } from '../engine/readingTracker.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────────────────────
 function fmtInt(n) { return (Math.round(n) || 0).toLocaleString(); }
@@ -14,7 +15,7 @@ function fmtDur(secs) {
   return `${s}s`;
 }
 function dayKey(d) { return d.toISOString().slice(0, 10); }
-function wpmOf(words, secs) { return secs > 0 ? Math.round((words / secs) * 60) : 0; }
+function wpmOf(words, secs) { return secs > 0 ? Math.min(MAX_REAL_WPM, Math.round((words / secs) * 60)) : 0; }
 // "pages 1–42 of 300" (PDF/grabbed images) or "sections …" (EPUB/HTML), from the source-page summary.
 function sourcePageLabel(b) {
   const noun = b.sourceKind === 'epub' || b.sourceKind === 'html' ? 'section' : 'page';

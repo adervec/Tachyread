@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { allFiles } from '../state/storage.js';
+import { MAX_REAL_WPM } from '../engine/readingTracker.js';
 
 function fmtTime(secs) {
   if (!secs) return '0s';
@@ -89,7 +90,7 @@ export default function StatisticsDialog({ tabs = [], activeTabId, onClose }) {
   }
 
   function wpm({ words, secs }) {
-    return secs > 0 ? Math.round((words / secs) * 60) : 0;
+    return secs > 0 ? Math.min(MAX_REAL_WPM, Math.round((words / secs) * 60)) : 0;
   }
 
   const openTabs = tabs.filter((t) => t && (t.doc || t.lazy));
