@@ -21,7 +21,7 @@ export const MODES = {
   idle: { icon: '💤', label: 'idle', hint: 'No reading activity in the last few seconds' },
 };
 
-export function createModeDetector() {
+export function createModeDetector(getWindowMs = () => WINDOW_MS) {
   const events = []; // {kind, ts}
 
   function note(kind, now = Date.now()) {
@@ -34,7 +34,7 @@ export function createModeDetector() {
     if (listening) return 'listen';
     if (playing) return 'auto';
     // Not playing → stale 'auto' ticks describe the player that just stopped, not the user.
-    const cutoff = now - WINDOW_MS;
+    const cutoff = now - getWindowMs();
     const win = events.filter((e) => e.ts >= cutoff && e.kind !== 'auto');
     if (!win.length) return 'idle';
     const counts = new Map();
@@ -51,10 +51,11 @@ export function createModeDetector() {
   // Epoch-ms when the current event window drains to idle (newest non-auto event + WINDOW_MS),
   // or null when there's nothing live — drives the time-until-idle underline on the mode chip.
   function idleAt(now = Date.now()) {
-    const cutoff = now - WINDOW_MS;
+    const win = getWindowMs();
+    const cutoff = now - win;
     for (let i = events.length - 1; i >= 0; i--) {
       if (events[i].kind === 'auto') continue;
-      return events[i].ts >= cutoff ? events[i].ts + WINDOW_MS : null;
+      return events[i].ts >= cutoff ? events[i].ts + win : null;
     }
     return null;
   }

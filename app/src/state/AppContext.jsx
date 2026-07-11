@@ -320,6 +320,8 @@ export function AppProvider({ children }) {
     { let inPara = false; for (const ln of doc.lines) { if (ln.isEmpty) { inPara = false; continue; } if (!inPara) { paragraphStarts.push(ln.startWordIndex); inPara = true; } } }
     const tracker = createReadingTracker({
       wordCount: doc.words.length,
+      // Live AFK-guard cap: how much of a pause still counts as active reading (Application Settings).
+      getIdleCapMs: () => Math.max(5, Math.min(600, Number(stateRef.current.global.idleGraceSecs) || 60)) * 1000,
       maskB64: rs?.maskB64 || '',
       wpmB64: rs?.wpmB64 || '',
       srcB64: rs?.srcB64 || '',

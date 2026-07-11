@@ -44,7 +44,7 @@ import ResourceWizard from './dialogs/ResourceWizard.jsx';
 import IndexPane from './components/IndexPane.jsx';
 import { buildProperNamesFromList } from './document/resourceWizard.js';
 import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
-import { createModeDetector, WINDOW_MS as MODE_WINDOW_MS } from './engine/readingMode.js';
+import { createModeDetector } from './engine/readingMode.js';
 import { startMediaSession, updateMediaSession, stopMediaSession, armMediaKeepAlive, nudgeMediaKeepAlive, getSpeechAudio } from './features/mediaSession.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import AdaptiveProbe from './components/AdaptiveProbe.jsx';
@@ -154,8 +154,12 @@ function AppInner() {
 
   // Live reading-mode detection: every advancement notes its input source; the chip in the
   // controls bar shows how the app currently thinks you're reading (see engine/readingMode.js).
+  // Idle grace (AFK guard) as a live ref, so the tracker's active-time cap and the mode chip's
+  // idle window both follow the Application Settings value without rebuilding anything.
+  const graceMsRef = useRef(60000);
+  graceMsRef.current = Math.max(5, Math.min(600, Number(state.global.idleGraceSecs) || 60)) * 1000;
   const modeDetRef = useRef(null);
-  if (!modeDetRef.current) modeDetRef.current = createModeDetector();
+  if (!modeDetRef.current) modeDetRef.current = createModeDetector(() => graceMsRef.current);
   const [readingMode, setReadingMode] = useState('idle');
   const [modeIdleFrac, setModeIdleFrac] = useState(null); // 1→0 as a stepping mode drains to idle
   // Draggable floating-chip positions (seeded from the last-saved spot; persisted on drop).
@@ -260,7 +264,7 @@ function AppInner() {
       const m = modeDetRef.current.current({ playing, listening, peeking });
       setReadingMode(m);
       const at = ['idle', 'auto', 'listen', 'peek', 'speak'].includes(m) ? null : modeDetRef.current.idleAt();
-      setModeIdleFrac(at ? Math.max(0, Math.min(1, (at - Date.now()) / MODE_WINDOW_MS)) : null);
+      setModeIdleFrac(at ? Math.max(0, Math.min(1, (at - Date.now()) / graceMsRef.current)) : null);
     };
     compute();
     const id = setInterval(compute, 1000);

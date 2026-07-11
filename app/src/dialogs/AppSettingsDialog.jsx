@@ -144,6 +144,19 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
       </Field>
 
       <div className="field-section">Reading guard</div>
+      <Field label="Idle grace period (seconds)">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="number" min={5} max={600} step={5} style={{ width: 80 }}
+            value={g.idleGraceSecs ?? 60}
+            onChange={(e) => patch({ idleGraceSecs: Math.max(5, Math.min(600, Number(e.target.value) || 60)) })}
+          />
+          <span className="settings-note" style={{ margin: 0 }}>
+            How long a pause still counts as reading. Longer gaps stop crediting active time — the AFK
+            guard, so a bathroom break can’t wreck your WPM — and the mode chip goes idle after it.
+          </span>
+        </div>
+      </Field>
       <Field label="Pause when text isn’t visible">
         <label className="inline-check">
           <input
