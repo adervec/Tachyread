@@ -3505,6 +3505,7 @@
 .rh-link-chip { font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 10px; white-space: nowrap; opacity: 0.6; border: 1px solid var(--divider); }
 .rh-link-chip.on { opacity: 1; color: var(--toggle-active-bg); border-color: var(--toggle-active-bg); }
 .rh-detail-link { margin: -4px 0 10px; }
+.rh-open-file { margin-left: 10px; font-size: 12px; vertical-align: middle; }
 .lj-bind { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--divider); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .lj-bind label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--status-fg); }
 

@@ -84,7 +84,7 @@ function Spark({ daily }) {
 // The full reading-history view — rendered standalone below AND embedded as Trackyread's Reading
 // History tab (the history was folded into the tracker).
 export function HistoryView() {
-  const { state, updateGlobal } = useApp();
+  const { state, updateGlobal, openRecent, closeDialog } = useApp();
   const [files, setFiles] = useState(null);
   const [nameMap, setNameMap] = useState({});
   const [linkMap, setLinkMap] = useState({}); // checksum → { id, title } of the linked Trackyread book
@@ -407,7 +407,14 @@ export function HistoryView() {
           {tab === 'library' && selBook && (
             <div className="rh-detail">
               <button className="rh-back" onClick={() => setSelected(null)}>← Library</button>
-              <h3 className="rh-detail-title">{selBook.name}</h3>
+              <h3 className="rh-detail-title">
+                {selBook.name}
+                <button
+                  className="rh-open-file"
+                  title="Open this document in the reader — uses the copy saved on this device (or focuses it if it's already open)"
+                  onClick={async () => { if (await openRecent(selBook.checksum)) closeDialog?.(); }}
+                >▶ Open file</button>
+              </h3>
               <p className="rh-detail-link">
                 {linkMap[selBook.checksum]
                   ? <span className="rh-link-chip on" title="This file is linked to a book in your Trackyread tracker">🔗 Linked to Trackyread: <b>{linkMap[selBook.checksum].title}</b></span>

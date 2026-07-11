@@ -437,15 +437,16 @@ export function AppProvider({ children }) {
   // because it calls it.)
   const openRecent = useCallback(async (checksum) => {
     const existing = stateRef.current.tabs.find((t) => (t.lazy ? t.checksum : t.doc?.contentChecksum) === checksum);
-    if (existing) { dispatch({ type: 'SET_ACTIVE_TAB', id: existing.id }); if (existing.lazy) await hydrateTab(existing.id); return; }
+    if (existing) { dispatch({ type: 'SET_ACTIVE_TAB', id: existing.id }); if (existing.lazy) await hydrateTab(existing.id); return true; }
     const rec = await loadDocPayload(checksum);
-    if (!rec?.fullText) { dispatch({ type: 'SET_STATUS', text: 'That file’s saved copy is no longer available.' }); return; }
+    if (!rec?.fullText) { dispatch({ type: 'SET_STATUS', text: 'That file’s saved copy is no longer available.' }); return false; }
     const doc = readerDocFromText(rec.fullText, rec.fileName || 'Document');
     if (rec.source) doc.source = rec.source;
     if (rec.wordToSegment) doc.wordToSegment = rec.wordToSegment;
     if (rec.segmentCount) doc.segmentCount = rec.segmentCount;
     await attachChecksum(doc);
     await openDoc(doc);
+    return true;
   }, [openDoc, hydrateTab]);
 
   // Throttled persistence of reading state: mask → readstate store, counters/daily → settings
