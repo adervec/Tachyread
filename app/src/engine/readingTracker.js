@@ -49,7 +49,10 @@ const WINDOW_MS = 30000; // sliding window for the live "recent WPM"
 // around with every screenful.
 const SCROLL_WINDOW_MS = 120000;
 const MIN_MS_PER_WORD = 25; // faster than this (~2400 wpm) over a multi-word move = skim/skip
-const MAX_RECENT_WPM = 2500; // clamp the live readout for sanity
+// No human reads above this — anything faster is a skim, a fling, or corrupt timing data. It is
+// filtered EVERYWHERE: per-word paces above it are never recorded, and every derived readout
+// (recent/session/lifetime WPM, aggregates) clamps to it.
+export const MAX_REAL_WPM = 2000;
 // Regression awareness: a backward saccade of ≤ this many words is a "short" regression — the kind
 // that is frequently a habitual twitch rather than a deliberate comprehension repair, and the main
 // target of regression-reduction training. Longer backward jumps usually mean genuine re-analysis.
@@ -235,7 +238,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
         mask[i] = 1;
         added++;
       }
-      if (pace > 0) wpm[i] = Math.min(65535, pace);
+      if (pace > 0 && pace <= MAX_REAL_WPM) wpm[i] = pace; // impossible paces are noise, not reading
       if (srcCode && !srcTrace[i]) srcTrace[i] = srcCode; // how it was FIRST read; re-reads keep it
       sessionMask[i] = 1;
     }
@@ -393,7 +396,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
   function markRangeReadAtPace(from, to, pace) {
     const a = Math.max(0, from | 0);
     const b = Math.min(wordCount, to | 0);
-    const p = Math.max(1, Math.round(pace) || 1);
+    const p = Math.min(MAX_REAL_WPM, Math.max(1, Math.round(pace) || 1));
     let added = 0;
     for (let i = a; i < b; i++) {
       if (!mask[i]) { mask[i] = 1; readCount++; wpm[i] = Math.min(65535, p); added++; }
@@ -450,14 +453,14 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
         ms += scrollPend.ms;
       }
     }
-    if (ms >= 400) return Math.min(MAX_RECENT_WPM, Math.round((p / ms) * 60000));
+    if (ms >= 400) return Math.min(MAX_REAL_WPM, Math.round((p / ms) * 60000));
     // Scroll mode between gestures: the window is empty while a long dwell is still reading
     // toward the next scroll — hold the last screenful's pace instead of flapping to 0.
-    if (lastScroll && now - lastScroll.ts < SCROLL_HOLD_MS) return Math.min(MAX_RECENT_WPM, lastScroll.pace);
+    if (lastScroll && now - lastScroll.ts < SCROLL_HOLD_MS) return Math.min(MAX_REAL_WPM, lastScroll.pace);
     return 0;
   }
 
-  const wpmFrom = (words, ms) => (ms > 1000 ? Math.round((words / ms) * 60000) : 0);
+  const wpmFrom = (words, ms) => (ms > 1000 ? Math.min(MAX_REAL_WPM, Math.round((words / ms) * 60000)) : 0);
 
   // Downsample the per-word trace into `cols` buckets for the mountain-graph trendline.
   // Each bucket: { wpm: avg read pace, readFrac, sessionFrac }.

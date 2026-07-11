@@ -134,4 +134,16 @@ const t12 = createReadingTracker({ wordCount: 100, maskB64: t11.serializeMask(),
 assert.deepEqual(t12.sampleSrc(10), s11, 'src trace round-trips through RLE serialize/restore');
 t12.unmarkRangeRead(10, 30);
 assert.equal(t12.sampleSrc(10)[1], 0, 'unmark clears the source too');
+// Impossible-speed filter: >2000 wpm is never recorded as a pace, and every readout clamps
+const t13 = createReadingTracker({ wordCount: 200 });
+t13.recordMove(0, 0, T);
+t13.recordMove(0, 2, T + 55); // 2 words in 55ms ≈ 2182 wpm — read (not a skim) but paceless
+assert.equal(t13.readCount, 2, 'the words still count as read');
+assert.equal(t13.rangeStats(0, 2).wpm, 0, 'impossible pace is not recorded');
+const r13 = t13.markRangeReadAtPace(10, 20, 5000); // absurd manual pace → capped
+assert.equal(t13.rangeStats(10, 20).wpm, 2000, 'manual pace capped at 2000');
+assert.ok(r13.ms >= Math.round((10 / 2000) * 60000), 'time credited at the capped pace');
+const t14 = createReadingTracker({ wordCount: 100000, lifetimeActiveMs: 2000 });
+t14.markRangeRead(0, 100000); // bulk coverage with ~no time → derived wpm would explode
+assert.equal(t14.lifetimeWpm(), 2000, 'lifetime wpm clamps to the possible ceiling');
 console.log('ok');

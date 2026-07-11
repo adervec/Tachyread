@@ -6,6 +6,7 @@
 // journeyAi.demo.mjs.
 
 import { libraryStats, readStatus, finishMs, sortBooks } from './journeyLibrary.js';
+import { MAX_REAL_WPM } from '../engine/readingTracker.js';
 
 export const LIGHT_INSTRUCTION =
   'LIGHT update. Refresh recScore only for books you can confidently judge; produce a short "read next" ' +
@@ -70,7 +71,7 @@ export function buildProgress(files, { books = [], bindMap = {}, days = 35, now 
       });
     }
   }
-  const wpmOf = (w, s) => (s > 0 ? Math.round((w / s) * 60) : 0);
+  const wpmOf = (w, s) => (s > 0 ? Math.min(MAX_REAL_WPM, Math.round((w / s) * 60)) : 0);
   const daysArr = [...byDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
     .map((d) => ({ ...d, wpm: wpmOf(d.wordsRead, d.activeSecs) }));
   // Weekly rollups (weeks start Monday).
