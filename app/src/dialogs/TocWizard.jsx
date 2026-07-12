@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { getLineIndex } from '../document/readerDocument.js';
 import { autoDetectToc, isMatterTitle, sectionSpan } from '../document/toc.js';
-import { detectTocRegion, parsePrintedToc, buildFromParsed, finalizeEntries, joinRegion, autoSplitSquashed, parseManualToc, outOfSequence, seqWindow, autoLocateRemaining } from '../document/tocWizard.js';
+import { detectTocRegion, parsePrintedToc, buildFromParsed, finalizeEntries, joinRegion, autoSplitSquashed, parseManualToc, outOfSequence, seqWindow, autoLocateRemaining , fuzzyFindLines } from '../document/tocWizard.js';
 import { findInDoc } from '../document/findText.js';
 import FindResults from '../components/FindResults.jsx';
 
@@ -28,10 +28,16 @@ export default function TocWizard({ tab, onApply, onClose }) {
 
   // In-wizard Find (rich): locate the real start of an entry, with the same info columns + context peek
   // as the Find dialog — but no jump/peek/goal buttons (a ✓ assigns the line to the entry instead).
-  const wizHits = useMemo(
-    () => (findFor != null && findQuery.trim().length >= 2 ? findInDoc(doc, findQuery, { max: 80 }) : []),
-    [doc, findQuery, findFor],
-  );
+  // Exact substring hits first; when they're scarce, fall back to the fuzzy heading matcher —
+  // tolerant of odd spacing (even letter-spaced headings), roman vs arabic vs written-out chapter
+  // numbers, and small misspellings.
+  const wizHits = useMemo(() => {
+    if (findFor == null || findQuery.trim().length < 2) return [];
+    const exact = findInDoc(doc, findQuery, { max: 80 });
+    if (exact.length >= 3) return exact;
+    const fuzzy = fuzzyFindLines(doc, findQuery, { max: 40 }).filter((f) => !exact.some((e) => e.lineIndex === f.lineIndex));
+    return [...exact, ...fuzzy].map((h, i) => ({ ...h, seq: i + 1 }));
+  }, [doc, findQuery, findFor]);
 
   // Parse preview of the chosen region — from the guided manual split when active, else line-per-entry.
   const parsedAuto = useMemo(() => parsePrintedToc(doc, start, end), [doc, start, end]);
