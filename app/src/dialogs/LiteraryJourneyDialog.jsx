@@ -1149,6 +1149,31 @@ function ConstellationView({ books, ai }) {
     try { localStorage.setItem(TREE_VIEW_KEY, JSON.stringify({ view, genre, status, labels, hideUntouched, kindOff: [...kindOff] })); } catch { /* full/blocked */ }
   }, [view, genre, status, labels, hideUntouched, kindOff]);
 
+  // Auto-zoom to the filtered stars: when a filter narrows the set, fit the viewport to their
+  // bounding box (debounced for the search box). Clearing filters leaves your view alone.
+  const fitKey = `${genre}|${status}|${hideUntouched}|${q}`;
+  const lastFit = useRef(fitKey); // seeded with the restored filters so mount doesn't refit
+  useEffect(() => {
+    if (lastFit.current === fitKey) return;
+    lastFit.current = fitKey;
+    if (!shown.length || shown.length === layout.nodes.length) return;
+    const t = setTimeout(() => {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const n of shown) {
+        if (n.x < minX) minX = n.x;
+        if (n.x > maxX) maxX = n.x;
+        if (n.y < minY) minY = n.y;
+        if (n.y > maxY) maxY = n.y;
+      }
+      const pad = 70;
+      const size = Math.max(180, maxX - minX + pad * 2, maxY - minY + pad * 2);
+      const v = { x: (minX + maxX) / 2 - size / 2, y: (minY + maxY) / 2 - size / 2, w: size, h: size };
+      applyView(v); setView(v);
+    }, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitKey]);
+
   // Labels come in as you zoom: titles once you're past ~1.5×, authors too when deep in.
   const showTitles = labels && view.w < CONSTELLATION_R * 1.3;
   const showAuthors = view.w < CONSTELLATION_R * 0.6;
