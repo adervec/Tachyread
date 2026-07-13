@@ -16,12 +16,21 @@ const PANEL_LABELS = {
 };
 
 export default function TabBar() {
-  const { state, setActiveTab, closeTab, setActivePanel, closePanel, reorderTabs } = useApp();
+  const { state, setActiveTab, closeTab, closeTabs, closeAllTabs, setActivePanel, closePanel, reorderTabs, updateGlobal } = useApp();
   const { panels, activePanelId, tabs } = state;
   const groups = state.global.bookGroups || [];
+  const multiRow = !!state.global.tabBarMultiRow;
   const noDocs = tabs.length === 0;
   const dragId = useRef(null);                 // document tab being dragged
   const [dropId, setDropId] = useState(null);  // tab the drop indicator is on
+  // Right-click menu (desktop): Notepad++-style close actions for the tab under the cursor.
+  const [menu, setMenu] = useState(null);      // { x, y, tabId } | null
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e) => { if (e.key === 'Escape') setMenu(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menu]);
 
   // Trackyread link status per tab: the `binding` map (checksum → tracker book id). Loaded once and
   // refreshed when a link changes (setBinding / library import fire tachyread-bindings-changed). The
@@ -60,8 +69,45 @@ export default function TabBar() {
     );
   };
 
+  // Build the right-click menu's actions from the tab it was opened on. Left/right are relative to
+  // that tab's position among the document tabs; each entry is disabled when it would close nothing.
+  const renderMenu = () => {
+    const i = tabs.findIndex((t) => t.id === menu.tabId);
+    if (i < 0) return null;
+    const leftIds = tabs.slice(0, i).map((t) => t.id);
+    const rightIds = tabs.slice(i + 1).map((t) => t.id);
+    const otherIds = tabs.filter((t) => t.id !== menu.tabId).map((t) => t.id);
+    const items = [
+      { label: 'Close', fn: () => closeTab(menu.tabId) },
+      { label: 'Close others', n: otherIds.length, fn: () => closeTabs(otherIds) },
+      { label: 'Close to the left', n: leftIds.length, fn: () => closeTabs(leftIds) },
+      { label: 'Close to the right', n: rightIds.length, fn: () => closeTabs(rightIds) },
+      { label: 'Close all', n: tabs.length, fn: () => closeAllTabs() },
+      { sep: true },
+      { label: multiRow ? '✓ Multi-row tabs' : 'Multi-row tabs', fn: () => updateGlobal({ tabBarMultiRow: !multiRow }) },
+    ];
+    return (
+      <>
+        <div className="word-menu-backdrop" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
+        <div className="word-menu" style={{ left: menu.x, top: menu.y }}>
+          {items.map((it, k) => it.sep
+            ? <div key={`sep-${k}`} className="sep" />
+            : (
+              <div
+                key={it.label}
+                className={`item${it.n === 0 ? ' disabled' : ''}`}
+                onClick={it.n === 0 ? undefined : () => { it.fn(); setMenu(null); }}
+              >
+                {it.label}
+              </div>
+            ))}
+        </div>
+      </>
+    );
+  };
+
   return (
-    <div className="tab-bar">
+    <div className={`tab-bar${multiRow ? ' multi-row' : ''}`}>
       {/* Unscoped dialog tabs first (leftmost); doc-scoped ones render inside their file's group below. */}
       {panels.filter((p) => p.docTabId == null).map((p) => renderPanel(p, null))}
       {noDocs && panels.length === 0 && (
@@ -91,6 +137,7 @@ export default function TabBar() {
             className={`tab ${tab.id === state.activeTabId ? 'active' : ''} ${tab.lazy ? 'lazy' : ''}${dropId === tab.id ? ' drop-target' : ''}${scopedPanels.length ? ' has-group' : ''}`}
             draggable
             onClick={() => setActiveTab(tab.id)}
+            onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, tabId: tab.id }); }}
             onDragStart={(e) => { dragId.current = tab.id; e.dataTransfer.effectAllowed = 'move'; }}
             onDragOver={(e) => { if (dragId.current && dragId.current !== tab.id) { e.preventDefault(); setDropId(tab.id); } }}
             onDragLeave={() => setDropId((d) => (d === tab.id ? null : d))}
@@ -122,6 +169,7 @@ export default function TabBar() {
           </Fragment>
         );
       })}
+      {menu && renderMenu()}
     </div>
   );
 }

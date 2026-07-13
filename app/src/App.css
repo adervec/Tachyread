@@ -198,6 +198,14 @@
   overflow-x: auto;
   min-height: 30px;
 }
+/* Multi-row: let tabs wrap instead of scrolling sideways. Caps at ~4 rows then scrolls vertically
+   so a wall of tabs can't swallow the reading area. */
+.tab-bar.multi-row {
+  flex-wrap: wrap;
+  overflow-x: visible;
+  overflow-y: auto;
+  max-height: 120px;
+}
 .tab-bar .tab {
   display: flex;
   align-items: center;
@@ -1575,6 +1583,9 @@
 }
 .word-menu .item { padding: 6px 14px; cursor: pointer; white-space: nowrap; color: var(--menu-fg); }
 .word-menu .item:hover { background: var(--menu-highlight); }
+.word-menu .item.disabled { opacity: 0.4; cursor: default; }
+.word-menu .item.disabled:hover { background: transparent; }
+.word-menu .sep { height: 1px; margin: 4px 0; background: var(--divider); }
 
 .reading-pointer {
   display: inline-flex;

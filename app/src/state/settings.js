@@ -252,6 +252,9 @@ export function defaultGlobalSettings() {
     // Defer building a restored tab's document until it's first opened (saves memory, esp. on
     // phones with several large books open). Applied on compact screens; eager on desktop.
     lazyTabsMobile: true,
+    // Let the tab strip wrap onto multiple rows instead of scrolling horizontally (desktop, many
+    // tabs open). Toggled from the tab right-click menu. Default off = single scrolling row.
+    tabBarMultiRow: false,
     // Small bottom-bar readout of how hard the app is working (frame pacing). Useful on phones.
     showPerfMeter: true,
     // Read-aloud auto-stop: pause speech after this many minutes of playback (0 = never).
