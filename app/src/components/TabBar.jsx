@@ -7,7 +7,7 @@ import { getBinding } from '../state/storage.js';
 const PANEL_LABELS = {
   'tab-settings': 'Tab Settings', 'typing-settings': 'Typing Settings', 'audio-settings': 'Audio Settings',
   'font-manager': 'Fonts', 'help': 'Help', 'def-settings': 'Default Settings', 'app-settings': 'App Settings',
-  'camera-settings': 'Camera', 'comfort-settings': 'Comfort', 'data': 'Data', 'book-groups': 'Book Groups',
+  'biometric-settings': 'Biometric Controls', 'comfort-settings': 'Comfort', 'data': 'Data', 'book-groups': 'Book Groups',
   'stats': 'Statistics', 'history': 'History', 'literary-journey': 'Trackyread', 'proper-names': 'Proper Names',
   'audiobook': 'Audiobook', 'notes': 'Notes', 'tts-popup': 'Text-to-Speech', 'face-library': 'Faces',
   'typing-progress': 'Typing Progress', 'span-drill': 'Span Drill', 'eye-warmup': 'Eye Warmup',
