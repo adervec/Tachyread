@@ -3,32 +3,17 @@
 
 import { createRecognizer, speechRecognitionSupported } from './speechRecognition.js';
 
-const COMMAND_MAP = {
-  play: 'play',
-  pause: 'pause',
-  next: 'next',
-  back: 'back',
-  forward: 'next',
-  stop: 'pause',
-};
-
-// onHeard({ transcript, isFinal, command }) fires for every result (for the live transcript
-// chat); onCommand(command) fires only when a final transcript matches a known command.
-// ponytail: voice commands stay en-US — COMMAND_MAP is English keywords; localize both together
-// if non-English command words are ever wanted.
-export function startVoiceCommands({ onHeard, onCommand } = {}) {
+// `match(transcript) → commandId | null` is injected by the caller (App builds it from the user's
+// editable voice-command list). onHeard({ transcript, isFinal, command }) fires for every result
+// (for the live feed); onCommand(commandId) fires only when a final transcript matches.
+export function startVoiceCommands({ match, onHeard, onCommand } = {}) {
   if (!speechRecognitionSupported()) return null;
   const r = createRecognizer({
     onResult: ({ transcript, isFinal }) => {
       const t = (transcript || '').toLowerCase().trim();
-      let command = null;
-      if (isFinal) {
-        for (const k of Object.keys(COMMAND_MAP)) {
-          if (t.includes(k)) { command = COMMAND_MAP[k]; break; }
-        }
-      }
+      const command = isFinal && match ? (match(t) || null) : null;
       onHeard?.({ transcript, isFinal, command });
-      if (isFinal && command) onCommand?.(command);
+      if (command) onCommand?.(command);
     },
     continuous: true,
   });

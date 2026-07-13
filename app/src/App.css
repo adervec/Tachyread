@@ -198,6 +198,14 @@
   overflow-x: auto;
   min-height: 30px;
 }
+/* Multi-row: let tabs wrap instead of scrolling sideways. Caps at ~4 rows then scrolls vertically
+   so a wall of tabs can't swallow the reading area. */
+.tab-bar.multi-row {
+  flex-wrap: wrap;
+  overflow-x: visible;
+  overflow-y: auto;
+  max-height: 120px;
+}
 .tab-bar .tab {
   display: flex;
   align-items: center;
@@ -1575,6 +1583,9 @@
 }
 .word-menu .item { padding: 6px 14px; cursor: pointer; white-space: nowrap; color: var(--menu-fg); }
 .word-menu .item:hover { background: var(--menu-highlight); }
+.word-menu .item.disabled { opacity: 0.4; cursor: default; }
+.word-menu .item.disabled:hover { background: transparent; }
+.word-menu .sep { height: 1px; margin: 4px 0; background: var(--divider); }
 
 .reading-pointer {
   display: inline-flex;
@@ -1969,7 +1980,6 @@
   display: inline-flex; align-items: center; gap: 5px;
 }
 .chip-min .chip-mini-btn { position: static; opacity: 0.75; }
-.audio-chat.chip-min { min-width: 0; width: auto; }
 
 /* Stats-chip WPM sparkline: fixed 0–1400 scale, 15s buckets over the last 8 minutes. */
 .chip-spark { margin-top: 6px; }
@@ -2838,55 +2848,15 @@
 .closing-overlay button { margin-top: 8px; }
 
 /* Audio-command transcript chat (sanity check; ephemeral) */
-.audio-chat {
-  position: fixed;
-  right: 14px;
-  bottom: 70px;
-  width: 290px;
-  max-height: 300px;
-  display: flex;
-  flex-direction: column;
-  background: var(--pane-bg);
-  border: 1px solid var(--divider);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
-  z-index: 4000;
-  font-size: 12px;
-  overflow: hidden;
-  pointer-events: auto; /* interactive: the ? legend toggle + scope live here */
-  opacity: 0.97;
-}
-.audio-chat-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--menu-bg); border-bottom: 1px solid var(--divider); font-weight: 600; font-size: 11px; cursor: grab; touch-action: none; }
-.audio-chat-head:active { cursor: grabbing; }
-.audio-chat-head .ac-help { margin-left: auto; width: 20px; height: 20px; border: 1px solid var(--divider); border-radius: 50%; background: transparent; color: var(--status-fg); cursor: pointer; font-weight: 700; line-height: 1; }
-.audio-chat-head .ac-help.on, .audio-chat-head .ac-help:hover { color: var(--menu-fg); border-color: var(--accent, #3a86ff); }
-.audio-chat-head .ac-close { width: 20px; height: 20px; border: none; background: transparent; color: var(--status-fg); cursor: pointer; font-size: 15px; line-height: 1; }
-.audio-chat-head .ac-close:hover { color: #c0392b; }
-.audio-scope { display: block; width: 100%; height: 38px; background: #0b0b0e; color: var(--accent, #3a86ff); }
-.audio-legend { padding: 6px 10px; overflow-y: auto; }
-.audio-legend .al-group { margin-bottom: 6px; }
-.audio-legend .al-group.off { opacity: 0.5; }
-.audio-legend .al-title { font-size: 11px; font-weight: 700; margin-bottom: 2px; }
-.audio-legend .al-group.on .al-title { color: #2e9d4f; }
-.audio-legend .al-row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
-.audio-legend .al-say { color: var(--fg); }
-.audio-legend .al-does { color: var(--status-fg); flex: 0 0 auto; }
-.audio-chat-body { padding: 6px 10px; overflow-y: auto; }
-.audio-chat-empty { color: var(--status-fg); font-style: italic; }
-.audio-chat-line { display: flex; gap: 6px; align-items: baseline; padding: 1px 0; }
-.audio-chat-line.noop { color: var(--status-fg); }
-.audio-chat-line.valid .audio-chat-text { color: #2e9d4f; font-weight: 600; }
-.audio-chat-ts { font-family: Consolas, monospace; font-size: 10px; color: var(--status-fg); flex: 0 0 auto; }
-.audio-chat-text { flex: 1; word-break: break-word; }
-.audio-chat-action { color: var(--toggle-active-bg); font-weight: 600; flex: 0 0 auto; }
 
 /* ── Camera popup: self-view + on-video overlay + event log + legend ─────────────────────────── */
-.camera-panel {
+/* Biometric Control Feed — the unified draggable camera + voice popup. */
+.bio-feed {
   position: fixed;
   right: 14px;
-  top: 72px; /* top-right so it never collides with the audio panel (bottom-right) */
-  width: 260px;
-  max-height: 62vh;
+  top: 72px;
+  width: 272px;
+  max-height: 82vh;
   display: flex;
   flex-direction: column;
   background: var(--pane-bg);
@@ -2897,10 +2867,22 @@
   overflow: hidden;
   font-size: 12px;
 }
-.camera-panel.wb-watching { border-color: #2e9d4f; }
-.camera-panel.wb-away { border-color: #d98324; }
-.camera-panel.wb-drowsy { border-color: #9b59b6; }
-.camera-panel.wb-error { border-color: #c0392b; }
+.bio-feed.wb-watching { border-color: #2e9d4f; }
+.bio-feed.wb-away { border-color: #d98324; }
+.bio-feed.wb-drowsy { border-color: #9b59b6; }
+.bio-feed.wb-error { border-color: #c0392b; }
+.bio-feed-head { display: flex; align-items: center; gap: 4px; padding: 5px 8px; background: var(--menu-bg); border-bottom: 1px solid var(--divider); color: var(--menu-fg); cursor: grab; touch-action: none; }
+.bio-feed-head:active { cursor: grabbing; }
+.bio-feed-head .wpv-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.bio-feed.wb-watching .bio-feed-head .wpv-dot { color: #2e9d4f; }
+.bio-feed.wb-away .bio-feed-head .wpv-dot { color: #d98324; }
+.bio-feed.wb-drowsy .bio-feed-head .wpv-dot { color: #9b59b6; }
+.bio-feed.wb-error .bio-feed-head .wpv-dot { color: #c0392b; }
+.bio-feed-head .bf-title { font-weight: 600; font-size: 11px; }
+.bio-feed-head button { border: none; background: transparent; color: var(--status-fg); cursor: pointer; padding: 0 4px; font-size: 14px; line-height: 1; }
+.bio-feed-head button:hover, .bio-feed-head button.on { color: var(--menu-fg); }
+
+/* Camera self-view + overlay (reused by the feed). */
 .cam-video-wrap { position: relative; background: #000; }
 .cam-video { display: block; width: 100%; height: 150px; object-fit: cover; transform: scaleX(-1); }
 .cam-overlay { position: absolute; left: 6px; top: 6px; right: 6px; display: flex; flex-wrap: wrap; gap: 4px; pointer-events: none; }
@@ -2909,31 +2891,38 @@
 .cam-overlay .cam-ev-away { color: #ffca8a; }
 .cam-overlay .cam-ev-drowsy { color: #d9b3ff; }
 .cam-overlay .cam-ev-hand { color: #8ec9ff; }
-.cam-bar { display: flex; align-items: center; gap: 4px; padding: 4px 6px; background: var(--menu-bg); border-top: 1px solid var(--divider); color: var(--menu-fg); }
-.cam-bar .wpv-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
-.camera-panel.wb-watching .cam-bar .wpv-dot { color: #2e9d4f; }
-.camera-panel.wb-away .cam-bar .wpv-dot { color: #d98324; }
-.camera-panel.wb-drowsy .cam-bar .wpv-dot { color: #9b59b6; }
-.cam-bar .cam-title { font-weight: 600; font-size: 11px; }
-.cam-bar button { border: none; background: transparent; color: var(--status-fg); cursor: pointer; padding: 0 4px; font-size: 14px; line-height: 1; }
-.cam-bar button:hover, .cam-bar button.on { color: var(--menu-fg); }
-.cam-log { padding: 5px 8px; overflow-y: auto; max-height: 26vh; }
-.cam-log-empty { color: var(--status-fg); font-style: italic; }
-.cam-log-line { display: flex; gap: 6px; align-items: baseline; padding: 1px 0; }
-.cam-log-line.warn .cam-log-text { color: #d98324; }
-.cam-log-line.ok .cam-log-text { color: #2e9d4f; }
-.cam-log-line.gesture .cam-log-text { color: var(--accent, #3a86ff); }
-.cam-log-ts { font-family: Consolas, monospace; font-size: 10px; color: var(--status-fg); flex: 0 0 auto; }
-.cam-log-text { flex: 1; word-break: break-word; }
-.cam-legend { padding: 6px 8px; overflow-y: auto; max-height: 30vh; }
-.cam-legend-head { font-size: 11px; font-weight: 700; margin-bottom: 4px; color: var(--status-fg); }
-.cam-legend-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
-.cam-legend-row.off { opacity: 0.5; }
-.cam-legend-row .cl-state { width: 12px; text-align: center; color: var(--status-fg); }
-.cam-legend-row.on .cl-state { color: #2e9d4f; font-weight: 700; }
-.cam-legend-row .cl-icon { width: 18px; text-align: center; }
-.cam-legend-cal { margin-top: 6px; font-size: 11px; }
-@media (max-width: 860px) { .camera-panel { right: 8px; bottom: auto; top: calc(92px + env(safe-area-inset-top, 0px)); width: 190px; } .cam-video { height: 100px; } }
+
+/* Mic oscilloscope. */
+.bio-scope { display: block; width: 100%; height: 38px; background: #0b0b0e; color: var(--accent, #3a86ff); }
+
+/* Unified event feed. Resizable in height (native grip); the dragged height is persisted. */
+.bio-feed-body { padding: 5px 8px; overflow-y: auto; resize: vertical; max-height: 60vh; min-height: 48px; }
+.bio-feed-empty { color: var(--status-fg); font-style: italic; }
+.bio-feed-line { display: flex; gap: 6px; align-items: baseline; padding: 1px 0; }
+.bio-feed-line .bf-ts { font-family: Consolas, monospace; font-size: 10px; color: var(--status-fg); flex: 0 0 auto; }
+.bio-feed-line .bf-text { flex: 1; word-break: break-word; }
+.bio-feed-line .bf-action { color: var(--toggle-active-bg); font-weight: 600; flex: 0 0 auto; }
+.bio-feed-line.warn .bf-text { color: #d98324; }
+.bio-feed-line.ok .bf-text { color: #2e9d4f; }
+.bio-feed-line.gesture .bf-text { color: var(--accent, #3a86ff); }
+.bio-feed-line.valid .bf-text { color: #2e9d4f; font-weight: 600; }
+.bio-feed-line.noop { color: var(--status-fg); }
+
+/* Combined legend. */
+.bio-legend { padding: 6px 8px; overflow-y: auto; max-height: 42vh; }
+.bio-legend .bl-group { margin-bottom: 6px; }
+.bio-legend .bl-group.off { opacity: 0.5; }
+.bio-legend .bl-title { font-size: 11px; font-weight: 700; margin-bottom: 3px; color: var(--status-fg); }
+.bio-legend .bl-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.bio-legend .bl-row.off { opacity: 0.5; }
+.bio-legend .bl-row .bl-state { width: 12px; text-align: center; color: var(--status-fg); }
+.bio-legend .bl-row.on .bl-state { color: #2e9d4f; font-weight: 700; }
+.bio-legend .bl-row .bl-icon { width: 18px; text-align: center; }
+.bio-legend .bl-cal { margin-top: 6px; font-size: 11px; }
+.bio-legend .bl-cmd { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+.bio-legend .bl-say { color: var(--fg); }
+.bio-legend .bl-does { color: var(--status-fg); flex: 0 0 auto; }
+@media (max-width: 860px) { .bio-feed { right: 8px; bottom: auto; top: calc(92px + env(safe-area-inset-top, 0px)); width: 200px; } .cam-video { height: 100px; } }
 
 /* Jump-to-current-word buttons (controls bar + mobile dock). */
 .jump-current-btn, .dock-mini-jump {
@@ -3185,11 +3174,6 @@
   .controls-bar.compact .playback-row { row-gap: 8px; }
   .controls-bar.compact .goal-row { font-size: 12px; gap: 6px; }
   .controls-bar.compact .goal-row select, .controls-bar.compact .goal-row input[type='text'] { max-width: 130px; }
-  /* The heard-speech readout sits up top on phones (out of the way of the bottom controls) and,
-     with pointer-events:none, never blocks them. */
-  /* Right gutter (126px) left clear so the heard-speech readout never sits under the top-right
-     webcam self-view when both are active. */
-  .audio-chat { right: 126px; left: 8px; bottom: auto; top: 58px; width: auto; max-height: 26vh; }
   .grab-screen-2col { flex-direction: column; }
   .grab-shots-col { flex: 1 1 auto; width: 100%; }
   .grab-shots { max-height: 36vh; }

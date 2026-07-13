@@ -19,7 +19,7 @@ import ReaderRotator from './components/ReaderRotator.jsx';
 import FaceStage from './components/FaceStage.jsx';
 import PerfMonitor from './components/PerfMonitor.jsx';
 import { useIsCompact, deviceKind, isCompactScreen } from './state/device.js';
-import AudioChat from './components/AudioChat.jsx';
+import BiometricFeed from './components/BiometricFeed.jsx';
 import TypingRun from './components/TypingRun.jsx';
 import FindDialog from './dialogs/FindDialog.jsx';
 import GoToLineDialog from './dialogs/GoToLineDialog.jsx';
@@ -53,7 +53,7 @@ import SpanDrillDialog from './dialogs/SpanDrillDialog.jsx';
 import EyeWarmupDialog from './dialogs/EyeWarmupDialog.jsx';
 import TypingSettingsDialog from './dialogs/TypingSettingsDialog.jsx';
 import AudioSettingsDialog from './dialogs/AudioSettingsDialog.jsx';
-import CameraSettingsDialog from './dialogs/CameraSettingsDialog.jsx';
+import BiometricControlsDialog from './dialogs/BiometricControlsDialog.jsx';
 import ComfortSettingsDialog from './dialogs/ComfortSettingsDialog.jsx';
 import ImportDialog from './dialogs/ImportDialog.jsx';
 import FontManagerDialog from './dialogs/FontManagerDialog.jsx';
@@ -96,8 +96,8 @@ import { buildTabPdf } from './features/exportPdf.js';
 import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
 import { createGestureMonitor, DEFAULT_HAND_CALIB, DEFAULT_GESTURES, GESTURE_INFO } from './features/handGestures.js';
+import { runCommand, actionLabel, matchVoice, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from './features/commandRegistry.js';
 import HandCalibrationDialog from './dialogs/HandCalibrationDialog.jsx';
-import CameraPanel from './components/CameraPanel.jsx';
 import WebcamCalibrationDialog from './dialogs/WebcamCalibrationDialog.jsx';
 import { createAlarm } from './features/alarm.js';
 
@@ -135,7 +135,7 @@ function AppInner() {
   const chips = isCompact || !!state.global.chipMode;
   const [mobileView, setMobileView] = useState('rsvp'); // compact-screen single reading view: 'rsvp' | 'lines'
   const [recenterKey, setRecenterKey] = useState(0); // bump to snap the Lines pane back to the current word
-  const [audioChatPos, setAudioChatPos] = useState(() => state.global.audioChatPos || null); // draggable audio-command chip
+  const [bioFeedPos, setBioFeedPos] = useState(() => state.global.bioFeedPos || null); // draggable Biometric Control Feed
   const [controlsCollapsed, setControlsCollapsed] = useState(false); // minimize the bottom dock for text room
   const [moreOpen, setMoreOpen] = useState(false); // mobile: show the finer controls row (toggle lives in the dock grip bar)
   const [chromeHidden, setChromeHidden] = useState(false); // mobile: hide menu+tabs above the reader for text room
@@ -195,11 +195,6 @@ function AppInner() {
   const [goalKills, setGoalKills] = useState([]); // session-only killfeed of completed goals
   const onGoalComplete = useCallback((label) => {
     setGoalKills((k) => [...k, { label, time: fmtTime(Date.now(), true) }]);
-  }, []);
-  const [audioLog, setAudioLog] = useState([]); // ephemeral audio-command transcript
-  const audioLogId = useRef(0);
-  const pushAudioLog = useCallback((entry) => {
-    setAudioLog((l) => [...l.slice(-49), { id: ++audioLogId.current, time: fmtTime(Date.now(), true), ...entry }]);
   }, []);
   const [typingRuns, setTypingRuns] = useState([]); // session killfeed of completed typing runs
   const onSaveTypingRun = useCallback((run) => {
@@ -807,11 +802,12 @@ function AppInner() {
   const [webcamStream, setWebcamStream] = useState(null);
   const [gestureStream, setGestureStream] = useState(null); // hand-gesture camera stream (for the popup)
   const webcamRef = useRef(null);
-  // Camera event log for the popup — recent detected events (away/back, doze, gestures, …).
-  const [cameraLog, setCameraLog] = useState([]);
-  const cameraLogId = useRef(0);
-  const pushCameraLog = useCallback((e) => {
-    setCameraLog((l) => [...l.slice(-49), { id: ++cameraLogId.current, time: fmtTime(Date.now(), true), ...e }]);
+  // Unified Biometric Control Feed log — camera events (away/back, doze, gestures) and voice/clap
+  // commands interleaved, time-ordered. Each entry carries source: 'camera' | 'voice'.
+  const [bioLog, setBioLog] = useState([]);
+  const bioLogId = useRef(0);
+  const pushBioLog = useCallback((e) => {
+    setBioLog((l) => [...l.slice(-49), { id: ++bioLogId.current, time: fmtTime(Date.now(), true), ...e }]);
   }, []);
 
   const evalBlock = useCallback(() => {
@@ -879,6 +875,7 @@ function AppInner() {
     || state.global.webcamDistanceNudge || state.global.webcamFocusStats;
   const camOn = !isCompact && camGuardsOn;
   const handGesturesOn = !isCompact && !!state.global.handGestures;
+  const audioCtrlOn = !!activeTab?.settings?.audioCtrl;
   useEffect(() => {
     if (!camOn) {
       webcamRef.current?.stop();
@@ -906,14 +903,14 @@ function AppInner() {
           if (f.attentive) f.watchedMs += now - f.lastTs; else f.awayMs += now - f.lastTs;
           f.lastTs = now;
           if (!attentive) f.distractions += 1;
-          if (f.attentive !== attentive) pushCameraLog(attentive ? { icon: '👀', text: 'Back — watching', kind: 'ok' } : { icon: '🙈', text: 'Looked away', kind: 'warn' });
+          if (f.attentive !== attentive) pushBioLog(attentive ? { source: 'camera', icon: '👀', text: 'Back — watching', tone: 'ok' } : { source: 'camera', icon: '🙈', text: 'Looked away', tone: 'warn' });
           f.attentive = attentive;
         }
       },
       onDoze: (dozing) => {
         // doze → stop read-aloud (it's otherwise exempt from the guards). No auto-resume: if you
         // nodded off, it just stops, like the wind-down timer.
-        if (dozing) pushCameraLog({ icon: '💤', text: 'Drowsy — eyes shut', kind: 'warn' });
+        if (dozing) pushBioLog({ source: 'camera', icon: '💤', text: 'Drowsy — eyes shut', tone: 'warn' });
         if (dozing && webcamDozeRef.current && playingRef.current && activeTabRef.current?.settings.readAloud) {
           engineRef.current.pause();
           setPlaying(false);
@@ -937,7 +934,7 @@ function AppInner() {
       },
       onProximity: (close) => {
         setTooClose(distanceNudgeRef.current ? close : false);
-        if (close) pushCameraLog({ icon: '↔', text: 'Too close to the screen', kind: 'warn' });
+        if (close) pushBioLog({ source: 'camera', icon: '↔', text: 'Too close to the screen', tone: 'warn' });
       },
     });
     webcamRef.current = mon;
@@ -1016,20 +1013,25 @@ function AppInner() {
     return { title: `${pct}% · ${chapter || book}`, artist: book, album: 'Tachyread — read-aloud', pct };
   }
 
-  // Discrete hand gestures → reader actions (each gesture is individually enabled in settings).
+  // Small action bag the command registry runs against (shared by gestures, voice, and claps).
+  const cmdCtx = () => ({ playPause: () => playPauseRef.current?.(), setPlaying, nav, adjustWpm });
+  // Latest voice-command phrase list, read live by the recognizer's matcher (so edits in Biometric
+  // Controls take effect without toggling voice off/on).
+  const voiceCommandsRef = useRef(DEFAULT_VOICE_COMMANDS);
+  voiceCommandsRef.current = state.global.voiceCommands?.length ? state.global.voiceCommands : DEFAULT_VOICE_COMMANDS;
+  // Discrete hand gestures (and the wave) → whatever command the user mapped them to. Each gesture is
+  // individually enabled in settings; the map decides the action (gestureMap; falls back to defaults).
   const handleGestureRef = useRef(null);
   handleGestureRef.current = (kind) => {
     if (!activeTab) return;
-    if (kind === 'thumbUp' || kind === 'thumbDown') {
-      const wpm = Math.max(60, Math.min(1500, (activeTab.settings.wpm || 300) + (kind === 'thumbUp' ? 25 : -25)));
-      patchSettings(activeTab.id, { wpm });
-      setStatus(`${kind === 'thumbUp' ? '👍' : '👎'} WPM ${wpm}.`);
-    } else if (kind === 'fist') {
-      if (playingRef.current) { playPauseRef.current?.(); setStatus('✊ Paused.'); }
-    } else if (kind === 'victory') {
-      nav('nextPara');
-      setStatus('✌ Next paragraph.');
+    const gmap = { ...DEFAULT_GESTURE_MAP, ...(state.global.gestureMap || {}) };
+    const cmdId = gmap[kind];
+    const info = GESTURE_INFO[kind];
+    if (cmdId) {
+      runCommand(cmdId, cmdCtx());
+      setStatus(`${info?.icon || '🖐'} ${actionLabel(cmdId)}`);
     }
+    pushBioLog({ source: 'camera', icon: info?.icon || '🖐', text: info?.label || kind, action: cmdId ? actionLabel(cmdId) : null, tone: 'gesture' });
   };
 
   // Hand-gesture controls (opt-in): open palm = scroll joystick over the Lines pane (raise/lower
@@ -1052,20 +1054,12 @@ function AppInner() {
       intervalMs: deviceKind() === 'Mobile' ? 150 : 100,
       onState: setHandState,
       onStream: (s) => setGestureStream(s),
-      onGesture: (kind) => {
-        handleGestureRef.current?.(kind);
-        const info = GESTURE_INFO[kind];
-        pushCameraLog({ icon: info?.icon || '🖐', text: info?.label || kind, kind: 'gesture' });
-      },
+      onGesture: (kind) => handleGestureRef.current?.(kind),
       onHand: ({ present, v }) => {
         setHandState(!present ? 'watching' : v < 0 ? 'scroll-up' : v > 0 ? 'scroll-down' : 'hand');
       },
       onScroll: (v) => { handVelRef.current = v; },
-      onWave: () => {
-        playPauseRef.current?.();
-        setStatus('🖐 Wave — play/pause.');
-        pushCameraLog({ icon: '👋', text: 'Wave → play/pause', kind: 'gesture' });
-      },
+      onWave: () => handleGestureRef.current?.('wave'),
     });
     handRef.current = mon;
     mon.start();
@@ -1095,8 +1089,8 @@ function AppInner() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handGesturesOn]);
-  // Clear the camera event log once no camera feature is running.
-  useEffect(() => { if (!camOn && !handGesturesOn) setCameraLog([]); }, [camOn, handGesturesOn]);
+  // Clear the unified feed once no biometric source (camera, gestures, or voice) is running.
+  useEffect(() => { if (!camOn && !handGesturesOn && !audioCtrlOn) setBioLog([]); }, [camOn, handGesturesOn, audioCtrlOn]);
   // Turn off every front-camera feature at once (the popup's × does this).
   const turnOffCamera = useCallback(() => {
     updateGlobal({ webcamAttention: false, webcamDoze: false, webcamAwayAlarm: false, webcamDistanceNudge: false, webcamFocusStats: false, handGestures: false });
@@ -1464,37 +1458,32 @@ function AppInner() {
         clapRef.current = null;
       }
       if (micScopeRef.current) { try { micScopeRef.current.stop(); } catch { /* ignore */ } micScopeRef.current = null; setMicScope(null); }
-      setAudioLog([]); // ephemeral transcript — clear when listening stops
       return;
     }
     // Oscilloscope: a live waveform of the incoming mic audio while listening.
     if (micScopeSupported()) {
       startMicScope().then((s) => { micScopeRef.current = s; setMicScope(s); }).catch(() => {});
     }
-    const CMD_LABEL = { play: '▶ play', pause: '❚❚ pause', next: '→ next word', back: '← prev word' };
     const mode = state.global.audioCtrlMode || 'Both';
     if (mode === 'Voice' || mode === 'Both') {
       const r = startVoiceCommands({
+        // Match against the user's editable phrase list (read live via the ref so edits apply without
+        // toggling voice off/on). Returns a commandId the registry runs.
+        match: (t) => matchVoice(t, voiceCommandsRef.current),
         onHeard: ({ transcript, isFinal, command }) => {
           if (!isFinal) return;
-          pushAudioLog({ transcript, command, action: command ? CMD_LABEL[command] : null });
+          pushBioLog({ source: 'voice', text: transcript, action: command ? actionLabel(command) : null, tone: command ? 'valid' : 'noop' });
         },
-        onCommand: (cmd) => {
-          if (cmd === 'play') setPlaying(true);
-          else if (cmd === 'pause') setPlaying(false);
-          else if (cmd === 'next') stepWord(1, { nav: true, src: 'word' });
-          else if (cmd === 'back') stepWord(-1, { nav: true, src: 'word' });
-        },
+        onCommand: (cmd) => { runCommand(cmd, cmdCtx()); },
       });
       audioCtrlRef.current = r;
     }
     if (mode === 'Claps' || mode === 'Both') {
       startClapDetector((claps) => {
-        let action = null;
-        if (claps === 1) { setPlaying((p) => !p); action = '⏯ play/pause'; }
-        else if (claps === 2) { stepWord(1, { nav: true, src: 'word' }); action = '→ next word'; }
-        else if (claps === 3) { stepWord(-1, { nav: true, src: 'word' }); action = '← prev word'; }
-        pushAudioLog({ transcript: `👏 × ${claps}`, command: action ? 'clap' : null, action });
+        const cmap = { ...DEFAULT_CLAP_MAP, ...(state.global.clapMap || {}) };
+        const cmdId = cmap[claps];
+        if (cmdId) runCommand(cmdId, cmdCtx());
+        pushBioLog({ source: 'voice', text: `👏 × ${claps}`, action: cmdId ? actionLabel(cmdId) : null, tone: cmdId ? 'valid' : 'noop' });
       }).then((cd) => (clapRef.current = cd)).catch(() => {});
     }
     return () => {
@@ -1706,7 +1695,7 @@ function AppInner() {
     if (action === 'find' && activeTab) return openDialog({ kind: 'find' });
     if (action === 'goto' && activeTab) return openDialog({ kind: 'goto' });
     if (action === 'app-settings') return openDialog({ kind: 'app-settings' });
-    if (action === 'camera-settings') return openDialog({ kind: 'camera-settings' });
+    if (action === 'biometric-settings') return openDialog({ kind: 'biometric-settings' });
     if (action === 'comfort-settings') return openDialog({ kind: 'comfort-settings' });
     if (action === 'toggle-lines') { dispatch({ type: 'TOGGLE_LINES' }); return; }
     if (action === 'typing-settings' && activeTab) return openDialog({ kind: 'typing-settings' });
@@ -2323,6 +2312,11 @@ function AppInner() {
             🖐 {HAND_LABEL[handState] || handState}
           </button>
         )}
+        {audioCtrlOn && (
+          <button className="webcam-badge wb-watching" title={state.global.webcamPreview !== false ? 'Voice / clap commands listening — audio is analysed on your device.' : 'Show the Biometric Control Feed'} onClick={() => updateGlobal({ webcamPreview: true })}>
+            🎤 listening
+          </button>
+        )}
       </div>
 
       {/* Dialogs. A docked (tab) panel portals into the .dialog-slot inside .content-area so it fills
@@ -2399,8 +2393,8 @@ function AppInner() {
           onClose={closeDialog}
         />
       )}
-      {dialog?.kind === 'camera-settings' && (
-        <CameraSettingsDialog
+      {dialog?.kind === 'biometric-settings' && (
+        <BiometricControlsDialog
           global={state.global}
           onPatch={(p) => updateGlobal(p)}
           onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
@@ -2616,39 +2610,37 @@ function AppInner() {
         </div>
       )}
 
-      {/* Live audio-command panel: oscilloscope + transcript + a legend of every command. Draggable;
-          × turns voice commands off. */}
-      {!!activeTab?.settings?.audioCtrl && (
-        <AudioChat
-          log={audioLog}
+      {/* Biometric Control Feed: one draggable, resizable popup — self-view (when a camera feature is
+          on) + mic oscilloscope (when voice is on) + a unified camera/voice event feed. − minimizes
+          (badge restores); × turns every biometric source off. */}
+      {(camOn || handGesturesOn || audioCtrlOn) && state.global.webcamPreview !== false && (webcamStream || gestureStream || audioCtrlOn) && (
+        <BiometricFeed
+          stream={webcamStream || gestureStream || null}
+          camState={camOn ? webcamState : (handGesturesOn ? 'watching' : null)}
+          handState={handGesturesOn ? handState : null}
           scope={micScope}
           mode={state.global.audioCtrlMode || 'Both'}
-          pos={audioChatPos}
-          onMove={setAudioChatPos}
-          onDrop={(p) => p && updateGlobal({ audioChatPos: p })}
-          onClose={() => patchSettings(activeTab.id, { audioCtrl: false })}
-        />
-      )}
-
-      {/* Camera popup: live self-view + event log + on-video overlay + a legend of every event. Shown
-          while a front-camera feature is on (never on mobile). − minimizes; × turns the camera off. */}
-      {(camOn || handGesturesOn) && state.global.webcamPreview && (webcamStream || gestureStream) && (
-        <CameraPanel
-          stream={webcamStream || gestureStream}
-          camState={camOn ? webcamState : 'watching'}
-          handState={handState}
-          log={cameraLog}
+          voiceOn={audioCtrlOn}
+          gestureMap={{ ...DEFAULT_GESTURE_MAP, ...(state.global.gestureMap || {}) }}
+          voiceCommands={state.global.voiceCommands?.length ? state.global.voiceCommands : DEFAULT_VOICE_COMMANDS}
+          clapMap={{ ...DEFAULT_CLAP_MAP, ...(state.global.clapMap || {}) }}
+          log={bioLog}
+          feedHeight={state.global.bioFeedHeight || null}
+          onResizeFeed={(h) => updateGlobal({ bioFeedHeight: h })}
           features={{
             attention: !!state.global.webcamAttention, doze: !!state.global.webcamDoze,
             awayAlarm: !!state.global.webcamAwayAlarm, distanceNudge: !!state.global.webcamDistanceNudge,
             focusStats: !!state.global.webcamFocusStats, handGestures: handGesturesOn,
             gestures: { ...DEFAULT_GESTURES, ...(state.global.handGestureSet || {}) },
           }}
+          pos={bioFeedPos}
+          onMove={setBioFeedPos}
+          onDrop={(p) => p && updateGlobal({ bioFeedPos: p })}
           canCalibrate={!!webcamRef.current?.eyesAvailable?.()}
           onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
           onCalibrateHand={() => openDialog({ kind: 'hand-calib' })}
           onMinimize={() => updateGlobal({ webcamPreview: false })}
-          onClose={turnOffCamera}
+          onClose={() => { turnOffCamera(); if (audioCtrlOn && activeTab) patchSettings(activeTab.id, { audioCtrl: false }); }}
         />
       )}
 

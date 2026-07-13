@@ -188,17 +188,9 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
           onChange={(e) => onPatchGlobal({ ttsAutoStopMin: Math.max(0, Number(e.target.value) || 0) })}
         />
       </Field>
-      <div className="field-section">Hands-free control</div>
-      <Field label="Hands-free mode">
-        <select value={global.audioCtrlMode || 'Both'} onChange={(e) => onPatchGlobal({ audioCtrlMode: e.target.value })}>
-          <option>Voice</option>
-          <option>Claps</option>
-          <option>Both</option>
-        </select>
-      </Field>
       <p className="settings-note">
-        Voice commands and clap detection need microphone permission; voice commands need a
-        Chromium browser. Toggle per tab with <strong>VOICE COMMAND</strong> in the controls bar.
+        Voice &amp; clap commands (and their custom mappings) now live in <strong>Settings → Biometric
+        Controls</strong>. Toggle listening per tab with <strong>VOICE COMMAND</strong> in the controls bar.
       </p>
     </Dialog>
   );

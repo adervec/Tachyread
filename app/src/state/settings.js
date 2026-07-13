@@ -62,6 +62,7 @@ export function defaultFileSettings() {
     autoSkipHeaders: false,
     enableProperNames: false,
     readAloud: false, // integrated TTS: speak from the current position and advance in sync
+    audioCtrl: false, // hands-free voice / clap commands active for this tab (VOICE COMMAND toggle)
     // Non-driving "follow" TTS while reading (does NOT set the pace, unlike readAloud):
     //   'off' | 'firstWord' (speak each sentence's first word — a progress marker)
     //   | 'line' (speak the current line; usually cut off by the next line, since TTS lags fast reading)
@@ -252,6 +253,9 @@ export function defaultGlobalSettings() {
     // Defer building a restored tab's document until it's first opened (saves memory, esp. on
     // phones with several large books open). Applied on compact screens; eager on desktop.
     lazyTabsMobile: true,
+    // Let the tab strip wrap onto multiple rows instead of scrolling horizontally (desktop, many
+    // tabs open). Toggled from the tab right-click menu. Default off = single scrolling row.
+    tabBarMultiRow: false,
     // Small bottom-bar readout of how hard the app is working (frame pacing). Useful on phones.
     showPerfMeter: true,
     // Read-aloud auto-stop: pause speech after this many minutes of playback (0 = never).
@@ -289,11 +293,20 @@ export function defaultGlobalSettings() {
     handGestures: false,
     handCalib: null,
     handGestureSet: null,
+    // Custom trigger→command maps (Biometric Controls). null → the defaults in commandRegistry.js,
+    // which reproduce the original hardcoded behavior. Many triggers may point at one command.
+    //   gestureMap: { thumbUp|thumbDown|fist|victory|wave: commandId }  (scroll stays the joystick)
+    //   voiceCommands: [{ phrase, commandId }]  (add your own words; matched against the transcript)
+    //   clapMap: { 1|2|3: commandId }
+    gestureMap: null,
+    voiceCommands: null,
+    clapMap: null,
     mobileFacePos: null, // {x,y} of the draggable floating face on mobile (null = default corner)
     mobileStatsPos: null, // {x,y} of the draggable floating stats popup on mobile
     mobileGoalPos: null, // {x,y} of the draggable floating goal chip
     mobileTimerPos: null, // {x,y} of the draggable floating timer chip
-    audioChatPos: null, // {x,y} of the draggable audio-command chip
+    bioFeedPos: null, // {x,y} of the draggable Biometric Control Feed popup (null = default corner)
+    bioFeedHeight: null, // px height of the feed's event list, set by dragging its resize grip (null = default)
     // Chip mode: on phones the face/stats/goal/timer always float as transparent draggable chips.
     // This turns that same floating-chip layout on for desktop too (the dock face/stats move out to
     // float), so the reading area stays clear.

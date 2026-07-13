@@ -116,6 +116,19 @@ function reducer(state, action) {
       const activePanelId = panels.some((p) => p.id === state.activePanelId) ? state.activePanelId : null;
       return { ...state, tabs, activeTabId: active, panels, activePanelId };
     }
+    case 'CLOSE_TABS': {
+      // Close a computed set of tabs at once (context-menu "close others / to the left / to the
+      // right"). Same active-tab + doc-scoped-panel cleanup as CLOSE_TAB, done in one pass.
+      const kill = new Set(action.ids);
+      if (kill.size === 0) return state;
+      const tabs = state.tabs.filter((t) => !kill.has(t.id));
+      const active = kill.has(state.activeTabId)
+        ? (tabs[tabs.length - 1]?.id ?? null)
+        : state.activeTabId;
+      const panels = state.panels.filter((p) => !kill.has(p.docTabId));
+      const activePanelId = panels.some((p) => p.id === state.activePanelId) ? state.activePanelId : null;
+      return { ...state, tabs, activeTabId: active, panels, activePanelId };
+    }
     case 'CLOSE_ALL_TABS': {
       const panels = state.panels.filter((p) => p.docTabId == null);
       return { ...state, tabs: [], activeTabId: null, panels,
@@ -648,6 +661,10 @@ export function AppProvider({ children }) {
     dispatch({ type: 'CLOSE_ALL_TABS' });
   }, []);
 
+  const closeTabs = useCallback((ids) => {
+    dispatch({ type: 'CLOSE_TABS', ids });
+  }, []);
+
   const setActiveTab = useCallback(async (id) => {
     const tab = stateRef.current.tabs.find((t) => t.id === id);
     if (tab?.lazy) await hydrateTab(id); // build the document the first time this tab is opened
@@ -695,6 +712,7 @@ export function AppProvider({ children }) {
     hydrateTab,
     closeTab,
     closeAllTabs,
+    closeTabs,
     setActiveTab,
     patchSettings,
     patchTab,

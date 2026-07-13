@@ -92,7 +92,7 @@ const MENUS = {
     { label: 'Reset Tab to Default Settings', action: 'reset-tab' },
     { kind: 'separator' },
     { label: 'Font Manager...', action: 'font-manager' },
-    { label: 'Camera & Gestures...', action: 'camera-settings' },
+    { label: 'Biometric Controls...', action: 'biometric-settings' },
     { label: 'Comfort & Breaks...', action: 'comfort-settings' },
     { kind: 'separator' },
     { label: 'Data Management...', action: 'data' },
