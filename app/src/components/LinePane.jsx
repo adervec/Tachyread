@@ -9,6 +9,7 @@ import { useReportVisibility } from '../state/useReportVisibility.js';
 import { useApp } from '../state/AppContext.jsx';
 import { translateText, translateConfigured, cacheKey } from '../features/translateService.js';
 import { getCachedTranslation, putCachedTranslation, appendAppLog } from '../state/storage.js';
+import { swapLookup, applySwap } from '../features/wordSwaps.js';
 
 // Reading-pointer feature archived for now (not useful). Flip to true to restore it, and uncomment
 // its Settings section in dialogs/SettingsDialog.jsx.
@@ -34,11 +35,13 @@ function renderWords(line, opts) {
   let wordIdx = line.startWordIndex;
   const elems = [];
   let runIdx = 0;
-  for (const tok of words) {
-    if (tok === '' || /^\s+$/.test(tok)) {
-      elems.push(<span key={runIdx++}>{tok}</span>);
+  for (const rawTok of words) {
+    if (rawTok === '' || /^\s+$/.test(rawTok)) {
+      elems.push(<span key={runIdx++}>{rawTok}</span>);
       continue;
     }
+    // Per-document display substitution (render one word as another) — display only.
+    const tok = opts.swaps ? applySwap(rawTok, opts.swaps) : rawTok;
     const isCurrentWord = opts.isCurrent && wordIdx === opts.currentWordIndex;
     const isProperName = opts.properNamesSet && opts.properNamesSet.has(stripPunct(tok).toLowerCase());
     let inner;
@@ -76,7 +79,8 @@ function renderWords(line, opts) {
       isProperName ? 'proper-name' : '',
       hidden ? 'hidden-word' : '',
     ].filter(Boolean).join(' ');
-    elems.push(<span key={runIdx++} className={cls}>{inner}</span>);
+    const cwStyle = isCurrentWord && opts.cwFontDelta ? { fontSize: `calc(1em + ${opts.cwFontDelta}pt)` } : undefined;
+    elems.push(<span key={runIdx++} className={cls} style={cwStyle}>{inner}</span>);
     wordIdx++;
   }
   return elems;
@@ -213,6 +217,8 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
               properNamesSet: propNameKeys,
               isHeaderFooter: isHF,
               hideBeyond: ctx.hideBeyond,
+              swaps: dsettings.swaps,
+              cwFontDelta: dsettings.currentWordFontDelta,
             });
             if (!parallel) return words;
             return (
@@ -504,13 +510,15 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       bionicFont: settings.bionicFont,
       highlightORP: settings.highlightORP,
       currentWordStyles: currentWordStyles(settings),
+      currentWordFontDelta: settings.currentWordFontDelta || 0,
+      swaps: swapLookup(settings.wordSwaps),
     }),
     [
       settings.blurLinesBefore, settings.blurLinesAfter, settings.blurGradient, settings.obscureMode, settings.parallelTranslation, settings.altSentenceColors,
       settings.currentLineFontSizeBoost,
       settings.textAlignment, settings.showPointer, settings.pointerStyle, settings.pointerPlacement,
       settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP,
-      settings.currentWordStyles, settings.currentWordStyle, wall,
+      settings.currentWordStyles, settings.currentWordStyle, settings.currentWordFontDelta, settings.wordSwaps, wall,
     ]
   );
 

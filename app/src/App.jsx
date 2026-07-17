@@ -1015,7 +1015,7 @@ function AppInner() {
   }
 
   // Small action bag the command registry runs against (shared by gestures, voice, and claps).
-  const cmdCtx = () => ({ playPause: () => playPauseRef.current?.(), setPlaying, nav, adjustWpm });
+  const cmdCtx = () => ({ playPause: () => playPauseRef.current?.(), setPlaying, nav, adjustWpm, page: pageLines, jumpToCurrent: () => jumpToCurrent() });
   // Latest voice-command phrase list, read live by the recognizer's matcher (so edits in Biometric
   // Controls take effect without toggling voice off/on).
   const voiceCommandsRef = useRef(DEFAULT_VOICE_COMMANDS);
@@ -2122,6 +2122,32 @@ function AppInner() {
               )}
               {!auxOpen && (
                 <>
+                  {/* Reader-area content toggles (faces / stats / incognito) live HERE on the top
+                      bar with the rotate/lock buttons — not buried in the menu drawer. */}
+                  <button
+                    className={`rv-rotate${activeTab?.settings?.showEyes ? ' on' : ''}`}
+                    title="Toggle the animated reader faces"
+                    aria-pressed={!!activeTab?.settings?.showEyes}
+                    onClick={() => activeTab && patchSettings(activeTab.id, { showEyes: !activeTab.settings.showEyes })}
+                  >
+                    🙂
+                  </button>
+                  <button
+                    className={`rv-rotate${state.showStats ? ' on' : ''}`}
+                    title="Toggle the reading stats"
+                    aria-pressed={state.showStats}
+                    onClick={() => dispatch({ type: 'TOGGLE_STATS' })}
+                  >
+                    📊
+                  </button>
+                  <button
+                    className={`rv-rotate${state.incognito ? ' on' : ''}`}
+                    title="Incognito reading — pause all tracking and persistence"
+                    aria-pressed={state.incognito}
+                    onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}
+                  >
+                    🕶
+                  </button>
                   {/* Full-screen reading: hide ALL chrome (menus, tabs, controls, status) — a tiny
                       ⛶ overlay (or a vigorous shake, if enabled) brings it back. */}
                   <button

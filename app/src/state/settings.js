@@ -36,10 +36,12 @@ export function defaultFileSettings() {
     contextWordsAfter: 0,
     currentWordStyles: ['Underline'], // combinable: Underline | Bold | Italic | Color | Background | Box | Glow | Overline
     currentWordColor: '', // highlight colour for Color/Background/Box/Glow/Underline styles ('' = theme default)
+    currentWordFontDelta: 0, // current-word font-size adjust in points (−3..+3)
     rightPaneFontSize: 12,
     lineSpacing: 1.5, // Lines-pane line-height multiplier
     linesGridH: false, // faint horizontal gridlines on the Lines pane background
     linesGridV: false, // faint vertical gridlines on the Lines pane background
+    wordSwaps: {}, // per-document display substitutions: { "word in text": "shown as" } (display only)
     wallText: false, // "wall of text": merge source lines into flowing blocks (newlines → spaces/tabs)
     wallBreakEvery: 0, // in wall mode, also start a new block every N source lines (0 = only sections/%)
     sourceChecks: {}, // ticked checkboxes in html/markdown source sections: { section: [box…] }
@@ -317,6 +319,8 @@ export function defaultGlobalSettings() {
     autoMinimizeControls: false,
     // Shake-to-toggle full-screen reading on phones (devicemotion; iOS asks permission once).
     shakeFullscreen: false,
+    // Recently used reading fonts for the top-bar quick picker: [{ stack, label }]
+    recentFonts: [],
     // Pause non-TTS playback when the reading text scrolls off-screen (you can't read what you can't
     // see). Read-aloud / typing are exempt. Default on.
     pauseWhenTextHidden: true,

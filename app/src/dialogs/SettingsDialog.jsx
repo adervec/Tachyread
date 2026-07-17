@@ -345,6 +345,9 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           <input type="checkbox" checked={!!s.linesGridV} onChange={(e) => patch({ linesGridV: e.target.checked })} /> Vertical
         </label>
       </Field>
+      <Field label="Word substitutions (this document)">
+        <WordSwapsEditor swaps={s.wordSwaps || {}} onChange={(m) => patch({ wordSwaps: m })} />
+      </Field>
       <Field label="Wall of text (merge lines into blocks)">
         <input type="checkbox" checked={!!s.wallText} onChange={(e) => patch({ wallText: e.target.checked })} />
       </Field>
@@ -453,6 +456,17 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
             >{hex ? '' : 'A'}</button>
           ))}
           <input type="color" className="swatch-custom" value={s.currentWordColor || '#ffd54f'} onChange={(e) => patch({ currentWordColor: e.target.value })} title="Custom colour" />
+        </div>
+      </Field>
+      <Field label="Current-word font size adjust (pt)">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="range" min={-3} max={3} step={0.5}
+            value={s.currentWordFontDelta ?? 0}
+            onChange={(e) => patch({ currentWordFontDelta: Math.max(-3, Math.min(3, Number(e.target.value) || 0)) })}
+          />
+          <span>{(s.currentWordFontDelta ?? 0) > 0 ? '+' : ''}{s.currentWordFontDelta ?? 0}pt</span>
+          {(s.currentWordFontDelta ?? 0) !== 0 && <button type="button" onClick={() => patch({ currentWordFontDelta: 0 })}>Reset</button>}
         </div>
       </Field>
 
@@ -808,5 +822,37 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       </Field>
       </div>
     </Dialog>
+  );
+}
+
+// Per-document word-substitution list editor (render one word as another; display only).
+function WordSwapsEditor({ swaps, onChange }) {
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const rows = Object.entries(swaps);
+  const add = () => {
+    if (!from.trim() || !to.trim()) return;
+    onChange({ ...swaps, [from.trim().toLowerCase()]: to.trim() });
+    setFrom(''); setTo('');
+  };
+  return (
+    <div className="wordswap-ed">
+      {rows.map(([f, t]) => (
+        <div key={f} className="wordswap-row">
+          <code>{f}</code><span>→</span><code>{t}</code>
+          <button type="button" className="close-x" title="Remove this substitution" onClick={() => { const m = { ...swaps }; delete m[f]; onChange(m); }}>×</button>
+        </div>
+      ))}
+      <div className="wordswap-row">
+        <input placeholder="word in text" value={from} onChange={(e) => setFrom(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} style={{ width: 110 }} />
+        <span>→</span>
+        <input placeholder="show as" value={to} onChange={(e) => setTo(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} style={{ width: 110 }} />
+        <button type="button" disabled={!from.trim() || !to.trim()} onClick={add}>＋ Add</button>
+      </div>
+      <p className="settings-note" style={{ margin: '4px 0 0' }}>
+        Display-only, this document only. Whole words, case-insensitive; a leading capital is kept
+        (shown in the Lines pane and the Fast Reader — search and read-aloud use the original text).
+      </p>
+    </div>
   );
 }

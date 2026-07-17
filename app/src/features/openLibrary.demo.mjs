@@ -31,5 +31,6 @@ assert.equal(p.coverId, 44);
 assert.equal(bookCoverUrl({ coverId: 44 }), 'https://covers.openlibrary.org/b/id/44-M.jpg');
 assert.ok(bookCoverUrl({ isbn: '9780441172719' }).includes('/b/isbn/9780441172719-M.jpg'));
 assert.equal(bookCoverUrl({ title: 'x' }), null);
+assert.equal(bookCoverUrl({ coverUrl: 'https://img.example/c.jpg', coverId: 44 }), 'https://img.example/c.jpg', 'custom cover URL wins');
 
 console.log('openLibrary.demo: all assertions passed ✅');

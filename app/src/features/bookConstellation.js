@@ -36,7 +36,7 @@ export function constellationLayout(books, treeMeta = null) {
   for (const e of treeMeta?.edges || []) {
     const [a, b, kind] = Array.isArray(e) ? e : [e.a, e.b, e.kind];
     const na = nodeById[a], nb = nodeById[b];
-    if (na && nb) edges.push({ a, b, kind: kind || 'link', ax: na.x, ay: na.y, bx: nb.x, by: nb.y });
+    if (na && nb) edges.push({ a, b, kind: kind || 'link', ax: na.x, ay: na.y, bx: nb.x, by: nb.y, br: nb.r });
   }
   return { nodes, edges, genres };
 }

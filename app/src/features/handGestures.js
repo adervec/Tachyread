@@ -18,17 +18,26 @@ const PALM = 9; // middle-finger MCP landmark — a stable palm-centre proxy
 export const DEFAULT_HAND_CALIB = { centerY: 0.5, topY: 0.28, bottomY: 0.72 };
 
 // Each gesture is individually toggleable (Application Settings) so unused ones can't false-fire.
-// The discrete gestures default OFF — opt in to the ones you actually use.
-export const DEFAULT_GESTURES = { scroll: true, wave: true, thumbUp: false, thumbDown: false, fist: false, victory: false };
+// The discrete gestures default OFF — opt in to the ones you actually use. Every kind (except the
+// joystick) is remappable to any reader command in Biometric Controls.
+export const DEFAULT_GESTURES = {
+  scroll: true, wave: true, thumbUp: false, thumbDown: false, fist: false, victory: false,
+  pointUp: false, iLoveYou: false, pinch: false, swipeLeft: false, swipeRight: false,
+};
 export const GESTURE_INFO = {
   scroll: { icon: '✋', label: 'Palm joystick', desc: 'Open palm above/below your rest height scrolls up/down — farther is faster' },
-  wave: { icon: '👋', label: 'Wave', desc: 'Wave side-to-side to toggle play/pause' },
-  thumbUp: { icon: '👍', label: 'Thumb up', desc: 'Speed up (+25 WPM) — hold to repeat' },
-  thumbDown: { icon: '👎', label: 'Thumb down', desc: 'Slow down (−25 WPM) — hold to repeat' },
-  fist: { icon: '✊', label: 'Fist', desc: 'Pause reading (pause only — never starts playback)' },
-  victory: { icon: '✌', label: 'Victory', desc: 'Jump to the next paragraph' },
+  wave: { icon: '👋', label: 'Wave', desc: 'Wave side-to-side (3+ direction changes)' },
+  thumbUp: { icon: '👍', label: 'Thumb up', desc: 'Hold to repeat' },
+  thumbDown: { icon: '👎', label: 'Thumb down', desc: 'Hold to repeat' },
+  fist: { icon: '✊', label: 'Fist', desc: 'Closed fist held for a moment' },
+  victory: { icon: '✌', label: 'Victory', desc: 'Two-finger V held for a moment' },
+  pointUp: { icon: '☝', label: 'Point up', desc: 'Index finger pointing up, held for a moment' },
+  iLoveYou: { icon: '🤟', label: 'Rock / ILY', desc: 'Thumb + index + pinky extended, held for a moment' },
+  pinch: { icon: '🤏', label: 'Pinch', desc: 'Thumb and index tips together (other fingers open), held for a moment' },
+  swipeLeft: { icon: '👈', label: 'Swipe left', desc: 'One fast open-palm sweep toward your left' },
+  swipeRight: { icon: '👉', label: 'Swipe right', desc: 'One fast open-palm sweep toward your right' },
 };
-const GESTURE_BY_LABEL = { Thumb_Up: 'thumbUp', Thumb_Down: 'thumbDown', Closed_Fist: 'fist', Victory: 'victory' };
+const GESTURE_BY_LABEL = { Thumb_Up: 'thumbUp', Thumb_Down: 'thumbDown', Closed_Fist: 'fist', Victory: 'victory', Pointing_Up: 'pointUp', ILoveYou: 'iLoveYou' };
 
 // Hold-to-fire for discrete gestures: a classification must persist `holdTicks` consecutive
 // feeds before it fires, then a cooldown gates the next fire (holding through the cooldown
@@ -98,6 +107,64 @@ export function createWaveDetector({ swing = 0.03, reversals = 3, windowMs = 120
   };
 }
 
+// Pinch: thumb tip (4) and index tip (8) touching while middle/ring/pinky stay extended — the
+// extension check keeps a closed fist (whose tips also bunch up) from reading as a pinch. All
+// distances are in normalized frame coords, scaled by the wrist→middle-MCP span so it works at any
+// distance from the camera. Pure — see the test file.
+// ponytail: single-threshold heuristic; a landmark-angle model would be sturdier if this misfires.
+export function isPinch(lm) {
+  if (!lm || !lm[0] || !lm[4] || !lm[8] || !lm[9]) return false;
+  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const span = Math.max(0.02, d(lm[0], lm[9])); // wrist → middle MCP
+  if (d(lm[4], lm[8]) > span * 0.35) return false; // thumb+index must touch
+  // at least two of middle/ring/pinky clearly extended (tip far from the wrist)
+  let ext = 0;
+  for (const tip of [12, 16, 20]) if (lm[tip] && d(lm[tip], lm[0]) > span * 1.45) ext++;
+  return ext >= 2;
+}
+
+// Swipe = ONE fast sustained horizontal sweep (unlike the wave's back-and-forth): displacement
+// accumulates while the direction holds; reaching `sweep` within `windowMs` arms a pending swipe
+// that fires after `confirmMs` with no reversal — a wave's return stroke cancels it, so the two
+// can coexist. feed(x, now) → 'left' | 'right' | null (frame-coordinate direction; the camera is
+// unmirrored, so the USER's rightward sweep is x-decreasing — callers map that).
+export function createSwipeDetector({ sweep = 0.24, minStep = 0.015, windowMs = 700, confirmMs = 320, cooldownMs = 1400 } = {}) {
+  let lastX = null;
+  let dir = 0;
+  let cum = 0;
+  let startT = 0;
+  let pending = null; // { dir, at }
+  let firedAt = -Infinity;
+  return {
+    feed(x, now) {
+      const px = lastX;
+      lastX = x;
+      if (px == null) return null;
+      const dx = x - px;
+      const d = Math.abs(dx) >= minStep ? Math.sign(dx) : 0;
+      if (pending) {
+        if (d !== 0 && d !== pending.dir) { pending = null; dir = d; cum = dx; startT = now; return null; } // reversal = a wave, not a swipe
+        if (now - pending.at >= confirmMs) {
+          const out = pending.dir > 0 ? 'right' : 'left';
+          pending = null; dir = 0; cum = 0;
+          firedAt = now;
+          return out;
+        }
+        return null;
+      }
+      if (d === 0) { if (now - startT > windowMs) { dir = 0; cum = 0; } return null; }
+      if (d !== dir) { dir = d; cum = 0; startT = now; }
+      cum += dx;
+      if (Math.abs(cum) >= sweep && now - startT <= windowMs && now - firedAt > cooldownMs) {
+        pending = { dir: d, at: now };
+        cum = 0;
+      }
+      return null;
+    },
+    reset() { lastX = null; dir = 0; cum = 0; pending = null; },
+  };
+}
+
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // onState: starting | watching | denied | unsupported | error | off
@@ -118,8 +185,9 @@ export function createGestureMonitor({
   let gest = { ...DEFAULT_GESTURES, ...(gestures || {}) };
   let lastY = null; // latest palm height while a hand is visible (calibration reads this)
   let lastV = 0;
-  let suppressScrollUntil = 0; // a wave wobbles y too — don't scroll off the wave itself
+  let suppressScrollUntil = 0; // a wave/swipe wobbles y too — don't scroll off the gesture itself
   const wave = createWaveDetector();
+  const swipe = createSwipeDetector();
   const trigger = createGestureTrigger();
 
   const setState = (s) => { if (s !== state) { state = s; onState?.(s); } };
@@ -173,6 +241,7 @@ export function createGestureMonitor({
     if (!lm || !lm[PALM]) {
       lastY = null;
       wave.reset();
+      swipe.reset();
       emitScroll(0);
       onHand?.({ present: false, gesture: null, y: null, v: 0 });
       return;
@@ -188,8 +257,25 @@ export function createGestureMonitor({
       onHand?.({ present: true, gesture, y, v: 0 });
       return;
     }
-    // Held discrete gestures (thumb up/down, fist, victory) — only enabled kinds accumulate hold.
-    const kind = GESTURE_BY_LABEL[gesture] || null;
+    // One-shot open-palm sweeps. The detector's directions are frame coords; the (unmirrored)
+    // selfie camera flips them, so the USER's rightward sweep is frame-left — map accordingly.
+    if ((gest.swipeLeft || gest.swipeRight) && open) {
+      const sw = swipe.feed(x, now);
+      if (sw) {
+        const kind = sw === 'left' ? 'swipeRight' : 'swipeLeft';
+        if (gest[kind]) {
+          suppressScrollUntil = now + 600;
+          emitScroll(0);
+          onGesture?.(kind);
+          onHand?.({ present: true, gesture, y, v: 0 });
+          return;
+        }
+      }
+    } else swipe.reset();
+    // Held discrete gestures — canned classifications plus the landmark-derived pinch. Only
+    // enabled kinds accumulate hold ticks.
+    let kind = GESTURE_BY_LABEL[gesture] || null;
+    if (!kind && gest.pinch && isPinch(lm)) kind = 'pinch';
     const fired = trigger.feed(kind && gest[kind] ? kind : null, now);
     if (fired) onGesture?.(fired);
     const v = gest.scroll && open && now > suppressScrollUntil ? scrollVelocity(y, cal, deadFrac) : 0;

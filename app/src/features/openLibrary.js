@@ -48,9 +48,11 @@ export function olPatch(book, doc) {
   return p;
 }
 
-// Cover image URL for a book — hotlinks covers.openlibrary.org (only rendered after the user has
-// fetched details or the book carries an ISBN, so browsing your library doesn't leak it wholesale).
+// Cover image URL for a book — a user-set custom URL wins; otherwise hotlinks covers.openlibrary.org
+// (only rendered after the user has fetched details or the book carries an ISBN, so browsing your
+// library doesn't leak it wholesale).
 export function bookCoverUrl(book, size = 'M') {
+  if (clean(book?.coverUrl)) return book.coverUrl;
   if (book?.coverId) return `https://covers.openlibrary.org/b/id/${book.coverId}-${size}.jpg`;
   const isbn = clean(book?.isbn).replace(/[^0-9xX]/g, '');
   if (isbn.length >= 10) return `https://covers.openlibrary.org/b/isbn/${isbn}-${size}.jpg`;

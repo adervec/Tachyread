@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { orpIndex } from '../document/readerDocument.js';
 import { useReportVisibility } from '../state/useReportVisibility.js';
+import { swapLookup, applySwap } from '../features/wordSwaps.js';
 
 function calcFontSize(word) {
   const BASE = 64;
@@ -29,7 +30,9 @@ export default function RsvpPane({ tab, onVisible }) {
   const { settings, doc } = tab;
   const visRef = useReportVisibility(onVisible || (() => {}));
   const idx = settings.wordIndex;
-  const word = doc.words[idx] || '';
+  // Per-document display substitutions (Tab Settings → Word substitutions).
+  const swaps = useMemo(() => swapLookup(settings.wordSwaps), [settings.wordSwaps]);
+  const word = applySwap(doc.words[idx] || '', swaps);
   const orp = orpIndex(word.length);
   const left = word.slice(0, orp);
   const orpCh = orp < word.length ? word[orp] : '';
@@ -41,14 +44,14 @@ export default function RsvpPane({ tab, onVisible }) {
   const after = settings.contextWordsAfter >= 0 ? settings.contextWordsAfter : settings.contextWordCount || 0;
   const beforeWords = useMemo(() => {
     const out = [];
-    for (let i = Math.max(0, idx - before); i < idx; i++) out.push(doc.words[i]);
+    for (let i = Math.max(0, idx - before); i < idx; i++) out.push(applySwap(doc.words[i], swaps));
     return out;
-  }, [doc, idx, before]);
+  }, [doc, idx, before, swaps]);
   const afterWords = useMemo(() => {
     const out = [];
-    for (let i = idx + 1; i < Math.min(doc.words.length, idx + 1 + after); i++) out.push(doc.words[i]);
+    for (let i = idx + 1; i < Math.min(doc.words.length, idx + 1 + after); i++) out.push(applySwap(doc.words[i], swaps));
     return out;
-  }, [doc, idx, after]);
+  }, [doc, idx, after, swaps]);
 
   const themeClass = `rsvp-pane ${settings.serif ? 'serif' : 'sans'} guide-${settings.guideColor || 'Red'}`;
   const gc = settings.guideColor || 'Red';
