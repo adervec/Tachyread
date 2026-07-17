@@ -647,21 +647,26 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     jumpRef.current(f, { read: true, src: 'scroll' });
   };
 
-  // Nav buttons while scroll-reading: snap the current line to the configured read point, then
-  // scroll by the requested amount (word/line = one line, paragraph = its line span, page = a
-  // screenful). The scroll itself advances the frontier through the normal crediting path above.
+  // Nav buttons while scroll-reading: DIRECT scroll ticks — no snap-to-read-point jump (that yank
+  // made the buttons feel broken when the view had drifted from the frontier). Word = half a line,
+  // line = one line, paragraph = the current paragraph's span, page = a screenful; restart = top.
+  // The scroll itself advances the frontier through the normal crediting path above.
   useEffect(() => {
     if (!scrollCmd || split || !scrollRead) return undefined;
     const wrap = listWrapRef.current;
     if (!wrap) return undefined;
     const scroller = [...wrap.querySelectorAll('*')].find((el) => /(auto|scroll)/.test(getComputedStyle(el).overflowY)) || wrap;
-    const point = Math.max(0, Math.min(1, settings.scrollReadPoint ?? 0));
+    const k = scrollCmd.kind;
+    if (k === 'restart') {
+      listRef.current?.scrollToRow?.({ index: 0, align: 'start' });
+      return undefined;
+    }
     const row = wrap.querySelector('.line-row[data-line]');
     const lineH = row ? row.getBoundingClientRect().height : 26;
-    const k = scrollCmd.kind;
     const dir = /prev|Up/.test(k) ? -1 : 1;
-    let delta = lineH; // word & line → one line
-    if (/Para/.test(k)) {
+    let delta = lineH; // line → one line
+    if (/Word/.test(k)) delta = Math.max(8, lineH * 0.5);
+    else if (/Para/.test(k)) {
       const r = getParagraphRange(doc, currentLine);
       const span = dir > 0
         ? Math.max(1, r.endLine + 1 - currentLine)
@@ -669,15 +674,8 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       delta = span * lineH;
     } else if (/page/i.test(k)) delta = scroller.clientHeight * 0.85;
     cmdScrollRef.current = true;
-    // Snap synchronously by direct scrollTop math (react-window's scrollToRow applies async and
-    // would clobber the delta): put the current line's row ON the read point, then add the step.
-    const curRow = wrap.querySelector(`.line-row[data-line="${currentLine}"]`);
-    if (curRow) {
-      const targetY = wrap.getBoundingClientRect().top + point * scroller.clientHeight;
-      scroller.scrollTop += curRow.getBoundingClientRect().top - targetY;
-    }
-    scroller.scrollTop += dir * delta;
-    setTimeout(() => { cmdScrollRef.current = false; }, 350);
+    scroller.scrollBy({ top: dir * delta, behavior: 'smooth' });
+    setTimeout(() => { cmdScrollRef.current = false; }, 450);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollCmd?.token]);
 
@@ -869,6 +867,17 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     if (visibleRef) visibleRef.current = { page: pageTargetLine };
   });
 
+  // Faint background gridlines (Tab Settings → Lines pane). Horizontal spacing follows the line
+  // height so rules sit between lines; vertical is a fixed character-ish rhythm. Both scroll with
+  // the content (background-attachment default = local element flow inside the scroller).
+  const gridStyle = useMemo(() => {
+    const c = 'var(--lines-grid, rgba(128,128,128,0.16))';
+    const layers = [];
+    if (settings.linesGridH) layers.push(`repeating-linear-gradient(to bottom, transparent 0, transparent calc(${lineSpacing}em - 1px), ${c} calc(${lineSpacing}em - 1px), ${c} ${lineSpacing}em)`);
+    if (settings.linesGridV) layers.push(`repeating-linear-gradient(to right, transparent 0, transparent calc(2.5em - 1px), ${c} calc(2.5em - 1px), ${c} 2.5em)`);
+    return layers.length ? { backgroundImage: layers.join(', ') } : {};
+  }, [settings.linesGridH, settings.linesGridV, lineSpacing]);
+
   const paneStyle = {};
   if (settings.fontFamily) paneStyle.fontFamily = settings.fontFamily;
   if (settings.currentWordColor) paneStyle['--cw-color'] = settings.currentWordColor;
@@ -899,7 +908,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
           headingPack={headingPack}
         />
       ) : (
-        <div className="line-pane-list" ref={listWrapRef} style={{ fontSize: `${baseFont}px`, lineHeight: lineSpacing }} onContextMenu={onContextMenu} {...pressHandlers}>
+        <div className="line-pane-list" ref={listWrapRef} style={{ fontSize: `${baseFont}px`, lineHeight: lineSpacing, ...gridStyle }} onContextMenu={onContextMenu} {...pressHandlers}>
           <List
             listRef={listRef}
             rowCount={totalLines}

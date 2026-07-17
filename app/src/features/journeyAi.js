@@ -149,8 +149,8 @@ export function buildDataset(books, { light = true, progress = null } = {}) {
   return ds;
 }
 
-const SCHEMA_LIGHT = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?,"notes"?}], "aiNotes"?: [{"bookId","type":"summary|section-summary|insight|critique|parallel|comparison|other","sectionTitle"?,"text"}], "crossNotes"?: [{"bookIds":["<id>",…],"series"?,"type","text"}], "bindings"?: [{"checksum","bookId"}] }';
-const SCHEMA_HEAVY = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?}], "aiNotes"?: [{"bookId","type":"summary|section-summary|insight|critique|parallel|comparison|other","sectionTitle"?,"text"}], "crossNotes"?: [{"bookIds":["<id>",…],"series"?,"type","text"}], "bindings"?: [{"checksum","bookId"}], "treeMeta": {"pos": {"<id>": {"x","y"}}, "edges": [["<idA>","<idB>","influence|prereq|series|same-author|theme|contrast|responds|similarity|opposed|same-universe"]]} }';
+const SCHEMA_LIGHT = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?,"notes"?}], "aiNotes"?: [{"bookId","type":"summary|section-summary|insight|critique|parallel|comparison|other","sectionTitle"?,"text"}], "crossNotes"?: [{"bookIds":["<id>",…],"series"?,"type","text"}], "bindings"?: [{"checksum","bookId"}], "weeklies"?: [{"week":"YYYY-MM-DD (the Monday from progress.weeklySummaries)","text"}] }';
+const SCHEMA_HEAVY = '{ "analysis": string, "recommendations": [{"title","author","why"}], "bookPatches": [{"id","recScore"?}], "aiNotes"?: [{"bookId","type":"summary|section-summary|insight|critique|parallel|comparison|other","sectionTitle"?,"text"}], "crossNotes"?: [{"bookIds":["<id>",…],"series"?,"type","text"}], "bindings"?: [{"checksum","bookId"}], "weeklies"?: [{"week":"YYYY-MM-DD","text"}], "treeMeta": {"pos": {"<id>": {"x","y"}}, "edges": [["<idA>","<idB>","influence|prereq|series|same-author|theme|contrast|responds|similarity|opposed|same-universe"]]} }';
 
 // Human-readable Markdown for pasting into any Claude chat (also written as the cowork instructions).
 export function buildDigest(dataset, instruction) {
@@ -166,6 +166,9 @@ export function buildDigest(dataset, instruction) {
       'is actually being read right now. `progress.files` lists every tracked file with its checksum and',
       'current link — you may return `bindings` pairing a file checksum with the tracker book it is (the',
       'app applies them), plus `crossNotes` spanning several bookIds and/or a whole `series`.',
+      '`progress.weeklySummaries` holds the app\'s algorithmic summary of each completed week — you may',
+      'return `weeklies` [{week, text}] (week = that row\'s `week` Monday date) to replace any of them',
+      'with a better-written version; keep each to a short paragraph grounded ONLY in the given numbers.',
     ] : []),
     '',
     '## Reply with ONE ```json block, no prose, using the exact ids below:',
@@ -248,12 +251,20 @@ export function applyAiOutput(output, booksById, now = Date.now()) {
   for (const b of output.bindings || []) {
     if (b?.checksum && typeof b.checksum === 'string' && booksById[b.bookId]) bindingAdds.push({ checksum: b.checksum, bookId: b.bookId });
   }
+  // Dressed-up weekly summaries: {week: 'YYYY-MM-DD' (a Monday), text}. Stored keyed by week so the
+  // Analytics view can prefer them over the algorithmic default.
+  const weeklyAdds = [];
+  for (const w of output.weeklies || []) {
+    const week = String(w?.week || '').slice(0, 10);
+    const text = String(w?.text || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(week) && text) weeklyAdds.push({ week, text });
+  }
   const aiPatch = {};
   if (output.recommendations) aiPatch.recommendations = output.recommendations;
   if (output.analysis) aiPatch.analysis = output.analysis;
   if (output.treeMeta) aiPatch.treeMeta = output.treeMeta;
   if (output.archetypeMeta) aiPatch.archetypeMeta = output.archetypeMeta;
-  return { bookUpdates, aiPatch, crossNoteAdds, bindingAdds };
+  return { bookUpdates, aiPatch, crossNoteAdds, bindingAdds, weeklyAdds };
 }
 
 // djb2 hash for the idempotency ledger (don't apply the same response twice).

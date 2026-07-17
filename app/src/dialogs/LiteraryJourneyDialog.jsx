@@ -24,7 +24,7 @@ import {
 } from '../features/journeyLibrary.js';
 import {
   cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, queueWithEstimates, estHours,
-  yearGoal, seriesProgress, yearInBooks,
+  yearGoal, seriesProgress, yearInBooks, weeklySummaries,
 } from '../features/journeyAnalytics.js';
 import { findDuplicates, finishedDateIssues } from '../features/journeyCleanup.js';
 import { normTitle } from '../document/tocWizard.js';
@@ -119,6 +119,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   const [goals, setGoals] = useState(null); // { [year]: target } — the yearly reading goals
   const [docMeta, setDocMeta] = useState([]);
   const [fileStats, setFileStats] = useState({}); // checksum → { firstRead, activeSecs, words, coverage } for auto-fill
+  const [dayAgg, setDayAgg] = useState([]); // [{date, wordsRead, activeSecs}] across all files — weekly summaries
   const [tab, setTab] = useState(initialTab || 'dashboard');
   const [progressFor, setProgressFor] = useState(null); // checksum whose stored progress detail is open
   const fileRef = useRef(null);
@@ -134,14 +135,16 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
 
   // Library view controls
   const [flt, setFlt] = useState({ readState: 'all', fnf: 'all', difficulty: [], recMin: 0, genre: 'all', search: '', recBy: 'all', tag: 'all', ctype: 'all' });
-  const [sort, setSort] = useState('rec');
-  const [limit, setLimit] = useState(60);
+  const [sort, setSort] = useState({ key: 'rec', dir: 1 }); // table-header sorting; dir 1 = the key's natural order
+  const [limit, setLimit] = useState(100);
   const [selected, setSelected] = useState(null);
   const [adding, setAdding] = useState(false);
   const [cleanup, setCleanup] = useState(null); // scan preview: { dups, datable, undatable, contradictory }
   const [cleanMsg, setCleanMsg] = useState('');
   // "This Book in Trackyread" entry points: focus an already-linked book, or run the link flow.
+  // linkName mirrors the prop but can also be set by the embedded Files table's "link…" action.
   const [linkCs, setLinkCs] = useState(linkChecksum || null);
+  const [linkName, setLinkName] = useState(linkFileName || '');
   useEffect(() => { if (focusBookId) { setTab('library'); setSelected(focusBookId); } }, [focusBookId]);
 
   async function reload() {
@@ -155,10 +158,17 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     setBindMap(bind); setSecBind(secs); setDocMeta(docs);
     // Per-document reading facts so a bound book can auto-fill its start date + reading time.
     const stats = {};
+    const byDay = new Map(); // date → {date, wordsRead, activeSecs} across all files (weekly summaries)
     for (const f of files) {
       const cs = f.checksum || f.contentChecksum;
       if (!cs) continue;
       const daily = (f.dailyHistory || []).filter((d) => (d.wordsRead || 0) > 0 || (d.activeTimeSecs || 0) > 0).sort((x, y) => (x.date < y.date ? -1 : 1));
+      for (const d of daily) {
+        const cur = byDay.get(d.date) || { date: d.date, wordsRead: 0, activeSecs: 0 };
+        cur.wordsRead += d.wordsRead || 0;
+        cur.activeSecs += d.activeTimeSecs || 0;
+        byDay.set(d.date, cur);
+      }
       stats[cs] = {
         fileName: f.fileName || '',
         firstRead: daily[0]?.date || null,
@@ -169,6 +179,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
       };
     }
     setFileStats(stats);
+    setDayAgg([...byDay.values()]);
   }
   useEffect(() => { reload(); }, []);
   useEffect(() => { if (books && !didInit.current) { didInit.current = true; if (books.length === 0 && !initialTab) setTab('data'); } }, [books, initialTab]);
@@ -208,7 +219,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   // Link-flow (from the "This Book in Trackyread" menu item): best library match for the file name.
   const linkSuggestion = useMemo(() => {
     if (!linkCs || !books) return null;
-    const tokens = new Set(normTitle(linkFileName || '').split(' ').filter((w) => w.length > 2));
+    const tokens = new Set(normTitle(linkName || '').split(' ').filter((w) => w.length > 2));
     if (!tokens.size) return null;
     let best = null, bestScore = 0;
     for (const b of books) {
@@ -216,13 +227,13 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
       if (score > bestScore) { best = b; bestScore = score; }
     }
     return bestScore >= 1 ? best : null;
-  }, [linkCs, books, linkFileName]);
+  }, [linkCs, books, linkName]);
   async function linkTo(bookId) {
     await bind(linkCs, bookId);
     setSelected(bookId); setLinkCs(null);
   }
   async function linkAsNewBook() {
-    const title = String(linkFileName || 'Untitled').replace(/\.[a-z0-9]+$/i, '');
+    const title = String(linkName || 'Untitled').replace(/\.[a-z0-9]+$/i, '');
     const book = { id: deriveId({ title }), title };
     await saveLibraryBook(book);
     await bind(linkCs, book.id);
@@ -279,8 +290,28 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   const recOptions = useMemo(() => (books ? [...new Set(books.map(recommender))].sort((a, b) => a.localeCompare(b)) : []), [books]);
   const tagOptions = useMemo(() => (books ? allTags(books) : []), [books]);
   const showCovers = !!global?.ljCovers; // Library-list cover thumbnails (hotlinks Open Library — opt-in)
-  const filtered = useMemo(() => (books ? sortBooks(filterBooks(books, flt), sort) : []), [books, flt, sort]);
+  const filtered = useMemo(() => {
+    if (!books) return [];
+    const base = filterBooks(books, flt);
+    const num = (v) => (v == null || v === '' ? -Infinity : Number(v));
+    const cmp = {
+      rec: (a, b) => num(b.recScore) - num(a.recScore),
+      title: (a, b) => String(a.title || '').localeCompare(String(b.title || '')),
+      author: (a, b) => String(a.author || '').localeCompare(String(b.author || '')),
+      genre: (a, b) => String(a.genre || '').localeCompare(String(b.genre || '')),
+      type: (a, b) => contentType(a).localeCompare(contentType(b)),
+      status: (a, b) => readStatus(a).localeCompare(readStatus(b)),
+      diff: (a, b) => num(b.difficultyLevel) - num(a.difficultyLevel),
+      pages: (a, b) => num(b.pages) - num(a.pages),
+      pub: (a, b) => (pubYear(b) ?? -Infinity) - (pubYear(a) ?? -Infinity),
+      finished: (a, b) => (finishMs(b) ?? -Infinity) - (finishMs(a) ?? -Infinity),
+    }[sort.key] || (() => 0);
+    const sorted = [...base].sort(cmp);
+    return sort.dir < 0 ? sorted.reverse() : sorted;
+  }, [books, flt, sort]);
   const shown = filtered.slice(0, limit);
+  const sortBy = (key) => setSort((s) => ({ key, dir: s.key === key ? -s.dir : 1 }));
+  const sortMark = (key) => (sort.key === key ? (sort.dir > 0 ? ' ▾' : ' ▴') : '');
   const selBook = useMemo(() => books?.find((b) => b.id === selected) || null, [books, selected]);
 
   async function onImportFile(e) {
@@ -473,7 +504,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
             <div className="lj-lib">
               {linkCs && (
                 <div className="lj-linkbar">
-                  <span>🔗 Link <b>{linkFileName}</b> to a tracker book:</span>
+                  <span>🔗 Link <b>{linkName}</b> to a tracker book:</span>
                   {linkSuggestion && <button className="toggle-on" onClick={() => linkTo(linkSuggestion.id)}>Link “{linkSuggestion.title}”</button>}
                   <button onClick={linkAsNewBook}>＋ New book from this file</button>
                   <span className="settings-note" style={{ margin: 0 }}>…or open any book below and set its “Linked document”.</span>
@@ -505,9 +536,6 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                     <option value="all">All tags</option>{tagOptions.map((t) => <option key={t} value={t}>🏷 {t}</option>)}
                   </select>
                 )}
-                <select value={sort} onChange={(e) => setSort(e.target.value)}>
-                  <option value="rec">Sort: Rec</option><option value="title">Title</option><option value="author">Author</option><option value="pages">Pages</option><option value="pub">Published</option><option value="finished">Recently finished</option>
-                </select>
                 <span className="lj-diffpick">Diff:{[1, 2, 3, 4, 5].map((d) => (
                   <label key={d}><input type="checkbox" checked={flt.difficulty.includes(d)} onChange={(e) => { const s = new Set(flt.difficulty); e.target.checked ? s.add(d) : s.delete(d); setFlt({ ...flt, difficulty: [...s] }); }} />{d}</label>
                 ))}</span>
@@ -526,33 +554,60 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               {adding && <BookEditor book={{ id: '', title: '', author: '', genre: '', fnf: 'F', type: 'long' }} isNew onCancel={() => setAdding(false)} onSave={async (b) => { await saveBook({ ...b, id: deriveId(b) }); setAdding(false); }} />}
               {selBook && <BookEditor book={selBook} books={books} docMeta={docMeta} bindMap={bindMap} fileStats={fileStats} groups={global?.bookGroups} crossNotes={crossNotes} onSaveCross={async (n) => { await saveCrossNote(n); setCrossNotes(await getCrossNotes()); }} onDeleteCross={async (id) => { await deleteCrossNote(id); setCrossNotes(await getCrossNotes()); }} onBind={bind} onProgress={setProgressFor} onCancel={() => setSelected(null)} onSave={saveBook} onDelete={() => removeBook(selBook.id)} />}
 
-              <div className="lj-list">
-                {shown.map((b) => {
-                  const st = readStatus(b);
-                  const rc = finishCount(b);
-                  const tgs = bookTags(b);
-                  const cov = showCovers ? bookCoverUrl(b, 'S') : null;
-                  return (
-                    <div key={b.id} className={`lj-row${selected === b.id ? ' on' : ''}`}>
-                      <button className={`lj-row-hit${showCovers ? ' with-cover' : ''}`} onClick={() => { setSelected(selected === b.id ? null : b.id); setAdding(false); }}>
-                        <span className={`lj-status lj-${st}`}>{STATUS_LABEL[st].split(' ')[0]}</span>
-                        {showCovers && (cov
-                          ? <img className="lj-row-cover" src={cov} alt="" loading="lazy" onError={(e) => { e.target.style.visibility = 'hidden'; }} />
-                          : <span className="lj-row-cover lj-row-cover-none" />)}
-                        <span className="lj-row-main"><b>{b.title}</b><em>{b.author}{b.series ? ` · ${b.series}${b.seriesNum ? ' #' + b.seriesNum : ''}` : ''}</em></span>
-                        <span className="lj-row-meta">{b.genre || ''}{b.difficultyLevel ? ` · D${b.difficultyLevel}` : ''}{b.recScore ? ` · ★${b.recScore}` : ''}{pubYear(b) ? ` · ${pubYear(b)}` : ''}{rc > 1 ? ` · ↻×${rc}` : ''}{tgs.length ? ` · 🏷${tgs.slice(0, 2).join(', ')}` : ''}{recommender(b) !== 'Claude' ? ` · ✦${recommender(b)}` : ''}</span>
-                      </button>
-                      <span className="lj-row-acts">
-                        <button title="On deck (queue)" className={st === 'queue' ? 'on' : ''} onClick={() => shelve(b, st === 'queue' ? 'toread' : 'queue')}>📋</button>
-                        <button title="Reading" className={st === 'reading' ? 'on' : ''} onClick={() => shelve(b, 'reading')}>📖</button>
-                        <button title="Finished" className={st === 'finished' ? 'on' : ''} onClick={() => shelve(b, 'finished')}>✅</button>
-                        <button title="Abandon" className={st === 'abandoned' ? 'on' : ''} onClick={() => shelve(b, st === 'abandoned' ? 'toread' : 'abandoned')}>✕</button>
-                      </span>
-                    </div>
-                  );
-                })}
+              <div className="lj-tablewrap">
+                <table className="lj-table">
+                  <thead>
+                    <tr>
+                      {[['status', 'St'], ['title', 'Title'], ['author', 'Author'], ['genre', 'Genre'], ['type', 'Type'], ['diff', 'D'], ['rec', '★'], ['pages', 'Pages'], ['pub', 'Pub'], ['finished', 'Finished']].map(([k, l]) => (
+                        <th key={k} className={sort.key === k ? 'on' : ''} onClick={() => sortBy(k)} title="Click to sort (click again to flip)">{l}{sortMark(k)}</th>
+                      ))}
+                      <th aria-label="Shelf actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shown.map((b) => {
+                      const st = readStatus(b);
+                      const rc = finishCount(b);
+                      const tgs = bookTags(b);
+                      const cov = showCovers ? bookCoverUrl(b, 'S') : null;
+                      return (
+                        <tr key={b.id} className={selected === b.id ? 'on' : ''} onClick={() => { setSelected(selected === b.id ? null : b.id); setAdding(false); }}>
+                          <td><span className={`lj-status lj-${st}`} title={STATUS_LABEL[st]}>{STATUS_LABEL[st].split(' ')[0]}</span></td>
+                          <td className="lj-td-title">
+                            {showCovers && (cov
+                              ? <img className="lj-row-cover" src={cov} alt="" loading="lazy" onError={(e) => { e.target.style.visibility = 'hidden'; }} />
+                              : <span className="lj-row-cover lj-row-cover-none" />)}
+                            <b>{b.title}</b>
+                            {(b.series || rc > 1 || tgs.length > 0 || recommender(b) !== 'Claude') && (
+                              <em>{b.series ? `${b.series}${b.seriesNum ? ' #' + b.seriesNum : ''}` : ''}{rc > 1 ? ` ↻×${rc}` : ''}{tgs.length ? ` 🏷${tgs.slice(0, 2).join(', ')}` : ''}{recommender(b) !== 'Claude' ? ` ✦${recommender(b)}` : ''}</em>
+                            )}
+                          </td>
+                          <td>{b.author || ''}</td>
+                          <td>{b.genre || ''}</td>
+                          <td>{contentType(b) !== 'long' ? (CONTENT_TYPES[contentType(b)] || '') : ''}</td>
+                          <td>{b.difficultyLevel || ''}</td>
+                          <td>{b.recScore || ''}</td>
+                          <td>{b.pages || ''}</td>
+                          <td>{pubYear(b) || ''}</td>
+                          <td>{finishMs(b) ? new Date(finishMs(b)).toISOString().slice(0, 10) : ''}</td>
+                          <td className="lj-row-acts" onClick={(e) => e.stopPropagation()}>
+                            <button title="On deck (queue)" className={st === 'queue' ? 'on' : ''} onClick={() => shelve(b, st === 'queue' ? 'toread' : 'queue')}>📋</button>
+                            <button title="Reading" className={st === 'reading' ? 'on' : ''} onClick={() => shelve(b, 'reading')}>📖</button>
+                            <button title="Finished" className={st === 'finished' ? 'on' : ''} onClick={() => shelve(b, 'finished')}>✅</button>
+                            <button title="Abandon" className={st === 'abandoned' ? 'on' : ''} onClick={() => shelve(b, st === 'abandoned' ? 'toread' : 'abandoned')}>✕</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-              {filtered.length > limit && <button className="lj-more" onClick={() => setLimit(limit + 60)}>Load more ({filtered.length - limit} left)</button>}
+              {filtered.length > limit && (
+                <div className="lj-inline">
+                  <button className="lj-more" onClick={() => setLimit(limit + 200)}>Load more ({filtered.length - limit} left)</button>
+                  <button className="lj-more" onClick={() => setLimit(filtered.length)}>Load all {filtered.length}</button>
+                </div>
+              )}
             </div>
           )}
 
@@ -568,7 +623,12 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
             />
           )}
           {tab === 'timeline' && <TimelineView books={books} />}
-          {tab === 'rhistory' && <HistoryView />}
+          {tab === 'rhistory' && (
+            <HistoryView
+              onOpenBook={(id) => { setTab('library'); setSelected(id); }}
+              onLinkFile={(cs, name) => { setLinkCs(cs); setLinkName(name || ''); setSelected(null); setTab('library'); }}
+            />
+          )}
           {tab === 'notes' && (
             <AllNotesView
               books={books} crossNotes={crossNotes} fileStats={fileStats}
@@ -576,7 +636,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               onReloadCross={async () => setCrossNotes(await getCrossNotes())}
             />
           )}
-          {tab === 'analytics' && <AnalyticsView books={books} />}
+          {tab === 'analytics' && <AnalyticsView books={books} dayAgg={dayAgg} ai={ai} />}
           {tab === 'authors' && <RefList kind="author" items={refs.authors} books={books} onOpen={(name) => { setFlt({ ...flt, search: name, genre: 'all' }); setLimit(60); setTab('library'); }} />}
           {tab === 'genres' && <RefList kind="genre" items={refs.genres} subitems={refs.subgenres} books={books} onOpen={(name) => { setFlt({ ...flt, genre: name, search: '' }); setLimit(60); setTab('library'); }} />}
           {tab === 'archetype' && <ArchetypeView books={books} />}
@@ -1822,17 +1882,48 @@ function YearWrap({ books, years }) {
   );
 }
 
+// Weekly summaries: algorithmic by default (weeklySummaries), replaced by a cowork-dressed version
+// when the ai record has one for that week (ai.weeklies[weekMonday] — see AiView / applyAiOutput).
+function WeeklySummaries({ books, dayAgg, ai }) {
+  const weeks = useMemo(() => weeklySummaries(dayAgg || [], books, { weeks: 8 }), [dayAgg, books]);
+  if (!weeks.length) return null;
+  const dressed = ai?.weeklies || {};
+  return (
+    <>
+      <div className="rh-section-h">Weekly summaries</div>
+      <p className="settings-note">Completed weeks (Mon–Sun), generated from your reading history. The AI / Cowork tab can “dress up” any week — dressed weeks show ✨.</p>
+      <div className="lj-weeklies">
+        {weeks.map((w) => {
+          const d = dressed[w.week];
+          return (
+            <div key={w.week} className="lj-weekly">
+              <div className="lj-weekly-head">
+                <b>{w.start} → {w.end}</b>
+                {w.words > 0 && <em>{w.words.toLocaleString()} words · {w.daysActive} day{w.daysActive === 1 ? '' : 's'}{w.wpm ? ` · ${w.wpm} WPM` : ''}</em>}
+                {w.finished.length > 0 && <em>✅ {w.finished.length}</em>}
+                {d && <span className="lj-weekly-ai" title="Written by the cowork AI from this week's numbers">✨ AI</span>}
+              </div>
+              <div className="lj-weekly-text">{d?.text || w.text}</div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 // ── Analytics view ───────────────────────────────────────────────────────────────────────────────
-function AnalyticsView({ books }) {
+function AnalyticsView({ books, dayAgg = [], ai = null }) {
   const pace = useMemo(() => paceByYear(books), [books]);
   const gt = useMemo(() => genreTrend(books, 6), [books]);
   const rb = useMemo(() => recommenderBreakdown(books), [books]);
-  if (pace.length === 0 && rb.length <= 1) return <p className="settings-note">Not much to chart yet — mark some books finished (with dates) and attribute a few recommendations.</p>;
+  if (pace.length === 0 && rb.length <= 1 && !dayAgg.length) return <p className="settings-note">Not much to chart yet — mark some books finished (with dates) and attribute a few recommendations.</p>;
   const maxBooks = Math.max(1, ...pace.map((p) => p.books));
   const maxGT = Math.max(1, ...gt.rows.map((r) => r.total));
   const maxRec = Math.max(1, ...rb.map((r) => r.total));
   return (
     <div className="lj-analytics">
+      <WeeklySummaries books={books} dayAgg={dayAgg} ai={ai} />
       {pace.length > 0 && <YearWrap books={books} years={pace.map((p) => p.year)} />}
       <div className="rh-section-h">Pace by year</div>
       {pace.length === 0 ? <p className="settings-note">No dated finishes.</p> : (
@@ -1892,10 +1983,12 @@ async function readFromDir(dir, name) {
 function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
   // Reading-progress bundle (daily/weekly totals, streak, in-flight books) attached to every export,
   // so cowork daily/weekly summary tasks have the data. Built fresh at call time from the file records.
-  const datasetWithProgress = async (light) => buildDataset(books, {
-    light,
-    progress: buildProgress(await allFiles().catch(() => []), { books, bindMap }),
-  });
+  // The algorithmic weekly summaries ride along so a cowork task can return dressed-up `weeklies`.
+  const datasetWithProgress = async (light) => {
+    const progress = buildProgress(await allFiles().catch(() => []), { books, bindMap, days: 63 });
+    progress.weeklySummaries = weeklySummaries(progress.days, books, { weeks: 8 });
+    return buildDataset(books, { light, progress });
+  };
   const instr = getInstruction(ai);
   const [mode, setMode] = useState(instr.mode);
   const [text, setText] = useState(instr.text);
@@ -1908,6 +2001,14 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
   const booksById = useMemo(() => Object.fromEntries(books.map((b) => [b.id, b])), [books]);
 
   useEffect(() => { getFsHandle('journeyCoworkDir').then(setDir).catch(() => {}); }, []);
+
+  // Related-activity feed: every cowork-ish event (requests written, responses applied, API runs)
+  // appends a line to ai.activity, shown at the bottom of this tab. Capped, newest last in storage.
+  const actEntry = (kind, text) => ({ at: Date.now(), kind, text });
+  async function logActivity(kind, text) {
+    await saveJourneyAi({ ...(ai || {}), activity: [...(ai?.activity || []), actEntry(kind, text)].slice(-40) });
+    onReload();
+  }
 
   async function saveInstruction(m, t) {
     await saveJourneyAi({ ...(ai || {}), instruction: { mode: m, text: t, updatedAt: Date.now() } });
@@ -1924,7 +2025,7 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
     const hash = contentHash(sourceText || JSON.stringify(output));
     const ledger = ai?.ledger || [];
     if (ledger.includes(hash)) { setMsg('That output was already applied.'); return; }
-    const { bookUpdates, aiPatch, crossNoteAdds, bindingAdds } = applyAiOutput(output, booksById);
+    const { bookUpdates, aiPatch, crossNoteAdds, bindingAdds, weeklyAdds } = applyAiOutput(output, booksById);
     for (const b of bookUpdates) await saveLibraryBook(b);
     const crossAdded = crossNoteAdds?.length ? await addCrossNotes(crossNoteAdds) : 0;
     for (const bd of bindingAdds || []) await onBind?.(bd.checksum, bd.bookId);
@@ -1934,10 +2035,17 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
     if (aiPatch.analysis && ai?.analysis && ai.analysis !== aiPatch.analysis) {
       nextAi.analysisHistory = [{ text: ai.analysis, at: ai.updatedAt || Date.now() }, ...(ai.analysisHistory || [])].slice(0, 20);
     }
+    // Dressed-up weekly summaries land keyed by their week's Monday (Analytics prefers these).
+    if (weeklyAdds?.length) {
+      nextAi.weeklies = { ...(ai?.weeklies || {}) };
+      for (const w of weeklyAdds) nextAi.weeklies[w.week] = { text: w.text, at: Date.now() };
+    }
     if (wasHeavy) nextAi.instruction = { mode: 'light', text: LIGHT_INSTRUCTION, updatedAt: Date.now() };
+    const summary = `Applied — ${bookUpdates.length} book patch(es)${crossAdded ? `, ${crossAdded} shared note(s)` : ''}${bindingAdds?.length ? `, ${bindingAdds.length} file link(s)` : ''}${weeklyAdds?.length ? `, ${weeklyAdds.length} weekly summar${weeklyAdds.length === 1 ? 'y' : 'ies'}` : ''}${aiPatch.analysis ? ', analysis' : ''}${aiPatch.recommendations ? ', recommendations' : ''}${aiPatch.treeMeta ? ', tech tree' : ''}.`;
+    nextAi.activity = [...(ai?.activity || []), actEntry('apply', summary)].slice(-40);
     await saveJourneyAi(nextAi);
     if (wasHeavy) { setMode('light'); setText(LIGHT_INSTRUCTION); }
-    setMsg(`Applied — ${bookUpdates.length} book patch(es)${crossAdded ? `, ${crossAdded} shared note(s)` : ''}${bindingAdds?.length ? `, ${bindingAdds.length} file link(s)` : ''}${aiPatch.analysis ? ', analysis' : ''}${aiPatch.recommendations ? ', recommendations' : ''}${aiPatch.treeMeta ? ', tech tree' : ''}.${wasHeavy ? ' Instruction reset to light.' : ''}`);
+    setMsg(`${summary}${wasHeavy ? ' Instruction reset to light.' : ''}`);
     onReload();
   }
 
@@ -1962,6 +2070,7 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
       const dataset = await datasetWithProgress(mode === 'light');
       await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(buildCoworkRequest(dataset, { mode, text }), null, 2));
       await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, { mode, text }));
+      await logActivity('request', `Wrote cowork request (${mode}) to “${dir.name}”`);
       setMsg('Wrote journey-cowork-request.json + journey-instructions.md. Drop the reply as journey-cowork-response.json, then Read response.');
     } catch (e) { setMsg('Write failed: ' + (e?.message || e)); }
     setBusy(false);
@@ -1976,8 +2085,11 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
     setBusy(false);
   }
   async function copyDigest() {
-    try { await navigator.clipboard.writeText(buildDigest(await datasetWithProgress(mode === 'light'), { mode, text })); setMsg('Digest copied — paste it into a Claude chat, then paste the JSON reply below.'); }
-    catch { setMsg('Clipboard blocked — use the cowork folder instead.'); }
+    try {
+      await navigator.clipboard.writeText(buildDigest(await datasetWithProgress(mode === 'light'), { mode, text }));
+      await logActivity('digest', `Copied ${mode} digest to clipboard`);
+      setMsg('Digest copied — paste it into a Claude chat, then paste the JSON reply below.');
+    } catch { setMsg('Clipboard blocked — use the cowork folder instead.'); }
   }
   async function applyPasted() {
     setBusy(true);
@@ -2037,6 +2149,21 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
               <p className="lj-analysis">{h.text}</p>
             </details>
           ))}
+        </>
+      )}
+
+      {(ai?.activity || []).length > 0 && (
+        <>
+          <div className="rh-section-h">Activity</div>
+          <div className="lj-actfeed">
+            {[...ai.activity].reverse().map((a, i) => (
+              <div key={`${a.at}-${i}`} className="lj-actrow">
+                <span className={`lj-actkind lj-act-${a.kind || 'other'}`}>{{ apply: '✅', request: '📤', digest: '📋' }[a.kind] || '·'}</span>
+                <span className="lj-acttext">{a.text}</span>
+                <em>{fmtDateTime(a.at)}</em>
+              </div>
+            ))}
+          </div>
         </>
       )}
 

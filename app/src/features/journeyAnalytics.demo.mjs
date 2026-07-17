@@ -1,6 +1,6 @@
 // Self-check for journeyAnalytics.js — run: node app/src/features/journeyAnalytics.demo.mjs
 import assert from 'node:assert';
-import { cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, estHours, queueWithEstimates, recentWordsPerDay, yearGoal, seriesProgress, yearInBooks } from './journeyAnalytics.js';
+import { cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, estHours, queueWithEstimates, recentWordsPerDay, yearGoal, seriesProgress, yearInBooks, weeklySummaries } from './journeyAnalytics.js';
 
 const books = [
   { id: 'a', title: 'A', author: 'X', genre: 'Literary', fnf: 'F', completion: true, finishTime: '2023-02-10', pages: 300, words: 90000, difficultyLevel: 4, rating: 5, recBy: 'Sam' },
@@ -150,6 +150,30 @@ assert.ok(qNone.items[0].hours > 0);
   assert.equal(w.favorite.title, 'Hard');
   assert.equal(w.fiction, 1);
   assert.equal(yearInBooks(lib, 1999), null);
+}
+
+// weeklySummaries: completed weeks only, aggregated + dated finishes, quiet weeks skipped
+{
+  const now = Date.parse('2026-07-15T12:00:00Z'); // a Wednesday → current week starts 2026-07-13
+  const days = [
+    { date: '2026-07-06', wordsRead: 3000, activeSecs: 600 },  // last week (Mon)
+    { date: '2026-07-08', wordsRead: 2000, activeSecs: 300 },  // last week (Wed)
+    { date: '2026-07-14', wordsRead: 9999, activeSecs: 60 },   // CURRENT week — excluded
+    { date: '2026-06-23', wordsRead: 500, activeSecs: 120 },   // 3 weeks back
+  ];
+  const lib = [
+    { id: 'wf', title: 'Weekly Fin', author: 'A', completion: true, finishTime: '2026-07-07' },
+  ];
+  const ws = weeklySummaries(days, lib, { weeks: 8, now });
+  assert.equal(ws[0].week, '2026-07-06', 'newest completed week first');
+  assert.equal(ws[0].words, 5000, 'week aggregates its days');
+  assert.equal(ws[0].daysActive, 2);
+  assert.equal(ws[0].finished[0].title, 'Weekly Fin', 'finish lands in its week');
+  assert.ok(ws[0].text.includes('5,000 words'), 'algorithmic text mentions the words');
+  assert.ok(ws[0].text.includes('Weekly Fin'), 'algorithmic text mentions the finish');
+  assert.ok(!ws.some((w) => w.week === '2026-07-13'), 'current week excluded');
+  assert.ok(!ws.some((w) => w.week === '2026-06-29'), 'quiet week skipped');
+  assert.ok(ws.some((w) => w.week === '2026-06-22'), 'older active week included');
 }
 
 console.log('journeyAnalytics.demo: all assertions passed ✅');

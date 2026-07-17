@@ -246,6 +246,24 @@ export default function MenuBar({ onFileOpen, onAction }) {
           ☰ Menu
         </button>
         <div className="grow" />
+        <button
+          className="menu-font-btn"
+          disabled={!activeTab}
+          title="Smaller reading font"
+          aria-label="Smaller reading font"
+          onClick={() => activeTab && patchSettings(activeTab.id, { rightPaneFontSize: Math.max(8, (activeTab.settings.rightPaneFontSize || 12) - 1) })}
+        >
+          A−
+        </button>
+        <button
+          className="menu-font-btn"
+          disabled={!activeTab}
+          title="Larger reading font"
+          aria-label="Larger reading font"
+          onClick={() => activeTab && patchSettings(activeTab.id, { rightPaneFontSize: Math.min(60, (activeTab.settings.rightPaneFontSize || 12) + 1) })}
+        >
+          A+
+        </button>
         <select
           className="menu-theme-compact"
           value={themeName}
@@ -391,14 +409,25 @@ export default function MenuBar({ onFileOpen, onAction }) {
         {state.incognito ? '🕶 ' : '☐ '}Incognito<kbd className="key-hint">I</kbd>
       </div>
       <div className="grow" />
-      <div
-        className="menu-item"
-        onClick={() => onAction('data')}
-        title="Open the data management suite — overview, backup &amp; restore, cloud sync, maintenance"
-      >
-        ☁ Data
-      </div>
       <div className="right-toggles">
+        <button
+          className="menu-font-btn"
+          disabled={!activeTab}
+          title="Smaller reading font (Lines pane)"
+          aria-label="Smaller reading font"
+          onClick={() => activeTab && patchSettings(activeTab.id, { rightPaneFontSize: Math.max(8, (activeTab.settings.rightPaneFontSize || 12) - 1) })}
+        >
+          A−
+        </button>
+        <button
+          className="menu-font-btn"
+          disabled={!activeTab}
+          title="Larger reading font (Lines pane)"
+          aria-label="Larger reading font"
+          onClick={() => activeTab && patchSettings(activeTab.id, { rightPaneFontSize: Math.min(60, (activeTab.settings.rightPaneFontSize || 12) + 1) })}
+        >
+          A+
+        </button>
         <label htmlFor="theme-select">Theme</label>
         <select
           id="theme-select"

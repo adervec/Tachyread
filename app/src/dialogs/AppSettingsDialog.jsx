@@ -142,6 +142,32 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
           On phones, collapse the bottom controls during playback for more text room
         </label>
       </Field>
+      <Field label="Shake for full screen">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.shakeFullscreen}
+            onChange={(e) => {
+              patch({ shakeFullscreen: e.target.checked });
+              // iOS needs a user-gesture permission grant for motion events — this click is one.
+              if (e.target.checked && typeof DeviceMotionEvent !== 'undefined' && DeviceMotionEvent.requestPermission) {
+                DeviceMotionEvent.requestPermission().catch(() => {});
+              }
+            }}
+          />
+          On phones, a vigorous shake toggles full-screen reading (same as the ⛶ button)
+        </label>
+      </Field>
+      <Field label="Multi-row tab strip">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={!!g.tabBarMultiRow}
+            onChange={(e) => patch({ tabBarMultiRow: e.target.checked })}
+          />
+          Wrap open tabs onto multiple rows instead of squeezing them into one (also in a tab’s right-click menu)
+        </label>
+      </Field>
 
       <div className="field-section">Reading guard</div>
       <Field label="Idle grace period (seconds)">

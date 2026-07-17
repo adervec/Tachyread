@@ -139,6 +139,7 @@ function AppInner() {
   const [controlsCollapsed, setControlsCollapsed] = useState(false); // minimize the bottom dock for text room
   const [moreOpen, setMoreOpen] = useState(false); // mobile: show the finer controls row (toggle lives in the dock grip bar)
   const [chromeHidden, setChromeHidden] = useState(false); // mobile: hide menu+tabs above the reader for text room
+  const [immersive, setImmersive] = useState(false); // mobile: reading area fills the whole screen (tiny ⛶ overlay to exit)
   const touchRef = useRef(null); // swipe-gesture start point
   const engineRef = useRef(null);
   if (!engineRef.current) engineRef.current = createEngine();
@@ -1766,6 +1767,30 @@ function AppInner() {
     }
   }
 
+  // Shake-to-toggle full-screen reading (opt-in, mobile): a burst of ≥3 hard acceleration spikes
+  // inside ~a second flips immersive mode, with a cooldown so one shake can't double-toggle.
+  useEffect(() => {
+    if (!isCompact || !state.global.shakeFullscreen) return undefined;
+    let peaks = [];
+    let lastToggle = 0;
+    const onMotion = (e) => {
+      const a = e.accelerationIncludingGravity;
+      if (!a || a.x == null) return;
+      const mag = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+      if (Math.abs(mag - 9.81) < 12) return; // ponytail: fixed threshold; expose a sensitivity slider if it misfires
+      const now = Date.now();
+      peaks = peaks.filter((t) => now - t < 1000);
+      peaks.push(now);
+      if (peaks.length >= 3 && now - lastToggle > 1500) {
+        lastToggle = now;
+        peaks = [];
+        setImmersive((v) => !v);
+      }
+    };
+    window.addEventListener('devicemotion', onMotion);
+    return () => window.removeEventListener('devicemotion', onMotion);
+  }, [isCompact, state.global.shakeFullscreen]);
+
   const hideWord = !state.showRsvp || !!activeTab?.settings?.hideRsvpPane;
   // On a phone showing only the Lines view, lock it to the viewport (no page scroll) so the lines
   // pane fills the whole screen (current line kept centred) instead of stacking at a fraction height.
@@ -2003,9 +2028,12 @@ function AppInner() {
 
   return (
     <div
-      className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}${forcePortrait != null ? ' force-portrait' : ''}`}
+      className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}${forcePortrait != null ? ' force-portrait' : ''}${isCompact && immersive ? ' immersive' : ''}`}
       style={forcePortrait != null ? { transform: `translate(-50%, -50%) rotate(${forcePortrait}deg)` } : undefined}
     >
+      {isCompact && immersive && (
+        <button className="immersive-exit" title="Exit full-screen reading" aria-label="Exit full-screen reading" onClick={() => setImmersive(false)}>⛶</button>
+      )}
       <header className={`app-chrome${isCompact && chromeHidden ? ' collapsed' : ''}`}>
         <div className="chrome-body">
           <MenuBar onFileOpen={openFiles} onAction={handleMenuAction} />
@@ -2094,6 +2122,16 @@ function AppInner() {
               )}
               {!auxOpen && (
                 <>
+                  {/* Full-screen reading: hide ALL chrome (menus, tabs, controls, status) — a tiny
+                      ⛶ overlay (or a vigorous shake, if enabled) brings it back. */}
+                  <button
+                    className="rv-rotate"
+                    title="Full-screen reading — hides all menus and controls (tap the small ⛶ overlay to exit)"
+                    aria-label="Full-screen reading"
+                    onClick={() => setImmersive(true)}
+                  >
+                    ⛶
+                  </button>
                   {/* Rotate JUST the reader box (not the menus/controls) by a quarter-turn. */}
                   <button
                     className={`rv-rotate${readerRotation ? ' on' : ''}`}

@@ -337,6 +337,14 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ showPercentSeparators: e.target.checked })}
         />
       </Field>
+      <Field label="Faint gridlines (Lines pane background)">
+        <label className="inline-check" title="Faint horizontal rules at the line rhythm">
+          <input type="checkbox" checked={!!s.linesGridH} onChange={(e) => patch({ linesGridH: e.target.checked })} /> Horizontal
+        </label>
+        <label className="inline-check" title="Faint vertical rules across the pane">
+          <input type="checkbox" checked={!!s.linesGridV} onChange={(e) => patch({ linesGridV: e.target.checked })} /> Vertical
+        </label>
+      </Field>
       <Field label="Wall of text (merge lines into blocks)">
         <input type="checkbox" checked={!!s.wallText} onChange={(e) => patch({ wallText: e.target.checked })} />
       </Field>

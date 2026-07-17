@@ -82,17 +82,23 @@ function Spark({ daily }) {
 
 // ── main ─────────────────────────────────────────────────────────────────────────────────────
 // The full reading-history view — rendered standalone below AND embedded as Trackyread's Reading
-// History tab (the history was folded into the tracker).
-export function HistoryView() {
-  const { state, updateGlobal, openRecent, closeDialog } = useApp();
+// History tab (the history was folded into the tracker). `onOpenBook` / `onLinkFile` come from the
+// Trackyread embed (jump to / link a book in the same panel); standalone falls back to opening the
+// Trackyread dialog itself.
+export function HistoryView({ onOpenBook, onLinkFile } = {}) {
+  const { state, updateGlobal, openRecent, closeDialog, openDialog } = useApp();
   const [files, setFiles] = useState(null);
   const [nameMap, setNameMap] = useState({});
   const [linkMap, setLinkMap] = useState({}); // checksum → { id, title } of the linked Trackyread book
   const [focus, setFocus] = useState(null);
-  const [tab, setTab] = useState('overview'); // overview | calendar | library
+  const [tab, setTab] = useState('overview'); // overview | calendar | library (the "Files" table)
   const [selected, setSelected] = useState(null); // checksum of the book being inspected
   const [shelfFilter, setShelfFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('recent'); // recent | progress | words | wpm | rating | title
+  const [fq, setFq] = useState(''); // Files table text filter
+  const [fsort, setFsort] = useState({ key: 'recent', dir: 1 }); // Files table header sort
+
+  const openBook = onOpenBook || ((id) => openDialog({ kind: 'literary-journey', tab: 'library', focusBookId: id }));
+  const linkFile = onLinkFile || ((cs, name) => openDialog({ kind: 'literary-journey', tab: 'library', linkChecksum: cs, linkFileName: name }));
 
   useEffect(() => {
     allFiles().then(setFiles).catch(() => setFiles([]));
@@ -252,23 +258,31 @@ export function HistoryView() {
     if (!model) return [];
     let list = model.books;
     if (shelfFilter !== 'all') list = list.filter((b) => b.shelf === shelfFilter);
+    const q = fq.trim().toLowerCase();
+    if (q) list = list.filter((b) => `${b.name} ${linkMap[b.checksum]?.title || ''}`.toLowerCase().includes(q));
     const cmp = {
       recent: (a, b) => (b.lastRead || '').localeCompare(a.lastRead || ''),
       progress: (a, b) => b.posFrac - a.posFrac,
       words: (a, b) => b.wordsRead - a.wordsRead,
+      time: (a, b) => b.activeSecs - a.activeSecs,
       wpm: (a, b) => b.avgWpm - a.avgWpm,
       rating: (a, b) => b.rating - a.rating,
       title: (a, b) => a.name.localeCompare(b.name),
-    }[sortBy];
-    return [...list].sort(cmp);
-  }, [model, shelfFilter, sortBy]);
+      link: (a, b) => (linkMap[b.checksum] ? 1 : 0) - (linkMap[a.checksum] ? 1 : 0),
+      shelf: (a, b) => (a.shelf || '').localeCompare(b.shelf || ''),
+    }[fsort.key] || (() => 0);
+    const sorted = [...list].sort(cmp);
+    return fsort.dir < 0 ? sorted.reverse() : sorted;
+  }, [model, shelfFilter, fq, fsort, linkMap]);
+  const fsortBy = (key) => setFsort((s) => ({ key, dir: s.key === key ? -s.dir : 1 }));
+  const fsortMark = (key) => (fsort.key === key ? (fsort.dir > 0 ? ' ▾' : ' ▴') : '');
 
   const selBook = useMemo(() => model?.books.find((b) => b.checksum === selected) || null, [model, selected]);
 
   const TABS = [
     { id: 'overview', label: 'Overview' },
     { id: 'calendar', label: 'Calendar' },
-    { id: 'library', label: `Library${model ? ` (${model.books.length})` : ''}` },
+    { id: 'library', label: `Files${model ? ` (${model.books.length})` : ''}` },
   ];
 
   return (
@@ -363,50 +377,66 @@ export function HistoryView() {
           {tab === 'library' && !selBook && (
             <div className="rh-library">
               <div className="rh-lib-controls">
+                <input className="lj-search" placeholder="Search files / linked books…" value={fq} onChange={(e) => setFq(e.target.value)} />
                 <select value={shelfFilter} onChange={(e) => setShelfFilter(e.target.value)} title="Filter by shelf">
                   <option value="all">All shelves</option>
                   {SHELVES.map((s) => <option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}
                 </select>
-                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} title="Sort by">
-                  <option value="recent">Recently read</option>
-                  <option value="progress">Progress</option>
-                  <option value="words">Words read</option>
-                  <option value="wpm">Avg WPM</option>
-                  <option value="rating">Rating</option>
-                  <option value="title">Title</option>
-                </select>
+                <span className="settings-note" style={{ margin: 0 }}>{libraryBooks.length} file{libraryBooks.length === 1 ? '' : 's'}</span>
               </div>
-              <div className="rh-book-list">
-                {libraryBooks.map((b) => (
-                  <div key={b.checksum} className="rh-book" onClick={() => setSelected(b.checksum)}>
-                    <div className="rh-book-main">
-                      <div className="rh-book-title">
-                        <span className="rh-shelf-dot" title={SHELF_BY_ID[b.shelf]?.label}>{SHELF_BY_ID[b.shelf]?.icon}</span>
-                        {b.name}
-                        {linkMap[b.checksum]
-                          ? <span className="rh-link-chip on" title={`Linked to Trackyread: ${linkMap[b.checksum].title}`}>🔗 {linkMap[b.checksum].title}</span>
-                          : <span className="rh-link-chip" title="Not linked to a Trackyread book">○ not in Trackyread</span>}
-                      </div>
-                      <div className="rh-book-sub">
-                        {Math.round(b.posFrac * 100)}% · {fmtInt(b.wordsRead)} words · {fmtDur(b.activeSecs)} · {b.avgWpm} WPM
-                        {b.sourcePages > 0 && <span title="Source pages reached in the original document"> · 📄 {sourcePageLabel(b)}</span>}
-                        {b.posDevice && <span title="Device that last moved the reading position"> · 📱 {b.posDevice}</span>}
-                        {b.rating > 0 && <span className="rh-stars"> · {'★'.repeat(b.rating)}</span>}
-                        {b.completions > 0 && <span> · finished ×{b.completions}</span>}
-                      </div>
-                      <div className="rh-progress"><div className="rh-progress-fill" style={{ width: `${b.posFrac * 100}%` }} /></div>
-                    </div>
-                    <div className="rh-book-when">{b.lastRead || '—'}</div>
-                  </div>
-                ))}
-                {libraryBooks.length === 0 && <p className="settings-note">No books on this shelf.</p>}
+              <div className="lj-tablewrap">
+                <table className="lj-table rh-files-table">
+                  <thead>
+                    <tr>
+                      {[['shelf', ''], ['title', 'File'], ['link', 'Trackyread'], ['progress', '%'], ['words', 'Words'], ['time', 'Time'], ['wpm', 'WPM'], ['rating', '★'], ['recent', 'Last read']].map(([k, l]) => (
+                        <th key={k} className={fsort.key === k ? 'on' : ''} onClick={() => fsortBy(k)} title="Click to sort (click again to flip)">{l}{fsortMark(k)}</th>
+                      ))}
+                      <th aria-label="Actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {libraryBooks.map((b) => (
+                      <tr key={b.checksum} onClick={() => setSelected(b.checksum)} title="Open this file's reading detail">
+                        <td><span className="rh-shelf-dot" title={SHELF_BY_ID[b.shelf]?.label}>{SHELF_BY_ID[b.shelf]?.icon}</span></td>
+                        <td className="lj-td-title">
+                          <b>{b.name}</b>
+                          {b.sourcePages > 0 && <em title="Source pages reached in the original document"> 📄 {sourcePageLabel(b)}</em>}
+                        </td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          {linkMap[b.checksum]
+                            ? <button className="rh-link-chip on" title={`Open “${linkMap[b.checksum].title}” in the Trackyread library`} onClick={() => openBook(linkMap[b.checksum].id)}>🔗 {linkMap[b.checksum].title}</button>
+                            : <button className="rh-link-chip" title="Link this file to a Trackyread book" onClick={() => linkFile(b.checksum, b.name)}>○ link…</button>}
+                        </td>
+                        <td>
+                          <div className="rh-td-prog" title={`${Math.round(b.posFrac * 100)}% through`}>
+                            <span>{Math.round(b.posFrac * 100)}%</span>
+                            <div className="rh-progress"><div className="rh-progress-fill" style={{ width: `${b.posFrac * 100}%` }} /></div>
+                          </div>
+                        </td>
+                        <td>{fmtInt(b.wordsRead)}</td>
+                        <td>{fmtDur(b.activeSecs)}</td>
+                        <td>{b.avgWpm || ''}</td>
+                        <td>{b.rating > 0 ? '★'.repeat(b.rating) : ''}</td>
+                        <td>{b.lastRead || '—'}</td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="rh-open-file"
+                            title="Open this document in the reader — uses the copy saved on this device (or focuses it if it's already open)"
+                            onClick={async () => { if (await openRecent(b.checksum)) closeDialog?.(); }}
+                          >▶</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {libraryBooks.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', padding: 12 }}>No files match.</td></tr>}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
 
           {tab === 'library' && selBook && (
             <div className="rh-detail">
-              <button className="rh-back" onClick={() => setSelected(null)}>← Library</button>
+              <button className="rh-back" onClick={() => setSelected(null)}>← Files</button>
               <h3 className="rh-detail-title">
                 {selBook.name}
                 <button

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { recordSpark } from '../features/wpmSpark.js';
+import { recordSpark, getSpark, sparkBuckets, sparkPoints, SPARK_MAX_WPM } from '../features/wpmSpark.js';
 
 function fmtDuration(ms) {
   const s = Math.floor((ms || 0) / 1000);
@@ -19,7 +19,7 @@ export const STATS_CHIP_ITEMS = [
   ['coverage', 'Book read % + active time', true],
   ['position', 'Word / line position + session words', true],
   ['set', 'Set speed', true],
-  ['spark', 'WPM sparkline (floating chip)', true],
+  ['spark', 'WPM trendline (sparkline)', true],
   ['lifetime', 'Lifetime WPM', false],
   ['eta', 'Time to finish (measured pace)', false],
   ['today', 'Words read today', false],
@@ -31,6 +31,27 @@ export function statsChipShow(settings) {
   const out = {};
   for (const [key, , def] of STATS_CHIP_ITEMS) out[key] = settings?.statsChip?.[key] ?? def;
   return out;
+}
+
+// Normalized WPM sparkline: 15s-averaged WPM over the trailing 8 minutes on a fixed 0–1400 scale
+// (samples recorded once a second below). Shown wherever the stats render — docked stats and the
+// floating chip alike — so the trend is visible in non-chip mode too.
+export function WpmSparkline({ tabId }) {
+  const [buckets, setBuckets] = useState(() => sparkBuckets(getSpark(tabId)));
+  useEffect(() => {
+    const id = setInterval(() => setBuckets(sparkBuckets(getSpark(tabId))), 3000);
+    return () => clearInterval(id);
+  }, [tabId]);
+  const W = 128, H = 28;
+  return (
+    <div className="chip-spark" title={`15s-averaged WPM over the last 8 minutes (scale 0–${SPARK_MAX_WPM})`}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        <line className="chip-spark-mid" x1="0" y1={H / 2} x2={W} y2={H / 2} />
+        <polyline className="chip-spark-line" points={sparkPoints(buckets, W, H)} />
+      </svg>
+      <div className="chip-spark-axis"><span>8m</span><span>0–{SPARK_MAX_WPM}</span><span>now</span></div>
+    </div>
+  );
 }
 
 function steadiness(cv) {
@@ -133,6 +154,7 @@ export default function ReadingStats({ tab }) {
           <span className="dash-mini">Set {settings.wpm} {settings.speedUnit || 'Words'}/min</span>
         </div>
       )}
+      {show.spark && <WpmSparkline tabId={tab.id} />}
     </div>
   );
 }
