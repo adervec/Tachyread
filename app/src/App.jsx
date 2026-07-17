@@ -1014,7 +1014,24 @@ function AppInner() {
   }
 
   // Small action bag the command registry runs against (shared by gestures, voice, and claps).
-  const cmdCtx = () => ({ playPause: () => playPauseRef.current?.(), setPlaying, nav, adjustWpm, page: pageLines, jumpToCurrent: () => jumpToCurrent() });
+  // Everything here goes through call-time closures, so triggers always see the live handlers.
+  const cmdCtx = () => ({
+    playPause: () => playPauseRef.current?.(),
+    setPlaying,
+    nav,
+    adjustWpm,
+    page: pageLines,
+    jumpToCurrent: () => jumpToCurrent(),
+    jumpToFrontier: () => jumpToFrontier(),
+    jumpToGap: () => jumpToGap(),
+    toggleReadAloud: () => toggleReadAloud(),
+    toggleScroll: () => toggleScrollRead(),
+    toggleFocus: () => toggleFocusMode(),
+    toggleFaces: () => { const t = activeTabRef.current; if (t) patchSettings(t.id, { showEyes: !t.settings.showEyes }); },
+    toggleStats: () => dispatch({ type: 'TOGGLE_STATS' }),
+    switchTab: (d) => cycleTabs(d),
+    sourcePage: (d) => jumpSourcePage(d),
+  });
   // Latest voice-command phrase list, read live by the recognizer's matcher (so edits in Biometric
   // Controls take effect without toggling voice off/on).
   const voiceCommandsRef = useRef(DEFAULT_VOICE_COMMANDS);

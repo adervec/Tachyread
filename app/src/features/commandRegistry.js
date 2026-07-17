@@ -4,7 +4,10 @@
 // remap any trigger (many triggers may point at one command).
 //
 // run(ctx) receives the small action bag App assembles from its own closures:
-//   { playPause(), setPlaying(bool), nav(kind), adjustWpm(delta) }.
+//   { playPause(), setPlaying(bool), nav(kind), page(dir), adjustWpm(delta), jumpToCurrent(),
+//     jumpToFrontier(), jumpToGap(), toggleReadAloud(), toggleScroll(), toggleFocus(),
+//     toggleFaces(), toggleStats(), switchTab(dir), sourcePage(dir) }.
+// Missing ctx entries are safe no-ops, so a partial bag (e.g. tests) never throws.
 
 import { wordMatches } from './speechRecognition.js';
 
@@ -22,8 +25,21 @@ export const COMMANDS = [
   { id: 'pageDown', label: 'Page down', icon: '⇟', run: (c) => c.page?.(1) },
   { id: 'pageUp', label: 'Page up', icon: '⇞', run: (c) => c.page?.(-1) },
   { id: 'jumpToCurrent', label: 'Jump to current word', icon: '⌖', run: (c) => c.jumpToCurrent?.() },
+  { id: 'jumpFrontier', label: 'Jump to latest unread', icon: '⇥', run: (c) => c.jumpToFrontier?.() },
+  { id: 'jumpGap', label: 'Jump to first unread gap', icon: '↷', run: (c) => c.jumpToGap?.() },
   { id: 'wpmUp', label: 'Speed up (+25 WPM)', icon: '➕', run: (c) => c.adjustWpm?.(25) },
   { id: 'wpmDown', label: 'Slow down (−25 WPM)', icon: '➖', run: (c) => c.adjustWpm?.(-25) },
+  { id: 'wpmUp100', label: 'Speed up a lot (+100 WPM)', icon: '⏫', run: (c) => c.adjustWpm?.(100) },
+  { id: 'wpmDown100', label: 'Slow down a lot (−100 WPM)', icon: '⏬', run: (c) => c.adjustWpm?.(-100) },
+  { id: 'toggleReadAloud', label: 'Read-aloud (TTS) on/off', icon: '🗣', run: (c) => c.toggleReadAloud?.() },
+  { id: 'toggleScroll', label: 'Scroll-to-read on/off', icon: '📜', run: (c) => c.toggleScroll?.() },
+  { id: 'toggleFocus', label: 'Focus mode on/off', icon: '🎯', run: (c) => c.toggleFocus?.() },
+  { id: 'toggleFaces', label: 'Reader faces on/off', icon: '🙂', run: (c) => c.toggleFaces?.() },
+  { id: 'toggleStats', label: 'Reading stats on/off', icon: '📊', run: (c) => c.toggleStats?.() },
+  { id: 'nextTab', label: 'Next tab', icon: '📑→', run: (c) => c.switchTab?.(1) },
+  { id: 'prevTab', label: 'Previous tab', icon: '←📑', run: (c) => c.switchTab?.(-1) },
+  { id: 'nextSourcePage', label: 'Next source page', icon: '▤▶', run: (c) => c.sourcePage?.(1) },
+  { id: 'prevSourcePage', label: 'Previous source page', icon: '◀▤', run: (c) => c.sourcePage?.(-1) },
 ];
 
 export const COMMAND_BY_ID = Object.fromEntries(COMMANDS.map((c) => [c.id, c]));
@@ -68,5 +84,7 @@ export const DEFAULT_VOICE_COMMANDS = [
   { phrase: 'next', commandId: 'nextWord' },
   { phrase: 'forward', commandId: 'nextWord' },
   { phrase: 'back', commandId: 'prevWord' },
+  { phrase: 'faster', commandId: 'wpmUp' },
+  { phrase: 'slower', commandId: 'wpmDown' },
 ];
 export const DEFAULT_CLAP_MAP = { 1: 'playPause', 2: 'nextWord', 3: 'prevWord' };
