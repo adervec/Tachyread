@@ -892,7 +892,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   if (settings.orpColor) paneStyle['--lines-orp'] = settings.orpColor;
   return (
     <div
-      className={`line-pane${headingPack ? ` hsp-${headingPack}` : ''}`}
+      className={`line-pane${headingPack ? ` hsp-${headingPack}` : ''}${settings.currentLineHighlight === false ? ' no-curline' : ''}`}
       ref={paneVisRef}
       style={Object.keys(paneStyle).length ? paneStyle : undefined}
     >
