@@ -16,6 +16,17 @@ function spyCtx() {
     setPlaying: (v) => calls.push(['setPlaying', v]),
     nav: (k) => calls.push(['nav', k]),
     adjustWpm: (d) => calls.push(['adjustWpm', d]),
+    page: (d) => calls.push(['page', d]),
+    jumpToCurrent: () => calls.push(['jumpToCurrent']),
+    jumpToFrontier: () => calls.push(['jumpToFrontier']),
+    jumpToGap: () => calls.push(['jumpToGap']),
+    toggleReadAloud: () => calls.push(['toggleReadAloud']),
+    toggleScroll: () => calls.push(['toggleScroll']),
+    toggleFocus: () => calls.push(['toggleFocus']),
+    toggleFaces: () => calls.push(['toggleFaces']),
+    toggleStats: () => calls.push(['toggleStats']),
+    switchTab: (d) => calls.push(['switchTab', d]),
+    sourcePage: (d) => calls.push(['sourcePage', d]),
   };
 }
 let c = spyCtx();
@@ -27,6 +38,25 @@ runCommand('pause', c); assert.deepEqual(c.calls.at(-1), ['setPlaying', false], 
 runCommand('play', c); assert.deepEqual(c.calls.at(-1), ['setPlaying', true]);
 runCommand('wpmUp', c); assert.deepEqual(c.calls.at(-1), ['adjustWpm', 25]);
 runCommand('wpmDown', c); assert.deepEqual(c.calls.at(-1), ['adjustWpm', -25]);
+runCommand('wpmUp100', c); assert.deepEqual(c.calls.at(-1), ['adjustWpm', 100]);
+runCommand('wpmDown100', c); assert.deepEqual(c.calls.at(-1), ['adjustWpm', -100]);
+runCommand('pageDown', c); assert.deepEqual(c.calls.at(-1), ['page', 1]);
+runCommand('pageUp', c); assert.deepEqual(c.calls.at(-1), ['page', -1]);
+runCommand('jumpToCurrent', c); assert.deepEqual(c.calls.at(-1), ['jumpToCurrent']);
+runCommand('jumpFrontier', c); assert.deepEqual(c.calls.at(-1), ['jumpToFrontier']);
+runCommand('jumpGap', c); assert.deepEqual(c.calls.at(-1), ['jumpToGap']);
+runCommand('toggleReadAloud', c); assert.deepEqual(c.calls.at(-1), ['toggleReadAloud']);
+runCommand('toggleScroll', c); assert.deepEqual(c.calls.at(-1), ['toggleScroll']);
+runCommand('toggleFocus', c); assert.deepEqual(c.calls.at(-1), ['toggleFocus']);
+runCommand('toggleFaces', c); assert.deepEqual(c.calls.at(-1), ['toggleFaces']);
+runCommand('toggleStats', c); assert.deepEqual(c.calls.at(-1), ['toggleStats']);
+runCommand('nextTab', c); assert.deepEqual(c.calls.at(-1), ['switchTab', 1]);
+runCommand('prevTab', c); assert.deepEqual(c.calls.at(-1), ['switchTab', -1]);
+runCommand('nextSourcePage', c); assert.deepEqual(c.calls.at(-1), ['sourcePage', 1]);
+runCommand('prevSourcePage', c); assert.deepEqual(c.calls.at(-1), ['sourcePage', -1]);
+// New voice defaults resolve.
+assert.equal(matchVoice('read faster please', DEFAULT_VOICE_COMMANDS), 'wpmUp', 'faster → wpmUp');
+assert.equal(matchVoice('slower', DEFAULT_VOICE_COMMANDS), 'wpmDown', 'slower → wpmDown');
 
 // Unassigned / unknown ids are safe no-ops (that's how "no mapping" behaves).
 c = spyCtx();
