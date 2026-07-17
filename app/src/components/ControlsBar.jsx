@@ -16,14 +16,15 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', modeIdleFrac = null, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, onJumpToFrontier, onJumpToGap, moreOpen = false }) {
+export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', modeIdleFrac = null, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, onJumpToFrontier, onJumpToGap }) {
   const { patchSettings, state, updateGlobal } = useApp();
   const isCompact = useIsCompact();
-  // Mobile "more" content is PAGINATED (steps / modes / goal), not one tall scrolling stack.
+  // Mobile: the expanded dock shows the FULL controls immediately (no "more" disclosure) —
+  // paginated between Steps / Modes / Goal so it never becomes one tall scrolling stack.
+  const moreOpen = true;
   const [morePage, setMorePage] = useState(0);
-  // On phones the full playback row (10 nav buttons + speed unit + 4 mode toggles + goal) wraps into a
-  // tall stack that eats the reader. The finer steps are behind a "More" disclosure whose toggle lives
-  // in the dock's grip bar (App.jsx) — this component just renders the extra row when `moreOpen`.
+  // On phones the full playback row (10 nav buttons + speed unit + mode toggles + goal) would wrap
+  // into a tall stack that eats the reader — hence the Steps/Modes/Goal pager above.
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
   const totalWords = doc.words.length;

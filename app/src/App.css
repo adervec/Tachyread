@@ -359,13 +359,24 @@
   border-color: var(--toggle-active-bg);
   font-weight: 600;
 }
-/* Rotate-the-reader button: compact, not full-width like the view tabs, pinned to the right. */
+/* Icon toggles (faces/stats/incognito/full-screen/rotate/lock): a uniform right-pinned group —
+   every button the same fixed width and height as the tabs, instead of content-sized stragglers
+   each carrying its own auto margin. */
+.reading-view-switch { align-items: stretch; }
 .reading-view-switch .rv-rotate {
-  flex: 0 0 auto;
-  margin-left: auto;
-  min-width: 52px;
+  flex: 0 0 38px;
+  width: 38px;
+  min-width: 0;
+  margin-left: 0;
+  padding: 8px 0;
+  text-align: center;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+/* The first icon toggle after the view tabs opens the right-pinned group. */
+.reading-view-switch button:not(.rv-rotate) + .rv-rotate { margin-left: auto; }
+/* The rotate button shows "⟳ 90°" when rotated — only IT gets to widen past the icon width. */
+.reading-view-switch .rv-rotate.rv-rot.on { flex-basis: auto; width: auto; padding: 8px 6px; }
 
 /* Reader-only rotation: the wrapper fills the reader region and clips; the inner box is sized to the
    rotated footprint by ReaderRotator (inline styles) and spun in place. */
@@ -1672,8 +1683,6 @@
 /* The grip bar holds the collapse handle and (compact) the more/fewer-controls toggle. */
 .dock-handle-bar { display: flex; align-items: stretch; border-top: 1px solid var(--divider); }
 .dock-handle-bar .dock-handle { flex: 1; border-top: none; }
-.dock-more { flex: 0 0 auto; border: none; border-left: 1px solid var(--divider); background: var(--menu-bg); color: var(--status-fg); font-size: 12px; font-weight: 600; padding: 0 14px; cursor: pointer; }
-.dock-more.open, .dock-more:hover { color: var(--toggle-active-bg); background: var(--menu-highlight); }
 .dock-mini {
   display: flex;
   align-items: center;
@@ -2172,10 +2181,6 @@
   font-size: 15px; color: var(--status-fg);
 }
 .pb-toggle.open { color: var(--toggle-active-bg); }
-.controls-bar.compact:not(.more-open) .wpm-block select,
-.controls-bar.compact:not(.more-open) .mode-block,
-.controls-bar.compact:not(.more-open) .goal-row,
-.controls-bar.compact:not(.more-open) .goal-killfeed { display: none; }
 
 .goal-row {
   display: flex;
@@ -3189,27 +3194,31 @@
      bordered chips (label left, control right) instead of a ragged wrap; the goal row and speed
      block tighten so the dock stays short. */
   .controls-bar.compact { gap: 4px; }
+  /* Compressed mode tiles: shorter rows, tighter padding, smaller controls — the Modes page fits
+     without pushing the goal/status area off screen. */
   .controls-bar.compact.more-open .mode-block {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px 8px;
+    gap: 4px 6px;
     width: 100%;
     margin-top: 2px;
   }
   .controls-bar.compact.more-open .mode-block .mode-pair {
     justify-content: space-between;
+    align-items: center;
     flex-wrap: wrap;
-    gap: 4px 6px;
-    padding: 7px 10px;
+    gap: 0 6px;
+    padding: 2px 8px;
     border: 1px solid var(--divider);
-    border-radius: 9px;
-    min-height: 40px;
+    border-radius: 7px;
+    min-height: 0;
   }
   .controls-bar.compact.more-open .mode-block .mode-pair > span {
-    font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--status-fg);
+    font-size: 9px; letter-spacing: .05em; text-transform: uppercase; color: var(--status-fg);
   }
-  .controls-bar.compact.more-open .mode-block .mode-pair select { max-width: 96px; }
-  .controls-bar.compact.more-open .mode-block .mode-pair input[type='range'] { flex: 1 1 100%; }
+  .controls-bar.compact.more-open .mode-block .mode-pair select { max-width: 92px; font-size: 11px; padding: 1px 2px; min-height: 0; }
+  .controls-bar.compact.more-open .mode-block .mode-pair button { padding: 2px 10px; font-size: 11px; min-height: 0; }
+  .controls-bar.compact.more-open .mode-block .mode-pair input[type='range'] { flex: 1 1 100%; height: 18px; }
   .controls-bar.compact .wpm-block { width: 100%; justify-content: center; gap: 4px; }
   .controls-bar.compact .playback-row { row-gap: 8px; }
   .controls-bar.compact .goal-row { font-size: 12px; gap: 6px; }
