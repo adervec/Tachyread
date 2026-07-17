@@ -137,7 +137,6 @@ function AppInner() {
   const [recenterKey, setRecenterKey] = useState(0); // bump to snap the Lines pane back to the current word
   const [bioFeedPos, setBioFeedPos] = useState(() => state.global.bioFeedPos || null); // draggable Biometric Control Feed
   const [controlsCollapsed, setControlsCollapsed] = useState(false); // minimize the bottom dock for text room
-  const [moreOpen, setMoreOpen] = useState(false); // mobile: show the finer controls row (toggle lives in the dock grip bar)
   const [chromeHidden, setChromeHidden] = useState(false); // mobile: hide menu+tabs above the reader for text room
   const [immersive, setImmersive] = useState(false); // mobile: reading area fills the whole screen (tiny ⛶ overlay to exit)
   const touchRef = useRef(null); // swipe-gesture start point
@@ -2160,7 +2159,7 @@ function AppInner() {
                   </button>
                   {/* Rotate JUST the reader box (not the menus/controls) by a quarter-turn. */}
                   <button
-                    className={`rv-rotate${readerRotation ? ' on' : ''}`}
+                    className={`rv-rotate rv-rot${readerRotation ? ' on' : ''}`}
                     title="Rotate the reader 90° (mobile only)"
                     aria-label={`Rotate reader (currently ${readerRotation}°)`}
                     onClick={() => updateGlobal({ readerRotation: ((state.global.readerRotation || 0) + 90) % 360 })}
@@ -2251,19 +2250,6 @@ function AppInner() {
             <span className="dock-grip" />
             <span className="dock-handle-label">{controlsCollapsed ? '⌃ controls' : '⌄'}</span>
           </button>
-          {/* The "more/fewer controls" toggle lives here, in the bar that expands the dock — not inside
-              the controls pane. Only meaningful on compact screens with the dock expanded. */}
-          {isCompact && !controlsCollapsed && (
-            <button
-              className={`dock-more${moreOpen ? ' open' : ''}`}
-              onClick={() => setMoreOpen((o) => !o)}
-              aria-expanded={moreOpen}
-              aria-label={moreOpen ? 'Fewer controls' : 'More controls'}
-              title="More / fewer controls"
-            >
-              {moreOpen ? '▴ less' : '▾ more'}
-            </button>
-          )}
         </div>
         {controlsCollapsed ? (
           activeTab && (
@@ -2346,7 +2332,6 @@ function AppInner() {
             onJumpToCurrent={jumpToCurrent}
             onJumpToFrontier={jumpToFrontier}
             onJumpToGap={jumpToGap}
-            moreOpen={moreOpen}
           />
         ) : (
           <div className="controls-bar" style={{ opacity: 0.5 }}>
