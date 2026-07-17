@@ -60,6 +60,13 @@
 .menu-bar .grow { flex: 1; }
 .menu-bar .right-toggles { display: flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 11px; color: var(--status-fg); }
 .menu-bar .right-toggles button { font-size: 11px; padding: 3px 8px; }
+/* Quick reading-font stepper next to the theme select (desktop right-toggles + mobile top bar). */
+.menu-font-btn {
+  border: 1px solid var(--input-border); border-radius: 5px; background: var(--input-bg, transparent);
+  color: var(--menu-fg); font-size: 11px; font-weight: 600; padding: 3px 7px; cursor: pointer;
+}
+.menu-font-btn:disabled { opacity: 0.4; cursor: default; }
+.menu-bar.compact .menu-font-btn { padding: 5px 9px; margin-right: 4px; }
 
 .menu-dropdown {
   position: absolute;
@@ -1484,7 +1491,9 @@
 .line-row.status-NavSessionRead .text { color: var(--nav-session-read-fg); background: color-mix(in srgb, var(--nav-session-read-fg) 10%, transparent); border-radius: 3px; }
 .line-row.status-Current { background: var(--current-line-bg); }
 .line-row.status-Current .text { color: var(--current-line-fg); }
-.line-row.in-current-para { background: var(--current-para-bg); }
+/* Paragraph highlight lives in the line-number gutter only — tinting the text itself read as a
+   second "current line" band and competed with the read-status colours. */
+.line-row.in-current-para .num { background: var(--current-para-bg); border-radius: 2px; }
 .line-row.is-header-footer .text { font-style: italic; }
 .line-row.toc-entry { background: var(--toc-entry-bg); }
 .line-row.toc-entry .text { color: var(--toc-entry-fg); font-weight: bold; }
@@ -1492,7 +1501,9 @@
 .line-row .word.current.style-Underline { text-decoration: underline; text-decoration-color: var(--cw-color, currentColor); }
 .line-row .word.current.style-Overline { text-decoration: overline; text-decoration-color: var(--cw-color, currentColor); }
 .line-row .word.current.style-Underline.style-Overline { text-decoration: underline overline; text-decoration-color: var(--cw-color, currentColor); }
-.line-row .word.current.style-Bold { font-weight: 800; }
+/* "Bold" via stroke/shadow, not font-weight — real bolding widens the glyphs and could push the
+   line's last word onto the next visual line every time the highlight crossed it. */
+.line-row .word.current.style-Bold { -webkit-text-stroke: 0.5px currentColor; text-shadow: 0 0 0.6px currentColor; }
 .line-row .word.current.style-Italic { font-style: italic; }
 .line-row .word.current.style-Color { color: var(--cw-color, var(--orp-fg)); }
 .line-row .word.current.style-Background { background: color-mix(in srgb, var(--cw-color, #ffeb3b) 35%, transparent); border-radius: 2px; }
@@ -3145,6 +3156,9 @@
      screen. Cap the dock and let it scroll internally so the status bar (a separate grid row) always
      stays visible; the collapsed dock is short and never triggers the scroll. */
   .controls-dock { max-height: 62dvh; overflow-y: auto; }
+  /* The grip + more/less bar stays pinned while the expanded dock scrolls, so collapsing or
+     shrinking the controls never requires scrolling back to the top first. */
+  .controls-dock .dock-handle-bar { position: sticky; top: 0; z-index: 6; background: var(--pane-bg); }
   /* Sleeker mobile controls: the "More"-revealed mode toggles become a tidy 2-column grid of
      bordered chips (label left, control right) instead of a ragged wrap; the goal row and speed
      block tighten so the dock stays short. */
@@ -3178,6 +3192,23 @@
   .grab-shots-col { flex: 1 1 auto; width: 100%; }
   .grab-shots { max-height: 36vh; }
 }
+
+/* Full-screen (immersive) reading on mobile: every piece of chrome disappears — only the reading
+   area and a tiny translucent ⛶ overlay to exit (or a shake, if enabled) remain. */
+.app.immersive .app-chrome,
+.app.immersive .reading-view-switch,
+.app.immersive .controls-dock,
+.app.immersive .app-status,
+.app.immersive .incognito-banner,
+.app.immersive .chapter-heading { display: none; }
+.immersive-exit {
+  position: fixed; top: 6px; right: 6px; z-index: 6500;
+  width: 30px; height: 30px; padding: 0; line-height: 1;
+  border: 1px solid var(--divider); border-radius: 8px;
+  background: var(--menu-bg); color: var(--menu-fg);
+  opacity: 0.35; font-size: 15px; cursor: pointer;
+}
+.immersive-exit:active, .immersive-exit:hover { opacity: 0.9; }
 
 /* Phones & portrait tablets: side-by-side panes get cramped — stack them vertically and let the
    column scroll. The mouse-only resize splitters are hidden. Landscape tablets/laptops keep the
@@ -3406,7 +3437,12 @@
 .an-actions { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .an-card textarea { width: 100%; box-sizing: border-box; }
 /* Author/genre rows: completion bar + library crosslink */
-.lj-ref-bar { flex: 0 1 120px; margin-left: auto; }
+/* Fixed-width, right-anchored completion bar so every row's bar starts at the same x — a shrinkable
+   bar started wherever the name/meta happened to end, which read as misaligned. The two-class
+   selector outranks .lj-series-bar's later margin-left. */
+.lj-refhead .lj-ref-bar, .lj-ref-bar { flex: 0 0 120px; }
+.lj-refhead .lj-ref-bar { margin-left: auto; }
+.lj-refhead > b { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lj-ref-jump { padding: 0 6px; color: var(--toggle-active-bg); font-weight: 700; cursor: pointer; }
 .lj-refhead { display: flex; align-items: center; gap: 8px; width: 100%; }
 /* Archived AI analyses */
@@ -3451,6 +3487,9 @@
 .lj-series-head em { font-style: normal; color: var(--status-fg); font-size: 12px; }
 .lj-series-count { font-weight: 700; font-size: 12px; }
 .lj-series-vols { display: flex; align-items: center; gap: 4px; margin: 6px 0; flex-wrap: wrap; }
+/* The series bar wraps onto its own full-width row — inline after N volume chips its start position
+   varied per series, which looked broken next to its neighbours. */
+.lj-series-vols > .lj-series-bar { flex: 1 1 100%; margin-left: 0; margin-top: 4px; }
 .lj-vol { min-width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--divider); background: transparent; cursor: pointer; font-size: 11px; font-weight: 700; padding: 0 4px; color: inherit; }
 .lj-vol-finished { background: var(--toggle-active-bg); color: #fff; border-color: var(--toggle-active-bg); }
 .lj-vol-reading { border-color: var(--toggle-active-bg); color: var(--toggle-active-bg); }
@@ -3462,6 +3501,24 @@
 .lj-series-next { display: flex; align-items: center; gap: 8px; font-size: 12px; flex-wrap: wrap; }
 
 .lj-list { display: flex; flex-direction: column; gap: 2px; max-height: 48vh; overflow-y: auto; }
+/* Library as a sortable full-width table: sticky clickable headers, rows fill the page. */
+.lj-tablewrap { overflow: auto; width: 100%; }
+.lj-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.lj-table th {
+  position: sticky; top: 0; z-index: 2; background: var(--menu-bg); color: var(--status-fg);
+  text-align: left; font-size: 11px; font-weight: 600; padding: 6px 6px; cursor: pointer;
+  border-bottom: 1px solid var(--divider); white-space: nowrap; user-select: none;
+}
+.lj-table th.on { color: var(--toggle-active-bg); }
+.lj-table td { padding: 5px 6px; border-bottom: 1px solid var(--divider); vertical-align: middle; white-space: nowrap; }
+.lj-table tbody tr { cursor: pointer; }
+.lj-table tbody tr:hover { background: color-mix(in srgb, var(--accent, #3a86ff) 6%, transparent); }
+.lj-table tbody tr.on { background: color-mix(in srgb, var(--accent, #3a86ff) 12%, transparent); }
+.lj-table .lj-td-title { white-space: normal; min-width: 180px; }
+.lj-table .lj-td-title b { margin-right: 6px; }
+.lj-table .lj-td-title em { color: var(--status-fg); font-size: 11px; }
+.lj-table .lj-td-title .lj-row-cover { float: left; margin-right: 6px; }
+.lj-table .lj-row-acts { display: flex; }
 .lj-row { display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--divider); }
 .lj-row-hit { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: 74px 1fr auto; gap: 8px; align-items: center; text-align: left; background: transparent; border: none; padding: 6px 4px; cursor: pointer; color: inherit; font: inherit; }
 .lj-row-hit.with-cover { grid-template-columns: 74px 26px 1fr auto; }
@@ -3510,6 +3567,12 @@
 /* Trackyread link chip in the reading-history view */
 .rh-link-chip { font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 10px; white-space: nowrap; opacity: 0.6; border: 1px solid var(--divider); }
 .rh-link-chip.on { opacity: 1; color: var(--toggle-active-bg); border-color: var(--toggle-active-bg); }
+/* In the Files table the chip is a live button (go to / link the Trackyread book). */
+button.rh-link-chip { background: transparent; color: inherit; cursor: pointer; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+button.rh-link-chip:hover { opacity: 1; background: color-mix(in srgb, var(--accent, #3a86ff) 10%, transparent); }
+.rh-td-prog { display: flex; align-items: center; gap: 6px; min-width: 90px; }
+.rh-td-prog .rh-progress { flex: 1 1 50px; }
+.rh-files-table .rh-open-file { padding: 2px 8px; }
 .rh-detail-link { margin: -4px 0 10px; }
 .rh-open-file { margin-left: 10px; font-size: 12px; vertical-align: middle; }
 .lj-bind { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--divider); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -3636,6 +3699,19 @@
 /* AI / Cowork */
 .lj-instr { width: 100%; background: var(--input-bg); color: var(--input-fg); border: 1px solid var(--input-border); border-radius: 4px; padding: 6px 8px; font: inherit; resize: vertical; margin: 6px 0; }
 .lj-aimsg { border-left: 3px solid var(--accent, #3a86ff); padding-left: 8px; }
+/* AI / Cowork related-activity feed */
+.lj-actfeed { display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; }
+.lj-actrow { display: flex; align-items: baseline; gap: 8px; font-size: 12px; padding: 3px 6px; border-bottom: 1px dashed var(--divider); }
+.lj-actrow:last-child { border-bottom: none; }
+.lj-actrow .lj-acttext { flex: 1 1 auto; min-width: 0; }
+.lj-actrow em { color: var(--status-fg); font-size: 11px; white-space: nowrap; }
+/* Weekly summaries (Analytics) */
+.lj-weeklies { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.lj-weekly { border: 1px solid var(--divider); border-radius: 8px; padding: 8px 10px; }
+.lj-weekly-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.lj-weekly-head em { color: var(--status-fg); font-size: 11px; }
+.lj-weekly-ai { margin-left: auto; font-size: 11px; color: var(--toggle-active-bg); font-weight: 600; }
+.lj-weekly-text { font-size: 12px; line-height: 1.45; }
 
 .lj-inline { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 6px 0; }
 .lj-reflist { max-height: 52vh; overflow-y: auto; margin-top: 6px; }

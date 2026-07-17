@@ -176,6 +176,71 @@ export function yearInBooks(books, year) {
   };
 }
 
+// ── Weekly summaries ─────────────────────────────────────────────────────────────────────────────
+// Algorithmic summaries of COMPLETED weeks (Mon–Sun, ending before the current week). `days` is an
+// array of {date:'YYYY-MM-DD', wordsRead, activeSecs} day aggregates (any order); finishes come from
+// the book list. Weeks with no reading AND no finishes are skipped. Newest week first. Each row's
+// `text` is the default summary; a cowork agent can replace it with a dressed-up version (stored in
+// the ai record's `weeklies`, keyed by the week's Monday date).
+export function weeklySummaries(days, books, { weeks = 8, now = Date.now() } = {}) {
+  const mondayOf = (t) => {
+    const d = new Date(t);
+    d.setUTCHours(0, 0, 0, 0);
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return d.getTime();
+  };
+  const iso = (t) => new Date(t).toISOString().slice(0, 10);
+  const curMonday = mondayOf(now);
+  const byWeek = new Map(); // weekStartMs → { words, secs, days:Set }
+  for (const d of days || []) {
+    const t = Date.parse((d.date || '') + 'T00:00:00Z');
+    if (!Number.isFinite(t) || t >= curMonday) continue; // only completed weeks
+    const w = mondayOf(t);
+    const cur = byWeek.get(w) || { words: 0, secs: 0, days: new Set() };
+    cur.words += d.wordsRead || 0;
+    cur.secs += d.activeSecs || 0;
+    if ((d.wordsRead || 0) > 0 || (d.activeSecs || 0) > 0) cur.days.add(d.date);
+    byWeek.set(w, cur);
+  }
+  const finishesByWeek = new Map();
+  for (const b of books || []) {
+    if (readStatus(b) !== 'finished') continue;
+    const t = finishMs(b);
+    if (t == null || t >= curMonday) continue;
+    const w = mondayOf(t);
+    if (!finishesByWeek.has(w)) finishesByWeek.set(w, []);
+    finishesByWeek.get(w).push(b);
+  }
+  const out = [];
+  for (let i = 1; i <= weeks; i++) {
+    const w = curMonday - i * 7 * 86400000;
+    const agg = byWeek.get(w);
+    const fins = finishesByWeek.get(w) || [];
+    if (!agg && !fins.length) continue;
+    const words = agg?.words || 0;
+    const secs = agg?.secs || 0;
+    const daysActive = agg?.days.size || 0;
+    const wpm = secs > 0 ? Math.round((words / secs) * 60) : 0;
+    const hrs = Math.floor(secs / 3600), mins = Math.round((secs % 3600) / 60);
+    const parts = [];
+    if (words > 0) {
+      parts.push(`Read ${words.toLocaleString()} words in ${hrs ? `${hrs}h ${mins}m` : `${mins}m`} across ${daysActive} day${daysActive === 1 ? '' : 's'}${wpm ? ` (≈${wpm} WPM effective)` : ''}.`);
+    } else if (fins.length) {
+      parts.push('No in-app reading recorded.');
+    }
+    if (fins.length) parts.push(`Finished ${fins.map((b) => `“${b.title}”${b.author ? ` (${b.author})` : ''}`).join(', ')}.`);
+    out.push({
+      week: iso(w), // the week's Monday — the key cowork uses to dress a week up
+      start: iso(w),
+      end: iso(w + 6 * 86400000),
+      words, secs, daysActive, wpm,
+      finished: fins.map((b) => ({ id: b.id, title: b.title, author: b.author || '' })),
+      text: parts.join(' '),
+    });
+  }
+  return out;
+}
+
 // Rough time-to-read. Prefer word count; fall back to pages (~275 words/page). null when unknown.
 export function estHours(book, wpm = 250) {
   const words = Number(book.words) || (Number(book.pages) ? Number(book.pages) * 275 : 0);

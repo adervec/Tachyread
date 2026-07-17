@@ -38,6 +38,8 @@ export function defaultFileSettings() {
     currentWordColor: '', // highlight colour for Color/Background/Box/Glow/Underline styles ('' = theme default)
     rightPaneFontSize: 12,
     lineSpacing: 1.5, // Lines-pane line-height multiplier
+    linesGridH: false, // faint horizontal gridlines on the Lines pane background
+    linesGridV: false, // faint vertical gridlines on the Lines pane background
     wallText: false, // "wall of text": merge source lines into flowing blocks (newlines → spaces/tabs)
     wallBreakEvery: 0, // in wall mode, also start a new block every N source lines (0 = only sections/%)
     sourceChecks: {}, // ticked checkboxes in html/markdown source sections: { section: [box…] }
@@ -313,6 +315,8 @@ export function defaultGlobalSettings() {
     chipMode: false,
     // Auto-minimize the controls dock while playing on compact screens, for more text room.
     autoMinimizeControls: false,
+    // Shake-to-toggle full-screen reading on phones (devicemotion; iOS asks permission once).
+    shakeFullscreen: false,
     // Pause non-TTS playback when the reading text scrolls off-screen (you can't read what you can't
     // see). Read-aloud / typing are exempt. Default on.
     pauseWhenTextHidden: true,

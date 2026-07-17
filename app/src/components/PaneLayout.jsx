@@ -3,6 +3,8 @@ import { Fragment, useRef } from 'react';
 // Horizontal resizable pane container. Every pane except the last has an explicit pixel
 // width (stored by id); the last pane flexes to fill. Splitters drag to resize the pane to
 // their left. The set of panes is data-driven so visibility toggles just add/remove entries.
+// Dragging uses pointer capture on the splitter itself — window-level listeners could miss the
+// pointerup (released outside the window / over an iframe) and leave the splitter glued to the mouse.
 export default function PaneLayout({ panes, widths, onResize, minWidth = 140 }) {
   const drag = useRef(null);
 
@@ -14,14 +16,11 @@ export default function PaneLayout({ panes, widths, onResize, minWidth = 140 }) 
   }
   function onUp() {
     drag.current = null;
-    window.removeEventListener('pointermove', onMove);
-    window.removeEventListener('pointerup', onUp);
     document.body.style.cursor = '';
   }
   function onDown(e, id, startW) {
     drag.current = { id, startX: e.clientX, startW };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    e.currentTarget.setPointerCapture?.(e.pointerId);
     document.body.style.cursor = 'col-resize';
     e.preventDefault();
   }
@@ -43,6 +42,10 @@ export default function PaneLayout({ panes, widths, onResize, minWidth = 140 }) 
                 aria-orientation="vertical"
                 title={`Drag to resize the ${p.label || p.id} pane`}
                 onPointerDown={(e) => onDown(e, p.id, w)}
+                onPointerMove={onMove}
+                onPointerUp={onUp}
+                onPointerCancel={onUp}
+                onLostPointerCapture={onUp}
               />
             )}
           </Fragment>

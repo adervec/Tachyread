@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react';
 import Face from './Face.jsx';
 import { useLineSweep } from './useLineSweep.js';
+import { useApp } from '../state/AppContext.jsx';
 
 // Mobile: the reader face(s) as a floating, draggable overlay with adjustable transparency —
 // so it can sit anywhere over the reading area instead of taking a slice of a small screen. The
 // stats stay in the dock; only the face floats. Position is passed in (persisted by App), opacity
 // is a per-tab face setting (Tab Settings → Animated faces).
 export default function FloatingFace({ tab, pos, onMove, onDrop }) {
+  const { state } = useApp();
   const { settings, doc, tracker } = tab;
   const idx = settings.wordIndex;
   const count = Math.max(1, Math.min(3, settings.faceCount || 1));
@@ -14,8 +16,12 @@ export default function FloatingFace({ tab, pos, onMove, onDrop }) {
   const opacity = Math.max(0.15, Math.min(1, settings.faceOpacity ?? 0.9));
 
   const wpm = (tracker && tracker.recentWpm()) || settings.wpm;
-  // Sweeps the eyes along the line in line-at-a-time modes (line/scroll/page) instead of snapping.
-  const lineProgress = useLineSweep(doc, idx, wpm);
+  // Sweeps the eyes along the line in line-at-a-time modes (line/page) instead of snapping; in
+  // scroll-to-read the eyes read along continuously at the live pace instead of tracking the frontier.
+  const lineProgress = useLineSweep(doc, idx, wpm, {
+    scroll: !!state.global.scrollAdvances,
+    getWpm: tracker ? () => tracker.recentWpm() : undefined,
+  });
 
   const elRef = useRef(null);
   const drag = useRef(null);

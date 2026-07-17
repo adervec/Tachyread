@@ -133,4 +133,17 @@ assert.notEqual(contentHash('hello'), contentHash('world'));
   assert.deepEqual(bindingAdds[0], { checksum: 'CS1', bookId: 'a' });
 }
 
+// weeklies: dressed-up weekly summaries validated (week must be a date, text non-empty)
+{
+  const { weeklyAdds } = applyAiOutput({
+    weeklies: [
+      { week: '2026-07-06', text: 'A big week of epic fantasy.' },
+      { week: 'not-a-date', text: 'dropped' },
+      { week: '2026-06-29', text: '   ' },
+    ],
+  }, {}, 5);
+  assert.equal(weeklyAdds.length, 1, 'junk weeklies dropped');
+  assert.deepEqual(weeklyAdds[0], { week: '2026-07-06', text: 'A big week of epic fantasy.' });
+}
+
 console.log('journeyAi.demo: all assertions passed ✅');
