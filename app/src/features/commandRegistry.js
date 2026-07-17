@@ -19,6 +19,9 @@ export const COMMANDS = [
   { id: 'nextPara', label: 'Next paragraph', icon: '⏭', run: (c) => c.nav?.('nextPara') },
   { id: 'prevPara', label: 'Previous paragraph', icon: '⏮', run: (c) => c.nav?.('prevPara') },
   { id: 'restart', label: 'Restart (to top)', icon: '⟲', run: (c) => c.nav?.('restart') },
+  { id: 'pageDown', label: 'Page down', icon: '⇟', run: (c) => c.page?.(1) },
+  { id: 'pageUp', label: 'Page up', icon: '⇞', run: (c) => c.page?.(-1) },
+  { id: 'jumpToCurrent', label: 'Jump to current word', icon: '⌖', run: (c) => c.jumpToCurrent?.() },
   { id: 'wpmUp', label: 'Speed up (+25 WPM)', icon: '➕', run: (c) => c.adjustWpm?.(25) },
   { id: 'wpmDown', label: 'Slow down (−25 WPM)', icon: '➖', run: (c) => c.adjustWpm?.(-25) },
 ];
@@ -54,7 +57,10 @@ export function matchVoice(transcript, rows) {
 
 // Default trigger→command maps — these reproduce the app's original hardcoded behavior exactly, so a
 // fresh install (or any trigger the user hasn't touched) works as before.
-export const DEFAULT_GESTURE_MAP = { thumbUp: 'wpmUp', thumbDown: 'wpmDown', fist: 'pause', victory: 'nextPara', wave: 'playPause' };
+export const DEFAULT_GESTURE_MAP = {
+  thumbUp: 'wpmUp', thumbDown: 'wpmDown', fist: 'pause', victory: 'nextPara', wave: 'playPause',
+  pointUp: 'pageUp', iLoveYou: 'jumpToCurrent', pinch: 'playPause', swipeLeft: 'prevPara', swipeRight: 'nextPara',
+};
 export const DEFAULT_VOICE_COMMANDS = [
   { phrase: 'play', commandId: 'play' },
   { phrase: 'pause', commandId: 'pause' },

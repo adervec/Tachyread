@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { useApp } from '../state/AppContext.jsx';
 import { fmtDateTime } from '../features/dateFmt.js';
 import {
   getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef, saveLibraryRef,
@@ -55,6 +56,46 @@ const clean = (v) => String(v || '').trim();
 // Map the Library editor's status pill back onto the book's completion/inProgress/shelf fields.
 const applyStatus = (book, status) => setReadStatus(book, status, todayISO());
 
+// Unified vs split view of the headline numbers: bucket books into long-form / short-form+articles /
+// AI-generated so throwaway content can be read OUT of the "real" totals at a glance.
+const TYPE_BUCKETS = [['long', '📚 Long-form'], ['short', '📄 Short-form & articles'], ['ai-gen', '🤖 AI-generated']];
+const bucketOf = (b) => {
+  const t = contentType(b);
+  return t === 'ai-gen' ? 'ai-gen' : t === 'short' || t === 'article' ? 'short' : 'long';
+};
+function TypeSplit({ books }) {
+  const rows = TYPE_BUCKETS.map(([key, label]) => {
+    const mine = books.filter((b) => bucketOf(b) === key);
+    const fin = mine.filter((b) => readStatus(b) === 'finished');
+    return {
+      key, label,
+      total: mine.length,
+      finished: fin.length,
+      words: fin.reduce((s, b) => s + (Number(b.words) || 0), 0),
+      pages: fin.reduce((s, b) => s + (Number(b.pages) || 0), 0),
+    };
+  }).filter((r) => r.total > 0);
+  if (!rows.length) return null;
+  return (
+    <div className="lj-tablewrap">
+      <table className="lj-table lj-split-table">
+        <thead><tr><th>Content</th><th>Books</th><th>Finished</th><th>Words read</th><th>Pages read</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.key}>
+              <td>{r.label}</td>
+              <td>{r.total.toLocaleString()}</td>
+              <td>{r.finished.toLocaleString()}</td>
+              <td>{r.words ? `${(r.words / 1e6).toFixed(2)}M` : '—'}</td>
+              <td>{r.pages ? r.pages.toLocaleString() : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function Stat({ v, l, sub }) {
   return <div className="rh-stat"><b className="rh-stat-v">{v}</b><span className="rh-stat-l">{l}</span>{sub && <em className="rh-stat-sub">{sub}</em>}</div>;
 }
@@ -109,6 +150,7 @@ function GoalCard({ books, goals, onSetGoal }) {
 }
 
 export default function LiteraryJourneyDialog({ global, onPatch, initialTab, focusBookId, linkChecksum, linkFileName, onClose }) {
+  const { openRecent } = useApp();
   const [books, setBooks] = useState(null);
   const [refs, setRefs] = useState({ authors: null, genres: null, subgenres: null });
   const [ai, setAi] = useState(null);
@@ -135,6 +177,8 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
 
   // Library view controls
   const [flt, setFlt] = useState({ readState: 'all', fnf: 'all', difficulty: [], recMin: 0, genre: 'all', search: '', recBy: 'all', tag: 'all', ctype: 'all' });
+  // Per-column filters live in the table header (status/title/author/genre/type/file-link).
+  const [colF, setColF] = useState({ title: '', author: '', genre: 'all', type: 'all', status: 'all', file: 'all' });
   const [sort, setSort] = useState({ key: 'rec', dir: 1 }); // table-header sorting; dir 1 = the key's natural order
   const [limit, setLimit] = useState(100);
   const [selected, setSelected] = useState(null);
@@ -290,9 +334,28 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   const recOptions = useMemo(() => (books ? [...new Set(books.map(recommender))].sort((a, b) => a.localeCompare(b)) : []), [books]);
   const tagOptions = useMemo(() => (books ? allTags(books) : []), [books]);
   const showCovers = !!global?.ljCovers; // Library-list cover thumbnails (hotlinks Open Library — opt-in)
+  // Reverse binding (book id → file checksum) + per-book reading facts for the table's File/Started/%.
+  const csForBook = useMemo(() => {
+    const m = {};
+    for (const [cs, id] of Object.entries(bindMap || {})) m[id] = cs;
+    return m;
+  }, [bindMap]);
+  const fileFacts = (b) => fileStats[csForBook[b.id]] || null;
   const filtered = useMemo(() => {
     if (!books) return [];
-    const base = filterBooks(books, flt);
+    let base = filterBooks(books, flt);
+    // Column filters (header row): text includes on title/author, exact on the rest.
+    const tq = colF.title.trim().toLowerCase();
+    const aq = colF.author.trim().toLowerCase();
+    base = base.filter((b) => {
+      if (colF.status !== 'all' && readStatus(b) !== colF.status) return false;
+      if (tq && !`${b.title || ''} ${b.series || ''}`.toLowerCase().includes(tq)) return false;
+      if (aq && !String(b.author || '').toLowerCase().includes(aq)) return false;
+      if (colF.genre !== 'all' && (b.genre || '') !== colF.genre) return false;
+      if (colF.type !== 'all' && contentType(b) !== colF.type) return false;
+      if (colF.file !== 'all' && !!csForBook[b.id] !== (colF.file === 'linked')) return false;
+      return true;
+    });
     const num = (v) => (v == null || v === '' ? -Infinity : Number(v));
     const cmp = {
       rec: (a, b) => num(b.recScore) - num(a.recScore),
@@ -305,10 +368,14 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
       pages: (a, b) => num(b.pages) - num(a.pages),
       pub: (a, b) => (pubYear(b) ?? -Infinity) - (pubYear(a) ?? -Infinity),
       finished: (a, b) => (finishMs(b) ?? -Infinity) - (finishMs(a) ?? -Infinity),
+      file: (a, b) => (csForBook[b.id] ? 1 : 0) - (csForBook[a.id] ? 1 : 0),
+      started: (a, b) => String(fileStats[csForBook[b.id]]?.firstRead || '').localeCompare(String(fileStats[csForBook[a.id]]?.firstRead || '')),
+      pct: (a, b) => (fileStats[csForBook[b.id]]?.coverage || 0) - (fileStats[csForBook[a.id]]?.coverage || 0),
     }[sort.key] || (() => 0);
     const sorted = [...base].sort(cmp);
     return sort.dir < 0 ? sorted.reverse() : sorted;
-  }, [books, flt, sort]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [books, flt, colF, sort, csForBook, fileStats]);
   const shown = filtered.slice(0, limit);
   const sortBy = (key) => setSort((s) => ({ key, dir: s.key === key ? -s.dir : 1 }));
   const sortMark = (key) => (sort.key === key ? (sort.dir > 0 ? ' ▾' : ' ▴') : '');
@@ -447,6 +514,10 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                 <Stat v={stats.words ? (stats.words / 1e6).toFixed(1) + 'M' : '0'} l="words read" />
                 <Stat v={stats.pages ? stats.pages.toLocaleString() : '0'} l="pages read" />
               </div>
+              <label className="inline-check" title="Break the totals out by long-form vs short-form/articles vs AI-generated content">
+                <input type="checkbox" checked={!!global?.ljSplitTypes} onChange={(e) => onPatch?.({ ljSplitTypes: e.target.checked })} /> Split by content type
+              </label>
+              {global?.ljSplitTypes && <TypeSplit books={books} />}
 
               <div className="rh-section-h">Difficulty of finished books</div>
               <div className="lj-diffbars">
@@ -512,18 +583,8 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                 </div>
               )}
               <div className="lj-toolbar">
-                <input className="lj-search" placeholder="Search title / author / series…" value={flt.search} onChange={(e) => { setFlt({ ...flt, search: e.target.value }); setLimit(60); }} />
-                <select value={flt.readState} onChange={(e) => setFlt({ ...flt, readState: e.target.value })}>
-                  <option value="all">All statuses</option><option value="finished">Finished</option><option value="reading">Reading</option><option value="queue">On deck</option><option value="toread">To read</option><option value="abandoned">Abandoned</option>
-                </select>
                 <select value={flt.fnf} onChange={(e) => setFlt({ ...flt, fnf: e.target.value })}>
                   <option value="all">Fiction + NF</option><option value="F">Fiction</option><option value="NF">Non-fiction</option>
-                </select>
-                <select value={flt.ctype} onChange={(e) => setFlt({ ...flt, ctype: e.target.value })} title="Content type">
-                  <option value="all">All types</option>{Object.entries(CONTENT_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                </select>
-                <select value={flt.genre} onChange={(e) => setFlt({ ...flt, genre: e.target.value })}>
-                  <option value="all">All genres</option>{genreOptions.map((g) => <option key={g} value={g}>{g}</option>)}
                 </select>
                 <select value={flt.recBy} onChange={(e) => setFlt({ ...flt, recBy: e.target.value })} title="Recommended by">
                   <option value="all">Any recommender</option>{recOptions.map((r) => <option key={r} value={r}>{r}</option>)}
@@ -558,10 +619,36 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                 <table className="lj-table">
                   <thead>
                     <tr>
-                      {[['status', 'St'], ['title', 'Title'], ['author', 'Author'], ['genre', 'Genre'], ['type', 'Type'], ['diff', 'D'], ['rec', '★'], ['pages', 'Pages'], ['pub', 'Pub'], ['finished', 'Finished']].map(([k, l]) => (
+                      {[['status', 'St'], ['title', 'Title'], ['author', 'Author'], ['genre', 'Genre'], ['type', 'Type'], ['file', '📄'], ['started', 'Started'], ['pct', '%'], ['diff', 'D'], ['rec', '★'], ['pages', 'Pages'], ['pub', 'Pub'], ['finished', 'Finished']].map(([k, l]) => (
                         <th key={k} className={sort.key === k ? 'on' : ''} onClick={() => sortBy(k)} title="Click to sort (click again to flip)">{l}{sortMark(k)}</th>
                       ))}
                       <th aria-label="Shelf actions" />
+                    </tr>
+                    {/* Column filters live right under their headers. */}
+                    <tr className="lj-filter-row">
+                      <th>
+                        <select value={colF.status} onChange={(e) => { setColF({ ...colF, status: e.target.value }); setLimit(100); }} title="Filter by status">
+                          <option value="all">all</option><option value="finished">✅</option><option value="reading">📖</option><option value="queue">📋</option><option value="toread">🔖</option><option value="abandoned">✕</option>
+                        </select>
+                      </th>
+                      <th><input placeholder="filter…" value={colF.title} onChange={(e) => { setColF({ ...colF, title: e.target.value }); setLimit(100); }} /></th>
+                      <th><input placeholder="filter…" value={colF.author} onChange={(e) => { setColF({ ...colF, author: e.target.value }); setLimit(100); }} /></th>
+                      <th>
+                        <select value={colF.genre} onChange={(e) => { setColF({ ...colF, genre: e.target.value }); setLimit(100); }} title="Filter by genre">
+                          <option value="all">all</option>{genreOptions.map((g) => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                      </th>
+                      <th>
+                        <select value={colF.type} onChange={(e) => { setColF({ ...colF, type: e.target.value }); setLimit(100); }} title="Filter by content type">
+                          <option value="all">all</option>{Object.entries(CONTENT_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                        </select>
+                      </th>
+                      <th>
+                        <select value={colF.file} onChange={(e) => { setColF({ ...colF, file: e.target.value }); setLimit(100); }} title="Filter by file link">
+                          <option value="all">all</option><option value="linked">📄</option><option value="unlinked">—</option>
+                        </select>
+                      </th>
+                      <th colSpan={8} />
                     </tr>
                   </thead>
                   <tbody>
@@ -570,6 +657,8 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                       const rc = finishCount(b);
                       const tgs = bookTags(b);
                       const cov = showCovers ? bookCoverUrl(b, 'S') : null;
+                      const cs = csForBook[b.id];
+                      const ff = fileFacts(b);
                       return (
                         <tr key={b.id} className={selected === b.id ? 'on' : ''} onClick={() => { setSelected(selected === b.id ? null : b.id); setAdding(false); }}>
                           <td><span className={`lj-status lj-${st}`} title={STATUS_LABEL[st]}>{STATUS_LABEL[st].split(' ')[0]}</span></td>
@@ -585,6 +674,17 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                           <td>{b.author || ''}</td>
                           <td>{b.genre || ''}</td>
                           <td>{contentType(b) !== 'long' ? (CONTENT_TYPES[contentType(b)] || '') : ''}</td>
+                          <td onClick={(e) => e.stopPropagation()}>
+                            {cs && (
+                              <button
+                                className="lj-file-open"
+                                title={`Linked file: ${ff?.fileName || cs.slice(0, 8)} — open it in the reader`}
+                                onClick={async () => { if (await openRecent(cs)) handleClose(); }}
+                              >📄</button>
+                            )}
+                          </td>
+                          <td>{ff?.firstRead || ''}</td>
+                          <td>{ff && ff.coverage > 0 ? `${Math.round(ff.coverage * 100)}%` : ''}</td>
                           <td>{b.difficultyLevel || ''}</td>
                           <td>{b.recScore || ''}</td>
                           <td>{b.pages || ''}</td>
@@ -611,7 +711,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
             </div>
           )}
 
-          {tab === 'queue' && <QueueView books={books} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
+          {tab === 'queue' && <QueueView books={books} fileStats={fileStats} bindMap={bindMap || {}} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
           {tab === 'series' && <SeriesView books={books} crossNotes={crossNotes} onDeleteCross={async (id) => { await deleteCrossNote(id); setCrossNotes(await getCrossNotes()); }} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
           {tab === 'groups' && (
             <GroupsView
@@ -636,9 +736,9 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               onReloadCross={async () => setCrossNotes(await getCrossNotes())}
             />
           )}
-          {tab === 'analytics' && <AnalyticsView books={books} dayAgg={dayAgg} ai={ai} />}
-          {tab === 'authors' && <RefList kind="author" items={refs.authors} books={books} onOpen={(name) => { setFlt({ ...flt, search: name, genre: 'all' }); setLimit(60); setTab('library'); }} />}
-          {tab === 'genres' && <RefList kind="genre" items={refs.genres} subitems={refs.subgenres} books={books} onOpen={(name) => { setFlt({ ...flt, genre: name, search: '' }); setLimit(60); setTab('library'); }} />}
+          {tab === 'analytics' && <AnalyticsView books={books} dayAgg={dayAgg} ai={ai} splitTypes={!!global?.ljSplitTypes} onSplitTypes={(v) => onPatch?.({ ljSplitTypes: v })} />}
+          {tab === 'authors' && <RefList kind="author" items={refs.authors} books={books} onOpen={(name) => { setColF({ ...colF, author: name, genre: 'all' }); setLimit(100); setTab('library'); }} />}
+          {tab === 'genres' && <RefList kind="genre" items={refs.genres} subitems={refs.subgenres} books={books} onOpen={(name) => { setColF({ ...colF, genre: name, author: '' }); setLimit(100); setTab('library'); }} />}
           {tab === 'archetype' && <ArchetypeView books={books} />}
           {tab === 'constellation' && <ConstellationView books={books} ai={ai} />}
           {tab === 'ai' && <AiView books={books} ai={ai} global={global} bindMap={bindMap || {}} onBind={bind} onReload={reload} />}
@@ -848,6 +948,16 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
   useEffect(() => { setB(book); }, [book]);
   const status = readStatus(b);
   const set = (p) => setB({ ...b, ...p });
+  // Dirty tracking: which fields differ from the record as loaded. Changed fields highlight, and
+  // Save only enables once something actually changed (always enabled for a brand-new book).
+  const dirtyKeys = useMemo(() => {
+    const norm = (v) => (Array.isArray(v) ? JSON.stringify(v) : v == null || v === '' ? '' : String(v));
+    const keys = new Set([...Object.keys(book || {}), ...Object.keys(b || {})]);
+    const out = new Set();
+    for (const k of keys) if (norm(book?.[k]) !== norm(b?.[k])) out.add(k);
+    return out;
+  }, [b, book]);
+  const dcls = (...ks) => (ks.some((k) => dirtyKeys.has(k)) ? 'lj-dirty' : undefined);
   // Open Library lookup: explicit click only (sends the title/author or ISBN there). Fills BLANK
   // fields into the form — nothing is saved until the user hits Save.
   const [olBusy, setOlBusy] = useState(false);
@@ -901,25 +1011,41 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
   const totalSecs = estimateTotalSecs({ readSecs: b.readSecs, words: bookWordCount(b), audiobookFinish: b.audiobookFinish, eyeFrac });
   return (
     <div className="lj-editor">
-      {cover && <img className="lj-cover" src={cover} alt="" loading="lazy" onError={(e) => { e.target.style.display = 'none'; }} />}
+      {/* Cover art: preview + one-line controls (custom URL / fetch / remove) instead of fiddling
+          with ISBNs to coax a cover out. */}
+      <div className="lj-cover-ed">
+        {cover
+          ? <img className="lj-cover" src={cover} alt="" loading="lazy" onError={(e) => { e.target.style.opacity = 0.25; }} />
+          : <span className="lj-cover lj-cover-none" title="No cover yet — paste an image URL or fetch from Open Library">📕</span>}
+        <div className={`lj-cover-ctl ${dcls('coverUrl', 'coverId') || ''}`}>
+          <input
+            placeholder="Custom cover image URL…"
+            value={b.coverUrl || ''}
+            onChange={(e) => set({ coverUrl: e.target.value.trim() })}
+            title="Paste any image URL to use as this book's cover (wins over the Open Library one)"
+          />
+          <button type="button" disabled={olBusy || (!b.title && !b.isbn)} title="Fetch a cover (and blank details) from Open Library" onClick={fetchOl}>🔎 Fetch</button>
+          {(b.coverUrl || b.coverId) && <button type="button" title="Remove the cover (custom URL and fetched cover id)" onClick={() => set({ coverUrl: '', coverId: null })}>🗑 Remove</button>}
+        </div>
+      </div>
       <div className="lj-editor-grid">
-        <label>Title<input value={b.title || ''} onChange={(e) => set({ title: e.target.value })} /></label>
-        <label>Author<input value={b.author || ''} onChange={(e) => set({ author: e.target.value })} /></label>
-        <label>Genre<input value={b.genre || ''} onChange={(e) => set({ genre: e.target.value })} /></label>
-        <label>Subgenre<input value={b.subgenre || ''} onChange={(e) => set({ subgenre: e.target.value })} /></label>
-        <label>Fiction?<select value={b.fnf || ''} onChange={(e) => set({ fnf: e.target.value })}><option value="F">Fiction</option><option value="NF">Non-fiction</option></select></label>
-        <label>Content type<select value={contentType(b)} onChange={(e) => set({ type: e.target.value })}>{Object.entries(CONTENT_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
-        <label>Status<select value={status} onChange={(e) => setB(applyStatus(b, e.target.value))}><option value="toread">To read</option><option value="queue">On deck</option><option value="reading">Reading</option><option value="finished">Finished</option><option value="abandoned">Abandoned</option></select></label>
-        <label>Finished<input type="date" value={(finishMs(b) ? new Date(finishMs(b)).toISOString().slice(0, 10) : '')} onChange={(e) => set({ finishTime: e.target.value })} /></label>
-        <label>Rec. by<input value={b.recBy || ''} placeholder="Claude" onChange={(e) => set({ recBy: e.target.value })} /></label>
-        <label>Rating<input type="number" min="0" max="5" value={bookRating(b) || ''} onChange={(e) => set({ rating: Number(e.target.value) })} /></label>
-        <label>Difficulty<input type="number" min="1" max="5" value={b.difficultyLevel || ''} onChange={(e) => set({ difficultyLevel: Number(e.target.value) })} /></label>
-        <label>Rec score<input type="number" min="0" max="10" value={b.recScore || ''} onChange={(e) => set({ recScore: Number(e.target.value) })} /></label>
-        <label>Pages<input type="number" value={b.pages || ''} onChange={(e) => set({ pages: Number(e.target.value) })} /></label>
-        <label>Words<input type="number" value={b.words || ''} placeholder={b.pages ? `~${bookWordCount({ pages: b.pages })}` : ''} onChange={(e) => set({ words: Number(e.target.value) })} /></label>
-        <label>Published<input value={b.pubDate || ''} onChange={(e) => set({ pubDate: e.target.value })} /></label>
-        <label>ISBN<input value={b.isbn || ''} onChange={(e) => set({ isbn: e.target.value })} /></label>
-        <label>Tags<input value={Array.isArray(b.tags) ? b.tags.join(', ') : (b.tags || '')} placeholder="comma, separated" onChange={(e) => set({ tags: e.target.value })} /></label>
+        <label className={dcls('title')}>Title<input value={b.title || ''} onChange={(e) => set({ title: e.target.value })} /></label>
+        <label className={dcls('author')}>Author<input value={b.author || ''} onChange={(e) => set({ author: e.target.value })} /></label>
+        <label className={dcls('genre')}>Genre<input value={b.genre || ''} onChange={(e) => set({ genre: e.target.value })} /></label>
+        <label className={dcls('subgenre')}>Subgenre<input value={b.subgenre || ''} onChange={(e) => set({ subgenre: e.target.value })} /></label>
+        <label className={dcls('fnf')}>Fiction?<select value={b.fnf || ''} onChange={(e) => set({ fnf: e.target.value })}><option value="F">Fiction</option><option value="NF">Non-fiction</option></select></label>
+        <label className={dcls('type')}>Content type<select value={contentType(b)} onChange={(e) => set({ type: e.target.value })}>{Object.entries(CONTENT_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+        <label className={dcls('completion', 'inProgress', 'shelf')}>Status<select value={status} onChange={(e) => setB(applyStatus(b, e.target.value))}><option value="toread">To read</option><option value="queue">On deck</option><option value="reading">Reading</option><option value="finished">Finished</option><option value="abandoned">Abandoned</option></select></label>
+        <label className={dcls('finishTime')}>Finished<input type="date" value={(finishMs(b) ? new Date(finishMs(b)).toISOString().slice(0, 10) : '')} onChange={(e) => set({ finishTime: e.target.value })} /></label>
+        <label className={dcls('recBy')}>Rec. by<input value={b.recBy || ''} placeholder="Claude" onChange={(e) => set({ recBy: e.target.value })} /></label>
+        <label className={dcls('rating')}>Rating<input type="number" min="0" max="5" value={bookRating(b) || ''} onChange={(e) => set({ rating: Number(e.target.value) })} /></label>
+        <label className={dcls('difficultyLevel')}>Difficulty<input type="number" min="1" max="5" value={b.difficultyLevel || ''} onChange={(e) => set({ difficultyLevel: Number(e.target.value) })} /></label>
+        <label className={dcls('recScore')}>Rec score<input type="number" min="0" max="10" value={b.recScore || ''} onChange={(e) => set({ recScore: Number(e.target.value) })} /></label>
+        <label className={dcls('pages')}>Pages<input type="number" value={b.pages || ''} onChange={(e) => set({ pages: Number(e.target.value) })} /></label>
+        <label className={dcls('words')}>Words<input type="number" value={b.words || ''} placeholder={b.pages ? `~${bookWordCount({ pages: b.pages })}` : ''} onChange={(e) => set({ words: Number(e.target.value) })} /></label>
+        <label className={dcls('pubDate')}>Published<input value={b.pubDate || ''} onChange={(e) => set({ pubDate: e.target.value })} /></label>
+        <label className={dcls('isbn')}>ISBN<input value={b.isbn || ''} onChange={(e) => set({ isbn: e.target.value })} /></label>
+        <label className={dcls('tags')}>Tags<input value={Array.isArray(b.tags) ? b.tags.join(', ') : (b.tags || '')} placeholder="comma, separated" onChange={(e) => set({ tags: e.target.value })} /></label>
       </div>
       <div className="lj-inline">
         <button type="button" disabled={olBusy || (!b.title && !b.isbn)} onClick={fetchOl}
@@ -941,13 +1067,13 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
       <div className="lj-readtime">
         <div className="field-section" style={{ marginTop: 0 }}>Reading time</div>
         <div className="lj-editor-grid">
-          <label>Started
+          <label className={dcls('startTime')}>Started
             <span className="lj-inline">
               <input type="date" value={b.startTime || ''} onChange={(e) => set({ startTime: e.target.value })} />
               {docStats?.firstRead && b.startTime !== docStats.firstRead && <button type="button" className="link-btn" title="Use the first date you read the linked document" onClick={() => set({ startTime: docStats.firstRead })}>auto</button>}
             </span>
           </label>
-          <label>Time reading (min)
+          <label className={dcls('readSecs')}>Time reading (min)
             <span className="lj-inline">
               <input type="number" min="0" value={b.readSecs ? Math.round(b.readSecs / 60) : ''} onChange={(e) => set({ readSecs: Math.max(0, Number(e.target.value) || 0) * 60 })} />
               {docStats?.activeSecs > 0 && b.readSecs !== docStats.activeSecs && <button type="button" className="link-btn" title="Use the active reading time recorded for the linked document" onClick={() => set({ readSecs: docStats.activeSecs })}>auto</button>}
@@ -969,7 +1095,7 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
         <p className="settings-note" style={{ margin: '2px 0 0' }}>{readingTimeSummary(b, finishISO)}</p>
       </div>
 
-      <label className="lj-editor-notes">Notes<textarea rows={3} value={b.notes || ''} onChange={(e) => set({ notes: e.target.value })} /></label>
+      <label className={`lj-editor-notes ${dcls('notes') || ''}`}>Notes<textarea rows={3} value={b.notes || ''} onChange={(e) => set({ notes: e.target.value })} /></label>
       <AiNotesBlock book={b} />
       {!isNew && <CrossNotesBlock book={b} books={books} crossNotes={crossNotes} onSaveCross={onSaveCross} onDeleteCross={onDeleteCross} />}
       {!isNew && onBind && (
@@ -987,7 +1113,14 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
         </div>
       )}
       <div className="lj-editor-buttons">
-        <button className="primary" disabled={!b.title} onClick={() => onSave({ ...b, tags: bookTags(b) })}>{isNew ? 'Add' : 'Save'}</button>
+        <button
+          className="primary"
+          disabled={!b.title || (!isNew && dirtyKeys.size === 0)}
+          title={!isNew && dirtyKeys.size === 0 ? 'No changes yet — edit a field first' : undefined}
+          onClick={() => onSave({ ...b, tags: bookTags(b) })}
+        >
+          {isNew ? 'Add' : dirtyKeys.size ? `Save ${dirtyKeys.size} change${dirtyKeys.size === 1 ? '' : 's'}` : 'Save'}
+        </button>
         <button onClick={onCancel}>Cancel</button>
         {!isNew && onDelete && <button className="lj-danger" onClick={onDelete}>Delete</button>}
       </div>
@@ -995,11 +1128,13 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
   );
 }
 
-// Authors / Genres reference tab — shows the imported reference records with a live count, plus a
-// search. Falls back to book-derived genre counts when no reference data was imported.
+// Authors / Genres reference tab — a sortable table with per-row completion bars and best-effort
+// Goodreads / Wikipedia search links. Falls back to book-derived counts when no reference data was
+// imported; a row expands to show its imported reference fields.
 function RefList({ kind, items, subitems, books, onOpen }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(null);
+  const [rsort, setRsort] = useState({ key: 'books', dir: 1 });
   const nameKey = kind === 'author' ? 'author' : 'genre';
   const derived = useMemo(() => {
     if (items?.length) return null;
@@ -1007,41 +1142,85 @@ function RefList({ kind, items, subitems, books, onOpen }) {
     for (const b of books) { const k = b[nameKey]; if (k) counts[k] = (counts[k] || 0) + 1; }
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ [nameKey]: name, count }));
   }, [items, books, nameKey]);
-  const list = (items || derived || []).filter((it) => !q || String(it[nameKey] || '').toLowerCase().includes(q.toLowerCase()));
+  const rows = useMemo(() => {
+    const base = (items || derived || [])
+      .filter((it) => !q || String(it[nameKey] || '').toLowerCase().includes(q.toLowerCase()))
+      .map((it) => {
+        const name = it[nameKey] || '—';
+        const mine = books.filter((b) => (b[nameKey] || '') === name);
+        const fin = mine.filter((b) => readStatus(b) === 'finished').length;
+        const total = mine.length || it.count || 0;
+        return { it, name, mine: mine.length, fin, total, pct: total ? (fin / total) * 100 : 0 };
+      });
+    const cmp = {
+      name: (a, b) => a.name.localeCompare(b.name),
+      books: (a, b) => b.total - a.total,
+      finished: (a, b) => b.fin - a.fin,
+      pct: (a, b) => b.pct - a.pct,
+    }[rsort.key] || (() => 0);
+    const sorted = base.sort(cmp);
+    return rsort.dir < 0 ? sorted.reverse() : sorted;
+  }, [items, derived, q, books, nameKey, rsort]);
+  const rsortBy = (key) => setRsort((s) => ({ key, dir: s.key === key ? -s.dir : 1 }));
+  const rsortMark = (key) => (rsort.key === key ? (rsort.dir > 0 ? ' ▾' : ' ▴') : '');
+  // Best-effort external lookups — plain search URLs, nothing is fetched until clicked.
+  const grUrl = (name) => `https://www.goodreads.com/search?q=${encodeURIComponent(name)}`;
+  const wikiUrl = (name) => `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(name)}`;
   return (
     <div className="lj-ref">
       <input className="lj-search" placeholder={`Search ${kind}s…`} value={q} onChange={(e) => setQ(e.target.value)} />
-      <p className="settings-note">{list.length} {kind}{list.length === 1 ? '' : 's'}{!items && ' (derived from your books)'}</p>
-      <div className="lj-reflist">
-        {list.slice(0, 300).map((it, i) => {
-          const name = it[nameKey] || '—';
-          return (
-            <div key={name + i} className="lj-refitem">
-              {(() => {
-                const mine = books.filter((b) => (b[nameKey] || '') === name);
-                const fin = mine.filter((b) => readStatus(b) === 'finished').length;
-                const pct = mine.length ? (fin / mine.length) * 100 : 0;
-                return (
-                  <button className="lj-refhead" onClick={() => setOpen(open === i ? null : i)}>
-                    <b>{name}</b>{(it.count != null || mine.length > 0) && <em>{fin}/{mine.length || it.count} finished</em>}{it.lifespan && <em>{it.lifespan}</em>}{it.emerged && <em>{it.emerged}</em>}
-                    <span className="lj-series-bar lj-ref-bar" title={`${fin} of ${mine.length} finished`}><i style={{ width: `${pct}%` }} /></span>
-                    <span className="lj-ref-jump" role="link" title={`Show ${name} in the Library`} onClick={(e) => { e.stopPropagation(); onOpen?.(name); }}>↗</span>
-                  </button>
-                );
-              })()}
-              {open === i && (
-                <div className="lj-refbody">
-                  {Object.entries(it).filter(([k, v]) => v && k !== nameKey && typeof v !== 'object').map(([k, v]) => (
-                    <div key={k}><b>{k}:</b> {String(v)}</div>
-                  ))}
-                  {kind === 'genre' && subitems?.length > 0 && (
-                    <div className="lj-subgenres">Subgenres: {subitems.filter((s) => s.genre === name).map((s) => s.subgenre).join(', ') || '—'}</div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+      <p className="settings-note">{rows.length} {kind}{rows.length === 1 ? '' : 's'}{!items && ' (derived from your books)'} · click a name for its reference details</p>
+      <div className="lj-tablewrap">
+        <table className="lj-table lj-ref-table">
+          <thead>
+            <tr>
+              {[['name', kind === 'author' ? 'Author' : 'Genre'], ['books', 'Books'], ['finished', 'Finished'], ['pct', 'Completion']].map(([k, l]) => (
+                <th key={k} className={rsort.key === k ? 'on' : ''} onClick={() => rsortBy(k)} title="Click to sort (click again to flip)">{l}{rsortMark(k)}</th>
+              ))}
+              <th>Links</th>
+              <th aria-label="Show in library" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 300).map(({ it, name, fin, total, pct }, i) => (
+              <Fragment key={name + i}>
+                <tr onClick={() => setOpen(open === i ? null : i)}>
+                  <td className="lj-td-title"><b>{name}</b>{it.lifespan ? <em> {it.lifespan}</em> : it.emerged ? <em> {it.emerged}</em> : null}</td>
+                  <td>{total}</td>
+                  <td>{fin}</td>
+                  <td>
+                    <div className="rh-td-prog" title={`${fin} of ${total} finished`}>
+                      <span>{total ? Math.round(pct) : 0}%</span>
+                      <span className="lj-series-bar lj-ref-bar"><i style={{ width: `${pct}%` }} /></span>
+                    </div>
+                  </td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <a className="link-btn" href={grUrl(name)} target="_blank" rel="noreferrer noopener" title={`Search Goodreads for ${name}`}>GR</a>
+                    {' '}
+                    <a className="link-btn" href={wikiUrl(name)} target="_blank" rel="noreferrer noopener" title={`Search Wikipedia for ${name}`}>W</a>
+                  </td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <button className="link-btn" title={`Show ${name} in the Library`} onClick={() => onOpen?.(name)}>↗</button>
+                  </td>
+                </tr>
+                {open === i && (
+                  <tr className="lj-ref-detail">
+                    <td colSpan={6}>
+                      <div className="lj-refbody">
+                        {Object.entries(it).filter(([k, v]) => v && k !== nameKey && typeof v !== 'object').map(([k, v]) => (
+                          <div key={k}><b>{k}:</b> {String(v)}</div>
+                        ))}
+                        {kind === 'genre' && subitems?.length > 0 && (
+                          <div className="lj-subgenres">Subgenres: {subitems.filter((s) => s.genre === name).map((s) => s.subgenre).join(', ') || '—'}</div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -1156,20 +1335,23 @@ const FULL_VIEW = { x: -CONSTELLATION_R - 40, y: -CONSTELLATION_R - 40, w: (CONS
 // Typed relatedness links — a real knowledge graph. Colours + labels per relationship kind; the AI
 // heavy "knowledge graph" task returns treeMeta.edges as [idA, idB, kind]. Unknown kinds fall back to
 // a neutral "related".
+// `dir: true` kinds are DIRECTIONAL (edge order [idA, idB] means A → B) and draw an arrowhead.
 const EDGE_KINDS = {
-  influence: { color: '#c9a227', label: 'influence' },
-  prereq: { color: '#3a86ff', label: 'prerequisite' },
+  influence: { color: '#c9a227', label: 'influence', dir: true },
+  prereq: { color: '#3a86ff', label: 'prerequisite', dir: true },
   series: { color: '#06d6a0', label: 'series' },
   'same-author': { color: '#b5651d', label: 'same author' },
   theme: { color: '#7209b7', label: 'shared theme' },
   contrast: { color: '#ef476f', label: 'contrast / rebuttal' },
-  responds: { color: '#2a9d8f', label: 'responds to' },
+  responds: { color: '#2a9d8f', label: 'responds to', dir: true },
   similarity: { color: '#4cc9f0', label: 'similar work' },
   opposed: { color: '#d00000', label: 'opposed pair' },
   'same-universe': { color: '#ffb703', label: 'same universe' },
   link: { color: '#8d99ae', label: 'related' },
 };
 const edgeColor = (k) => (EDGE_KINDS[k] || EDGE_KINDS.link).color;
+const edgeDir = (k) => !!(EDGE_KINDS[k] || EDGE_KINDS.link).dir;
+const DIR_KINDS = Object.keys(EDGE_KINDS).filter((k) => EDGE_KINDS[k].dir);
 const BOOK_LINKS = [['isbnUrl', 'Find'], ['goodreadsUrl', 'Goodreads'], ['wikipediaUrl', 'Wikipedia'], ['platformUrl', 'Read']];
 
 // The tree view remembers itself between opens (pan/zoom + every filter) — device-local view state.
@@ -1297,9 +1479,26 @@ function ConstellationView({ books, ai }) {
       <p className="settings-note">{shown.length} of {layout.nodes.length} books · size = rec score · distance from centre = difficulty · brightness = read status{layout.edges.length ? ` · ${layout.edges.length} knowledge-graph links` : ' · no links yet (build the knowledge graph from AI / Cowork)'}. Drag to pan, scroll to zoom, click a star for details (open several; tightly stacked stars show a chooser).</p>
       <div className="lj-sky-wrap">
         <svg ref={svgRef} className="lj-sky" viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp} onWheel={(e) => zoom(e.deltaY > 0 ? 1.1 : 0.9)}>
+          {/* Arrowheads for directional kinds (influence / prerequisite / responds-to): A → B. */}
+          <defs>
+            {DIR_KINDS.map((k) => (
+              <marker key={k} id={`lj-arr-${k}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse" markerUnits="strokeWidth">
+                <path d="M 0 1 L 8 5 L 0 9 z" fill={edgeColor(k)} />
+              </marker>
+            ))}
+          </defs>
           {shownEdges.map((e, i) => {
             const on = openSet.has(e.a) || openSet.has(e.b);
-            return <line key={i} className={`lj-edge${on ? ' lj-edge-on' : ''}`} x1={e.ax} y1={e.ay} x2={e.bx} y2={e.by} stroke={edgeColor(e.kind)} strokeWidth={(on ? 2.2 : 1) * (view.w / FULL_VIEW.w)} opacity={openIds.length ? (on ? 0.95 : 0.15) : 0.5} />;
+            const dir = edgeDir(e.kind);
+            // Directional edges stop at the target star's rim so the arrowhead isn't buried in it.
+            let { bx, by } = e;
+            if (dir) {
+              const dx = e.bx - e.ax, dy = e.by - e.ay;
+              const len = Math.hypot(dx, dy) || 1;
+              const trim = (e.br || 6) + 2;
+              if (len > trim * 2) { bx = e.bx - (dx / len) * trim; by = e.by - (dy / len) * trim; }
+            }
+            return <line key={i} className={`lj-edge${on ? ' lj-edge-on' : ''}`} x1={e.ax} y1={e.ay} x2={bx} y2={by} stroke={edgeColor(e.kind)} strokeWidth={(on ? 2.2 : 1) * (view.w / FULL_VIEW.w)} opacity={openIds.length ? (on ? 0.95 : 0.15) : 0.5} markerEnd={dir ? `url(#lj-arr-${e.kind})` : undefined} />;
           })}
           {shown.map((n) => <circle key={n.id} data-id={n.id} className={`lj-star lj-${n.status}${openSet.has(n.id) ? ' sel' : ''}`} cx={n.x} cy={n.y} r={n.r} style={{ fill: genreHue(n.genre) }} onClick={() => starClick(n)} />)}
           {showTitles && shown.map((n) => (
@@ -1380,11 +1579,27 @@ function ConstellationView({ books, ai }) {
 // ── Queue / shortlist view ───────────────────────────────────────────────────────────────────────
 // The on-deck list (books shelved 'queue') with time estimates, plus a compact browser to pull books
 // out of the vast to-read recommendation pile into the queue. Reshelving is one tap.
-function QueueView({ books, onShelve, onOpen }) {
+function QueueView({ books, onShelve, onOpen, fileStats = {}, bindMap = {} }) {
   const [wpm, setWpm] = useState(250);
   const [q, setQ] = useState('');
   const [recBy, setRecBy] = useState('all');
   const [cat, setCat] = useState('all'); // separate queue per content category
+  // Recently read but NOT on deck: in-progress books and anything whose linked file was read in the
+  // last 30 days — surfaced so an active read can be queued (or resumed) with one tap.
+  const recentUnqueued = useMemo(() => {
+    const cutoff = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const lastReadOf = {};
+    for (const [cs, id] of Object.entries(bindMap)) {
+      const lr = fileStats[cs]?.lastRead;
+      if (lr && (!lastReadOf[id] || lr > lastReadOf[id])) lastReadOf[id] = lr;
+    }
+    return books
+      .filter((b) => readStatus(b) !== 'queue')
+      .map((b) => ({ b, st: readStatus(b), lastRead: lastReadOf[b.id] || null }))
+      .filter((x) => x.st === 'reading' || (x.lastRead && x.lastRead >= cutoff))
+      .sort((a, b2) => String(b2.lastRead || '').localeCompare(String(a.lastRead || '')))
+      .slice(0, 12);
+  }, [books, bindMap, fileStats]);
   // Category pills with live counts — every content type that has anything on deck.
   const queuedAll = useMemo(() => books.filter((b) => readStatus(b) === 'queue'), [books]);
   const catCounts = useMemo(() => {
@@ -1434,6 +1649,28 @@ function QueueView({ books, onShelve, onOpen }) {
             </li>
           ))}
         </ol>
+      )}
+
+      {recentUnqueued.length > 0 && (
+        <>
+          <div className="rh-section-h">Recently read — not on deck</div>
+          <div className="lj-list">
+            {recentUnqueued.map(({ b, st, lastRead }) => (
+              <div key={b.id} className="lj-row">
+                <button className="lj-row-hit" onClick={() => onOpen(b.id)} title="Open in Library">
+                  <span className={`lj-status lj-${st}`}>{STATUS_LABEL[st].split(' ')[0]}</span>
+                  <span className="lj-row-main"><b>{b.title}</b><em>{b.author}{lastRead ? ` · last read ${lastRead}` : ''}</em></span>
+                  <span className="lj-row-meta">{b.genre || ''}</span>
+                </button>
+                <span className="lj-row-acts">
+                  {st !== 'finished' && <button title="Add to queue" onClick={() => onShelve(b, 'queue')}>📋</button>}
+                  {st === 'finished' && <button title="Queue a re-read" onClick={() => onShelve(b, 'queue')}>↻📋</button>}
+                  <button title="Open in Library" onClick={() => onOpen(b.id)}>↗</button>
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       <div className="rh-section-h">Add from recommendations</div>
@@ -1603,7 +1840,7 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
   // Bulk-link scan: every opened file with NO tracker link, split into fuzzy matches against
   // existing books vs. strangers — the strangers are typically AI-generated one-offs, so the bulk
   // action creates them as 'ai-gen' books and links them in one pass.
-  const [bulk, setBulk] = useState(null); // { matched:[{cs,fileName,book}], fresh:[{cs,title}], sel:Set }
+  const [bulk, setBulk] = useState(null); // { matched:[{cs,fileName,book}], fresh:[{cs,title}], sel:Set, mSel:Set }
   function scanUnlinked() {
     const matched = [], fresh = [];
     for (const [cs, f] of Object.entries(fileStats)) {
@@ -1613,12 +1850,17 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
       if (sugg) matched.push({ cs, fileName: f.fileName, book: sugg });
       else fresh.push({ cs, title });
     }
-    setBulk({ matched, fresh, sel: new Set(fresh.map((x) => x.cs)) });
+    setBulk({ matched, fresh, sel: new Set(fresh.map((x) => x.cs)), mSel: new Set(matched.map((m) => m.cs)) });
     if (!matched.length && !fresh.length) { setBulk(null); setMsg('Every opened file is already linked. ✅'); }
   }
   async function linkAllMatched() {
-    for (const m of bulk.matched) await onBind(m.cs, m.book.id);
-    setMsg(`Linked ${bulk.matched.length} file(s) to their matching books.`);
+    let n = 0;
+    for (const m of bulk.matched) {
+      if (!bulk.mSel.has(m.cs)) continue;
+      await onBind(m.cs, m.book.id);
+      n++;
+    }
+    setMsg(`Linked ${n} file(s) to their matching books.`);
     setBulk(null);
   }
   async function createAiGenBooks() {
@@ -1721,8 +1963,10 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
         <div className="lj-cleanup">
           {bulk.matched.length > 0 && (
             <details open><summary><b>{bulk.matched.length}</b> match existing books</summary>
-              <ul className="lj-clean-list">{bulk.matched.map((m) => <li key={m.cs}>{m.fileName} → <b>{m.book.title}</b></li>)}</ul>
-              <button className="toggle-on" onClick={linkAllMatched}>🔗 Link all {bulk.matched.length}</button>
+              <ul className="lj-clean-list">{bulk.matched.map((m) => (
+                <li key={m.cs}><label className="inline-check"><input type="checkbox" checked={bulk.mSel.has(m.cs)} onChange={(e) => setBulk((b) => { const mSel = new Set(b.mSel); e.target.checked ? mSel.add(m.cs) : mSel.delete(m.cs); return { ...b, mSel }; })} /> {m.fileName} → <b>{m.book.title}</b></label></li>
+              ))}</ul>
+              <button className="toggle-on" disabled={!bulk.mSel.size} onClick={linkAllMatched}>🔗 Link {bulk.mSel.size} selected</button>
             </details>
           )}
           {bulk.fresh.length > 0 && (
@@ -1795,6 +2039,7 @@ function TimelineView({ books }) {
   const hm = useMemo(() => finishHeatmap(books), [books]);
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [monthPick, setMonthPick] = useState(null); // { y, m } — clicked heat tile → that month's finishes
   useEffect(() => { setIdx(cum.length); setPlaying(false); }, [cum.length]); // default to present
   useEffect(() => {
     if (!playing) return undefined;
@@ -1838,19 +2083,41 @@ function TimelineView({ books }) {
       </div>
 
       <div className="rh-section-h">Finishes by month</div>
-      <div className="lj-heat">
+      <div className="lj-heat lj-heat-compact">
         <div className="lj-heat-row lj-heat-head"><span className="lj-heat-yr" />{MON.map((m, i) => <span key={i} className="lj-heat-mlabel">{m}</span>)}</div>
         {hm.years.map((y) => (
           <div key={y} className="lj-heat-row">
             <span className="lj-heat-yr">{y}</span>
             {hm.cells[y].map((c, mi) => {
               const lvl = hm.max ? c / hm.max : 0;
-              return <span key={mi} className="lj-heat-cell" title={`${y}-${String(mi + 1).padStart(2, '0')}: ${c} finished`} style={{ background: c ? `color-mix(in srgb, var(--toggle-active-bg) ${Math.round(20 + lvl * 80)}%, transparent)` : 'var(--divider)' }} />;
+              const on = monthPick && monthPick.y === y && monthPick.m === mi;
+              return (
+                <button
+                  key={mi}
+                  className={`lj-heat-cell${on ? ' on' : ''}`}
+                  title={`${y}-${String(mi + 1).padStart(2, '0')}: ${c} finished — click to list them`}
+                  style={{ background: c ? `color-mix(in srgb, var(--toggle-active-bg) ${Math.round(20 + lvl * 80)}%, transparent)` : 'var(--divider)' }}
+                  onClick={() => setMonthPick(on ? null : { y, m: mi })}
+                />
+              );
             })}
           </div>
         ))}
       </div>
-      <p className="settings-note">{hm.total} dated finishes across {hm.years.length} year{hm.years.length === 1 ? '' : 's'}.</p>
+      {monthPick && (() => {
+        const key = `${monthPick.y}-${String(monthPick.m + 1).padStart(2, '0')}`;
+        const fins = cum.filter((r) => r.date.startsWith(key));
+        return (
+          <div className="lj-month-fins">
+            <div className="lj-month-fins-head"><b>{key}</b> — {fins.length} finish{fins.length === 1 ? '' : 'es'} <button className="close-x" onClick={() => setMonthPick(null)}>×</button></div>
+            {fins.length === 0 && <p className="settings-note">Nothing finished this month.</p>}
+            <ul className="lj-recent">
+              {fins.map((r) => <li key={r.id}><b>{r.title}</b> — {r.author} <em>{r.date}</em></li>)}
+            </ul>
+          </div>
+        );
+      })()}
+      <p className="settings-note">{hm.total} dated finishes across {hm.years.length} year{hm.years.length === 1 ? '' : 's'} — click a tile to see that month's books.</p>
     </div>
   );
 }
@@ -1913,7 +2180,7 @@ function WeeklySummaries({ books, dayAgg, ai }) {
 }
 
 // ── Analytics view ───────────────────────────────────────────────────────────────────────────────
-function AnalyticsView({ books, dayAgg = [], ai = null }) {
+function AnalyticsView({ books, dayAgg = [], ai = null, splitTypes = false, onSplitTypes }) {
   const pace = useMemo(() => paceByYear(books), [books]);
   const gt = useMemo(() => genreTrend(books, 6), [books]);
   const rb = useMemo(() => recommenderBreakdown(books), [books]);
@@ -1923,6 +2190,10 @@ function AnalyticsView({ books, dayAgg = [], ai = null }) {
   const maxRec = Math.max(1, ...rb.map((r) => r.total));
   return (
     <div className="lj-analytics">
+      <label className="inline-check" title="Break the numbers out by long-form vs short-form/articles vs AI-generated content (shared with the Dashboard toggle)">
+        <input type="checkbox" checked={splitTypes} onChange={(e) => onSplitTypes?.(e.target.checked)} /> Split by content type
+      </label>
+      {splitTypes && <TypeSplit books={books} />}
       <WeeklySummaries books={books} dayAgg={dayAgg} ai={ai} />
       {pace.length > 0 && <YearWrap books={books} years={pace.map((p) => p.year)} />}
       <div className="rh-section-h">Pace by year</div>

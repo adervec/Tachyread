@@ -118,15 +118,6 @@ const MENU_ORDER = [
 ];
 const MENU_TITLE = Object.fromEntries(MENU_ORDER);
 
-// Compact pill toggle for a reading pane (mobile drawer top level).
-function PanelChip({ on, label, onClick }) {
-  return (
-    <button className={`menu-panel-chip${on ? ' on' : ''}`} onClick={onClick}>
-      <span className="mpc-check">{on ? '☑' : '☐'}</span>{label}
-    </button>
-  );
-}
-
 // One menu entry (file/view list) rendered as a drawer/dropdown row. `badges` optionally maps an
 // action → a small count shown as a pill (e.g. how many tab settings differ from the defaults).
 function MenuItem({ it, onPick, badges }) {
@@ -143,19 +134,86 @@ function MenuItem({ it, onPick, badges }) {
 
 
 // Open-recent list appended to the File menu — reopens a persisted document by its checksum.
+// Shows the top 12; "Show all" expands to the full remembered list (scrolls inside the menu).
 function RecentFiles({ recent, onPick }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? recent : recent.slice(0, 12);
   return (
     <>
       <div className="separator" />
       <div className="menu-sub-head">Open recent</div>
       {recent.length === 0
         ? <div className="item menu-recent-empty"><span>No recent files</span></div>
-        : recent.slice(0, 12).map((r) => (
-          <div key={r.checksum} className="item menu-recent" onClick={() => onPick(r.checksum)} title={r.name}>
-            <span className="menu-recent-name">{r.name}</span>
+        : (
+          <div className={`menu-recent-list${all ? ' expanded' : ''}`}>
+            {shown.map((r) => (
+              <div key={r.checksum} className="item menu-recent" onClick={() => onPick(r.checksum)} title={r.name}>
+                <span className="menu-recent-name">{r.name}</span>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
+      {recent.length > 12 && (
+        <div className="item menu-recent-more" onClick={(e) => { e.stopPropagation(); setAll((v) => !v); }}>
+          <span>{all ? '▴ Show top 12' : `▾ Show all (${recent.length})`}</span>
+        </div>
+      )}
     </>
+  );
+}
+
+// Quick reading-font picker for the top bar: very legible picks, common system fonts, and your
+// recently used ones. The full searchable catalogue stays in Settings → Font Manager.
+const QUICK_FONTS_LEGIBLE = [
+  ["'Lexend', sans-serif", 'Lexend'],
+  ["'Atkinson Hyperlegible', sans-serif", 'Atkinson Hyperlegible'],
+  ["'OpenDyslexic', 'Comic Sans MS', sans-serif", 'OpenDyslexic'],
+  ["Verdana, sans-serif", 'Verdana'],
+];
+const QUICK_FONTS_COMMON = [
+  ['Arial, sans-serif', 'Arial'],
+  ["'Times New Roman', serif", 'Times New Roman'],
+  ['Georgia, serif', 'Georgia'],
+  ["Garamond, 'EB Garamond', serif", 'Garamond'],
+  ['Tahoma, sans-serif', 'Tahoma'],
+  ["'Courier New', monospace", 'Courier New'],
+];
+function FontQuickPick({ activeTab, patchSettings, global, updateGlobal }) {
+  const current = activeTab?.settings?.fontFamily || '';
+  const recents = (global.recentFonts || []).filter((r) => r && r.stack);
+  const pick = (v) => {
+    if (!activeTab) return;
+    patchSettings(activeTab.id, { fontFamily: v });
+    if (!v) return;
+    const label = [...QUICK_FONTS_LEGIBLE, ...QUICK_FONTS_COMMON].find(([s]) => s === v)?.[1]
+      || recents.find((r) => r.stack === v)?.label
+      || v.split(',')[0].replace(/['"]/g, '');
+    updateGlobal({ recentFonts: [{ stack: v, label }, ...recents.filter((r) => r.stack !== v)].slice(0, 6) });
+  };
+  const known = new Set([...QUICK_FONTS_LEGIBLE, ...QUICK_FONTS_COMMON].map(([s]) => s).concat(recents.map((r) => r.stack)));
+  return (
+    <select
+      className="menu-font-pick"
+      value={current}
+      disabled={!activeTab}
+      title="Reading font — legible / common / recent picks (full catalogue in Settings → Font Manager)"
+      aria-label="Reading font"
+      onChange={(e) => pick(e.target.value)}
+    >
+      <option value="">Font: theme</option>
+      {current && !known.has(current) && <option value={current}>{current.split(',')[0].replace(/['"]/g, '')}</option>}
+      {recents.length > 0 && (
+        <optgroup label="Recent">
+          {recents.map((r) => <option key={`r-${r.stack}`} value={r.stack}>{r.label}</option>)}
+        </optgroup>
+      )}
+      <optgroup label="Very legible">
+        {QUICK_FONTS_LEGIBLE.map(([s, l]) => <option key={s} value={s}>{l}</option>)}
+      </optgroup>
+      <optgroup label="Common">
+        {QUICK_FONTS_COMMON.map(([s, l]) => <option key={s} value={s}>{l}</option>)}
+      </optgroup>
+    </select>
   );
 }
 
@@ -246,6 +304,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
           ☰ Menu
         </button>
         <div className="grow" />
+        <FontQuickPick activeTab={activeTab} patchSettings={patchSettings} global={state.global} updateGlobal={updateGlobal} />
         <button
           className="menu-font-btn"
           disabled={!activeTab}
@@ -278,23 +337,9 @@ export default function MenuBar({ onFileOpen, onAction }) {
         {open && (
           <div className="menu-drawer">
             {sub === null ? (
-              // Top level: quick panel toggles + a short list of menus to drill into (so the whole
-              // menu tree isn't one long scroll — you pick a menu, then its items).
+              // Top level: a short list of menus to drill into (so the whole menu tree isn't one
+              // long scroll). The reader-area toggles live on the top bar with rotate/lock, not here.
               <>
-                <div className="menu-drawer-section">Panels</div>
-                <div className="menu-panel-grid">
-                  <PanelChip on={state.showToc} label="ToC" onClick={() => dispatch({ type: 'TOGGLE_TOC' })} />
-                  <PanelChip on={!!activeTab?.settings?.showEyes} label="Faces" onClick={() => activeTab && patchSettings(activeTab.id, { showEyes: !activeTab.settings.showEyes })} />
-                  <PanelChip on={state.showStats} label="Stats" onClick={() => dispatch({ type: 'TOGGLE_STATS' })} />
-                  {activeTab?.doc?.source && (
-                    <PanelChip on={state.showSource} label="Source" onClick={() => dispatch({ type: 'TOGGLE_SOURCE' })} />
-                  )}
-                  <PanelChip on={state.showIndex} label="Index" onClick={() => dispatch({ type: 'TOGGLE_INDEX' })} />
-                  <PanelChip on={state.showRsvp} label="Fast Reader" onClick={() => dispatch({ type: 'TOGGLE_SHOW_RSVP' })} />
-                  <PanelChip on={state.showLines !== false} label="Lines" onClick={() => dispatch({ type: 'TOGGLE_LINES' })} />
-                  <PanelChip on={state.incognito} label="🕶 Incognito" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })} />
-                </div>
-
                 <div className="menu-drawer-section">Menus</div>
                 {/* Tap-friendly tile grid (not a list) — bigger targets, two per row. */}
                 <div className="menu-cat-grid">
@@ -410,6 +455,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
       </div>
       <div className="grow" />
       <div className="right-toggles">
+        <FontQuickPick activeTab={activeTab} patchSettings={patchSettings} global={state.global} updateGlobal={updateGlobal} />
         <button
           className="menu-font-btn"
           disabled={!activeTab}

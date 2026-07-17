@@ -3,6 +3,7 @@ import Dialog from './Dialog.jsx';
 import { allTypingRuns, clearTypingRuns } from '../state/storage.js';
 import { TYPING_MODE_BY_ID } from '../engine/typingModes.js';
 import { fmtDateTime } from '../features/dateFmt.js';
+import { typingWeekly, typingOverall } from '../features/typingStats.js';
 
 function fmtDur(ms) {
   const s = Math.round((ms || 0) / 1000);
@@ -86,6 +87,52 @@ export default function TypingProgressDialog({ onClose }) {
 
           <div className="tp-legend"><span className="tp-lg-net">— net WPM</span> <span className="tp-lg-acc">— accuracy</span></div>
           <TpChart runs={runs} />
+
+          {(() => {
+            const o = typingOverall(runs);
+            if (!o) return null;
+            const sign = (v) => (v > 0 ? `+${v}` : `${v}`);
+            return (
+              <>
+                <div className="tp-section">Overall progress</div>
+                <p className="tp-overall">
+                  First {o.n} runs averaged <b>{o.firstNet} WPM</b> · latest {o.n} average <b>{o.lastNet} WPM</b> —{' '}
+                  <b className={o.deltaNet >= 0 ? 'tp-up' : 'tp-down'}>{sign(o.deltaNet)} WPM{o.pctNet != null ? ` (${sign(o.pctNet)}%)` : ''}</b> over {o.spanDays} day{o.spanDays === 1 ? '' : 's'}.
+                  {' '}Accuracy {o.firstAcc}% → {o.lastAcc}% (<b className={o.deltaAcc >= 0 ? 'tp-up' : 'tp-down'}>{sign(o.deltaAcc)} pts</b>).
+                </p>
+              </>
+            );
+          })()}
+
+          {(() => {
+            const weekly = typingWeekly(runs);
+            if (weekly.length < 1) return null;
+            const sign = (v) => (v > 0 ? `+${v}` : `${v}`);
+            return (
+              <>
+                <div className="tp-section">Weekly summaries</div>
+                <div className="tp-table-wrap">
+                  <table className="tp-table">
+                    <thead><tr><th>Week</th><th>Runs</th><th>Avg net</th><th>Δ vs prev</th><th>Best</th><th>Avg acc</th><th>Words</th><th>Time</th></tr></thead>
+                    <tbody>
+                      {weekly.map((w) => (
+                        <tr key={w.week}>
+                          <td>{w.week} → {w.end}</td>
+                          <td>{w.runs}</td>
+                          <td>{w.avgNet}</td>
+                          <td className={w.deltaNet == null ? '' : w.deltaNet >= 0 ? 'tp-up' : 'tp-down'}>{w.deltaNet == null ? '—' : `${sign(w.deltaNet)} WPM`}</td>
+                          <td>{w.best}</td>
+                          <td>{w.avgAcc}%</td>
+                          <td>{w.words.toLocaleString()}</td>
+                          <td>{fmtDur(w.ms)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            );
+          })()}
 
           <div className="tp-section">Error-prone keys</div>
           <div className="tp-keys">

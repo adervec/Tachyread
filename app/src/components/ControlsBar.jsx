@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { useIsCompact } from '../state/device.js';
 import Trendline from './Trendline.jsx';
@@ -19,6 +19,8 @@ function formatTime(secs) {
 export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', modeIdleFrac = null, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, onJumpToFrontier, onJumpToGap, moreOpen = false }) {
   const { patchSettings, state, updateGlobal } = useApp();
   const isCompact = useIsCompact();
+  // Mobile "more" content is PAGINATED (steps / modes / goal), not one tall scrolling stack.
+  const [morePage, setMorePage] = useState(0);
   // On phones the full playback row (10 nav buttons + speed unit + 4 mode toggles + goal) wraps into a
   // tall stack that eats the reader. The finer steps are behind a "More" disclosure whose toggle lives
   // in the dock's grip bar (App.jsx) — this component just renders the extra row when `moreOpen`.
@@ -163,6 +165,13 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
               {B.pageUp()}{B.prevLine()}{playBtn}{B.nextLine()}{B.pageDown()}
             </div>
             {moreOpen && (
+              <div className="more-pager" role="tablist" aria-label="More controls pages">
+                {['⏩ Steps', '🎛 Modes', '🎯 Goal'].map((l, i) => (
+                  <button key={l} role="tab" aria-selected={morePage === i} className={`more-page-tab${morePage === i ? ' on' : ''}`} onClick={() => setMorePage(i)}>{l}</button>
+                ))}
+              </div>
+            )}
+            {moreOpen && morePage === 0 && (
               <div className="pb-fine">
                 {B.restart()}{B.prevPara()}{B.prevWord()}{B.nextWord()}{B.nextPara()}
               </div>
@@ -176,6 +185,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
           </div>
         )}
 
+        {(!isCompact || (moreOpen && morePage === 1)) && (
         <div className="mode-block">
           <div className="mode-pair">
             <span>TTS{!isCompact && <kbd className="key-hint">A</kbd>}</span>
@@ -299,9 +309,10 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             </button>
           </div>
         </div>
+        )}
       </div>
 
-      <GoalRow tab={tab} onGoalComplete={onGoalComplete} goalKills={goalKills} />
+      {(!isCompact || (moreOpen && morePage === 2)) && <GoalRow tab={tab} onGoalComplete={onGoalComplete} goalKills={goalKills} />}
     </div>
   );
 }

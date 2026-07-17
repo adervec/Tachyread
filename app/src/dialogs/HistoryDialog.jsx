@@ -94,7 +94,8 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
   const [tab, setTab] = useState('overview'); // overview | calendar | library (the "Files" table)
   const [selected, setSelected] = useState(null); // checksum of the book being inspected
   const [shelfFilter, setShelfFilter] = useState('all');
-  const [fq, setFq] = useState(''); // Files table text filter
+  const [fq, setFq] = useState(''); // Files table: File-column text filter
+  const [linkFilter, setLinkFilter] = useState('all'); // all | linked | unlinked
   const [fsort, setFsort] = useState({ key: 'recent', dir: 1 }); // Files table header sort
 
   const openBook = onOpenBook || ((id) => openDialog({ kind: 'literary-journey', tab: 'library', focusBookId: id }));
@@ -258,6 +259,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
     if (!model) return [];
     let list = model.books;
     if (shelfFilter !== 'all') list = list.filter((b) => b.shelf === shelfFilter);
+    if (linkFilter !== 'all') list = list.filter((b) => !!linkMap[b.checksum] === (linkFilter === 'linked'));
     const q = fq.trim().toLowerCase();
     if (q) list = list.filter((b) => `${b.name} ${linkMap[b.checksum]?.title || ''}`.toLowerCase().includes(q));
     const cmp = {
@@ -273,7 +275,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
     }[fsort.key] || (() => 0);
     const sorted = [...list].sort(cmp);
     return fsort.dir < 0 ? sorted.reverse() : sorted;
-  }, [model, shelfFilter, fq, fsort, linkMap]);
+  }, [model, shelfFilter, linkFilter, fq, fsort, linkMap]);
   const fsortBy = (key) => setFsort((s) => ({ key, dir: s.key === key ? -s.dir : 1 }));
   const fsortMark = (key) => (fsort.key === key ? (fsort.dir > 0 ? ' ▾' : ' ▴') : '');
 
@@ -377,12 +379,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
           {tab === 'library' && !selBook && (
             <div className="rh-library">
               <div className="rh-lib-controls">
-                <input className="lj-search" placeholder="Search files / linked books…" value={fq} onChange={(e) => setFq(e.target.value)} />
-                <select value={shelfFilter} onChange={(e) => setShelfFilter(e.target.value)} title="Filter by shelf">
-                  <option value="all">All shelves</option>
-                  {SHELVES.map((s) => <option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}
-                </select>
-                <span className="settings-note" style={{ margin: 0 }}>{libraryBooks.length} file{libraryBooks.length === 1 ? '' : 's'}</span>
+                <span className="settings-note" style={{ margin: 0 }}>{libraryBooks.length} file{libraryBooks.length === 1 ? '' : 's'} — filters live under each column header</span>
               </div>
               <div className="lj-tablewrap">
                 <table className="lj-table rh-files-table">
@@ -392,6 +389,21 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
                         <th key={k} className={fsort.key === k ? 'on' : ''} onClick={() => fsortBy(k)} title="Click to sort (click again to flip)">{l}{fsortMark(k)}</th>
                       ))}
                       <th aria-label="Actions" />
+                    </tr>
+                    <tr className="lj-filter-row">
+                      <th>
+                        <select value={shelfFilter} onChange={(e) => setShelfFilter(e.target.value)} title="Filter by shelf">
+                          <option value="all">all</option>
+                          {SHELVES.map((s) => <option key={s.id} value={s.id}>{s.icon}</option>)}
+                        </select>
+                      </th>
+                      <th><input placeholder="filter…" value={fq} onChange={(e) => setFq(e.target.value)} /></th>
+                      <th>
+                        <select value={linkFilter} onChange={(e) => setLinkFilter(e.target.value)} title="Filter by Trackyread link">
+                          <option value="all">all</option><option value="linked">🔗 linked</option><option value="unlinked">○ not</option>
+                        </select>
+                      </th>
+                      <th colSpan={7} />
                     </tr>
                   </thead>
                   <tbody>
