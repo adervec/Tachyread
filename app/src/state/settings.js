@@ -34,6 +34,7 @@ export function defaultFileSettings() {
     contextWordCount: 0,
     contextWordsBefore: 0,
     contextWordsAfter: 0,
+    currentLineHighlight: true, // tint the current line's row in the Lines pane (off = position shown by the word highlight only)
     currentWordStyles: ['Underline'], // combinable: Underline | Bold | Italic | Color | Background | Box | Glow | Overline
     currentWordColor: '', // highlight colour for Color/Background/Box/Glow/Underline styles ('' = theme default)
     currentWordFontDelta: 0, // current-word font-size adjust in points (−3..+3)

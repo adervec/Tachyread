@@ -53,6 +53,7 @@ const HINTS = {
   'Line jump: long-press hold (ms, 0 = instant click)': 'How long to hold a tap on a line before it jumps there (0 = a plain click jumps immediately).',
   'Reveal mode (hide text ahead)': 'Progressively hide upcoming text (by word/line/sentence/paragraph) so you cannot read ahead.',
   'Bionic font': 'Bold the first few letters of each word to pull your eye through the line faster.',
+  'Current-line highlight': 'Tint the whole current line in the Lines pane. Off, the line looks like any other and only the current-word highlight marks your position.',
   'Current-word highlight (combine any)': 'How the word you are on is marked in the Lines pane — combine any of underline, bold, background, colour, box.',
   'Auto-collapse completed sections': 'Fold away ToC sections once you have finished reading them.',
   'Show faces': 'Animated reader faces whose expression tracks your pace and progress.',
@@ -429,6 +430,13 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       </Field>
       <Field label="Bionic font">
         <input type="checkbox" checked={s.bionicFont} onChange={(e) => patch({ bionicFont: e.target.checked })} />
+      </Field>
+      <Field label="Current-line highlight">
+        <input
+          type="checkbox"
+          checked={s.currentLineHighlight !== false}
+          onChange={(e) => patch({ currentLineHighlight: e.target.checked })}
+        />
       </Field>
       <Field label="Current-word highlight (combine any)">
         <div className="checkbox-group">

@@ -1496,6 +1496,11 @@
 .line-row.status-NavSessionRead .text { color: var(--nav-session-read-fg); background: color-mix(in srgb, var(--nav-session-read-fg) 10%, transparent); border-radius: 3px; }
 .line-row.status-Current { background: var(--current-line-bg); }
 .line-row.status-Current .text { color: var(--current-line-fg); }
+/* Current-line highlight is optional (Tab Settings) — off, the line reads like any other and the
+   current-word highlight alone marks the position. Covers the split view's centre band too. */
+.line-pane.no-curline .line-row.status-Current { background: transparent; }
+.line-pane.no-curline .line-row.status-Current .text { color: inherit; }
+.line-pane.no-curline .lps-current { background: transparent; border-top-color: transparent; border-bottom-color: transparent; }
 /* Paragraph highlight lives in the line-number gutter only — tinting the text itself read as a
    second "current line" band and competed with the read-status colours. */
 .line-row.in-current-para .num { background: var(--current-para-bg); border-radius: 2px; }
