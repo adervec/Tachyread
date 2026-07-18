@@ -3279,13 +3279,15 @@
   .menu-bar > .menu-item { padding: 9px 13px; }
   .menu-dropdown { min-width: 260px; }
   .menu-dropdown .item { padding: 11px 16px; }
-  .tab-bar .tab { padding: 10px 14px; }
+  /* Compact tab strip: the whole tab is the tap target, so it doesn't need button-sized chrome —
+     tighter padding + a close ✕ exempt from the 44px button floor roughly halves the strip height. */
+  .tab-bar .tab { padding: 5px 9px; font-size: 11.5px; }
+  .tab-bar.multi-row { max-height: 96px; }
   /* ~44px minimum hit target on touch (Apple/Google guidance) without changing the desktop look. */
   button, select, input[type='text'], input[type='number'] { min-height: 44px; }
   .ctrl-btn { width: 44px; height: 44px; }
   .wpm-step { width: 40px; }
-  /* The tab close ✕ is a frequent mis-tap — give it real padding. */
-  .tab-bar .tab .close { padding: 6px 8px; margin-left: 2px; font-size: 16px; }
+  .tab-bar .tab .close { padding: 4px 7px; margin-left: 0; font-size: 14px; min-height: 0; }
   /* Dense icon-button clusters in tables/wizards/plans: keep them tappable but compact, and let
      their rows breathe (height comes from min-height above; these set width/padding). */
   .toc-act button { font-size: 16px; padding: 4px 6px; min-width: 34px; }
