@@ -2171,6 +2171,12 @@
 .wordswap-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .wordswap-row input { min-width: 0; max-width: 110px; }
 .wordswap-row code { background: var(--menu-highlight); padding: 1px 6px; border-radius: 4px; }
+/* Biometric Controls: per-hand gesture maps + sequence builder rows */
+.bio-gesture-maps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bio-hand-lbl { font-size: 10px; font-weight: 700; color: var(--status-fg); }
+.bio-seq-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px dashed var(--divider); }
+.bio-seq-row select { max-width: 150px; font-size: 11px; }
+.bio-seq-arrow { color: var(--status-fg); font-weight: 700; }
 /* Typing progress: overall + weekly summaries */
 .tp-overall { font-size: 12px; line-height: 1.5; }
 .tp-up { color: #3fb950; }

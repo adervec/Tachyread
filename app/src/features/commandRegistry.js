@@ -62,13 +62,19 @@ export function actionLabel(id) {
   return c ? `${c.icon} ${c.label}` : '';
 }
 
-// First voice row whose phrase matches the (final) transcript → its commandId, else null. Reuses the
-// fuzzy comparator so "let's play" still triggers "play". Rows are [{ phrase, commandId }].
-export function matchVoice(transcript, rows) {
+// First voice row whose phrase matches the (final) transcript, else null. Reuses the fuzzy
+// comparator so "let's play" still triggers "play". Rows are [{ phrase, commandId, on? }].
+// Disabled rows (on === false) still MATCH here — they feed trigger sequences — but matchVoice
+// (the direct-command path) skips them, so a disabled mapping is preserved without firing.
+export function matchVoiceRow(transcript, rows) {
   for (const row of rows || []) {
-    if (row?.phrase && row.commandId && wordMatches(row.phrase, transcript)) return row.commandId;
+    if (row?.phrase && wordMatches(row.phrase, transcript)) return row;
   }
   return null;
+}
+export function matchVoice(transcript, rows) {
+  const row = matchVoiceRow(transcript, (rows || []).filter((r) => r?.on !== false && r?.commandId));
+  return row ? row.commandId : null;
 }
 
 // Default trigger→command maps — these reproduce the app's original hardcoded behavior exactly, so a

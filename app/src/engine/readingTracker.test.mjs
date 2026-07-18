@@ -146,4 +146,20 @@ assert.ok(r13.ms >= Math.round((10 / 2000) * 60000), 'time credited at the cappe
 const t14 = createReadingTracker({ wordCount: 100000, lifetimeActiveMs: 2000 });
 t14.markRangeRead(0, 100000); // bulk coverage with ~no time → derived wpm would explode
 assert.equal(t14.lifetimeWpm(), 2000, 'lifetime wpm clamps to the possible ceiling');
+
+// "Reading now" decays through a pause: the open dwell counts as wordless active time (capped at
+// the idle grace), so the readout sags during a pause instead of freezing at its pre-pause value.
+const t15 = createReadingTracker({ wordCount: 5000 });
+t15.recordMove(0, 0, T);
+for (let i = 1; i <= 50; i++) t15.recordMove(i - 1, i, T + i * 200); // steady 300 wpm for 10s
+const atPace = t15.recentWpm(T + 50 * 200 + 200);
+assert(atPace >= 250 && atPace <= 320, `steady readout ≈300, got ${atPace}`);
+const paused = t15.recentWpm(T + 50 * 200 + 8000); // 8s into a pause
+assert(paused < atPace - 40, `pause drags the readout down (${atPace} → ${paused})`);
+const d15 = t15.recentWpmDetail(T + 50 * 200 + 8000);
+assert.equal(d15.windowSecs, 30, 'continuous reading averages over 30s');
+assert.equal(d15.scrolling, false);
+assert.equal(d15.wpm, t15.recentWpm(T + 50 * 200 + 8000), 'detail wpm matches recentWpm');
+const d3 = t3.recentWpmDetail(T + 150000);
+assert.equal(d3.windowSecs, 120, 'scroll mode averages over the long window');
 console.log('ok');

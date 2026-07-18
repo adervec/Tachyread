@@ -96,7 +96,8 @@ import { buildTabPdf } from './features/exportPdf.js';
 import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
 import { createGestureMonitor, DEFAULT_HAND_CALIB, DEFAULT_GESTURES, GESTURE_INFO } from './features/handGestures.js';
-import { runCommand, actionLabel, matchVoice, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from './features/commandRegistry.js';
+import { runCommand, actionLabel, matchVoice, matchVoiceRow, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from './features/commandRegistry.js';
+import { createSequenceMatcher } from './features/triggerSequences.js';
 import HandCalibrationDialog from './dialogs/HandCalibrationDialog.jsx';
 import WebcamCalibrationDialog from './dialogs/WebcamCalibrationDialog.jsx';
 import { createAlarm } from './features/alarm.js';
@@ -1036,19 +1037,40 @@ function AppInner() {
   // Controls take effect without toggling voice off/on).
   const voiceCommandsRef = useRef(DEFAULT_VOICE_COMMANDS);
   voiceCommandsRef.current = state.global.voiceCommands?.length ? state.global.voiceCommands : DEFAULT_VOICE_COMMANDS;
+  // Clap config via a ref too, so remaps/disables apply without toggling listening off/on.
+  const clapCfgRef = useRef({ map: DEFAULT_CLAP_MAP, off: {} });
+  clapCfgRef.current = { map: { ...DEFAULT_CLAP_MAP, ...(state.global.clapMap || {}) }, off: state.global.clapOff || {} };
+  // Custom trigger SEQUENCES (gesture/phrase/clap chains → one command). Every hands-free event
+  // feeds the matcher; a completed chain runs its command. Rows live in global.triggerSeqs.
+  const seqMatcherRef = useRef(null);
+  if (!seqMatcherRef.current) seqMatcherRef.current = createSequenceMatcher();
+  const triggerSeqsRef = useRef([]);
+  triggerSeqsRef.current = state.global.triggerSeqs || [];
+  const seqFeedRef = useRef(null);
+  seqFeedRef.current = (eventKey) => {
+    const cmdId = seqMatcherRef.current.feed(eventKey, Date.now(), triggerSeqsRef.current);
+    if (cmdId) {
+      runCommand(cmdId, cmdCtx());
+      setStatus(`⛓ ${actionLabel(cmdId)}`);
+      pushBioLog({ source: 'voice', icon: '⛓', text: 'Sequence complete', action: actionLabel(cmdId), tone: 'valid' });
+    }
+  };
+
   // Discrete hand gestures (and the wave) → whatever command the user mapped them to. Each gesture is
   // individually enabled in settings; the map decides the action (gestureMap; falls back to defaults).
+  // A per-hand override (`kind:L` / `kind:R` in the map) wins over the any-hand mapping when set.
   const handleGestureRef = useRef(null);
-  handleGestureRef.current = (kind) => {
+  handleGestureRef.current = (kind, hand) => {
     if (!activeTab) return;
     const gmap = { ...DEFAULT_GESTURE_MAP, ...(state.global.gestureMap || {}) };
-    const cmdId = gmap[kind];
+    const cmdId = (hand && gmap[`${kind}:${hand}`]) || gmap[kind];
     const info = GESTURE_INFO[kind];
     if (cmdId) {
       runCommand(cmdId, cmdCtx());
       setStatus(`${info?.icon || '🖐'} ${actionLabel(cmdId)}`);
     }
-    pushBioLog({ source: 'camera', icon: info?.icon || '🖐', text: info?.label || kind, action: cmdId ? actionLabel(cmdId) : null, tone: 'gesture' });
+    pushBioLog({ source: 'camera', icon: info?.icon || '🖐', text: `${info?.label || kind}${hand ? ` (${hand === 'L' ? 'left' : 'right'})` : ''}`, action: cmdId ? actionLabel(cmdId) : null, tone: 'gesture' });
+    seqFeedRef.current?.(`g:${kind}${hand ? `:${hand}` : ''}`);
   };
 
   // Hand-gesture controls (opt-in): open palm = scroll joystick over the Lines pane (raise/lower
@@ -1071,12 +1093,12 @@ function AppInner() {
       intervalMs: deviceKind() === 'Mobile' ? 150 : 100,
       onState: setHandState,
       onStream: (s) => setGestureStream(s),
-      onGesture: (kind) => handleGestureRef.current?.(kind),
+      onGesture: (kind, hand) => handleGestureRef.current?.(kind, hand),
       onHand: ({ present, v }) => {
         setHandState(!present ? 'watching' : v < 0 ? 'scroll-up' : v > 0 ? 'scroll-down' : 'hand');
       },
       onScroll: (v) => { handVelRef.current = v; },
-      onWave: () => handleGestureRef.current?.('wave'),
+      onWave: (hand) => handleGestureRef.current?.('wave', hand),
     });
     handRef.current = mon;
     mon.start();
@@ -1485,8 +1507,13 @@ function AppInner() {
     if (mode === 'Voice' || mode === 'Both') {
       const r = startVoiceCommands({
         // Match against the user's editable phrase list (read live via the ref so edits apply without
-        // toggling voice off/on). Returns a commandId the registry runs.
-        match: (t) => matchVoice(t, voiceCommandsRef.current),
+        // toggling voice off/on). Returns a commandId the registry runs. A matched phrase ALWAYS
+        // feeds trigger sequences — even a disabled row (its direct command just doesn't fire).
+        match: (t) => {
+          const row = matchVoiceRow(t, voiceCommandsRef.current);
+          if (row) seqFeedRef.current?.(`v:${row.phrase}`);
+          return matchVoice(t, voiceCommandsRef.current);
+        },
         onHeard: ({ transcript, isFinal, command }) => {
           if (!isFinal) return;
           pushBioLog({ source: 'voice', text: transcript, action: command ? actionLabel(command) : null, tone: command ? 'valid' : 'noop' });
@@ -1497,10 +1524,12 @@ function AppInner() {
     }
     if (mode === 'Claps' || mode === 'Both') {
       startClapDetector((claps) => {
-        const cmap = { ...DEFAULT_CLAP_MAP, ...(state.global.clapMap || {}) };
-        const cmdId = cmap[claps];
+        // A disabled clap mapping (clapOff) is preserved but doesn't fire directly — it can still
+        // be a sequence step.
+        const cmdId = clapCfgRef.current.off[claps] ? null : clapCfgRef.current.map[claps];
         if (cmdId) runCommand(cmdId, cmdCtx());
         pushBioLog({ source: 'voice', text: `👏 × ${claps}`, action: cmdId ? actionLabel(cmdId) : null, tone: cmdId ? 'valid' : 'noop' });
+        seqFeedRef.current?.(`c:${claps}`);
       }).then((cd) => (clapRef.current = cd)).catch(() => {});
     }
     return () => {

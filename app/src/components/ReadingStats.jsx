@@ -78,7 +78,8 @@ export default function ReadingStats({ tab }) {
   }, [tab]);
 
   const show = statsChipShow(settings);
-  const recent = tracker ? tracker.recentWpm() : 0;
+  const recentDetail = tracker?.recentWpmDetail ? tracker.recentWpmDetail() : null;
+  const recent = recentDetail ? recentDetail.wpm : (tracker ? tracker.recentWpm() : 0);
   const sessionWpm = tracker ? tracker.sessionWpm() : 0;
   const coverage = tracker ? tracker.coverageExcluding(settings.skipRanges) : 0;
   const activeMs = tracker ? tracker.sessionActiveMs : 0;
@@ -103,9 +104,12 @@ export default function ReadingStats({ tab }) {
   return (
     <div className="dash-stats">
       {show.recent && (
-        <div className="dash-stat dash-stat-hero">
+        <div
+          className="dash-stat dash-stat-hero"
+          title={recentDetail ? `Words ÷ attentive time over the last ${recentDetail.windowSecs}s${recentDetail.scrolling ? ' (scroll mode uses the longer window — gestures are bursty)' : ''}. The current pause counts as reading time up to the idle grace, so pausing visibly drags this down.` : undefined}
+        >
           <span className="dash-num">{recent || '—'}</span>
-          <span className="dash-label">Reading now (WPM)</span>
+          <span className="dash-label">Reading now (WPM · {recentDetail ? `last ${recentDetail.windowSecs}s` : 'recent'})</span>
         </div>
       )}
       {show.session && (
