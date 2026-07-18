@@ -322,6 +322,12 @@ export function defaultGlobalSettings() {
     shakeFullscreen: false,
     // Recently used reading fonts for the top-bar quick picker: [{ stack, label }]
     recentFonts: [],
+    // Custom trigger sequences (Biometric Controls): [{ steps: ['g:fist','v:play'], commandId, on }]
+    triggerSeqs: [],
+    // Disabled clap mappings (preserved, just inert): { 1: true }
+    clapOff: {},
+    // Show per-hand (left/right) gesture mapping overrides in Biometric Controls
+    gestureHands: false,
     // Pause non-TTS playback when the reading text scrolls off-screen (you can't read what you can't
     // see). Read-aloud / typing are exempt. Default on.
     pauseWhenTextHidden: true,

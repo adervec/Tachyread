@@ -237,6 +237,10 @@ export function createGestureMonitor({
     try { res = recognizer.recognizeForVideo(video, performance.now()); } catch { return; }
     const lm = res?.landmarks?.[0];
     const gesture = res?.gestures?.[0]?.[0]?.categoryName || null;
+    // Which hand made it — MediaPipe labels handedness for a MIRRORED (selfie) view, and our raw
+    // stream is unmirrored, so the label flips: their 'Left' is the user's RIGHT hand.
+    const handed = res?.handednesses?.[0]?.[0]?.categoryName || res?.handedness?.[0]?.[0]?.categoryName || null;
+    const hand = handed === 'Left' ? 'R' : handed === 'Right' ? 'L' : null;
     const now = Date.now();
     if (!lm || !lm[PALM]) {
       lastY = null;
@@ -253,8 +257,8 @@ export function createGestureMonitor({
     if (gest.wave && open && wave.feed(x, now)) {
       suppressScrollUntil = now + 900;
       emitScroll(0);
-      onWave?.();
-      onHand?.({ present: true, gesture, y, v: 0 });
+      onWave?.(hand);
+      onHand?.({ present: true, gesture, y, v: 0, hand });
       return;
     }
     // One-shot open-palm sweeps. The detector's directions are frame coords; the (unmirrored)
@@ -266,8 +270,8 @@ export function createGestureMonitor({
         if (gest[kind]) {
           suppressScrollUntil = now + 600;
           emitScroll(0);
-          onGesture?.(kind);
-          onHand?.({ present: true, gesture, y, v: 0 });
+          onGesture?.(kind, hand);
+          onHand?.({ present: true, gesture, y, v: 0, hand });
           return;
         }
       }
@@ -277,10 +281,10 @@ export function createGestureMonitor({
     let kind = GESTURE_BY_LABEL[gesture] || null;
     if (!kind && gest.pinch && isPinch(lm)) kind = 'pinch';
     const fired = trigger.feed(kind && gest[kind] ? kind : null, now);
-    if (fired) onGesture?.(fired);
+    if (fired) onGesture?.(fired, hand);
     const v = gest.scroll && open && now > suppressScrollUntil ? scrollVelocity(y, cal, deadFrac) : 0;
     emitScroll(v);
-    onHand?.({ present: true, gesture, y, v });
+    onHand?.({ present: true, gesture, y, v, hand });
   }
 
   function stop() {

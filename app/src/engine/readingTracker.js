@@ -453,11 +453,24 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
         ms += scrollPend.ms;
       }
     }
+    // The OPEN dwell since the last movement counts as active time with no new words (you're reading
+    // the current word/screen right now). Without it the readout froze at its pre-pause value for the
+    // whole window; with it a pause visibly drags the number down, capped at the idle grace (past
+    // that you're AFK, which the mode chip reports as idle anyway).
+    if (!scrolling && lastTs != null && !hidden && p > 0) {
+      ms += Math.min(Math.max(0, now - lastTs), getIdleCapMs());
+    }
     if (ms >= 400) return Math.min(MAX_REAL_WPM, Math.round((p / ms) * 60000));
     // Scroll mode between gestures: the window is empty while a long dwell is still reading
     // toward the next scroll — hold the last screenful's pace instead of flapping to 0.
     if (lastScroll && now - lastScroll.ts < SCROLL_HOLD_MS) return Math.min(MAX_REAL_WPM, lastScroll.pace);
     return 0;
+  }
+
+  // Live-readout metadata for the UI: the averaging window (seconds) and mode behind recentWpm().
+  function recentWpmDetail(now = Date.now()) {
+    const scrolling = !!(scrollPend || (lastScroll && now - lastScroll.ts < SCROLL_HOLD_MS));
+    return { wpm: recentWpm(now), windowSecs: Math.round((scrolling ? SCROLL_WINDOW_MS : WINDOW_MS) / 1000), scrolling };
   }
 
   const wpmFrom = (words, ms) => (ms > 1000 ? Math.min(MAX_REAL_WPM, Math.round((words / ms) * 60000)) : 0);
@@ -597,6 +610,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     markRangeReadAtPace,
     unmarkRangeRead,
     recentWpm,
+    recentWpmDetail,
     sampleTrend,
     rangeStats,
     readRuns,

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { DEFAULT_GESTURES, GESTURE_INFO } from '../features/handGestures.js';
 import { COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from '../features/commandRegistry.js';
+import { stepLabel } from '../features/triggerSequences.js';
 import { createRecognizer, speechRecognitionSupported } from '../features/speechRecognition.js';
 import { getLanguage } from '../state/languages.js';
 
@@ -149,15 +150,32 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
         </div>
       </Field>
       <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>Gesture → command</div>
+      <Field label="Distinguish hands">
+        <label className="inline-check">
+          <input type="checkbox" checked={!!g.gestureHands} onChange={(e) => patch({ gestureHands: e.target.checked })} />
+          Map the left and right hand separately (per-hand override wins; empty = the any-hand mapping)
+        </label>
+      </Field>
       {Object.entries(GESTURE_INFO).filter(([k]) => k !== 'scroll').map(([k, info]) => (
         <Field key={k} label={`${info.icon} ${info.label}`}>
-          <CommandSelect value={gestureMap[k]} disabled={!g.handGestures} onChange={(v) => patch({ gestureMap: { ...gestureMap, [k]: v } })} />
+          <div className="bio-gesture-maps">
+            <CommandSelect value={gestureMap[k]} disabled={!g.handGestures} onChange={(v) => patch({ gestureMap: { ...gestureMap, [k]: v } })} />
+            {g.gestureHands && (
+              <>
+                <span className="bio-hand-lbl" title="Left-hand override">L</span>
+                <CommandSelect value={gestureMap[`${k}:L`]} disabled={!g.handGestures} onChange={(v) => patch({ gestureMap: { ...gestureMap, [`${k}:L`]: v } })} />
+                <span className="bio-hand-lbl" title="Right-hand override">R</span>
+                <CommandSelect value={gestureMap[`${k}:R`]} disabled={!g.handGestures} onChange={(v) => patch({ gestureMap: { ...gestureMap, [`${k}:R`]: v } })} />
+              </>
+            )}
+          </div>
         </Field>
       ))}
       <p className="settings-note">
         The open-palm <strong>joystick</strong> (scroll) isn’t remappable — it scrolls the Lines pane by how
         far your palm is from its rest height. Fewer enabled gestures = fewer false positives; discrete
-        gestures must be held ~half a second before firing.
+        gestures must be held ~half a second before firing. Unticking a gesture above <strong>disables it
+        but keeps its mapping</strong> for later.
       </p>
       <Field label="Hand calibration">
         <button onClick={onCalibrateHand} disabled={!onCalibrateHand || !g.handGestures} title={g.handGestures ? '' : 'Turn on Hand gestures first'}>
@@ -181,7 +199,13 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
       <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>Spoken phrases → command</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {voiceRows.map((row, i) => (
-          <div key={i} className="bio-voice-row" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div key={i} className="bio-voice-row" style={{ display: 'flex', gap: 6, alignItems: 'center', opacity: row.on === false ? 0.55 : 1 }}>
+            <input
+              type="checkbox"
+              checked={row.on !== false}
+              title="Enable / disable this phrase (the mapping is kept while disabled; it can still be a sequence step)"
+              onChange={(e) => setRows(voiceRows.map((r, j) => (j === i ? { ...r, on: e.target.checked } : r)))}
+            />
             <input
               type="text"
               value={row.phrase}
@@ -207,9 +231,66 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
       <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>Claps → command</div>
       {[1, 2, 3].map((n) => (
         <Field key={n} label={`${'👏'.repeat(n)} ${n} clap${n > 1 ? 's' : ''}`}>
-          <CommandSelect value={clapMap[n]} onChange={(v) => patch({ clapMap: { ...clapMap, [n]: v } })} />
+          <div className="bio-gesture-maps">
+            <input
+              type="checkbox"
+              checked={!(g.clapOff || {})[n]}
+              title="Enable / disable this clap pattern (the mapping is kept while disabled; it can still be a sequence step)"
+              onChange={(e) => patch({ clapOff: { ...(g.clapOff || {}), [n]: !e.target.checked } })}
+            />
+            <CommandSelect value={clapMap[n]} disabled={!!(g.clapOff || {})[n]} onChange={(v) => patch({ clapMap: { ...clapMap, [n]: v } })} />
+          </div>
         </Field>
       ))}
+
+      <div className="field-section">Sequences (combos)</div>
+      <p className="settings-note">
+        Chain 2–3 triggers — any mix of gestures, phrases, and claps — into one command (e.g. ✊ fist
+        then “go” = restart). Steps must follow each other within ~5 seconds, in order, with nothing
+        in between. Note: each step ALSO runs its own mapping — untick a step’s own mapping above if
+        it should only count inside the sequence.
+      </p>
+      {(g.triggerSeqs || []).map((seq, i) => {
+        const setSeq = (p) => patch({ triggerSeqs: g.triggerSeqs.map((s, j) => (j === i ? { ...s, ...p } : s)) });
+        const setStep = (si, v) => setSeq({ steps: (seq.steps || ['', '']).map((s, j) => (j === si ? v : s)) });
+        return (
+          <div key={i} className="bio-seq-row" style={{ opacity: seq.on === false ? 0.55 : 1 }}>
+            <input
+              type="checkbox"
+              checked={seq.on !== false}
+              title="Enable / disable this sequence (kept while disabled)"
+              onChange={(e) => setSeq({ on: e.target.checked })}
+            />
+            {[0, 1, 2].map((si) => (
+              <select key={si} value={(seq.steps || [])[si] || ''} onChange={(e) => setStep(si, e.target.value)} title={si === 2 ? 'Optional third step' : `Step ${si + 1}`}>
+                <option value="">{si === 2 ? '(no 3rd step)' : `step ${si + 1}…`}</option>
+                <optgroup label="Gestures">
+                  {Object.entries(GESTURE_INFO).filter(([k]) => k !== 'scroll').flatMap(([k, info]) => [
+                    <option key={k} value={`g:${k}`}>{info.icon} {info.label}</option>,
+                    ...(g.gestureHands ? [
+                      <option key={`${k}L`} value={`g:${k}:L`}>{info.icon} {info.label} (left)</option>,
+                      <option key={`${k}R`} value={`g:${k}:R`}>{info.icon} {info.label} (right)</option>,
+                    ] : []),
+                  ])}
+                </optgroup>
+                <optgroup label="Phrases">
+                  {voiceRows.filter((r) => r.phrase).map((r) => <option key={r.phrase} value={`v:${r.phrase}`}>🗣 “{r.phrase}”</option>)}
+                </optgroup>
+                <optgroup label="Claps">
+                  {[1, 2, 3].map((n) => <option key={n} value={`c:${n}`}>👏×{n}</option>)}
+                </optgroup>
+              </select>
+            ))}
+            <span className="bio-seq-arrow">→</span>
+            <CommandSelect value={seq.commandId} onChange={(v) => setSeq({ commandId: v })} />
+            <button title="Remove this sequence" onClick={() => patch({ triggerSeqs: g.triggerSeqs.filter((_, j) => j !== i) })}>✕</button>
+            <span className="settings-note" style={{ margin: 0, flexBasis: '100%' }}>
+              {(seq.steps || []).filter(Boolean).map((s) => stepLabel(s, GESTURE_INFO)).join('  →  ') || 'pick the steps…'}
+            </span>
+          </div>
+        );
+      })}
+      <button style={{ marginTop: 6 }} onClick={() => patch({ triggerSeqs: [...(g.triggerSeqs || []), { steps: ['', ''], commandId: '', on: true }] })}>+ Add sequence</button>
 
       <p className="settings-note">
         Everything runs on-device — camera frames and microphone audio are analysed locally and never
