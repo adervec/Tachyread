@@ -2430,6 +2430,12 @@
 .pd-scan-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 4px; cursor: pointer; }
 .pd-scan-row .pd-scan-title { font-weight: 600; }
 .pd-cmp-pick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+/* Similarity-scan results: tiered % badge per matched file. */
+.pd-sim-row { cursor: default; flex-wrap: wrap; }
+.pd-sim-badge { flex: 0 0 44px; text-align: center; font-weight: 700; font-size: 11px; border-radius: 10px; padding: 2px 0; font-variant-numeric: tabular-nums; }
+.pd-sim-dup { background: color-mix(in srgb, #e5534b 22%, transparent); color: #e5534b; }
+.pd-sim-strong { background: color-mix(in srgb, #d9a441 22%, transparent); color: #b07d1e; }
+.pd-sim-some { background: color-mix(in srgb, var(--accent, #3a86ff) 18%, transparent); color: var(--accent, #3a86ff); }
 .pd-sec-check { flex: 0 0 auto; margin-right: 4px; }
 .pd-sec-row.pd-sec-sel { background: color-mix(in srgb, var(--toggle-active-bg) 12%, transparent); border-radius: 4px; }
 .pd-sec-row.pd-sec-skipped .pd-sec-title { opacity: 0.55; }
