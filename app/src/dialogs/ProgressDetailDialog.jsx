@@ -6,6 +6,7 @@ import { loadFile, loadReadState, saveReadState, saveFile, getReadSections, load
 import { createReadingTracker, READ_SRC_INFO } from '../engine/readingTracker.js';
 import { sectionChecksum } from '../document/sectionHash.js';
 import { readerDocFromText } from '../document/readerDocument.js';
+import { textSignature, signatureSimilarity, similarityTier } from '../features/textSimilarity.js';
 
 // Detailed annotated progress popup. Pulls everything the reading tracker knows into one view:
 //   • WHAT was read   — the coverage strip (read this session / earlier / unread / excluded).
@@ -301,6 +302,41 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
     for (const i of readSel) { const s = sections[i]; if (s) tracker.markRangeRead(s.start, s.end); }
     // Live tab: the tracker is now dirty and the app flushes readstate periodically (same as unread).
     setReadSel(new Set()); setScanMatches(null); setReadArm(false); setTick((n) => n + 1);
+  }
+
+  // Fuzzy "have I read something LIKE this before?" — sketch this file's shingles, then score every
+  // previously-read file's stored text against it. Survives edition differences and re-chunked
+  // chapters (unlike the exact section hashes). Matches offer the detailed section compare below.
+  const [simBusy, setSimBusy] = useState(false);
+  const [simRes, setSimRes] = useState(null); // null | { rows, scanned, skipped } | { error }
+  async function scanSimilar() {
+    setSimBusy(true); setSimRes(null);
+    try {
+      const mySig = textSignature(t.doc.words);
+      if (!mySig.length) { setSimRes({ error: 'This document is too short to fingerprint.' }); setSimBusy(false); return; }
+      const rows = [];
+      let scanned = 0;
+      let skipped = 0;
+      for (const f of fileList) {
+        const cs = f.checksum || f.contentChecksum;
+        const payload = await loadDocPayload(cs).catch(() => null);
+        const text = payload?.fullText;
+        if (!text) { skipped++; continue; } // text not stored on this device — reopen it once to include it
+        scanned++;
+        const sim = signatureSimilarity(mySig, textSignature(text.split(/\s+/)));
+        if (sim >= 0.12) {
+          rows.push({
+            checksum: cs,
+            fileName: f.fileName || cs.slice(0, 8),
+            sim,
+            readPct: f.totalWords ? Math.round(((f.persistentWordsRead || 0) / f.totalWords) * 100) : 0,
+          });
+        }
+      }
+      rows.sort((a, b) => b.sim - a.sim);
+      setSimRes({ rows, scanned, skipped });
+    } catch (e) { setSimRes({ error: 'Similarity scan failed: ' + (e?.message || e) }); }
+    setSimBusy(false);
   }
 
   // Compare THIS file section-by-section with a previously-read one — loading the other file's stored
@@ -610,6 +646,55 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
                 </div>
               )}
             </>
+          )}
+
+          {/* Fuzzy library scan: is THIS file similar to anything already read? Whole-text fingerprint,
+              so it needs no ToC — matches hand off to the detailed section compare above (which does). */}
+          {scanAvailable && fileList.length > 0 && (
+            <div className="pd-scan">
+              {simRes === null && !simBusy && (
+                <button onClick={scanSimilar} title="Fingerprint this document and score every previously-read file against it — catches new editions, retitled copies, and heavily overlapping texts even when no section matches exactly">🧬 Scan library for similar files</button>
+              )}
+              {simBusy && <span className="settings-note" style={{ margin: 0 }}>Scanning {fileList.length} previously-read file{fileList.length === 1 ? '' : 's'}…</span>}
+              {simRes?.error && (
+                <>
+                  <span className="settings-note" style={{ margin: 0 }}>{simRes.error}</span>
+                  <button onClick={() => setSimRes(null)}>Done</button>
+                </>
+              )}
+              {simRes?.rows && simRes.rows.length === 0 && (
+                <>
+                  <span className="settings-note" style={{ margin: 0 }}>
+                    No meaningful overlap with the {simRes.scanned} previously-read file{simRes.scanned === 1 ? '' : 's'} scanned{simRes.skipped ? ` (${simRes.skipped} skipped — text not stored on this device)` : ''}. This looks new. ✨
+                  </span>
+                  <button onClick={() => setSimRes(null)}>Done</button>
+                </>
+              )}
+              {simRes?.rows && simRes.rows.length > 0 && (
+                <>
+                  <div className="field-section" style={{ marginTop: 0 }}>Similar to {simRes.rows.length} previously-read file{simRes.rows.length === 1 ? '' : 's'}</div>
+                  {simRes.rows.map((r) => {
+                    const tier = similarityTier(r.sim);
+                    return (
+                      <div key={r.checksum} className="pd-scan-row pd-sim-row">
+                        <span className={`pd-sim-badge pd-sim-${tier.key}`}>{Math.round(r.sim * 100)}%</span>
+                        <span className="pd-scan-title">{r.fileName}</span>
+                        <span className="settings-note" style={{ margin: 0 }}>{tier.label} · {r.readPct}% read there</span>
+                        {sections.length > 0 && (
+                          <button className="link-btn" disabled={cmpBusy} title="Run the detailed section-by-section compare against this file (carry read state over)" onClick={() => compareWith(r.checksum)}>⇄ Compare sections</button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div className="pd-unread-bar">
+                    <button onClick={() => setSimRes(null)}>Done</button>
+                    <span className="settings-note" style={{ margin: 0 }}>
+                      Fuzzy content fingerprint (5-word shingles) — survives edition changes and re-split chapters{simRes.skipped ? ` · ${simRes.skipped} file(s) skipped (text not stored here)` : ''}{sections.length === 0 ? ' · run the ToC wizard here to enable the section-level compare/carry-over' : ''}.
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
           <div className="field-section">Reading sessions — when &amp; where (by paragraph)</div>
