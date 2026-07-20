@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { EXERCISES, DEFAULT_IDS, MIN_MINUTES, MAX_MINUTES, buildPlan, planSeconds, TAU } from '../engine/eyeWarmup.js';
-import { createGazeTracker, fitGazeModel, applyGazeModel, createSmoother, averageCalibSamples } from '../features/eyeTracking.js';
+import { createGazeTracker, fitGazeModel, applyGazeModel, createSmoother, averageCalibSamples, poseDrift, POSE_DRIFT_WARN } from '../features/eyeTracking.js';
 
 // Guided eye-warmup routine before a reading session: smooth pursuit (sweeps, figure-eight,
 // orbits), saccade drills (jumps, corner darts), peripheral flashes, an accommodation pulse,
@@ -229,6 +229,30 @@ const ON_TARGET_FRAC = 0.16;
 // a perfect pursuit as a miss. Score against where the dot was at any point in the last
 // LAG_WINDOW_MS instead — that measures the eye, not the pipeline.
 const LAG_WINDOW_MS = 260;
+const HEAT_W = 26, HEAT_H = 14; // gaze-coverage grid drawn on the summary screen
+
+// Where you actually looked, over the whole routine. Reveals the blind spots a percentage can't:
+// a reader who never sweeps left, or who parks on the middle third of the screen.
+function drawHeatmap(ctx, w, h, heat) {
+  const max = heat.reduce((m, v) => (v > m ? v : m), 0);
+  if (!max) return;
+  const cw = w / HEAT_W, ch = h / HEAT_H;
+  ctx.save();
+  // Blur the grid into a proper heat cloud. Native canvas filter — falls back to hard cells on the
+  // rare engine that doesn't support it, which is still readable.
+  ctx.filter = 'blur(14px)';
+  for (let j = 0; j < HEAT_H; j++) {
+    for (let i = 0; i < HEAT_W; i++) {
+      const v = heat[j * HEAT_W + i] / max;
+      if (v <= 0.02) continue;
+      // cool (rarely looked) → warm (dwelled on)
+      const hue = 200 - 160 * Math.min(1, v);
+      ctx.fillStyle = `hsla(${hue}, 90%, 55%, ${0.12 + 0.5 * v})`;
+      ctx.fillRect(i * cw, j * ch, cw + 1, ch + 1);
+    }
+  }
+  ctx.restore();
+}
 
 // Idle/done: a slow ambient glow so the stage never looks dead.
 function drawAmbient(ctx, w, h, now) {
@@ -279,7 +303,15 @@ export default function EyeWarmupDialog({ onClose }) {
   const gazeRef = useRef(null);      // latest smoothed gaze point, 0..1 stage coords
   const modelRef = useRef(model);
   const scoreRef = useRef({ frames: 0, hits: 0 });
+  const perDrillRef = useRef({});    // exercise id → { frames, hits }
+  const heatRef = useRef(new Float32Array(HEAT_W * HEAT_H)); // gaze coverage over the routine
   const targetHistRef = useRef([]); // recent target positions, for lag-tolerant scoring
+  const [faceSeen, setFaceSeen] = useState(false);
+  const [drift, setDrift] = useState(0);   // head movement since calibration
+  const [videoEl, setVideoEl] = useState(null); // framing preview element
+  const [hasStream, setHasStream] = useState(false); // no camera stream (e.g. an injected source) → no preview
+  const streamRef = useRef(null);
+  const lastFaceRef = useRef(0);
   const calibRef = useRef(null);
   modelRef.current = model;
 
@@ -296,10 +328,16 @@ export default function EyeWarmupDialog({ onClose }) {
         setGazeState(s);
         if (s !== 'tracking') { featRef.current = null; gazeRef.current = null; }
       },
+      onStream: (s) => { streamRef.current = s; setHasStream(!!s); setVideoEl((v) => { if (v) v.srcObject = s; return v; }); },
       onFeatures: (f) => {
         featRef.current = f;
         const g = f && modelRef.current ? applyGazeModel(modelRef.current, f) : null;
         gazeRef.current = f ? smoothRef.current.push(g) : null;
+        // "Is it seeing me?" — the single most useful thing to show before calibrating.
+        const now = Date.now();
+        if (f) lastFaceRef.current = now;
+        setFaceSeen(now - lastFaceRef.current < 700);
+        setDrift(f ? (poseDrift(modelRef.current, f) ?? 0) : 0);
       },
     });
     trackerRef.current.start();
@@ -309,9 +347,16 @@ export default function EyeWarmupDialog({ onClose }) {
     trackerRef.current = null;
     featRef.current = null;
     gazeRef.current = null;
+    streamRef.current = null;
+    setHasStream(false);
+    setFaceSeen(false);
+    setDrift(0);
     setGazeState('off');
     setCalib(null);
   }
+  // The preview <video> mounts after the stream arrives (and remounts across phases), so wire them
+  // together whenever either side changes.
+  useEffect(() => { if (videoEl && streamRef.current) { videoEl.srcObject = streamRef.current; videoEl.play?.().catch(() => {}); } }, [videoEl, gazeState]);
 
   // Calibration walk: for each target, ignore the first SETTLE_MS (your eyes are still travelling),
   // then average the features over SAMPLE_MS. A target that never saw a face is simply dropped —
@@ -382,6 +427,7 @@ export default function EyeWarmupDialog({ onClose }) {
       }
       if (run.phase !== 'run' || !routine.length) {
         drawAmbient(ctx, rect.width, rect.height, now);
+        if (run.phase === 'done') drawHeatmap(ctx, rect.width, rect.height, heatRef.current);
         const gi = gazeRef.current;
         if (gi) drawGaze(ctx, gi.x * rect.width, gi.y * rect.height, false);
         return;
@@ -396,7 +442,7 @@ export default function EyeWarmupDialog({ onClose }) {
       if (!run.paused) tRef.current += dt;
       if (tRef.current >= ex.dur) {
         tRef.current = 0;
-        if (run.exIndex + 1 >= routine.length) { setScore({ ...scoreRef.current }); setPhase('done'); }
+        if (run.exIndex + 1 >= routine.length) finishRef.current();
         else setExIndex(run.exIndex + 1);
         return;
       }
@@ -417,7 +463,14 @@ export default function EyeWarmupDialog({ onClose }) {
           on = hist.some((p) => Math.hypot(gx - p.x, gy - p.y) < tol);
           scoreRef.current.frames++;
           if (on) scoreRef.current.hits++;
+          const per = perDrillRef.current[ex.id] || (perDrillRef.current[ex.id] = { frames: 0, hits: 0, name: ex.name });
+          per.frames++;
+          if (on) per.hits++;
         }
+        // Coverage heatmap: every tracked frame, target-bearing drill or not.
+        const hi = Math.min(HEAT_W - 1, Math.max(0, Math.floor(g.x * HEAT_W)));
+        const hj = Math.min(HEAT_H - 1, Math.max(0, Math.floor(g.y * HEAT_H)));
+        heatRef.current[hj * HEAT_W + hi] += 1;
         drawGaze(ctx, gx, gy, on);
       }
     }
@@ -430,6 +483,8 @@ export default function EyeWarmupDialog({ onClose }) {
     if (!plan.length) return;
     persist();
     scoreRef.current = { frames: 0, hits: 0 };
+    perDrillRef.current = {};
+    heatRef.current = new Float32Array(HEAT_W * HEAT_H);
     setScore(null);
     jumpTo(0);
   }
@@ -439,6 +494,14 @@ export default function EyeWarmupDialog({ onClose }) {
     setPaused(false);
     setPhase('run');
   }
+  // Every route to the summary goes through here — skipping the last drill used to reach 'done'
+  // without ever publishing the score, so the run's tracking silently evaporated.
+  function finish() {
+    setScore({ ...scoreRef.current, per: { ...perDrillRef.current } });
+    setPhase('done');
+  }
+  const finishRef = useRef(finish);
+  useEffect(() => { finishRef.current = finish; });
 
   // Live follow-percentage for the controls row. Polled rather than pushed — the draw loop updates
   // scoreRef every frame and re-rendering at that rate for one number is pointless.
@@ -481,6 +544,17 @@ export default function EyeWarmupDialog({ onClose }) {
         )}
         <div className="ew-stage">
           <canvas ref={canvasRef} />
+          {/* Framing preview — mirrored like every selfie view, so "move left" means move left. */}
+          {hasStream && (gazeState === 'tracking' || gazeState === 'starting') && (
+            <video
+              ref={setVideoEl}
+              className={`ew-cam${faceSeen ? ' seen' : ''}`}
+              muted
+              playsInline
+              autoPlay
+              title={faceSeen ? 'Face found' : 'No face detected — centre yourself in the frame'}
+            />
+          )}
           {/* The setup panel covers the stage, and calibration needs the stage — step aside for it. */}
           {phase === 'idle' && !calib && (
             <div className="ew-overlay ew-setup">
@@ -512,8 +586,10 @@ export default function EyeWarmupDialog({ onClose }) {
               <div className="ew-gaze">
                 <div className="ew-gaze-head">
                   👁 Eye tracking <span className="ew-beta">beta</span>
-                  <span className={`ew-gaze-dot st-${gazeState}`} />
-                  <span className="settings-note">{GAZE_LABEL[gazeState] || gazeState}</span>
+                  <span className={`ew-gaze-dot st-${gazeState === 'tracking' && !faceSeen ? 'noface' : gazeState}`} />
+                  <span className="settings-note">
+                    {gazeState === 'tracking' ? (faceSeen ? 'face found' : 'no face — sit in frame') : (GAZE_LABEL[gazeState] || gazeState)}
+                  </span>
                 </div>
                 <div className="ew-gaze-actions" title="Watches your eyes with the front camera to show where you're looking and score how well you follow each drill. Runs entirely on this device — nothing is recorded or uploaded.">
                   {gazeState === 'off' || gazeState === 'denied' || gazeState === 'error' || gazeState === 'unsupported'
@@ -532,6 +608,11 @@ export default function EyeWarmupDialog({ onClose }) {
                     </span>
                   )}
                 </div>
+                {model && drift > POSE_DRIFT_WARN && (
+                  <span className="ew-drift" title="The map is learnt for one head position. Sit back where you calibrated, or calibrate again from here.">
+                    ⚠ head has moved since calibration
+                  </span>
+                )}
                 <p className="settings-note">Shows where you&apos;re looking and scores your follow. All on-device — nothing is recorded or uploaded.</p>
               </div>
               <div className="ew-setup-actions">
@@ -544,9 +625,23 @@ export default function EyeWarmupDialog({ onClose }) {
             <div className="ew-overlay">
               <p className="settings-note">Done — eyes warm. Happy reading.</p>
               {score && score.frames > 30 && (
-                <p className="ew-score">
-                  👁 On target <b>{Math.round((score.hits / score.frames) * 100)}%</b> of the tracked drills
-                </p>
+                <>
+                  <p className="ew-score">
+                    👁 On target <b>{Math.round((score.hits / score.frames) * 100)}%</b> of the tracked drills
+                    <span className="settings-note"> · the map behind shows where your eyes spent the routine</span>
+                  </p>
+                  <div className="ew-per-drill">
+                    {Object.entries(score.per || {}).filter(([, v]) => v.frames > 15).map(([id, v]) => {
+                      const pct = Math.round((v.hits / v.frames) * 100);
+                      return (
+                        <span key={id} className="ew-drill-score" title={`${v.hits} of ${v.frames} tracked frames on target`}>
+                          {v.name}
+                          <b style={{ color: pct >= 70 ? '#7dff8a' : pct >= 40 ? '#ffd54f' : '#ff8a8a' }}> {pct}%</b>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </>
               )}
               <div className="ew-setup-actions">
                 <button className="toggle-on" onClick={() => jumpTo(0)}>Again ↻</button>
@@ -564,7 +659,7 @@ export default function EyeWarmupDialog({ onClose }) {
             )}
             <button onClick={() => setPhase('idle')}>⚙ Setup</button>
             <button onClick={() => setPaused((p) => !p)}>{paused ? 'Resume ▸' : 'Pause ⏸'}</button>
-            <button onClick={() => (exIndex + 1 >= plan.length ? setPhase('done') : jumpTo(exIndex + 1))}>Skip ▸</button>
+            <button onClick={() => (exIndex + 1 >= plan.length ? finish() : jumpTo(exIndex + 1))}>Skip ▸</button>
           </div>
         )}
       </div>

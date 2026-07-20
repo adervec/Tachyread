@@ -1,7 +1,7 @@
 // Self-check for the gaze math. Run: node app/src/features/eyeTracking.test.mjs
 // (The camera half needs a browser; only the pure functions are covered here.)
 import assert from 'node:assert';
-import { gazeFeatures, fitGazeModel, applyGazeModel, createSmoother, averageCalibSamples, GAZE_FEATURES } from './eyeTracking.js';
+import { gazeFeatures, fitGazeModel, applyGazeModel, createSmoother, averageCalibSamples, poseDrift, POSE_DRIFT_WARN, GAZE_FEATURES } from './eyeTracking.js';
 
 // ── gazeFeatures ────────────────────────────────────────────────────────────
 // Build a synthetic mesh: eyes 0.2 wide / 0.06 tall, irises placed at a known spot inside them.
@@ -84,6 +84,30 @@ if (degenerate) { // ridge makes it solvable; it must at least not explode
   const g = applyGazeModel(degenerate, [0.5, 0.5, 0, 0]);
   assert.ok(Math.abs(g.x - 0.5) < 0.2 && Math.abs(g.y - 0.5) < 0.2, `degenerate fit stays near the only point it saw: ${JSON.stringify(g)}`);
 }
+
+// ── robustness: one bad calibration point must not bend the whole map ───────
+// Simulate a target the user glanced away from: its features are fine, its label is nonsense.
+const spoiled = grid.map((s, i) => (i === 4 ? { ...s, x: s.x + 0.9, y: s.y - 0.8 } : s));
+const robust = fitGazeModel(spoiled, 1e-9);
+assert.ok(robust.dropped >= 1, `the outlier is dropped, got dropped=${robust.dropped}`);
+for (const s of grid.slice(0, 4)) {
+  const g = applyGazeModel(robust, s.f);
+  assert.ok(Math.hypot(g.x - s.x, g.y - s.y) < 0.02, `good points still map true after rejection (off by ${Math.hypot(g.x - s.x, g.y - s.y)})`);
+}
+const naive = fitGazeModel(spoiled.slice(0, 5).concat(spoiled.slice(5)), 1e-9);
+assert.ok(naive.rms < 0.02, `reported fit reflects the points it kept, got ${naive.rms}`);
+// Clean data must NOT get pruned — dropping points nobody asked to drop loses real coverage.
+assert.equal(model.dropped, 0, `clean calibration keeps every point, dropped=${model.dropped}`);
+
+// ── head pose ───────────────────────────────────────────────────────────────
+assert.ok(Array.isArray(model.pose) && model.pose.length === 2, 'model records the calibration head pose');
+assert.ok(Math.abs(model.pose[0] - 0.005) < 1e-9, `mean yaw of the grid, got ${model.pose[0]}`);
+assert.equal(poseDrift(model, [0.5, 0.5, model.pose[0], model.pose[1]]), 0, 'same pose → no drift');
+const moved = poseDrift(model, [0.5, 0.5, model.pose[0] + 0.06, model.pose[1]]);
+assert.ok(Math.abs(moved - 0.06) < 1e-9, `drift is the distance from the calibration pose, got ${moved}`);
+assert.ok(moved > POSE_DRIFT_WARN, 'a 6% face-width head shift is past the warning threshold');
+assert.equal(poseDrift(null, [0, 0, 0, 0]), null, 'no model → no drift');
+assert.equal(poseDrift({ ax: [], ay: [] }, [0, 0, 0, 0]), null, 'model from before poses → no drift, no crash');
 
 // ── calibration averaging ───────────────────────────────────────────────────
 // Two targets, uneven dwell: the long one must not drown out the short one, and each target must

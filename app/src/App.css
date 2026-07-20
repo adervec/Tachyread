@@ -1115,10 +1115,20 @@
 .ew-gaze > p.settings-note { flex-basis: 100%; margin: 0; }
 .ew-gaze-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7488; }
 .ew-gaze-dot.st-tracking { background: #7dff8a; box-shadow: 0 0 6px #7dff8a; }
-.ew-gaze-dot.st-starting { background: #ffd54f; }
+.ew-gaze-dot.st-starting, .ew-gaze-dot.st-noface { background: #ffd54f; }
 .ew-gaze-dot.st-denied, .ew-gaze-dot.st-error, .ew-gaze-dot.st-unsupported { background: #ff5c5c; }
 .ew-live-score { font-size: 12px; color: var(--nav-session-read-fg, #7dff8a); font-variant-numeric: tabular-nums; }
 .ew-score { color: #dbe2f0; font-size: 14px; margin: 0; }
+.ew-drift { font-size: 11px; color: #ffd54f; }
+.ew-per-drill { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: center; max-width: 520px; }
+.ew-drill-score { font-size: 11px; color: #9aa5bb; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; padding: 1px 8px; }
+/* Camera framing preview, pinned in the stage corner and mirrored like a selfie view. */
+.ew-cam {
+  position: absolute; right: 10px; bottom: 10px; width: 116px; height: 87px; object-fit: cover;
+  transform: scaleX(-1); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.25);
+  background: #000; opacity: 0.85; pointer-events: none;
+}
+.ew-cam.seen { border-color: #7dff8a; }
 
 /* Once-a-day desktop nudge to warm up before reading. */
 .ew-nudge { display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: var(--menu-highlight); border-bottom: 1px solid var(--divider); font-size: 13px; }
