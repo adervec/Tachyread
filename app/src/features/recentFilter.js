@@ -8,7 +8,9 @@ export function finishedNotRereading(f, shelf) {
   if (shelf && shelf !== 'finished') return false; // explicitly re-shelved → always show
   if (shelf === 'finished') return true; // explicit shelf wins over heuristics
   const comps = Array.isArray(f.completions) ? f.completions : [];
-  const posFrac = f.totalWords ? Math.min(1, (f.wordIndex || 0) / f.totalWords) : 0;
+  // wordIndex is the CURRENT word (0-based), so sitting on the last word means totalWords read — the
+  // +1 matters for short files, where "last word" is otherwise only ~99% and never counts as done.
+  const posFrac = f.totalWords ? Math.min(1, ((f.wordIndex || 0) + 1) / f.totalWords) : 0;
   if (!comps.length) return posFrac >= 0.999; // parked at the very end counts as finished; restarting un-hides
   const lastFinish = comps.map((c) => String(c.date || '').slice(0, 10)).sort().pop();
   // Rereading = reading on a later day than the last finish…

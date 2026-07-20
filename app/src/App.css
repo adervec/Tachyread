@@ -1531,7 +1531,36 @@
 .line-row .word.current.style-Box { outline: 1.5px solid var(--cw-color, var(--orp-fg)); border-radius: 3px; padding: 0 2px; }
 .line-row .word.current.style-Glow { text-shadow: 0 0 6px var(--cw-color, var(--orp-fg)), 0 0 10px var(--cw-color, var(--orp-fg)); }
 .line-row .word.hidden-word { visibility: hidden; }
-.line-row .orp-char { color: var(--lines-orp, var(--orp-fg)); font-weight: bold; }
+/* ORP letter: colour always, plus any combination of the looks below (Tab Settings → ORP style).
+   Everything here is paint-only — nothing that changes glyph metrics, or every word on the page
+   would re-wrap when you switched style. `orp-Larger`/`orp-Caps` are the deliberate exceptions and
+   are marked as such in the picker. */
+.line-row .orp-char { color: var(--lines-orp, var(--orp-fg)); }
+.line-row .orp-Bold { -webkit-text-stroke: 0.4px currentColor; text-shadow: 0 0 0.6px currentColor; }
+.line-row .orp-Glow { text-shadow: 0 0 5px var(--lines-orp, var(--orp-fg)), 0 0 9px var(--lines-orp, var(--orp-fg)); }
+.line-row .orp-Underline { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 2px; }
+.line-row .orp-Box { outline: 1px solid var(--lines-orp, var(--orp-fg)); border-radius: 2px; }
+.line-row .orp-Background { background: color-mix(in srgb, var(--lines-orp, var(--orp-fg)) 28%, transparent); border-radius: 2px; }
+.line-row .orp-Dot { position: relative; }
+.line-row .orp-Dot::after { content: ''; position: absolute; left: 50%; bottom: -0.25em; width: 3px; height: 3px; margin-left: -1.5px; border-radius: 50%; background: var(--lines-orp, var(--orp-fg)); }
+.line-row .orp-Italic { font-style: italic; }
+.line-row .orp-Larger { font-size: 1.18em; }
+.line-row .orp-Caps { text-transform: uppercase; }
+/* ponytail: one shared keyframe timeline, so every ORP letter pulses in lockstep — cheap because
+   only opacity/text-shadow animate (no layout). Respects reduced-motion. */
+.line-row .orp-Pulse { animation: orp-pulse 1.6s ease-in-out infinite; }
+.line-row .orp-Shimmer { animation: orp-shimmer 2.4s ease-in-out infinite; }
+@keyframes orp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes orp-shimmer {
+  0%, 100% { text-shadow: none; }
+  50% { text-shadow: 0 0 7px var(--lines-orp, var(--orp-fg)), 0 0 14px var(--lines-orp, var(--orp-fg)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .line-row .orp-Pulse, .line-row .orp-Shimmer { animation: none; }
+}
+/* Settings preview row: the ORP rules key off .line-row, so the preview borrows the class and undoes
+   the pane's gutter grid. */
+.orp-preview { display: block; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--divider); border-radius: 6px; font-size: 15px; }
 .line-row .bionic-bold { font-weight: 700; }
 .line-row .proper-name { font-style: italic; }
 
@@ -2171,6 +2200,11 @@
 .wordswap-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .wordswap-row input { min-width: 0; max-width: 110px; }
 .wordswap-row code { background: var(--menu-highlight); padding: 1px 6px; border-radius: 4px; }
+/* Scroll-to-read end runway: a phantom row after the last line so the final screenful can scroll
+   up past the read point (otherwise the last lines could never be counted read). */
+.lp-endpad { height: 85vh; display: flex; align-items: flex-start; justify-content: center; padding-top: 2em; }
+.lp-endpad span { color: var(--status-fg); opacity: 0.5; font-size: 11px; letter-spacing: 0.2em; }
+
 /* Biometric Controls: per-hand gesture maps + sequence builder rows */
 .bio-gesture-maps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .bio-hand-lbl { font-size: 10px; font-weight: 700; color: var(--status-fg); }

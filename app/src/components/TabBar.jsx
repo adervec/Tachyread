@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { groupForChecksum, masterOf } from '../features/bookGroups.js';
+import { finishedNotRereading } from '../features/recentFilter.js';
 import { getBinding } from '../state/storage.js';
 
 // Short labels for the dialog tabs (menus use longer "…" titles). Fallback is the raw kind.
@@ -77,11 +78,19 @@ export default function TabBar() {
     const leftIds = tabs.slice(0, i).map((t) => t.id);
     const rightIds = tabs.slice(i + 1).map((t) => t.id);
     const otherIds = tabs.filter((t) => t.id !== menu.tabId).map((t) => t.id);
+    // Finished (and not being reread) tabs — same heuristic that hides them from Open Recent.
+    const shelves = state.global.readingList?.shelves || {};
+    const finishedIds = tabs.filter((t) => {
+      const cs = t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum;
+      const rec = { ...t.settings, totalWords: t.lazy ? (t.settings?.totalWords || 0) : t.doc.words.length };
+      return finishedNotRereading(rec, shelves[cs]);
+    }).map((t) => t.id);
     const items = [
       { label: 'Close', fn: () => closeTab(menu.tabId) },
       { label: 'Close others', n: otherIds.length, fn: () => closeTabs(otherIds) },
       { label: 'Close to the left', n: leftIds.length, fn: () => closeTabs(leftIds) },
       { label: 'Close to the right', n: rightIds.length, fn: () => closeTabs(rightIds) },
+      { label: 'Close finished', n: finishedIds.length, fn: () => closeTabs(finishedIds) },
       { label: 'Close all', n: tabs.length, fn: () => closeAllTabs() },
       { sep: true },
       { label: multiRow ? '✓ Multi-row tabs' : 'Multi-row tabs', fn: () => updateGlobal({ tabBarMultiRow: !multiRow }) },
