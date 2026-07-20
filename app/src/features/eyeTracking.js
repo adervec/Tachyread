@@ -87,31 +87,64 @@ export function fitGazeModel(samples, lambda = 1e-4) {
   const rows = (samples || []).filter((s) => Array.isArray(s.f) && s.f.length === GAZE_FEATURES);
   const n = GAZE_FEATURES + 1; // + bias
   if (rows.length < n) return null;
-  const ata = Array.from({ length: n }, () => new Array(n).fill(0));
-  const atx = new Array(n).fill(0);
-  const aty = new Array(n).fill(0);
-  for (const s of rows) {
-    const v = [...s.f, 1];
-    for (let i = 0; i < n; i++) {
-      for (let j = 0; j < n; j++) ata[i][j] += v[i] * v[j];
-      atx[i] += v[i] * s.x;
-      aty[i] += v[i] * s.y;
+
+  const fitOnce = (set) => {
+    const ata = Array.from({ length: n }, () => new Array(n).fill(0));
+    const atx = new Array(n).fill(0);
+    const aty = new Array(n).fill(0);
+    for (const s of set) {
+      const v = [...s.f, 1];
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) ata[i][j] += v[i] * v[j];
+        atx[i] += v[i] * s.x;
+        aty[i] += v[i] * s.y;
+      }
+    }
+    for (let i = 0; i < n; i++) ata[i][i] += lambda;
+    const ax = solve(ata, atx); // solve() works on its own copy, so ata is reusable
+    const ay = solve(ata, aty);
+    return ax && ay ? { ax, ay } : null;
+  };
+  const residuals = (m, set) => set.map((s) => {
+    const g = applyGazeModel(m, s.f);
+    return Math.hypot(g.x - s.x, g.y - s.y);
+  });
+
+  let model = fitOnce(rows);
+  if (!model) return null;
+  let used = rows;
+  // One robustness pass: a target the user blinked through or glanced away from drags the whole
+  // map. Drop the points that miss by far more than the typical point, then refit on the rest.
+  const res = residuals(model, rows);
+  const sorted = [...res].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  if (median > 1e-6) {
+    const keep = rows.filter((_, i) => res[i] <= Math.max(3 * median, 0.05));
+    if (keep.length >= n && keep.length < rows.length) {
+      const refit = fitOnce(keep);
+      if (refit) { model = refit; used = keep; }
     }
   }
-  for (let i = 0; i < n; i++) ata[i][i] += lambda;
-  const ax = solve(ata, atx); // solve() works on its own copy, so ata is reusable
-  const ay = solve(ata, aty);
-  if (!ax || !ay) return null;
-  // Residual error on the calibration points themselves — shown to the user as "fit quality".
-  const model = { ax, ay };
-  let err = 0;
-  for (const s of rows) {
-    const g = applyGazeModel(model, s.f);
-    err += Math.hypot(g.x - s.x, g.y - s.y);
-  }
-  model.rms = err / rows.length;
+  model.dropped = rows.length - used.length;
+  // Residual error on the points it kept — shown to the user as "fit quality".
+  const finalRes = residuals(model, used);
+  model.rms = finalRes.reduce((a, b) => a + b, 0) / finalRes.length;
+  // Mean head pose during calibration. The map is only valid near that pose, so the UI can warn
+  // when you've drifted away from where you sat (see poseDrift).
+  model.pose = [
+    used.reduce((s, r) => s + r.f[2], 0) / used.length,
+    used.reduce((s, r) => s + r.f[3], 0) / used.length,
+  ];
   return model;
 }
+
+// How far the head has moved from where it sat during calibration, in the same units as the yaw /
+// pitch features (roughly a fraction of face width / height). Null when the model predates poses.
+export function poseDrift(model, f) {
+  if (!model?.pose || !f) return null;
+  return Math.hypot(f[2] - model.pose[0], f[3] - model.pose[1]);
+}
+export const POSE_DRIFT_WARN = 0.045; // ~ a couple of centimetres of head shift at a normal distance
 
 export function applyGazeModel(model, f) {
   if (!model || !f) return null;
@@ -154,7 +187,7 @@ export function createSmoother(alpha = 0.35) {
 // onFeatures(f | null) fires every frame with the raw feature vector (null = no face). onState:
 // starting | tracking | denied | unsupported | error | off.
 // `source` is a test seam: pass { start, read, stop } to drive the tracker without a camera.
-export function createGazeTracker({ onFeatures, onState, intervalMs = 60, source = null } = {}) {
+export function createGazeTracker({ onFeatures, onState, onStream, intervalMs = 60, source = null } = {}) {
   let stream = null, video = null, landmarker = null, timer = null, running = false;
   let state = 'off';
   const setState = (s) => { if (s !== state) { state = s; onState?.(s); } };
@@ -178,6 +211,7 @@ export function createGazeTracker({ onFeatures, onState, intervalMs = 60, source
       return;
     }
     if (!running) { stream.getTracks().forEach((t) => t.stop()); return; }
+    onStream?.(stream); // the dialog shows this as a framing preview
     video = document.createElement('video');
     video.srcObject = stream;
     video.muted = true;
@@ -219,6 +253,7 @@ export function createGazeTracker({ onFeatures, onState, intervalMs = 60, source
     if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
     if (landmarker) { try { landmarker.close(); } catch { /* ignore */ } landmarker = null; }
     if (video) { video.srcObject = null; video = null; }
+    onStream?.(null);
     setState('off');
   }
 
