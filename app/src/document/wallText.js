@@ -6,10 +6,18 @@
 // line spans a contiguous word range, so current-word highlighting and jumps keep working. Pure; see
 // wallText.demo.mjs.
 
+// Marker prefixing an inserted newline glyph, so the renderer can show it without counting it as a
+// word (word indices are positional — an extra token would shift every highlight after it).
+export const WALL_SEP = ''; // private-use area: never appears in real text
+
 // headLevels: Map(sourceLineIndex → tier) for the lines that are ToC headings (each gets its own
 // block). breakEvery: 0 = only headings/percent; >0 = also every N source lines. pctEvery: 0 = off;
 // >0 = also break when the block's first word crosses another 1/pctEvery slice of the document.
-export function buildWallDoc(doc, headLevels, { breakEvery = 0, pctEvery = 0 } = {}) {
+// joiner: characters/emoji shown where a source newline was ('' = just a space, as prose normally
+// reads). Whitespace inside it is stripped — the glyphs must stay one token.
+export function buildWallDoc(doc, headLevels, { breakEvery = 0, pctEvery = 0, joiner = '' } = {}) {
+  const sep = String(joiner || '').replace(/\s+/g, '');
+  const glue = sep ? ` ${WALL_SEP}${sep} ` : ' ';
   const src = doc.lines || [];
   const totalWords = doc.words?.length || 0;
   const merged = [];
@@ -49,7 +57,7 @@ export function buildWallDoc(doc, headLevels, { breakEvery = 0, pctEvery = 0 } =
     if (ln.isEmpty) {
       if (cur.text) cur.text += '\t'; // paragraph break → an indent tab (only between text)
     } else {
-      cur.text += (cur.text && !cur.text.endsWith('\t') ? ' ' : '') + ln.text;
+      cur.text += (cur.text && !cur.text.endsWith('\t') ? glue : '') + ln.text;
       if (cur.startWordIndex < 0) cur.startWordIndex = ln.startWordIndex;
       cur.endWordIndex = ln.endWordIndex;
     }

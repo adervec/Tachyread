@@ -46,6 +46,9 @@
   display: flex;
   align-items: center;
   background: var(--menu-bg);
+  /* Wraps to a second row rather than running off the right edge — on a portrait monitor the
+     view toggles and the theme/font controls used to be clipped with no way to reach them. */
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--divider);
   font-size: 13px;
   user-select: none;
@@ -58,7 +61,7 @@
 .menu-bar > .menu-item:hover { background: var(--menu-highlight); }
 .menu-bar > .menu-item.open { background: var(--menu-highlight); }
 .menu-bar .grow { flex: 1; }
-.menu-bar .right-toggles { display: flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 11px; color: var(--status-fg); }
+.menu-bar .right-toggles { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 0 8px; font-size: 11px; color: var(--status-fg); }
 .menu-bar .right-toggles button { font-size: 11px; padding: 3px 8px; }
 /* Quick reading-font stepper next to the theme select (desktop right-toggles + mobile top bar). */
 .menu-font-btn {
@@ -1558,6 +1561,11 @@
 @media (prefers-reduced-motion: reduce) {
   .line-row .orp-Pulse, .line-row .orp-Shimmer { animation: none; }
 }
+/* Wall-of-text newline marker — faint so it punctuates without competing with the text. */
+.line-row .wall-sep { opacity: 0.45; }
+.joiner-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.joiner-preset { min-width: 26px; height: 26px; font-size: 14px; line-height: 1; }
+.joiner-custom { width: 74px; }
 /* Settings preview row: the ORP rules key off .line-row, so the preview borrows the class and undoes
    the pane's gutter grid. */
 .orp-preview { display: block; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--divider); border-radius: 6px; font-size: 15px; }
@@ -1915,6 +1923,14 @@
   align-items: center;
   gap: 16px;
 }
+/* Grid items default to min-width:auto, which refuses to shrink below their content — on a narrow
+   desktop window (a PORTRAIT monitor, or the app at half screen) that pushed the mode column clean
+   off the right edge instead of letting it wrap. These three let it reflow in place. */
+.playback-row > * { min-width: 0; }
+.playback-buttons { flex-wrap: wrap; }
+.wpm-block { flex-wrap: wrap; }
+/* The slider shrinks before the row wraps — a wrapped stepper reads worse than a shorter track. */
+.wpm-block input[type='range'] { min-width: 60px; }
 .wpm-block {
   display: flex;
   align-items: center;

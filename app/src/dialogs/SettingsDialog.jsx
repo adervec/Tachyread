@@ -30,6 +30,14 @@ function readCwStyles(s) {
   return ['Underline'];
 }
 
+// Wall-of-text newline markers. '' = a plain space (prose default); anything else is drawn faintly
+// where each source line ended. Custom text goes in the box beside them.
+const WALL_JOINERS = [
+  ['', 'Nothing — just a space'], ['¶', 'Pilcrow'], ['·', 'Middle dot'], ['•', 'Bullet'],
+  ['↵', 'Return arrow'], ['⏎', 'Return symbol'], ['/', 'Slash'], ['—', 'Em dash'],
+  ['🔹', 'Blue diamond'], ['🍃', 'Leaf'], ['✦', 'Star'],
+];
+
 const GUIDE_COLORS = ['Red', 'Pink', 'Orange', 'Green', 'Blue', 'Purple'];
 const ALIGNMENTS = ['Left', 'Center', 'Right', 'Justify'];
 
@@ -394,6 +402,30 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
             value={s.wallBreakEvery || 0}
             onChange={(e) => patch({ wallBreakEvery: Math.max(0, Math.min(500, Number(e.target.value) || 0)) })}
           />
+        </Field>
+      )}
+      {s.wallText && (
+        <Field label="Wall: newline marker">
+          <div className="joiner-row">
+            {WALL_JOINERS.map(([val, label]) => (
+              <button
+                key={val || 'none'}
+                type="button"
+                className={`swatch joiner-preset${(s.wallJoiner || '') === val ? ' on' : ''}`}
+                title={label}
+                onClick={() => patch({ wallJoiner: val })}
+              >{val || '␣'}</button>
+            ))}
+            <input
+              type="text"
+              maxLength={8}
+              className="joiner-custom"
+              value={s.wallJoiner || ''}
+              placeholder="custom"
+              onChange={(e) => patch({ wallJoiner: e.target.value.replace(/\s+/g, '') })}
+              title="Any characters or emoji — shown where each source newline was (spaces are stripped)"
+            />
+          </div>
         </Field>
       )}
       <Field label="Alternate unread sentence colours">

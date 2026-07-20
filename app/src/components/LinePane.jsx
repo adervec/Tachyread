@@ -2,7 +2,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'rea
 import { List, useDynamicRowHeight, useListRef } from 'react-window';
 import { ReadStatus, orpIndex, getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import { getTocEntries } from '../document/toc.js';
-import { buildWallDoc } from '../document/wallText.js';
+import { buildWallDoc, WALL_SEP } from '../document/wallText.js';
 import { resolveHeadingPack } from '../state/themes.js';
 import Pointer from './Pointer.jsx';
 import { useReportVisibility } from '../state/useReportVisibility.js';
@@ -45,6 +45,11 @@ function renderWords(line, opts) {
   for (const rawTok of words) {
     if (rawTok === '' || /^\s+$/.test(rawTok)) {
       elems.push(<span key={runIdx++}>{rawTok}</span>);
+      continue;
+    }
+    // Wall-mode newline glyph: decoration, not a word — it must NOT consume a word index.
+    if (rawTok[0] === WALL_SEP) {
+      elems.push(<span key={runIdx++} className="wall-sep">{rawTok.slice(1)}</span>);
       continue;
     }
     // Per-document display substitution (render one word as another) — display only.
@@ -451,7 +456,8 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wall, srcDoc, settings.tocEntries]);
   const pctEvery = wall && settings.showPercentSeparators ? 100 : 0;
-  const wallDoc = useMemo(() => (wall ? buildWallDoc(srcDoc, wallHeads, { breakEvery: wallBreakEvery, pctEvery }) : null), [wall, srcDoc, wallHeads, wallBreakEvery, pctEvery]);
+  const wallJoiner = settings.wallJoiner || '';
+  const wallDoc = useMemo(() => (wall ? buildWallDoc(srcDoc, wallHeads, { breakEvery: wallBreakEvery, pctEvery, joiner: wallJoiner }) : null), [wall, srcDoc, wallHeads, wallBreakEvery, pctEvery, wallJoiner]);
   const doc = wall ? wallDoc : srcDoc;
   const paneVisRef = useReportVisibility(onVisible || (() => {}));
   const idx = settings.wordIndex;
@@ -551,7 +557,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   const defaultRowHeight = Math.round(baseFont * lineSpacing) + 8;
   const rowHeightCtl = useDynamicRowHeight({
     defaultRowHeight,
-    key: `${doc.contentChecksum}:${baseFont}:${lineSpacing}:${wall ? 'w' + wallBreakEvery : 'n'}`,
+    key: `${doc.contentChecksum}:${baseFont}:${lineSpacing}:${wall ? 'w' + wallBreakEvery + wallJoiner : 'n'}`,
   });
 
   const listRef = useListRef();

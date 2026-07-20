@@ -45,6 +45,7 @@ export function defaultFileSettings() {
     wordSwaps: {}, // per-document display substitutions: { "word in text": "shown as" } (display only)
     wallText: false, // "wall of text": merge source lines into flowing blocks (newlines → spaces/tabs)
     wallBreakEvery: 0, // in wall mode, also start a new block every N source lines (0 = only sections/%)
+    wallJoiner: '', // characters/emoji shown where a source newline was in wall mode ('' = plain space)
     sourceChecks: {}, // ticked checkboxes in html/markdown source sections: { section: [box…] }
     sourceCursor: true, // show the current-word marker on the Source page view
     sourceCursorStyle: 'vortex', // marker look: vortex (invert) | box | underline | highlight

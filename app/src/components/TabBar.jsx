@@ -62,6 +62,8 @@ export default function TabBar() {
         key={`panel-${p.id}`}
         className={`tab dialog-tab${docLabel ? ' grouped' : ''} ${p.id === activePanelId ? 'active' : ''}`}
         onClick={() => setActivePanel(p.id)}
+        onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closePanel(p.id); } }}
+        onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }} // stop the browser's middle-click autoscroll
         title={p.id === activePanelId ? `${label} — tap to minimize` : label}
       >
         <span className="name">{label}</span>
@@ -146,6 +148,10 @@ export default function TabBar() {
             className={`tab ${tab.id === state.activeTabId ? 'active' : ''} ${tab.lazy ? 'lazy' : ''}${dropId === tab.id ? ' drop-target' : ''}${scopedPanels.length ? ' has-group' : ''}`}
             draggable
             onClick={() => setActiveTab(tab.id)}
+            // Chrome-style: middle-click closes the tab. mousedown is swallowed so the browser
+            // doesn't start its autoscroll on the way.
+            onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeTab(tab.id); } }}
+            onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, tabId: tab.id }); }}
             onDragStart={(e) => { dragId.current = tab.id; e.dataTransfer.effectAllowed = 'move'; }}
             onDragOver={(e) => { if (dragId.current && dragId.current !== tab.id) { e.preventDefault(); setDropId(tab.id); } }}

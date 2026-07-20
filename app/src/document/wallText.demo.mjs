@@ -1,6 +1,6 @@
 // Self-check for buildWallDoc. Run: node app/src/document/wallText.demo.mjs
 import assert from 'node:assert';
-import { buildWallDoc } from './wallText.js';
+import { buildWallDoc, WALL_SEP } from './wallText.js';
 
 // A tiny doc: heading, two prose lines, a blank (para break), one more prose line, then a 2nd section.
 // words: [Ch,One, a,b,c, d,e, (blank), f,g, Ch,Two, h,i]
@@ -47,5 +47,18 @@ for (const ln of w2.lines) { if (ln.startWordIndex < 0) continue; assert.ok(ln.s
 const flat = buildWallDoc({ ...doc, lines: doc.lines.slice(1, 5) }, null, {});
 assert.equal(flat.lines.length, 1);
 assert.equal(flat.lines[0].text, 'a b c d e\tf g');
+
+// Newline marker: shown where a source line ended, prefixed with WALL_SEP so the renderer can tell
+// it from a word. Word ranges must be IDENTICAL to the unmarked build — the marker is not a word.
+const w3 = buildWallDoc(doc, heads, { breakEvery: 0, joiner: '¶' });
+assert.equal(w3.lines[1].text, `a b c ${WALL_SEP}¶ d e\tf g`, `got ${JSON.stringify(w3.lines[1].text)}`);
+assert.deepEqual(w3.wordToLine, w.wordToLine, 'marker must not shift the word→line map');
+assert.equal(w3.lines[1].startWordIndex, w.lines[1].startWordIndex);
+assert.equal(w3.lines[1].endWordIndex, w.lines[1].endWordIndex);
+// Counting non-marker tokens is how the renderer assigns word indices — it must still find 7 words.
+const toks = w3.lines[1].text.split(/\s+/).filter((t) => t && t[0] !== WALL_SEP && t !== '\t');
+assert.equal(toks.length, 7, `7 real words, got ${toks.length}: ${JSON.stringify(toks)}`);
+// Whitespace inside the marker is stripped so it stays a single token.
+assert.equal(buildWallDoc(doc, heads, { joiner: ' • ' }).lines[1].text, `a b c ${WALL_SEP}• d e\tf g`);
 
 console.log('wallText.demo: all assertions passed ✅');
