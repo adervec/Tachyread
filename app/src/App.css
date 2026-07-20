@@ -1102,6 +1102,23 @@
 }
 .ew-pick.on { color: #e6ecf7; background: rgba(255, 255, 255, 0.05); }
 .ew-setup-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+/* Eye-tracking block on the setup screen — one panel: status, camera/calibrate buttons, the note. */
+.ew-gaze {
+  width: min(620px, 100%); display: flex; flex-wrap: wrap; gap: 4px 12px;
+  align-items: center; justify-content: center;
+  padding: 7px 12px; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 8px;
+}
+.ew-gaze-head { display: flex; align-items: center; gap: 8px; color: #dbe2f0; font-size: 13px; font-weight: 600; }
+.ew-beta { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #8794ab; border: 1px solid #46506a; border-radius: 8px; padding: 0 5px; }
+.ew-gaze-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: center; }
+.ew-gaze .settings-note { color: #9aa5bb; font-size: 11px; max-width: 600px; text-align: center; }
+.ew-gaze > p.settings-note { flex-basis: 100%; margin: 0; }
+.ew-gaze-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7488; }
+.ew-gaze-dot.st-tracking { background: #7dff8a; box-shadow: 0 0 6px #7dff8a; }
+.ew-gaze-dot.st-starting { background: #ffd54f; }
+.ew-gaze-dot.st-denied, .ew-gaze-dot.st-error, .ew-gaze-dot.st-unsupported { background: #ff5c5c; }
+.ew-live-score { font-size: 12px; color: var(--nav-session-read-fg, #7dff8a); font-variant-numeric: tabular-nums; }
+.ew-score { color: #dbe2f0; font-size: 14px; margin: 0; }
 
 /* Once-a-day desktop nudge to warm up before reading. */
 .ew-nudge { display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: var(--menu-highlight); border-bottom: 1px solid var(--divider); font-size: 13px; }
