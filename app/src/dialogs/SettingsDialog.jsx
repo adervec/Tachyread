@@ -14,6 +14,9 @@ const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel']
 // const POINTER_STYLES = ['Arrow', 'Diamond', 'Star', 'Circle', 'Hand'];
 // const POINTER_PLACEMENTS = ['Above', 'Below', 'Left', 'Right'];
 const CURRENT_WORD_STYLES = ['Underline', 'Overline', 'Bold', 'Italic', 'Color', 'Background', 'Box', 'Glow'];
+// Lines-pane ORP looks (combinable). Larger/Caps change glyph metrics, so they re-wrap lines — the
+// title says so; the rest are paint-only.
+const ORP_STYLES = ['Bold', 'Glow', 'Pulse', 'Shimmer', 'Underline', 'Box', 'Background', 'Dot', 'Italic', 'Larger', 'Caps'];
 // Named highlight colours shared by the current-word highlight and the source cursor. '' = theme default.
 const HIGHLIGHT_COLORS = [
   ['', 'Theme'], ['#ffd54f', 'Amber'], ['#4fd8ff', 'Cyan'], ['#7dff8a', 'Green'],
@@ -133,6 +136,14 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
     patch({ currentWordStyles: [...set] });
   }
 
+  const orpStyles = Array.isArray(s.orpStyles) ? s.orpStyles : ['Bold'];
+  function toggleOrpStyle(name) {
+    const set = new Set(orpStyles);
+    if (set.has(name)) set.delete(name);
+    else set.add(name);
+    patch({ orpStyles: [...set] });
+  }
+
   return (
     <Dialog
       title={title}
@@ -240,6 +251,28 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           <input type="color" className="swatch-custom" value={s.orpColor || '#d24a43'} onChange={(e) => patch({ orpColor: e.target.value })} title="Custom colour" />
         </div>
       </Field>
+      <Field label="ORP style (Lines, combine any)">
+        <div className="checkbox-group">
+          {ORP_STYLES.map((name) => (
+            <label
+              key={name}
+              className="checkbox-pill"
+              title={name === 'Larger' || name === 'Caps' ? `${name} — changes the letter's size, so lines re-wrap` : name}
+            >
+              <input type="checkbox" checked={orpStyles.includes(name)} onChange={() => toggleOrpStyle(name)} />
+              {name}
+            </label>
+          ))}
+        </div>
+      </Field>
+      {/* Live preview — these are purely visual, and hunting for the effect in the pane behind the
+          dialog is a pain. Reuses the real .line-row/.orp-* rules so it can't drift. */}
+      <div className="line-row orp-preview" style={s.orpColor ? { '--lines-orp': s.orpColor } : undefined}>
+        <span className="text">
+          The qu<span className={['orp-char', ...orpStyles.map((st) => `orp-${st}`)].join(' ')}>i</span>ck brown fox
+          {' '}jumps o<span className={['orp-char', ...orpStyles.map((st) => `orp-${st}`)].join(' ')}>v</span>er the lazy dog
+        </span>
+      </div>
       <Field label="ORP horizontal position (%)">
         <input
           type="range"

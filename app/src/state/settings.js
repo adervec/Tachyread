@@ -58,6 +58,7 @@ export function defaultFileSettings() {
     contentChecksum: '',
     highlightORP: false,
     orpColor: '', // ORP letter colour in the Lines pane ('' = theme default, usually red)
+    orpStyles: ['Bold'], // combinable Lines-pane ORP looks: Bold | Glow | Pulse | Underline | Box | Background | Larger | Italic | Caps
     statsChip: {}, // stats-chip block toggles (see STATS_CHIP_ITEMS; {} = the default layout)
     orpHorizontalPercent: 0.5,
     rsvpFocus: 'none', // eye-focuser at the ORP: none | fisheye | pulse | converge

@@ -29,6 +29,13 @@ function currentWordStyles(settings) {
   return ['Underline'];
 }
 
+// Combinable ORP-letter looks, precomputed into one class string (it's the same for every word on
+// the page, so building it per word would be pure waste).
+function orpClass(settings) {
+  const styles = Array.isArray(settings.orpStyles) ? settings.orpStyles : ['Bold'];
+  return ['orp-char', ...styles.map((st) => `orp-${st}`)].join(' ');
+}
+
 function renderWords(line, opts) {
   const text = line.text;
   const words = text.split(/(\s+)/);
@@ -61,7 +68,7 @@ function renderWords(line, opts) {
       inner = (
         <>
           {tok.slice(0, o)}
-          <span className="orp-char">{tok[o]}</span>
+          <span className={opts.orpCls}>{tok[o]}</span>
           {tok.slice(o + 1)}
         </>
       );
@@ -213,6 +220,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
               currentWordIndex: ctx.currentWordIndex,
               bionic: dsettings.bionicFont,
               highlightORP: dsettings.highlightORP,
+              orpCls: dsettings.orpCls,
               currentWordStyles: dsettings.currentWordStyles,
               properNamesSet: propNameKeys,
               isHeaderFooter: isHF,
@@ -262,12 +270,22 @@ function lineRowEqual(p, n) {
 const LineRow = memo(LineRowImpl, lineRowEqual);
 
 // Row component for react-window: positions LineRow absolutely and measures its height.
+// In scroll-to-read one PHANTOM row past the last line renders as an end runway — without it the
+// final screenful can never scroll up past the read point, so the last lines were unreachable.
 function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl, headingMap, headingPack }) {
   const ref = useRef(null);
   useEffect(() => {
     if (!ref.current) return;
     return rowHeightCtl.observeRowElements([ref.current]);
   }, [rowHeightCtl]);
+
+  if (index >= doc.lines.length) {
+    return (
+      <div ref={ref} style={style} {...ariaAttributes}>
+        <div className="lp-endpad" aria-hidden="true"><span>— end —</span></div>
+      </div>
+    );
+  }
 
   const showSep = sepEvery > 0 && index > 0 && index % sepEvery === 0;
 
@@ -509,6 +527,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       pointerBlinkMs: settings.pointerBlinkMs,
       bionicFont: settings.bionicFont,
       highlightORP: settings.highlightORP,
+      orpCls: orpClass(settings),
       currentWordStyles: currentWordStyles(settings),
       currentWordFontDelta: settings.currentWordFontDelta || 0,
       swaps: swapLookup(settings.wordSwaps),
@@ -517,7 +536,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       settings.blurLinesBefore, settings.blurLinesAfter, settings.blurGradient, settings.obscureMode, settings.parallelTranslation, settings.altSentenceColors,
       settings.currentLineFontSizeBoost,
       settings.textAlignment, settings.showPointer, settings.pointerStyle, settings.pointerPlacement,
-      settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP,
+      settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP, settings.orpStyles,
       settings.currentWordStyles, settings.currentWordStyle, settings.currentWordFontDelta, settings.wordSwaps, wall,
     ]
   );
@@ -744,6 +763,16 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
         const frac = Math.max(0, Math.min(1, (readY - rr.top) / Math.max(1, rr.height)));
         return ln.startWordIndex + Math.round(frac * Math.max(0, end - ln.startWordIndex));
       }
+      // Every text row sits ABOVE the read line — the reader scrolled the last line past it into
+      // the end runway. The tail counts as read, and the position lands on the final word.
+      let lastBottom = -Infinity;
+      let sawRow = false;
+      for (const row of rows) {
+        sawRow = true;
+        const rr = row.getBoundingClientRect();
+        if (rr.bottom > lastBottom) lastBottom = rr.bottom;
+      }
+      if (sawRow && lastBottom <= readY + 1) return doc.words.length - 1;
       return null;
     };
     let raf = 0;
@@ -919,7 +948,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
         <div className="line-pane-list" ref={listWrapRef} style={{ fontSize: `${baseFont}px`, lineHeight: lineSpacing, ...gridStyle }} onContextMenu={onContextMenu} {...pressHandlers}>
           <List
             listRef={listRef}
-            rowCount={totalLines}
+            rowCount={totalLines + (scrollRead ? 1 : 0)}
             rowHeight={rowHeightCtl}
             rowComponent={Row}
             rowProps={rowProps}

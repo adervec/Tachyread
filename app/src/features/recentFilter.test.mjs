@@ -10,6 +10,8 @@ assert.equal(finishedNotRereading({ ...fin, wordIndex: 300 }, undefined), false,
 assert.equal(finishedNotRereading(fin, 'reading'), false, 'explicit reading shelf → shown');
 assert.equal(finishedNotRereading({ totalWords: 1000, wordIndex: 400 }, undefined), false, 'unfinished → shown');
 assert.equal(finishedNotRereading({ totalWords: 1000, wordIndex: 1000 }, undefined), true, 'parked at end, no completion → hidden');
+assert.equal(finishedNotRereading({ totalWords: 225, wordIndex: 224 }, undefined), true, 'short file on its LAST word → finished');
+assert.equal(finishedNotRereading({ totalWords: 225, wordIndex: 200 }, undefined), false, 'short file near the end → still reading');
 assert.equal(finishedNotRereading({ totalWords: 1000, wordIndex: 100 }, 'finished'), true, 'explicit finished shelf → hidden');
 assert.equal(finishedNotRereading(null, undefined), false, 'no record → shown');
 
