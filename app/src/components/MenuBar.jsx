@@ -456,6 +456,15 @@ export default function MenuBar({ onFileOpen, onAction }) {
       </div>
       <div className="grow" />
       <div className="right-toggles">
+        <button
+          className="menu-font-btn"
+          disabled={!activeTab}
+          title="Full-screen Lines reading — fills the screen with the Lines pane and hides all chrome (Esc to exit)"
+          aria-label="Full-screen Lines reading"
+          onClick={() => onAction('fullscreen-lines')}
+        >
+          ⛶
+        </button>
         <FontQuickPick activeTab={activeTab} patchSettings={patchSettings} global={state.global} updateGlobal={updateGlobal} />
         <button
           className="menu-font-btn"

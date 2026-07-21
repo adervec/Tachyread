@@ -166,7 +166,9 @@ function AppInner() {
   const [bioFeedPos, setBioFeedPos] = useState(() => state.global.bioFeedPos || null); // draggable Biometric Control Feed
   const [controlsCollapsed, setControlsCollapsed] = useState(false); // minimize the bottom dock for text room
   const [chromeHidden, setChromeHidden] = useState(false); // mobile: hide menu+tabs above the reader for text room
-  const [immersive, setImmersive] = useState(false); // mobile: reading area fills the whole screen (tiny ⛶ overlay to exit)
+  const [immersive, setImmersive] = useState(false); // reading area fills the whole screen (tiny ⛶ overlay / Esc to exit)
+  const immersiveRef = useRef(false);
+  immersiveRef.current = immersive;
   const touchRef = useRef(null); // swipe-gesture start point
   const engineRef = useRef(null);
   if (!engineRef.current) engineRef.current = createEngine();
@@ -1410,8 +1412,9 @@ function AppInner() {
       const inField = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable;
       const inDialog = !!(k.state.modal || k.state.panels.some((p) => p.id === k.state.activePanelId));
 
-      // Escape works from anywhere: close a footnote, else the focused dialog tab.
+      // Escape works from anywhere: leave full-screen reading, close a footnote, else the dialog tab.
       if (e.key === 'Escape') {
+        if (k.immersiveRef?.current) { k.setImmersive(false); return; }
         if (k.showFootnote) { k.setShowFootnote(false); return; }
         if (inDialog) { k.closeDialog(); }
         return;
@@ -1864,6 +1867,14 @@ function AppInner() {
     }
     if (action === 'def-settings') return openDialog({ kind: 'def-settings' });
     if (action === 'tab-settings' && activeTab) return openDialog({ kind: 'tab-settings' });
+    if (action === 'fullscreen-lines') {
+      // Desktop full-screen Lines reading: ensure the Lines pane is showing, then immersive collapses
+      // the layout to it and hides all chrome (Esc or the ⛶ overlay exits). Same look as mobile
+      // immersive, minus the accelerometer shake toggle.
+      if (state.showLines === false) dispatch({ type: 'TOGGLE_LINES' });
+      setImmersive(true);
+      return;
+    }
     if (action === 'reset-tab' && activeTab) {
       const defaults = state.global.fileDefaults || defaultFileSettings();
       patchSettings(activeTab.id, { ...defaults, wordIndex: activeTab.settings.wordIndex, contentChecksum: activeTab.settings.contentChecksum });
@@ -2056,6 +2067,7 @@ function AppInner() {
     activeTab, state, showFootnote, playPause, nav, pageLines, jumpToCurrent, triggerOpen,
     openClipboard, openDialog, closeDialog, setShowFootnote, toggleFocusMode, dispatch,
     toggleReadAloud, toggleAudioCtrl, toggleScrollRead, adjustWpm, cycleTabs, togglePane, jumpToFrontier, jumpToGap,
+    immersiveRef, setImmersive,
   };
 
   // Maximise the text on a phone. The Lines view is for immersive (often thumb-scrolled) reading, so
@@ -2181,11 +2193,11 @@ function AppInner() {
 
   return (
     <div
-      className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}${forcePortrait != null ? ' force-portrait' : ''}${isCompact && immersive ? ' immersive' : ''}`}
+      className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}${forcePortrait != null ? ' force-portrait' : ''}${immersive ? ' immersive' : ''}${!isCompact && immersive ? ' lines-full' : ''}`}
       style={forcePortrait != null ? { transform: `translate(-50%, -50%) rotate(${forcePortrait}deg)` } : undefined}
     >
-      {isCompact && immersive && (
-        <button className="immersive-exit" title="Exit full-screen reading" aria-label="Exit full-screen reading" onClick={() => setImmersive(false)}>⛶</button>
+      {immersive && (
+        <button className="immersive-exit" title="Exit full-screen reading (Esc)" aria-label="Exit full-screen reading" onClick={() => setImmersive(false)}>⛶</button>
       )}
       {/* Bedtime blue-light filter: a warm multiply overlay over the whole app. pointer-events:none
           so it never intercepts clicks; strength is the user's. */}
