@@ -1,5 +1,6 @@
-// Eye gestures as a hands-free control: deliberate blinks, winks (left and right are different
-// gestures) and eye rolls, each mapped to a command by how LONG you held it.
+// Eye and face gestures as a hands-free control: deliberate blinks, winks (left and right are
+// different gestures), eye rolls, and held face poses — tongue out, puffed cheeks, raised brows and
+// so on — each mapped to a command by how LONG you held it.
 //
 // The whole design problem here is that eyes are not a button. They blink ~15 times a minute on
 // their own, they saccade constantly while reading, and none of that is meant as a command. So:
@@ -25,9 +26,37 @@ export const EYE_KINDS = [
   { id: 'rollCW', label: 'Eye roll — clockwise', icon: '🔃' },
   { id: 'rollCCW', label: 'Eye roll — anticlockwise', icon: '🔄' },
 ];
-export const EYE_KIND_IDS = EYE_KINDS.map((k) => k.id);
+
+// Held FACE poses, same duration-window idea as the eye gestures. Each reads one or two of the
+// face model's expression scores (0 = neutral, 1 = full).
+//
+// `floor` is the shortest hold that can be mapped, and it varies a lot by pose: nobody sticks their
+// tongue out by accident, but people smile and open their mouths constantly, so those need a longer
+// deliberate hold before they can mean anything. `natural` flags the ones the UI should caution
+// about. `min` is how pronounced the pose must be — a faint half-smile shouldn't count as a command.
+export const FACE_KINDS = [
+  { id: 'tongueOut', label: 'Tongue out', icon: '😛', shapes: ['tongueOut'], min: 0.32, floor: 450, hint: 'The face model reads this one less confidently than the rest — stick it out clearly.' },
+  { id: 'cheekPuff', label: 'Puffed cheeks', icon: '😗', shapes: ['cheekPuff'], min: 0.4, floor: 500 },
+  { id: 'pucker', label: 'Pucker / kiss', icon: '😙', shapes: ['mouthPucker'], min: 0.5, floor: 600 },
+  { id: 'mouthLeft', label: 'Mouth to the left', icon: '↖', shapes: ['mouthLeft'], min: 0.45, floor: 600 },
+  { id: 'mouthRight', label: 'Mouth to the right', icon: '↗', shapes: ['mouthRight'], min: 0.45, floor: 600 },
+  { id: 'browsUp', label: 'Eyebrows raised', icon: '😯', shapes: ['browInnerUp', 'browOuterUpLeft', 'browOuterUpRight'], min: 0.5, floor: 700, natural: true },
+  { id: 'mouthOpen', label: 'Mouth open (held)', icon: '😮', shapes: ['jawOpen'], min: 0.45, floor: 700, natural: true },
+  { id: 'frown', label: 'Brows down (frown)', icon: '😠', shapes: ['browDownLeft', 'browDownRight'], min: 0.5, floor: 800, natural: true },
+  { id: 'smile', label: 'Smile (held)', icon: '😊', shapes: ['mouthSmileLeft', 'mouthSmileRight'], min: 0.5, floor: 900, natural: true },
+];
+export const FACE_BY_ID = Object.fromEntries(FACE_KINDS.map((k) => [k.id, k]));
+export const ALL_KINDS = [...EYE_KINDS, ...FACE_KINDS];
+export const EYE_KIND_IDS = ALL_KINDS.map((k) => k.id);
+// Every blendshape the detector reads, so the camera layer can ship just these instead of all 52.
+export const FACE_SHAPE_KEYS = [...new Set(FACE_KINDS.flatMap((k) => k.shapes))];
 
 export const DELIBERATE_MS = 450;  // below this it's a natural blink, not a command
+// The shortest hold this gesture may be mapped at — natural blinking for the eyes, and the
+// pose-specific floors above for the face.
+export function kindFloorMs(kind) {
+  return FACE_BY_ID[kind]?.floor ?? DELIBERATE_MS;
+}
 export const MAX_HOLD_MS = 5000;   // a hold longer than this is you resting your eyes, not signalling
 export const REFRACTORY_MS = 700;  // quiet period after a fire
 export const WINK_MARGIN = 0.35;   // how much more closed one eye must be than the other
@@ -55,7 +84,17 @@ export function validateEyeMappings(rows) {
     }
     if (max <= min) out.push({ index: i, level: 'error', code: 'range', message: 'The longest hold must be more than the shortest' });
     else if (max - min < MIN_RANGE_MS) out.push({ index: i, level: 'warn', code: 'narrow', message: `A window under ${MIN_RANGE_MS}ms is very hard to hit` });
-    if (min < DELIBERATE_MS) out.push({ index: i, level: 'error', code: 'floor', message: `Under ${DELIBERATE_MS}ms is natural blinking — it would fire while you read` });
+    const floor = kindFloorMs(r?.kind);
+    if (min < floor) {
+      out.push({
+        index: i,
+        level: 'error',
+        code: 'floor',
+        message: FACE_BY_ID[r?.kind]
+          ? `${FACE_BY_ID[r.kind].label} needs at least ${floor}ms — anything shorter happens on its own while you read or talk`
+          : `Under ${floor}ms is natural blinking — it would fire while you read`,
+      });
+    }
     if (max > MAX_HOLD_MS) out.push({ index: i, level: 'error', code: 'ceiling', message: `Over ${MAX_HOLD_MS / 1000}s is resting your eyes, not signalling` });
   });
   // Overlap, per gesture kind, among enabled + otherwise-sane rows.
@@ -111,12 +150,40 @@ export function createEyeGestureDetector({
   getRows, onGesture, onIgnored, onHold, onCue,
   closeThreshold = 0.5, deliberateMs = DELIBERATE_MS, refractoryMs = REFRACTORY_MS,
 } = {}) {
-  let hold = null;      // { kind, start, both, asymSum, n }
+  let hold = null;      // { kind, start, both, asymSum, n } — eyes closed
   let quietUntil = 0;
   let lastInWindow = null;
   let roll = null;      // { start, angle, last, turned }
+  let pose = null;      // { kind, start } — a held face pose
 
   const rows = () => (typeof getRows === 'function' ? getRows() || [] : []);
+
+  // The single most pronounced face pose above its own threshold, or null. Taking only the dominant
+  // one keeps a smile-plus-raised-brows from firing two commands at once; if the dominant pose
+  // changes mid-hold the hold restarts, so the gesture you end on is the one that counts.
+  function dominantPose(shapes) {
+    if (!shapes) return null;
+    let best = null, bestScore = 0;
+    for (const k of FACE_KINDS) {
+      const score = Math.max(...k.shapes.map((s) => Number(shapes[s]) || 0));
+      if (score >= k.min && score > bestScore) { best = k.id; bestScore = score; }
+    }
+    return best;
+  }
+
+  function finishPose(t) {
+    if (!pose) return;
+    const ms = t - pose.start;
+    const k = pose.kind;
+    pose = null;
+    lastInWindow = null;
+    if (ms < kindFloorMs(k)) return;                  // happened on its own — say nothing
+    if (ms > MAX_HOLD_MS) { onIgnored?.({ kind: k, ms, why: 'too long' }); return; }
+    const row = matchEyeHold(rows(), k, ms);
+    quietUntil = t + refractoryMs;
+    if (row) onGesture?.({ kind: k, ms, row });
+    else onIgnored?.({ kind: k, ms, why: 'no window' });
+  }
 
   function finishHold(t) {
     if (!hold) return;
@@ -144,6 +211,7 @@ export function createEyeGestureDetector({
     // Eyes shut → blink/wink tracking; the roll accumulator can't survive a blink.
     if (L || R) {
       roll = null;
+      finishPose(t); // a pose that ends in a blink still ends
       if (t < quietUntil) return;
       const kindNow = L && R ? 'blink' : L ? 'winkL' : 'winkR';
       if (!hold) hold = { kind: kindNow, start: t, both: L && R, asymSum: 0, n: 0 };
@@ -164,7 +232,24 @@ export function createEyeGestureDetector({
     }
 
     if (hold) { finishHold(t); return; }
-    if (t < quietUntil) { roll = null; return; }
+    if (t < quietUntil) { roll = null; pose = null; return; }
+
+    // Face poses. Same duration windows as the eye gestures, so the meter, the cue and the matcher
+    // are all shared — only the "am I holding it" test differs.
+    const poseNow = dominantPose(s?.shapes);
+    if (poseNow) {
+      roll = null; // a face pose owns the gesture channel while it lasts
+      if (!pose || pose.kind !== poseNow) { finishPose(t); pose = { kind: poseNow, start: t }; }
+      const ms = t - pose.start;
+      const inWindow = ms >= kindFloorMs(poseNow) ? matchEyeHold(rows(), poseNow, ms) : null;
+      const next = nextEyeWindow(rows(), poseNow, ms);
+      onHold?.({ kind: poseNow, ms, inWindow, next });
+      if (inWindow && inWindow !== lastInWindow) onCue?.('enter');
+      else if (!inWindow && lastInWindow) onCue?.(next ? 'leave' : 'over');
+      lastInWindow = inWindow;
+      return;
+    }
+    if (pose) { finishPose(t); return; }
 
     // Both eyes open: watch for a rolling sweep of the iris around the eye. Angles are accumulated
     // as signed deltas, so a back-and-forth reading sweep cancels out instead of adding up.
@@ -195,7 +280,7 @@ export function createEyeGestureDetector({
 
   return {
     push,
-    reset() { hold = null; roll = null; quietUntil = 0; lastInWindow = null; },
+    reset() { hold = null; roll = null; pose = null; quietUntil = 0; lastInWindow = null; },
     holding: () => (hold ? { kind: hold.kind, start: hold.start } : null),
   };
 }

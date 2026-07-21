@@ -95,7 +95,7 @@ import { saveTextToFile, saveBlobToFile } from './features/fileSystem.js';
 import { buildTabPdf } from './features/exportPdf.js';
 import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
-import { createEyeGestureDetector, eyeMappingsUsable, EYE_KINDS } from './features/eyeGestures.js';
+import { createEyeGestureDetector, eyeMappingsUsable, ALL_KINDS } from './features/eyeGestures.js';
 import { createEyeCue } from './features/eyeCue.js';
 import { createGestureMonitor, DEFAULT_HAND_CALIB, DEFAULT_GESTURES, GESTURE_INFO } from './features/handGestures.js';
 import { runCommand, actionLabel, matchVoice, matchVoiceRow, COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from './features/commandRegistry.js';
@@ -1015,14 +1015,14 @@ function AppInner() {
         setEyeHold(null);
         if (cueOn()) eyeCueRef.current?.play('fired', cueVol());
         const cmd = COMMANDS.find((c) => c.id === row.commandId);
-        const label = EYE_KINDS.find((k) => k.id === kind)?.label || kind;
+        const label = ALL_KINDS.find((k) => k.id === kind)?.label || kind;
         pushBioLog({ source: 'eyes', icon: '👁', text: `${label} ${Math.round(ms)}ms → ${cmd?.label || row.commandId}`, tone: 'ok' });
         cmd?.run(cmdCtx());
       },
       onIgnored: ({ kind, ms, why }) => {
         setEyeHold(null);
         // Telling you the hold you DID make is how you learn the windows; silence just feels broken.
-        if (why === 'no window') setStatus(`👁 ${EYE_KINDS.find((k) => k.id === kind)?.label || kind} held ${Math.round(ms)}ms — no action mapped to that length.`);
+        if (why === 'no window') setStatus(`👁 ${ALL_KINDS.find((k) => k.id === kind)?.label || kind} held ${Math.round(ms)}ms — no action mapped to that length.`);
       },
     });
     return () => { eyeDetectorRef.current = null; };
