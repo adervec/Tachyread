@@ -3,6 +3,8 @@ import Dialog from './Dialog.jsx';
 import { DEFAULT_GESTURES, GESTURE_INFO } from '../features/handGestures.js';
 import { COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from '../features/commandRegistry.js';
 import { stepLabel } from '../features/triggerSequences.js';
+import { EYE_KINDS, validateEyeMappings, DELIBERATE_MS, MAX_HOLD_MS } from '../features/eyeGestures.js';
+import { createEyeCue } from '../features/eyeCue.js';
 import { createRecognizer, speechRecognitionSupported } from '../features/speechRecognition.js';
 import { getLanguage } from '../state/languages.js';
 
@@ -28,9 +30,25 @@ function CommandSelect({ value, onChange, disabled }) {
   );
 }
 
-export default function BiometricControlsDialog({ global, onPatch, onCalibrate, onCalibrateHand, isCompact = false, onClose }) {
+export default function BiometricControlsDialog({ global, onPatch, onCalibrate, onCalibrateHand, isCompact = false, hold = null, onClose }) {
   const [g, setG] = useState(global);
   function patch(p) { setG({ ...g, ...p }); onPatch(p); }
+
+  // Eye gestures: rows live in global.eyeGestures. Validation runs on every edit so overlapping or
+  // natural-blink-range windows are called out (and block arming) before they can misfire.
+  const eye = g.eyeGestures || {};
+  const eyeRows = eye.rows || [];
+  const eyeProblems = validateEyeMappings(eyeRows);
+  const eyeOk = eyeProblems.every((p) => p.level !== 'error');
+  const patchEye = (p) => patch({ eyeGestures: { ...eye, ...p } });
+  const setEyeRows = (rows) => {
+    // Never leave the feature armed with a broken set — turn it off with the same edit.
+    const stillOk = validateEyeMappings(rows).every((p) => p.level !== 'error');
+    patchEye({ rows, ...(stillOk ? {} : { on: false }) });
+  };
+  const cueRef = useRef(null);
+  if (!cueRef.current) cueRef.current = createEyeCue();
+  useEffect(() => () => cueRef.current?.close(), []);
 
   const gestureMap = { ...DEFAULT_GESTURE_MAP, ...(g.gestureMap || {}) };
   const clapMap = { ...DEFAULT_CLAP_MAP, ...(g.clapMap || {}) };
@@ -291,6 +309,120 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
         );
       })}
       <button style={{ marginTop: 6 }} onClick={() => patch({ triggerSeqs: [...(g.triggerSeqs || []), { steps: ['', ''], commandId: '', on: true }] })}>+ Add sequence</button>
+
+      <div className="field-section">👁 Eye gestures</div>
+      <p className="settings-note">
+        Deliberate blinks, winks and eye rolls, mapped by <b>how long you hold them</b>. Anything under
+        {' '}{DELIBERATE_MS}ms is ordinary blinking and is ignored, so reading never triggers anything —
+        which also means every window must start at {DELIBERATE_MS}ms or later. This is the one camera
+        control that also runs on a phone.
+      </p>
+      <Field label="Eye gestures on">
+        <input
+          type="checkbox"
+          checked={!!eye.on}
+          disabled={!eyeOk && !eye.on}
+          title={!eyeOk && !eye.on ? 'Fix the mapping problems below first' : 'Turns on the front camera while reading'}
+          onChange={(e) => patchEye({ on: e.target.checked })}
+        />
+      </Field>
+      {eye.on && !eyeOk && (
+        <p className="settings-note" style={{ color: 'var(--ox-bright, #b0413e)' }}>
+          ⚠ These mappings can’t be armed until the errors below are fixed.
+        </p>
+      )}
+      <Field label="Audio timing cue">
+        <div className="bio-gesture-maps">
+          <input type="checkbox" checked={!!eye.cue} onChange={(e) => patchEye({ cue: e.target.checked })} />
+          <span className="settings-note" style={{ margin: 0 }}>
+            A tick when the hold enters a window (let go now), a lower one when it drops into a gap, a
+            buzz once you’re past them all.
+          </span>
+        </div>
+      </Field>
+      {eye.cue && (
+        <Field label="Cue volume">
+          <input
+            type="range" min={0} max={100} step={5}
+            value={Math.round((eye.cueVolume ?? 1) * 100)}
+            onChange={(e) => patchEye({ cueVolume: Number(e.target.value) / 100 })}
+          />
+          <button style={{ marginLeft: 6 }} onClick={() => cueRef.current.play('enter', eye.cueVolume ?? 1)}>Test ♪</button>
+        </Field>
+      )}
+      {/* Live meter: the hold you're doing right now and which window it's in. Without it, tuning
+          duration windows is pure guesswork. */}
+      {eye.on && (
+        <div className="bio-eye-meter">
+          {hold ? (
+            <>
+              <span className="bio-eye-kind">{EYE_KINDS.find((k) => k.id === hold.kind)?.icon} {EYE_KINDS.find((k) => k.id === hold.kind)?.label}</span>
+              <span className={`bio-eye-ms${hold.inWindow ? ' in' : ''}`}>{Math.round(hold.ms)}ms</span>
+              <span className="settings-note" style={{ margin: 0 }}>
+                {hold.inWindow
+                  ? `→ ${COMMANDS.find((c) => c.id === hold.inWindow.commandId)?.label || hold.inWindow.commandId} — release now`
+                  : hold.next ? `next window at ${hold.next.minMs}ms` : 'past every window'}
+              </span>
+            </>
+          ) : <span className="settings-note" style={{ margin: 0 }}>Hold a blink or wink to see it measured here…</span>}
+        </div>
+      )}
+      {eyeRows.map((r, i) => {
+        const setRow = (p) => setEyeRows(eyeRows.map((x, j) => (j === i ? { ...x, ...p } : x)));
+        const mine = eyeProblems.filter((p) => p.index === i);
+        const err = mine.find((p) => p.level === 'error');
+        return (
+          <div key={i} className={`bio-eye-row${err ? ' bad' : ''}`} style={{ opacity: r.on === false ? 0.55 : 1 }}>
+            <input
+              type="checkbox"
+              checked={r.on !== false}
+              title="Enable / disable this mapping (kept while disabled — a disabled row can't conflict)"
+              onChange={(e) => setRow({ on: e.target.checked })}
+            />
+            <select value={r.kind || ''} onChange={(e) => setRow({ kind: e.target.value })}>
+              <option value="">gesture…</option>
+              {EYE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {k.label}</option>)}
+            </select>
+            <span className="bio-eye-range">
+              <input
+                type="number" min={DELIBERATE_MS} max={MAX_HOLD_MS} step={50} value={r.minMs ?? ''}
+                title="Shortest hold that counts" onChange={(e) => setRow({ minMs: Number(e.target.value) })}
+              />
+              <span>–</span>
+              <input
+                type="number" min={DELIBERATE_MS} max={MAX_HOLD_MS} step={50} value={r.maxMs ?? ''}
+                title="Longest hold that counts" onChange={(e) => setRow({ maxMs: Number(e.target.value) })}
+              />
+              <span>ms</span>
+            </span>
+            <span className="bio-seq-arrow">→</span>
+            <CommandSelect value={r.commandId} onChange={(v) => setRow({ commandId: v })} />
+            <button title="Remove this mapping" onClick={() => setEyeRows(eyeRows.filter((_, j) => j !== i))}>✕</button>
+            {mine.map((p, k) => (
+              <span key={k} className={`bio-eye-problem ${p.level}`}>{p.level === 'error' ? '⛔' : '⚠'} {p.message}</span>
+            ))}
+          </div>
+        );
+      })}
+      <button
+        style={{ marginTop: 6 }}
+        onClick={() => setEyeRows([...eyeRows, { kind: 'blink', minMs: 600, maxMs: 1000, commandId: '', on: true }])}
+      >
+        + Add eye mapping
+      </button>
+      {!eyeRows.length && (
+        <button
+          style={{ marginTop: 6, marginLeft: 6 }}
+          title="A sane starting set you can edit"
+          onClick={() => setEyeRows([
+            { kind: 'blink', minMs: 600, maxMs: 1000, commandId: 'playPause', on: true },
+            { kind: 'winkL', minMs: 600, maxMs: 1200, commandId: 'prevLine', on: true },
+            { kind: 'winkR', minMs: 600, maxMs: 1200, commandId: 'nextLine', on: true },
+          ])}
+        >
+          Use a starter set
+        </button>
+      )}
 
       <p className="settings-note">
         Everything runs on-device — camera frames and microphone audio are analysed locally and never

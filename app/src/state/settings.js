@@ -300,6 +300,11 @@ export function defaultGlobalSettings() {
     handGestures: false,
     handCalib: null,
     handGestureSet: null,
+    // Eye-gesture controls (Biometric Controls → Eye gestures). Deliberate blinks / winks / eye
+    // rolls mapped to commands by how long you hold them. Unlike the other camera features this one
+    // runs on mobile too — it's explicitly opt-in, so the battery cost is the user's call.
+    //   { on, cue (audio timing cue), cueVolume, rows: [{ kind, minMs, maxMs, commandId, on }] }
+    eyeGestures: null,
     // Custom trigger→command maps (Biometric Controls). null → the defaults in commandRegistry.js,
     // which reproduce the original hardcoded behavior. Many triggers may point at one command.
     //   gestureMap: { thumbUp|thumbDown|fist|victory|wave: commandId }  (scroll stays the joystick)
