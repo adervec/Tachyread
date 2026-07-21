@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
+import { scanMiscategorized, applyRecat, recatSummary } from '../features/journeyRecat.js';
 import { fmtDateTime } from '../features/dateFmt.js';
 import {
   getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef, saveLibraryRef,
@@ -184,6 +185,10 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   const [selected, setSelected] = useState(null);
   const [adding, setAdding] = useState(false);
   const [cleanup, setCleanup] = useState(null); // scan preview: { dups, datable, undatable, contradictory }
+  // Miscategorised-content scan: suggestions plus the ids the user has ticked to apply.
+  const [recat, setRecat] = useState(null);
+  const [recatPick, setRecatPick] = useState(() => new Set());
+  const [recatMsg, setRecatMsg] = useState('');
   const [cleanMsg, setCleanMsg] = useState('');
   // "This Book in Trackyread" entry points: focus an already-linked book, or run the link flow.
   // linkName mirrors the prop but can also be set by the embedded Files table's "link…" action.
@@ -469,6 +474,24 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     for (const it of cleanup.undatable) await saveLibraryBook(it.fix);
     setCleanMsg(`Un-finished ${cleanup.undatable.length} undated book(s).`);
     setCleanup(null); await reload();
+  }
+
+  // ── Miscategorised content ───────────────────────────────────────────────────────────────────
+  // Content types come from import guesses, so the Dashboard's long/short/AI splits are only as
+  // honest as those guesses. Scan proposes; nothing changes until you tick and apply.
+  function scanTypes() {
+    const found = scanMiscategorized(books || []);
+    setRecat(found);
+    setRecatPick(new Set(found.map((s) => s.id))); // everything ticked — it's a review list, not a quiz
+    setRecatMsg(found.length ? '' : 'Every record’s content type matches its evidence. ✅');
+  }
+  async function applyRecatPicks() {
+    const accepted = (recat || []).filter((s) => recatPick.has(s.id));
+    const updated = applyRecat(books || [], accepted);
+    for (const b of updated) await saveLibraryBook(b);
+    setRecatMsg(`Recategorised ${updated.length} record${updated.length === 1 ? '' : 's'}. Types you set are locked, so the scan won’t re-flag them.`);
+    setRecat(null); setRecatPick(new Set());
+    await reload();
   }
 
   const empty = books && books.length === 0;
@@ -802,6 +825,60 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                     <button className="toggle-on" disabled={!cleanup.datable.length && !cleanup.contradictory.length && !cleanup.dups.length} onClick={applySafeCleanup}>Apply safe fixes</button>
                     {cleanup.undatable.length > 0 && <button className="lj-danger" onClick={clearUndatedFinishes}>Un-finish the {cleanup.undatable.length} undated…</button>}
                     <button onClick={() => { setCleanup(null); setCleanMsg(''); }}>Dismiss</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="rh-section-h">Fix miscategorised content</div>
+              <p className="settings-note">
+                Content types mostly come from how a record was imported, so the Dashboard’s long / short /
+                AI-generated splits inherit those guesses. This looks for records whose evidence — length,
+                author, title, genre — disagrees with their label. Every row says why, nothing changes until
+                you apply, and a type you set by hand is never re-flagged.
+              </p>
+              <div className="lj-inline">
+                <button onClick={scanTypes}>Scan content types</button>
+                {recatMsg && <span className="settings-note">{recatMsg}</span>}
+              </div>
+              {recat && recat.length > 0 && (
+                <div className="lj-cleanup">
+                  <p className="settings-note">
+                    <b>{recat.length}</b> record{recat.length === 1 ? '' : 's'} look mislabelled:{' '}
+                    {Object.entries(recatSummary(recat)).map(([t, n]) => `${n} → ${CONTENT_TYPES[t] || t}`).join(' · ')}
+                  </p>
+                  <div className="lj-inline">
+                    <button onClick={() => setRecatPick(new Set(recat.map((x) => x.id)))}>Select all</button>
+                    <button onClick={() => setRecatPick(new Set())}>Select none</button>
+                  </div>
+                  <table className="lj-recat">
+                    <thead><tr><th /><th>Title</th><th>Now</th><th>Suggested</th><th>Why</th></tr></thead>
+                    <tbody>
+                      {recat.map((sg) => (
+                        <tr key={sg.id} className={recatPick.has(sg.id) ? 'on' : ''}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={recatPick.has(sg.id)}
+                              onChange={(e) => setRecatPick((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(sg.id); else next.delete(sg.id);
+                                return next;
+                              })}
+                            />
+                          </td>
+                          <td>{sg.title}{sg.author ? <span className="settings-note"> — {sg.author}</span> : null}</td>
+                          <td className="lj-recat-from">{CONTENT_TYPES[sg.from] || sg.from}</td>
+                          <td className="lj-recat-to">{CONTENT_TYPES[sg.to] || sg.to}</td>
+                          <td className="settings-note">{sg.why}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="lj-inline">
+                    <button className="toggle-on" disabled={!recatPick.size} onClick={applyRecatPicks}>
+                      Apply {recatPick.size} change{recatPick.size === 1 ? '' : 's'}
+                    </button>
+                    <button onClick={() => { setRecat(null); setRecatMsg(''); }}>Dismiss</button>
                   </div>
                 </div>
               )}
