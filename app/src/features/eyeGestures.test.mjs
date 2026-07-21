@@ -3,7 +3,7 @@
 import assert from 'node:assert';
 import {
   createEyeGestureDetector, validateEyeMappings, eyeMappingsUsable, matchEyeHold, nextEyeWindow,
-  DELIBERATE_MS, MAX_HOLD_MS, WINK_MARGIN,
+  DELIBERATE_MS, MAX_HOLD_MS, WINK_MARGIN, kindFloorMs,
 } from './eyeGestures.js';
 
 const row = (kind, minMs, maxMs, commandId = 'playPause', on = true) => ({ kind, minMs, maxMs, commandId, on });
@@ -138,5 +138,66 @@ assert.equal(run(circle({ turns: 0.25 }), rollRows).fired.length, 0, 'a quarter 
 // A blink mid-roll resets it — you can't stitch two half-rolls together across a blink.
 const broken = [...circle({ ms: 420, turns: 0.45 }), ...hold({ t0: 500, ms: 200, openMs: 60 }), ...circle({ t0: 800, ms: 420, turns: 0.45 })];
 assert.equal(run(broken, rollRows).fired.length, 0, 'a blink breaks the roll accumulator');
+
+// ── face poses ──────────────────────────────────────────────────────────────
+// Same duration windows, driven by the face model's expression scores instead of the eyelids.
+function poseScript({ t0 = 0, ms, shapes, afterMs = 900, step = 60 }) {
+  const out = [];
+  for (let t = t0; t < t0 + ms; t += step) out.push({ t, blinkL: 0, blinkR: 0, irisX: 0.5, irisY: 0.5, shapes });
+  for (let t = t0 + ms; t < t0 + ms + afterMs; t += step) out.push({ t, blinkL: 0, blinkR: 0, irisX: 0.5, irisY: 0.5, shapes: {} });
+  return out;
+}
+const faceRows = [
+  row('tongueOut', 500, 1200, 'playPause'),
+  row('smile', 1000, 1800, 'nextPara'),
+  row('mouthOpen', 800, 1500, 'pageDown'),
+];
+const tongue = run(poseScript({ ms: 800, shapes: { tongueOut: 0.8 } }), faceRows);
+assert.equal(tongue.fired.length, 1, `tongue out fires, got ${JSON.stringify(tongue)}`);
+assert.equal(tongue.fired[0].kind, 'tongueOut');
+assert.equal(tongue.fired[0].row.commandId, 'playPause');
+// A faint pose isn't a command — half a smile shouldn't page the book.
+assert.equal(run(poseScript({ ms: 1400, shapes: { mouthSmileLeft: 0.2, mouthSmileRight: 0.2 } }), faceRows).fired.length, 0,
+  'a faint expression is under the pose threshold');
+// Per-pose floors: smiling for 600ms happens all day and must not fire, even though 600ms clears
+// the eye floor.
+assert.equal(kindFloorMs('smile'), 900, 'smile has its own, longer floor');
+assert.equal(kindFloorMs('tongueOut'), 450, 'tongue out does not');
+assert.equal(kindFloorMs('blink'), DELIBERATE_MS, 'eye gestures keep the blink floor');
+assert.equal(run(poseScript({ ms: 600, shapes: { mouthSmileLeft: 0.9, mouthSmileRight: 0.9 } }), faceRows).fired.length, 0,
+  'a 600ms smile is just a smile');
+assert.equal(run(poseScript({ ms: 1300, shapes: { mouthSmileLeft: 0.9, mouthSmileRight: 0.9 } }), faceRows).fired[0].kind, 'smile',
+  'a held smile is deliberate');
+// The editor enforces the same floor.
+assert.ok(validateEyeMappings([row('smile', 600, 1200)]).some((p) => p.code === 'floor'), 'a 600ms smile window is rejected');
+assert.deepEqual(validateEyeMappings([row('smile', 1000, 1600)]), [], 'a 1000ms smile window is fine');
+assert.ok(validateEyeMappings([row('tongueOut', 500, 900)]).length === 0, 'tongue out may start at 500ms');
+
+// Talking: the jaw flaps open and shut, never held — it must never look like "mouth open".
+const talking = [];
+for (let i = 0; i < 200; i++) {
+  const open = (i % 6) < 3 ? 0.7 : 0.1; // ~180ms open, ~180ms shut
+  talking.push({ t: i * 60, blinkL: 0, blinkR: 0, irisX: 0.5, irisY: 0.5, shapes: { jawOpen: open } });
+}
+assert.equal(run(talking, faceRows).fired.length, 0, 'talking must never fire the mouth-open gesture');
+
+// Two poses at once: only the strongest counts, so one face can't fire two commands.
+const both = run(poseScript({ ms: 1300, shapes: { tongueOut: 0.9, mouthSmileLeft: 0.95, mouthSmileRight: 0.95 } }), faceRows);
+assert.equal(both.fired.length, 1, `one command per face, got ${both.fired.length}`);
+assert.equal(both.fired[0].kind, 'smile', 'the more pronounced pose wins');
+
+// Eye and face gestures share the mapping space: same window, different gesture is legal…
+assert.deepEqual(validateEyeMappings([row('blink', 600, 1000), row('tongueOut', 600, 1000)]), [],
+  'a blink and a tongue may share a window');
+// …and overlap rules still bite within one face pose.
+assert.ok(validateEyeMappings([row('tongueOut', 500, 1000), row('tongueOut', 900, 1400)]).some((p) => p.code === 'overlap'),
+  'two tongue-out windows may not overlap');
+
+// A pose that ends in a blink still ends (rather than hanging until the eyes reopen).
+const poseThenBlink = [
+  ...poseScript({ ms: 800, shapes: { tongueOut: 0.8 }, afterMs: 0 }),
+  ...hold({ t0: 800, ms: 300 }),
+];
+assert.equal(run(poseThenBlink, faceRows).fired.length, 1, 'closing your eyes ends the pose cleanly');
 
 console.log('eyeGestures: all assertions passed ✅');

@@ -3,7 +3,7 @@ import Dialog from './Dialog.jsx';
 import { DEFAULT_GESTURES, GESTURE_INFO } from '../features/handGestures.js';
 import { COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from '../features/commandRegistry.js';
 import { stepLabel } from '../features/triggerSequences.js';
-import { EYE_KINDS, validateEyeMappings, DELIBERATE_MS, MAX_HOLD_MS } from '../features/eyeGestures.js';
+import { EYE_KINDS, FACE_KINDS, ALL_KINDS, validateEyeMappings, kindFloorMs, DELIBERATE_MS, MAX_HOLD_MS } from '../features/eyeGestures.js';
 import { createEyeCue } from '../features/eyeCue.js';
 import { createRecognizer, speechRecognitionSupported } from '../features/speechRecognition.js';
 import { getLanguage } from '../state/languages.js';
@@ -319,12 +319,14 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
       })}
       <button style={{ marginTop: 6 }} onClick={() => patch({ triggerSeqs: [...(g.triggerSeqs || []), { steps: ['', ''], commandId: '', on: true }] })}>+ Add sequence</button>
 
-      <div className="field-section">👁 Eye gestures</div>
+      <div className="field-section">👁 Eye &amp; face gestures</div>
       <p className="settings-note">
-        Deliberate blinks, winks and eye rolls, mapped by <b>how long you hold them</b>. Anything under
-        {' '}{DELIBERATE_MS}ms is ordinary blinking and is ignored, so reading never triggers anything —
-        which also means every window must start at {DELIBERATE_MS}ms or later. These run on a phone
-        whether or not the camera box above is ticked: switching them on is consent enough.
+        Deliberate blinks, winks, eye rolls and held face poses (tongue out, puffed cheeks, raised
+        brows…), mapped by <b>how long you hold them</b>. Each gesture has a floor below which it's
+        just a face you were making anyway — {DELIBERATE_MS}ms for the eyes, longer for the poses
+        people strike without meaning to — so reading, talking and smiling never trigger anything.
+        These run on a phone whether or not the camera box above is ticked: switching them on is
+        consent enough.
       </p>
       <Field label="Eye gestures on">
         <input
@@ -365,7 +367,7 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
         <div className="bio-eye-meter">
           {hold ? (
             <>
-              <span className="bio-eye-kind">{EYE_KINDS.find((k) => k.id === hold.kind)?.icon} {EYE_KINDS.find((k) => k.id === hold.kind)?.label}</span>
+              <span className="bio-eye-kind">{ALL_KINDS.find((k) => k.id === hold.kind)?.icon} {ALL_KINDS.find((k) => k.id === hold.kind)?.label}</span>
               <span className={`bio-eye-ms${hold.inWindow ? ' in' : ''}`}>{Math.round(hold.ms)}ms</span>
               <span className="settings-note" style={{ margin: 0 }}>
                 {hold.inWindow
@@ -373,7 +375,7 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
                   : hold.next ? `next window at ${hold.next.minMs}ms` : 'past every window'}
               </span>
             </>
-          ) : <span className="settings-note" style={{ margin: 0 }}>Hold a blink or wink to see it measured here…</span>}
+          ) : <span className="settings-note" style={{ margin: 0 }}>Hold a blink, wink or face pose to see it measured here…</span>}
         </div>
       )}
       {eyeRows.map((r, i) => {
@@ -390,16 +392,22 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
             />
             <select value={r.kind || ''} onChange={(e) => setRow({ kind: e.target.value })}>
               <option value="">gesture…</option>
-              {EYE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {k.label}</option>)}
+              <optgroup label="Eyes">
+                {EYE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {k.label}</option>)}
+              </optgroup>
+              <optgroup label="Face poses (held)">
+                {FACE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {k.label} — min {k.floor}ms</option>)}
+              </optgroup>
             </select>
             <span className="bio-eye-range">
               <input
-                type="number" min={DELIBERATE_MS} max={MAX_HOLD_MS} step={50} value={r.minMs ?? ''}
-                title="Shortest hold that counts" onChange={(e) => setRow({ minMs: Number(e.target.value) })}
+                type="number" min={kindFloorMs(r.kind)} max={MAX_HOLD_MS} step={50} value={r.minMs ?? ''}
+                title={`Shortest hold that counts (at least ${kindFloorMs(r.kind)}ms for this gesture)`}
+                onChange={(e) => setRow({ minMs: Number(e.target.value) })}
               />
               <span>–</span>
               <input
-                type="number" min={DELIBERATE_MS} max={MAX_HOLD_MS} step={50} value={r.maxMs ?? ''}
+                type="number" min={kindFloorMs(r.kind)} max={MAX_HOLD_MS} step={50} value={r.maxMs ?? ''}
                 title="Longest hold that counts" onChange={(e) => setRow({ maxMs: Number(e.target.value) })}
               />
               <span>ms</span>
@@ -410,6 +418,15 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
             {mine.map((p, k) => (
               <span key={k} className={`bio-eye-problem ${p.level}`}>{p.level === 'error' ? '⛔' : '⚠'} {p.message}</span>
             ))}
+            {FACE_KINDS.find((k) => k.id === r.kind)?.natural && (
+              <span className="bio-eye-problem warn">
+                ⚠ You’ll make this face without meaning to — hold it noticeably longer than feels natural, and
+                prefer it for harmless actions.
+              </span>
+            )}
+            {FACE_KINDS.find((k) => k.id === r.kind)?.hint && (
+              <span className="bio-eye-problem warn">ℹ {FACE_KINDS.find((k) => k.id === r.kind).hint}</span>
+            )}
           </div>
         );
       })}
@@ -427,6 +444,7 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
             { kind: 'blink', minMs: 600, maxMs: 1000, commandId: 'playPause', on: true },
             { kind: 'winkL', minMs: 600, maxMs: 1200, commandId: 'prevLine', on: true },
             { kind: 'winkR', minMs: 600, maxMs: 1200, commandId: 'nextLine', on: true },
+            { kind: 'tongueOut', minMs: 500, maxMs: 1400, commandId: 'jumpToCurrent', on: true },
           ])}
         >
           Use a starter set
