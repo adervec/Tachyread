@@ -2284,6 +2284,14 @@
   padding: 6px 10px; margin: 4px 0; border: 1px solid var(--divider); border-radius: 6px;
   background: color-mix(in srgb, var(--toggle-active-bg) 6%, transparent); min-height: 32px;
 }
+/* Trackyread: miscategorised-content review table (now → suggested, with the reason). */
+.lj-recat { width: 100%; border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+.lj-recat th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--status-fg); padding: 2px 6px; }
+.lj-recat td { padding: 3px 6px; border-top: 1px solid var(--divider); vertical-align: top; }
+.lj-recat tr.on { background: color-mix(in srgb, var(--toggle-active-bg) 8%, transparent); }
+.lj-recat-from { color: var(--status-fg); text-decoration: line-through; white-space: nowrap; }
+.lj-recat-to { color: #3fb950; font-weight: 600; white-space: nowrap; }
+.lj-recat .settings-note { margin: 0; }
 .bio-eye-kind { font-size: 12px; font-weight: 600; }
 .bio-eye-ms { font-family: Consolas, monospace; font-size: 14px; font-variant-numeric: tabular-nums; }
 .bio-eye-ms.in { color: #3fb950; font-weight: 700; }
