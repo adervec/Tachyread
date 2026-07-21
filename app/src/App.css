@@ -1545,6 +1545,21 @@
 /* Paragraph highlight lives in the line-number gutter only — tinting the text itself read as a
    second "current line" band and competed with the read-status colours. */
 .line-row.in-current-para .num { background: var(--current-para-bg); border-radius: 2px; }
+/* Page-edge marker: after PgUp/PgDn the line that was at the edge of the screen you just left stays
+   lit for a few seconds, so you can see how far you moved and where you'd got to. Deliberately
+   unlike the current-line band — a tinted bar with a hard rule down its left edge. */
+.line-row.page-mark {
+  background: color-mix(in srgb, var(--toggle-active-bg) 22%, transparent);
+  box-shadow: inset 3px 0 0 var(--toggle-active-bg);
+  border-radius: 3px;
+  animation: page-mark-in 0.45s ease-out;
+}
+.line-row.page-mark .text { background: none; }
+@keyframes page-mark-in {
+  0% { background: color-mix(in srgb, var(--toggle-active-bg) 62%, transparent); }
+  100% { background: color-mix(in srgb, var(--toggle-active-bg) 22%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .line-row.page-mark { animation: none; } }
 .line-row.is-header-footer .text { font-style: italic; }
 .line-row.toc-entry { background: var(--toc-entry-bg); }
 .line-row.toc-entry .text { color: var(--toc-entry-fg); font-weight: bold; }
