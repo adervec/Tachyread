@@ -297,6 +297,10 @@ export function defaultGlobalSettings() {
     // Webcam hand-gesture controls: open-palm joystick scrolls the Lines pane at variable speed,
     // a wave toggles play/pause. handCalib = { centerY, topY, bottomY } from the calibration.
     // handGestureSet = per-gesture on/off (null → feature defaults; discrete gestures start off).
+    // Front-camera features (attention guards, hand gestures) are desktop-only by default —
+    // battery/CPU-heavy, and a hand-held phone rarely faces you squarely. Tick to run them on a
+    // small screen too. (Eye gestures opt into the camera by themselves and ignore this.)
+    mobileCamera: false,
     handGestures: false,
     handCalib: null,
     handGestureSet: null,

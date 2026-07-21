@@ -887,8 +887,12 @@ function AppInner() {
   // most useful input there is. Everything else camera-driven stays desktop-only.
   const eyeGestureCfg = state.global.eyeGestures;
   const eyeGesturesOn = !!eyeGestureCfg?.on && eyeMappingsUsable(eyeGestureCfg.rows || []);
-  const camOn = (!isCompact && camGuardsOn) || eyeGesturesOn;
-  const handGesturesOn = !isCompact && !!state.global.handGestures;
+  // Front-camera features default to desktop-only (battery/CPU, and a phone rarely faces you
+  // squarely) but that's now a preference, not a law — `mobileCamera` lets a phone run them all.
+  // Eye gestures are their own opt-in and bring the camera up regardless of it.
+  const camAllowed = !isCompact || !!state.global.mobileCamera;
+  const camOn = (camAllowed && camGuardsOn) || eyeGesturesOn;
+  const handGesturesOn = camAllowed && !!state.global.handGestures;
   const audioCtrlOn = !!activeTab?.settings?.audioCtrl;
   useEffect(() => {
     if (!camOn) {
