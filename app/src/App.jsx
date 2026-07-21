@@ -1157,6 +1157,7 @@ function AppInner() {
     const mon = createGestureMonitor({
       calib: state.global.handCalib || DEFAULT_HAND_CALIB,
       gestures: state.global.handGestureSet || DEFAULT_GESTURES,
+      holdMs: state.global.handHoldMs || null,
       intervalMs: deviceKind() === 'Mobile' ? 150 : 100,
       onState: setHandState,
       onStream: (s) => setGestureStream(s),
@@ -1208,6 +1209,9 @@ function AppInner() {
   useEffect(() => {
     handRef.current?.setGestures(state.global.handGestureSet || DEFAULT_GESTURES);
   }, [state.global.handGestureSet]);
+  useEffect(() => {
+    handRef.current?.setHoldMs(state.global.handHoldMs || null);
+  }, [state.global.handHoldMs]);
 
   // Auto-stop timer: after this many minutes of continuous playback, pause and silence speech.
   // Handy for winding down to read-aloud without it running all night. Restarts on each Play.
@@ -1838,6 +1842,18 @@ function AppInner() {
     if (action === 'reset-tab' && activeTab) {
       const defaults = state.global.fileDefaults || defaultFileSettings();
       patchSettings(activeTab.id, { ...defaults, wordIndex: activeTab.settings.wordIndex, contentChecksum: activeTab.settings.contentChecksum });
+      return;
+    }
+    if (action === 'apply-defaults-all') {
+      const tabs = state.tabs;
+      if (!tabs.length) { setStatus('No open tabs to apply settings to.'); return; }
+      // tabDefaultsFrom strips the per-document/progress fields (reading position, history, word
+      // swaps, proper names…) so this overwrites only the reusable display / reading settings and
+      // never touches any tab's document data.
+      const shared = tabDefaultsFrom(state.global.fileDefaults || defaultFileSettings());
+      if (!window.confirm(`Apply your Default Tab Settings to all ${tabs.length} open tab${tabs.length === 1 ? '' : 's'}? Display and reading settings are overwritten; each tab keeps its own reading position, history and per-document data.`)) return;
+      for (const t of tabs) patchSettings(t.id, shared);
+      setStatus(`Applied default settings to ${tabs.length} tab${tabs.length === 1 ? '' : 's'}.`);
       return;
     }
     if (action === 'stats') return openDialog({ kind: 'stats' });

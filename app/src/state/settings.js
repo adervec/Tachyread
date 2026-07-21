@@ -304,6 +304,9 @@ export function defaultGlobalSettings() {
     handGestures: false,
     handCalib: null,
     handGestureSet: null,
+    // Per-gesture minimum hold time (ms) for the held discrete hand gestures — raise it to filter
+    // accidental flicks. { thumbUp|fist|victory|…: ms }; a missing entry uses DEFAULT_HOLD_MS.
+    handHoldMs: null,
     // Eye-gesture controls (Biometric Controls → Eye gestures). Deliberate blinks / winks / eye
     // rolls mapped to commands by how long you hold them. Unlike the other camera features this one
     // runs on mobile too — it's explicitly opt-in, so the battery cost is the user's call.

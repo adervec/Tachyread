@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
-import { DEFAULT_GESTURES, GESTURE_INFO } from '../features/handGestures.js';
+import { DEFAULT_GESTURES, GESTURE_INFO, HELD_GESTURES, DEFAULT_HOLD_MS, HOLD_MIN_MS, HOLD_MAX_MS, clampHoldMs } from '../features/handGestures.js';
 import { COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from '../features/commandRegistry.js';
 import { stepLabel } from '../features/triggerSequences.js';
 import { EYE_KINDS, FACE_KINDS, ALL_KINDS, validateEyeMappings, kindFloorMs, DELIBERATE_MS, MAX_HOLD_MS } from '../features/eyeGestures.js';
@@ -195,14 +195,29 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
                 <CommandSelect value={gestureMap[`${k}:R`]} disabled={!g.handGestures} onChange={(v) => patch({ gestureMap: { ...gestureMap, [`${k}:R`]: v } })} />
               </>
             )}
+            {/* Held gestures only — a wave/swipe is motion, not a hold, so a minimum hold makes no
+                sense for them. Raise this to reject accidental flicks. */}
+            {HELD_GESTURES.includes(k) && (
+              <label className="bio-hold" title="Hold this gesture at least this long before it fires — raise it to filter accidental flicks">
+                <span className="bio-hand-lbl">hold</span>
+                <input
+                  type="number" min={HOLD_MIN_MS} max={HOLD_MAX_MS} step={50}
+                  disabled={!g.handGestures}
+                  value={(g.handHoldMs || {})[k] ?? DEFAULT_HOLD_MS}
+                  onChange={(e) => patch({ handHoldMs: { ...(g.handHoldMs || {}), [k]: clampHoldMs(e.target.value) } })}
+                />
+                <span className="bio-hand-lbl">ms</span>
+              </label>
+            )}
           </div>
         </Field>
       ))}
       <p className="settings-note">
         The open-palm <strong>joystick</strong> (scroll) isn’t remappable — it scrolls the Lines pane by how
-        far your palm is from its rest height. Fewer enabled gestures = fewer false positives; discrete
-        gestures must be held ~half a second before firing. Unticking a gesture above <strong>disables it
-        but keeps its mapping</strong> for later.
+        far your palm is from its rest height. Fewer enabled gestures = fewer false positives, and each
+        held gesture only fires after you hold it for its <strong>hold time</strong> (default {DEFAULT_HOLD_MS}ms) —
+        raise a jittery one to filter accidentals. Unticking a gesture above <strong>disables it but keeps
+        its mapping</strong> for later.
       </p>
       <Field label="Hand calibration">
         <button onClick={onCalibrateHand} disabled={!onCalibrateHand || !g.handGestures} title={g.handGestures ? '' : 'Turn on Hand gestures first'}>
