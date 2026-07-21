@@ -1612,6 +1612,37 @@
    the pane's gutter grid. */
 .orp-preview { display: block; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--divider); border-radius: 6px; font-size: 15px; }
 .line-row .bionic-bold { font-weight: 700; }
+
+/* "Just entered the page" flash: a line gets one of these when it first scrolls into view, easing
+   back to the normal style over the configured seconds (--entry-secs). One-shot; see LinePane Row.
+   Reduced-motion users get the shortest, non-moving variants. */
+.lp-fresh .text { animation-duration: var(--entry-secs, 3s); animation-timing-function: ease-out; animation-fill-mode: both; }
+.lp-fresh-Fade .text { animation-name: lpfresh-fade; }
+.lp-fresh-Glow .text { animation-name: lpfresh-glow; }
+.lp-fresh-Highlight .text { animation-name: lpfresh-hl; }
+.lp-fresh-Rise .text { animation-name: lpfresh-rise; }
+.lp-fresh-Color .text { animation-name: lpfresh-color; }
+@keyframes lpfresh-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lpfresh-glow {
+  0% { text-shadow: 0 0 8px var(--toggle-active-bg), 0 0 14px var(--toggle-active-bg); }
+  100% { text-shadow: none; }
+}
+@keyframes lpfresh-hl {
+  0% { background: color-mix(in srgb, var(--toggle-active-bg) 40%, transparent); border-radius: 3px; }
+  100% { background: transparent; }
+}
+@keyframes lpfresh-rise {
+  0% { transform: translateY(7px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+@keyframes lpfresh-color {
+  0% { color: var(--toggle-active-bg); }
+  100% { color: inherit; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Drop the movement, keep a gentle fade so the cue still reads. */
+  .lp-fresh-Rise .text { animation-name: lpfresh-fade; }
+}
 .line-row .proper-name { font-style: italic; }
 
 /* ── Elaborate TOC-heading line styling ──────────────────────────────────────
@@ -2343,7 +2374,11 @@
   align-items: center;
   gap: 10px;
 }
-.app-status-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-status-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity 1.4s ease; }
+/* An old message fades once it's been up a while (see StatusText) — hover the bar to bring it back. */
+.app-status-text.faded { opacity: 0; }
+.app-status:hover .app-status-text.faded { opacity: 1; transition: opacity 0.15s ease; }
+@media (prefers-reduced-motion: reduce) { .app-status-text { transition: opacity 0.2s linear; } }
 
 /* Performance "is it struggling?" meter — a small dot + fps readout in the status bar. */
 .perf-meter {

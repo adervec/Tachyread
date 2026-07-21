@@ -159,7 +159,9 @@ function reducer(state, action) {
       return { ...state, tabs };
     }
     case 'SET_STATUS':
-      return { ...state, appStatus: action.text };
+      // Bump a sequence number so the status bar's fade re-triggers even when the same message is
+      // set twice in a row.
+      return { ...state, appStatus: action.text, appStatusSeq: (state.appStatusSeq || 0) + 1 };
     case 'SET_IMPORT':
       return { ...state, importing: action.payload };
     case 'OPEN_DIALOG': {

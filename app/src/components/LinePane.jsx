@@ -854,6 +854,42 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     [currentLine, idx, wall, tab.sessionLinesRead, tab.sessionNavLinesRead, tab.readLinesAllTime, paraRange, hideBeyond, pressingStart, longPressMs, translations, pageMark]
   );
 
+  // "Just entered the page" flash: an IntersectionObserver on the scroller catches each line the
+  // first time it scrolls into view and tags it with the effect class for a few seconds. react-
+  // window recycles row instances, so this runs off the DOM (not a mount hook) — the real
+  // "entered the viewport" signal. The seen-set is per-document so scrolling back doesn't re-flash.
+  const entryEffect = settings.linesEntryEffect || '';
+  const entrySecs = Math.max(1, Math.min(10, settings.linesEntrySecs || 3));
+  const entrySeenRef = useRef({ cs: null, set: new Set() });
+  if (entrySeenRef.current.cs !== doc.contentChecksum) entrySeenRef.current = { cs: doc.contentChecksum, set: new Set() };
+  useEffect(() => {
+    if (split || !entryEffect) return undefined;
+    const wrap = listWrapRef.current;
+    if (!wrap || typeof IntersectionObserver === 'undefined') return undefined;
+    const scroller = [...wrap.querySelectorAll('*')].find((el) => /(auto|scroll)/.test(getComputedStyle(el).overflowY)) || wrap;
+    const seen = entrySeenRef.current.set;
+    const cls = ['lp-fresh', `lp-fresh-${entryEffect}`];
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        const el = e.target;
+        if (!e.isIntersecting) continue;
+        io.unobserve(el);
+        const li = Number(el.getAttribute('data-line'));
+        if (!(li >= 0) || seen.has(li)) continue;
+        seen.add(li);
+        el.style.setProperty('--entry-secs', `${entrySecs}s`);
+        el.classList.add(...cls);
+        // Strip the classes after the one-shot animation so a recycled row node isn't left styled.
+        setTimeout(() => el.classList.remove(...cls), entrySecs * 1000 + 250);
+      }
+    }, { root: scroller, threshold: 0.01 });
+    const observeAll = () => wrap.querySelectorAll('.line-row[data-line]').forEach((el) => io.observe(el));
+    observeAll();
+    const mo = new MutationObserver(observeAll); // re-observe as react-window mounts new rows
+    mo.observe(wrap, { childList: true, subtree: true });
+    return () => { io.disconnect(); mo.disconnect(); };
+  }, [split, entryEffect, entrySecs, doc.contentChecksum]);
+
   // rowProps must not contain ariaAttributes/index/style (those are auto-passed by List).
   const rowProps = useMemo(
     () => ({ doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl, headingMap, headingPack }),

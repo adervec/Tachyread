@@ -42,6 +42,8 @@ export function defaultFileSettings() {
     lineSpacing: 1.5, // Lines-pane line-height multiplier
     linesGridH: false, // faint horizontal gridlines on the Lines pane background
     linesGridV: false, // faint vertical gridlines on the Lines pane background
+    linesEntryEffect: '', // temporary style for a line as it first scrolls in ('' = off; Fade|Glow|Highlight|Rise|Color)
+    linesEntrySecs: 3, // how long the entry effect lasts before settling to normal (1–10s)
     wordSwaps: {}, // per-document display substitutions: { "word in text": "shown as" } (display only)
     wallText: false, // "wall of text": merge source lines into flowing blocks (newlines → spaces/tabs)
     wallBreakEvery: 0, // in wall mode, also start a new block every N source lines (0 = only sections/%)

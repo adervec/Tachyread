@@ -127,6 +127,21 @@ function isSentenceStart(doc, i) {
   return /[.!?…][)"'”’\]]*$/.test(prev);
 }
 
+// Status-bar message that fades out after it's been up a while, so the last thing that happened
+// doesn't sit there forever. Each new message (tracked by seq, so identical repeats re-trigger)
+// snaps back to full opacity and restarts the timer; hovering the bar holds it visible to read.
+const STATUS_HOLD_MS = 6000;
+function StatusText({ text, seq }) {
+  const [faded, setFaded] = useState(false);
+  useEffect(() => {
+    if (!text) return undefined;
+    setFaded(false);
+    const t = setTimeout(() => setFaded(true), STATUS_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [text, seq]);
+  return <span className={`app-status-text${faded ? ' faded' : ''}`}>{text}</span>;
+}
+
 function AppInner() {
   const { state, activeTab: rawActiveTab, hydrateTab, openFiles, openClipboard, openRecent, setStatus, patchSettings, patchTab, openDialog, closeDialog, setActiveTab, setActivePanel, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
   // A lazy (restored, not-yet-loaded) tab has no parsed document — treat it as "no active reader"
@@ -2472,7 +2487,7 @@ function AppInner() {
       </div>
       <div className="app-status">
         {state.global.showPerfMeter && <PerfMonitor />}
-        <span className="app-status-text">{state.appStatus}</span>
+        <StatusText text={state.appStatus} seq={state.appStatusSeq} />
         {playing && !!activeTab?.settings?.readAloud && (
           <span className="webcam-badge wb-watching" title="Read-aloud voice + how much of this book is pre-generated as an audiobook. Pre-generate more in Audio → Audiobook Manager for lock-screen playback (ungenerated parts use the light native voice).">
             🗣 {state.global.offlineVoice ? voiceLabel(state.global.offlineVoiceId || defaultVoiceForLang(state.global.language || 'en')).split(' · ')[0] : (activeTab.settings.annunciateVoice || 'browser voice')}
