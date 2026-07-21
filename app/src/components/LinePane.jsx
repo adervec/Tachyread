@@ -17,6 +17,8 @@ const POINTER_ENABLED = false;
 const MAX_BLUR_PX = 5; // "fully blurred" — text at this blur is unreadable (feeds the blur gradient)
 const OBSCURE_GUARD_LINES = 100; // obscured band beyond the readable window; clear again past it (peeking + perf)
 const BLUR_RAMP_LINES = 3; // blur reaches full strength this many lines into the guard band
+const PAGE_OVERLAP = 2;    // lines of the old screen kept on the new one when paging
+const PAGE_MARK_MS = 10000; // how long the "here's where the last screen ended" line stays lit
 
 function stripPunct(w) {
   return w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
@@ -205,7 +207,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
 
   return (
     <div
-      className={`line-row status-${status} ${isHF ? 'is-header-footer' : ''} ${inPara ? 'in-current-para' : ''} ${pressing ? 'pressing' : ''} ${isHead ? `toc-head toc-head-l${headLevel}` : ''} ${altSent ? 'alt-sent' : ''}`}
+      className={`line-row status-${status} ${isHF ? 'is-header-footer' : ''} ${inPara ? 'in-current-para' : ''} ${pressing ? 'pressing' : ''} ${isHead ? `toc-head toc-head-l${headLevel}` : ''} ${altSent ? 'alt-sent' : ''} ${ctx.pageMark === index ? 'page-mark' : ''}`}
       data-line={index}
       data-start={line.startWordIndex}
       style={pressing ? { '--lp-ms': `${ctx.longPressMs}ms` } : undefined}
@@ -258,6 +260,7 @@ function lineRowEqual(p, n) {
   const i = n.index;
   if (pc.hideBeyond !== nc.hideBeyond) return false;        // progressive-reveal boundary moved
   if (pc.pressingStart !== nc.pressingStart) return false;  // long-press highlight
+  if ((pc.pageMark === i) !== (nc.pageMark === i)) return false; // gained / lost the page-edge mark
   if ((pc.translations?.get(i)) !== (nc.translations?.get(i))) return false; // this line's translation arrived/changed
   if (pc.sessionLines !== nc.sessionLines || pc.sessionNavLines !== nc.sessionNavLines || pc.readLines !== nc.readLines) return false;
   const pCur = pc.currentLine === i, nCur = nc.currentLine === i;
@@ -462,6 +465,17 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   const paneVisRef = useReportVisibility(onVisible || (() => {}));
   const idx = settings.wordIndex;
   const [menu, setMenu] = useState(null);
+  // The edge of the screen you just left, highlighted for PAGE_MARK_MS so you can see at a glance
+  // how far the page moved and where you'd got to.
+  const [pageMark, setPageMark] = useState(-1);
+  const markTimer = useRef(0);
+  function markPage(line) {
+    if (!(line >= 0)) return;
+    setPageMark(line);
+    clearTimeout(markTimer.current);
+    markTimer.current = setTimeout(() => setPageMark(-1), PAGE_MARK_MS);
+  }
+  useEffect(() => () => clearTimeout(markTimer.current), []);
   const [pressingStart, setPressingStart] = useState(-1); // wordIndex of the line being long-pressed
   const pressRef = useRef({});
   const longPressMs = settings.lineLongPressMs ?? 450;
@@ -705,7 +719,21 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
         ? Math.max(1, r.endLine + 1 - currentLine)
         : Math.max(1, currentLine - getParagraphRange(doc, Math.max(0, r.startLine - 1)).startLine);
       delta = span * lineH;
-    } else if (/page/i.test(k)) delta = scroller.clientHeight * 0.85;
+    } else if (/page/i.test(k)) {
+      // A screenful minus the overlap, so a couple of lines carry over (see PAGE_OVERLAP).
+      delta = Math.max(lineH, scroller.clientHeight - PAGE_OVERLAP * lineH);
+      // Mark the line at the edge you're leaving — the last line of this screen going down, the
+      // first going up.
+      const cr = scroller.getBoundingClientRect();
+      let edge = -1, best = dir > 0 ? -Infinity : Infinity;
+      for (const el of wrap.querySelectorAll('.line-row[data-line]')) {
+        const r = el.getBoundingClientRect();
+        if (r.bottom <= cr.top || r.top >= cr.bottom) continue;
+        const i = Number(el.getAttribute('data-line'));
+        if (dir > 0 ? i > best : i < best) { best = i; edge = i; }
+      }
+      markPage(edge);
+    }
     cmdScrollRef.current = true;
     scroller.scrollBy({ top: dir * delta, behavior: 'smooth' });
     setTimeout(() => { cmdScrollRef.current = false; }, 450);
@@ -821,8 +849,9 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       pressingStart,
       longPressMs,
       translations,
+      pageMark,
     }),
-    [currentLine, idx, wall, tab.sessionLinesRead, tab.sessionNavLinesRead, tab.readLinesAllTime, paraRange, hideBeyond, pressingStart, longPressMs, translations]
+    [currentLine, idx, wall, tab.sessionLinesRead, tab.sessionNavLinesRead, tab.readLinesAllTime, paraRange, hideBeyond, pressingStart, longPressMs, translations, pageMark]
   );
 
   // rowProps must not contain ariaAttributes/index/style (those are auto-passed by List).
@@ -904,7 +933,14 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       if (i > bottom) bottom = i;
     });
     if (top === Infinity) return null;
-    return dir > 0 ? bottom : top;
+    // Leave PAGE_OVERLAP lines of the old screen on the new one — landing exactly on the edge line
+    // reads as overshooting, because the line you were mid-way through is gone.
+    const edge = dir > 0 ? bottom : top;
+    markPage(edge); // remember where the last screen ended, and show it for a few seconds
+    const target = dir > 0
+      ? Math.max(currentLine + 1, bottom - PAGE_OVERLAP)
+      : Math.min(currentLine - 1, top + PAGE_OVERLAP);
+    return Math.max(0, Math.min(doc.lines.length - 1, target));
   }
   useEffect(() => {
     if (visibleRef) visibleRef.current = { page: pageTargetLine };
