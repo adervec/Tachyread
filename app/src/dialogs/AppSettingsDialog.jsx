@@ -112,6 +112,25 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
           On phones, don’t parse a restored document until its tab is opened (saves memory)
         </label>
       </Field>
+      <Field label="Reduce blue light (bedtime)">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <label className="inline-check">
+            <input type="checkbox" checked={!!g.nightShift} onChange={(e) => patch({ nightShift: e.target.checked })} />
+            Warm the whole app to cut blue light for evening reading
+          </label>
+          {g.nightShift && (
+            <>
+              <input
+                type="range" min={10} max={85} step={5}
+                value={Math.round((g.nightShiftStrength ?? 0.4) * 100)}
+                onChange={(e) => patch({ nightShiftStrength: Number(e.target.value) / 100 })}
+                title="How warm — deeper cuts more blue"
+              />
+              <span className="range-val">{Math.round((g.nightShiftStrength ?? 0.4) * 100)}%</span>
+            </>
+          )}
+        </div>
+      </Field>
       <Field label="Show performance meter">
         <label className="inline-check">
           <input

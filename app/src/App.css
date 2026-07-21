@@ -1851,6 +1851,13 @@
    cover windows in features/focusMode.js. */
 .app.focus-on .app-chrome,
 .app.focus-on .controls-bar,
+/* Bedtime "reduce blue light": a warm amber layer multiplied over everything. Multiply pulls the
+   blue channel down toward the amber, which is what actually cuts blue emission (not just a tint).
+   Fixed and click-through, above all app chrome AND dialogs. */
+.night-shift {
+  position: fixed; inset: 0; z-index: 100000; pointer-events: none;
+  background: #ff8b1e; mix-blend-mode: multiply;
+}
 .app.focus-on .app-status { opacity: 0.12; transition: opacity 0.25s ease; }
 .app.focus-on .app-chrome:hover,
 .app.focus-on .controls-bar:hover,
@@ -2382,6 +2389,7 @@
   gap: 10px;
 }
 .app-status-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity 1.4s ease; }
+.app-status-time { color: var(--status-fg); opacity: 0.7; font-variant-numeric: tabular-nums; margin-right: 6px; }
 /* An old message fades once it's been up a while (see StatusText) — hover the bar to bring it back. */
 .app-status-text.faded { opacity: 0; }
 .app-status:hover .app-status-text.faded { opacity: 1; transition: opacity 0.15s ease; }

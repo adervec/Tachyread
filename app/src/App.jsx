@@ -133,13 +133,23 @@ function isSentenceStart(doc, i) {
 const STATUS_HOLD_MS = 6000;
 function StatusText({ text, seq }) {
   const [faded, setFaded] = useState(false);
+  // Stamp each message with the wall-clock time it appeared, so a glance tells you how long ago the
+  // last thing happened. Captured on change (not render) so it doesn't drift.
+  const [stamp, setStamp] = useState('');
   useEffect(() => {
-    if (!text) return undefined;
+    if (!text) { setStamp(''); return undefined; }
+    const d = new Date();
+    setStamp(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
     setFaded(false);
     const t = setTimeout(() => setFaded(true), STATUS_HOLD_MS);
     return () => clearTimeout(t);
   }, [text, seq]);
-  return <span className={`app-status-text${faded ? ' faded' : ''}`}>{text}</span>;
+  return (
+    <span className={`app-status-text${faded ? ' faded' : ''}`}>
+      {text && stamp && <span className="app-status-time">{stamp}</span>}
+      {text}
+    </span>
+  );
 }
 
 function AppInner() {
@@ -2176,6 +2186,11 @@ function AppInner() {
     >
       {isCompact && immersive && (
         <button className="immersive-exit" title="Exit full-screen reading" aria-label="Exit full-screen reading" onClick={() => setImmersive(false)}>⛶</button>
+      )}
+      {/* Bedtime blue-light filter: a warm multiply overlay over the whole app. pointer-events:none
+          so it never intercepts clicks; strength is the user's. */}
+      {state.global.nightShift && (
+        <div className="night-shift" aria-hidden="true" style={{ opacity: Math.max(0.1, Math.min(0.85, state.global.nightShiftStrength ?? 0.4)) }} />
       )}
       <header className={`app-chrome${isCompact && chromeHidden ? ' collapsed' : ''}`}>
         <div className="chrome-body">
