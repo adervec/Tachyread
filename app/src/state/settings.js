@@ -379,6 +379,10 @@ export function defaultGlobalSettings() {
     // When on, mouse-wheel / trackpad scrolling over the reader advances/rewinds the reading
     // position instead of scrolling the pane.
     scrollAdvances: false,
+    // How brittle scroll-to-read's break-out is: the word budget a scroll may credit inside 3s
+    // before it decides you were flinging, not reading, and switches scroll mode off. Lower = more
+    // brittle; 0 = never auto-exit. Default 600 (≈ several screenfuls).
+    scrollBreakWords: 600,
     // Focus mode: fullscreen + fade chrome + (Chromium) black out other monitors. focusDim is how
     // dark the other-monitor cover windows are (1 = pure black, lower = dark grey).
     focusMode: false,

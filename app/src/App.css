@@ -225,7 +225,13 @@
   display: flex;
   align-items: center;
   padding: 6px 10px;
+  /* Full box outline — a right divider plus a top and bottom rule (the bar's own border-bottom
+     supplies the strip's baseline, so the per-tab bottom is inset to sit just above it and not
+     double up). The active tab keeps its bottom transparent so it reads as joined to the pane. */
   border-right: 1px solid var(--divider);
+  border-top: 1px solid var(--divider);
+  border-bottom: 1px solid transparent;
+  box-shadow: inset 0 -1px 0 var(--divider);
   cursor: pointer;
   position: relative;
   user-select: none;
@@ -235,6 +241,7 @@
 .tab-bar .tab.active {
   background: var(--pane-bg);
   font-weight: 600;
+  box-shadow: none; /* joins visually to the pane below — no bottom rule */
 }
 /* Drag-to-reorder document tabs. */
 .tab-bar .tab[draggable="true"] { cursor: grab; }
