@@ -88,11 +88,20 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
 
   return (
     <Dialog title="Biometric Controls" onClose={onClose} width={600} buttons={<button onClick={onClose}>Close</button>}>
-      {isCompact && (
+      <Field label="Front camera on phones & tablets">
+        <label className="inline-check">
+          <input type="checkbox" checked={!!g.mobileCamera} onChange={(e) => patch({ mobileCamera: e.target.checked })} />
+          Let the camera features below run on a small screen too
+        </label>
+      </Field>
+      <p className="settings-note" style={{ marginTop: 0 }}>
+        {g.mobileCamera
+          ? '📱 Camera features are enabled on mobile. They are battery- and CPU-heavy, and a hand-held phone rarely faces you squarely — if reading gets sluggish or warm, turn this back off.'
+          : '📵 Off by default on mobile: the camera guards (attention, doze, alarms, posture) and hand gestures run on desktop only, because they are battery/CPU-heavy and a phone rarely faces you squarely. Voice and clap commands work everywhere; eye gestures below bring the camera up on any device on their own.'}
+      </p>
+      {isCompact && !g.mobileCamera && (
         <p className="settings-note" style={{ marginTop: 0, color: 'var(--ox-bright, #b0413e)' }}>
-          📵 Front-camera features (attention, doze, alarms, posture, hand gestures) are <strong>off on mobile</strong> —
-          they’re battery/CPU-heavy and a phone rarely faces you squarely. Voice / clap commands still work.
-          Camera settings apply when you open the same account on a desktop.
+          You’re on a small screen, so the camera settings below are inactive until you tick that box.
         </p>
       )}
 
@@ -314,8 +323,8 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
       <p className="settings-note">
         Deliberate blinks, winks and eye rolls, mapped by <b>how long you hold them</b>. Anything under
         {' '}{DELIBERATE_MS}ms is ordinary blinking and is ignored, so reading never triggers anything —
-        which also means every window must start at {DELIBERATE_MS}ms or later. This is the one camera
-        control that also runs on a phone.
+        which also means every window must start at {DELIBERATE_MS}ms or later. These run on a phone
+        whether or not the camera box above is ticked: switching them on is consent enough.
       </p>
       <Field label="Eye gestures on">
         <input
