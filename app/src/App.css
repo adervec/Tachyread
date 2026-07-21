@@ -1851,6 +1851,13 @@
    cover windows in features/focusMode.js. */
 .app.focus-on .app-chrome,
 .app.focus-on .controls-bar,
+/* Bedtime "reduce blue light": a warm amber layer multiplied over everything. Multiply pulls the
+   blue channel down toward the amber, which is what actually cuts blue emission (not just a tint).
+   Fixed and click-through, above all app chrome AND dialogs. */
+.night-shift {
+  position: fixed; inset: 0; z-index: 100000; pointer-events: none;
+  background: #ff8b1e; mix-blend-mode: multiply;
+}
 .app.focus-on .app-status { opacity: 0.12; transition: opacity 0.25s ease; }
 .app.focus-on .app-chrome:hover,
 .app.focus-on .controls-bar:hover,
@@ -2382,6 +2389,7 @@
   gap: 10px;
 }
 .app-status-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity 1.4s ease; }
+.app-status-time { color: var(--status-fg); opacity: 0.7; font-variant-numeric: tabular-nums; margin-right: 6px; }
 /* An old message fades once it's been up a while (see StatusText) — hover the bar to bring it back. */
 .app-status-text.faded { opacity: 0; }
 .app-status:hover .app-status-text.faded { opacity: 1; transition: opacity 0.15s ease; }
@@ -2620,6 +2628,7 @@
 .profiles-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 8px; margin-bottom: 8px; border: 1px solid var(--divider); border-radius: 8px; background: color-mix(in srgb, var(--toggle-active-bg) 6%, transparent); }
 .profiles-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--status-fg); }
 .profiles-bar button { font-size: 12px; padding: 2px 8px; }
+.profiles-undo { margin-left: auto; border-color: var(--toggle-active-bg) !important; color: var(--toggle-active-bg); font-variant-numeric: tabular-nums; }
 
 /* Settings dialogs now fill the tab page — flow their fields into responsive columns so the width
    isn't wasted. `columns: 300px` = as many ~300px columns as fit; a phone gets exactly one. */
@@ -3418,6 +3427,18 @@
   opacity: 0.35; font-size: 15px; cursor: pointer;
 }
 .immersive-exit:active, .immersive-exit:hover { opacity: 0.9; }
+/* Desktop full-screen Lines: collapse the multi-pane split to just the pane holding the Lines
+   list, full-bleed. (:has() picks that pane; supported in every current desktop browser.) */
+.app.lines-full .main-split { display: block; height: 100vh; overflow: hidden; }
+.app.lines-full .main-split > .pane { display: none !important; }
+.app.lines-full .main-split > .pane:has(.line-pane) {
+  display: block !important;
+  width: 100% !important;
+  height: 100vh !important;
+  flex: none !important;
+}
+.app.lines-full .splitter { display: none; }
+.app.lines-full .line-pane { height: 100vh; }
 
 /* Phones & portrait tablets: side-by-side panes get cramped — stack them vertically and let the
    column scroll. The mouse-only resize splitters are hidden. Landscape tablets/laptops keep the

@@ -267,6 +267,10 @@ export function defaultGlobalSettings() {
     tabBarMultiRow: false,
     // Small bottom-bar readout of how hard the app is working (frame pacing). Useful on phones.
     showPerfMeter: true,
+    // Bedtime blue-light reduction: a warm overlay multiplied over the whole app. nightShiftStrength
+    // is how warm (0.1 faint .. 0.85 deep amber).
+    nightShift: false,
+    nightShiftStrength: 0.4,
     // Read-aloud auto-stop: pause speech after this many minutes of playback (0 = never).
     ttsAutoStopMin: 0,
     // Read-aloud playback speed multiplier (0.5–2.0), applied to both the native voice and the
