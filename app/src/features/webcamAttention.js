@@ -14,6 +14,7 @@
 // If neither is available the monitor reports 'unsupported' and never pauses anything.
 
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+import { gazeFeatures } from './eyeTracking.js';
 
 const MP_VERSION = '0.10.35';
 const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`;
@@ -50,12 +51,19 @@ async function createLandmarkBackend() {
       const lm = res.faceLandmarks?.[0];
       if (!lm) return { present: false, facing: false, blinkScore: null };
       // raw eye-blink score (0 = open, 1 = shut); the monitor applies the (calibrated) threshold.
-      let blinkScore = null;
+      // Per-eye scores are kept as well — eye GESTURES need to tell a wink from a blink, which the
+      // mean throws away.
+      let blinkScore = null, blinkL = null, blinkR = null;
       const cats = res.faceBlendshapes?.[0]?.categories;
       if (cats) {
         const score = (name) => cats.find((c) => c.categoryName === name)?.score ?? 0;
-        blinkScore = (score('eyeBlinkLeft') + score('eyeBlinkRight')) / 2;
+        blinkL = score('eyeBlinkLeft');
+        blinkR = score('eyeBlinkRight');
+        blinkScore = (blinkL + blinkR) / 2;
       }
+      // Iris position inside the eye opening, for the eye-roll gesture (same features the gaze
+      // tracker uses — one face mesh, two consumers).
+      const gf = gazeFeatures(lm);
       // rough yaw: nose tip relative to the two outer eye corners (0.5 = centred / facing forward)
       let facing = true;
       if (lm[1] && lm[33] && lm[263]) {
@@ -67,7 +75,7 @@ async function createLandmarkBackend() {
       }
       // face width as a fraction of the frame (left/right face-contour landmarks) — a distance proxy.
       const faceSpan = lm[234] && lm[454] ? Math.abs(lm[454].x - lm[234].x) : null;
-      return { present: true, facing, blinkScore, faceSpan };
+      return { present: true, facing, blinkScore, blinkL, blinkR, irisX: gf ? gf[0] : null, irisY: gf ? gf[1] : null, faceSpan };
     },
     close() { try { landmarker.close(); } catch { /* ignore */ } },
   };
@@ -95,7 +103,7 @@ function createFaceDetectorBackend() {
       const present = faces.length > 0;
       const w = video.videoWidth || 320;
       const faceSpan = present && faces[0].boundingBox ? faces[0].boundingBox.width / w : null;
-      return { present, facing: present && looksForward(faces[0] || {}), blinkScore: null, faceSpan };
+      return { present, facing: present && looksForward(faces[0] || {}), blinkScore: null, blinkL: null, blinkR: null, irisX: null, irisY: null, faceSpan };
     },
     close() {},
   };
@@ -105,7 +113,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // onState: starting | watching | away | drowsy | unsupported | denied | error | off
 export function createAttentionMonitor({
-  onState, onAttention, onDoze, onAway, onProximity, onStream, blinkThreshold = BLINK_CLOSED,
+  onState, onAttention, onDoze, onAway, onProximity, onStream, onSample, blinkThreshold = BLINK_CLOSED,
   intervalMs = 250, attentionGraceMs = 1300, dozeMs = 7000, absentMs = 20000,
   proximityThreshold = 0.52, proximityHoldMs = 2500,
 } = {}) {
@@ -166,6 +174,8 @@ export function createAttentionMonitor({
     try { r = await backend.detect(video, performance.now()); } catch { return; }
     if (!r) return;
     const now = Date.now();
+    // Raw frame out to whoever wants finer signals than attention/doze (eye gestures).
+    if (r.present) onSample?.({ t: now, blinkL: r.blinkL, blinkR: r.blinkR, irisX: r.irisX, irisY: r.irisY });
     const score = typeof r.blinkScore === 'number' ? r.blinkScore : null;
     lastBlinkScore = score;
     const eyesOpen = score != null ? score < threshold : null; // null = no eye data (presence-only)

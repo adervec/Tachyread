@@ -95,8 +95,10 @@ import { saveTextToFile, saveBlobToFile } from './features/fileSystem.js';
 import { buildTabPdf } from './features/exportPdf.js';
 import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
+import { createEyeGestureDetector, eyeMappingsUsable, EYE_KINDS } from './features/eyeGestures.js';
+import { createEyeCue } from './features/eyeCue.js';
 import { createGestureMonitor, DEFAULT_HAND_CALIB, DEFAULT_GESTURES, GESTURE_INFO } from './features/handGestures.js';
-import { runCommand, actionLabel, matchVoice, matchVoiceRow, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from './features/commandRegistry.js';
+import { runCommand, actionLabel, matchVoice, matchVoiceRow, COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from './features/commandRegistry.js';
 import { createSequenceMatcher } from './features/triggerSequences.js';
 import HandCalibrationDialog from './dialogs/HandCalibrationDialog.jsx';
 import WebcamCalibrationDialog from './dialogs/WebcamCalibrationDialog.jsx';
@@ -800,6 +802,12 @@ function AppInner() {
   const pauseTextHiddenRef = useRef(state.global.pauseWhenTextHidden);
   pauseTextHiddenRef.current = state.global.pauseWhenTextHidden;
   const [webcamState, setWebcamState] = useState('off');
+  // "Looked away" / "drowsy" are judgements the ATTENTION guards make. With only eye gestures on
+  // the camera is simply watching — reporting "looked away — paused" would claim a pause that isn't
+  // happening. Raw state still drives the guards; this is only what we show.
+  const webcamShownState = (s) => (
+    (s === 'away' && !state.global.webcamAttention && !state.global.webcamAwayAlarm)
+    || (s === 'drowsy' && !state.global.webcamDoze) ? 'watching' : s);
   const [webcamStream, setWebcamStream] = useState(null);
   const [gestureStream, setGestureStream] = useState(null); // hand-gesture camera stream (for the popup)
   const webcamRef = useRef(null);
@@ -874,7 +882,12 @@ function AppInner() {
   // rarely face the user squarely) — only OCR/Grab (which uses the rear/document camera) runs there.
   const camGuardsOn = state.global.webcamAttention || state.global.webcamDoze || state.global.webcamAwayAlarm
     || state.global.webcamDistanceNudge || state.global.webcamFocusStats;
-  const camOn = !isCompact && camGuardsOn;
+  // Eye GESTURES are the exception to the no-front-camera-on-mobile rule: they're a deliberate
+  // hands-free control the user switched on, and on a phone propped up while reading they're the
+  // most useful input there is. Everything else camera-driven stays desktop-only.
+  const eyeGestureCfg = state.global.eyeGestures;
+  const eyeGesturesOn = !!eyeGestureCfg?.on && eyeMappingsUsable(eyeGestureCfg.rows || []);
+  const camOn = (!isCompact && camGuardsOn) || eyeGesturesOn;
   const handGesturesOn = !isCompact && !!state.global.handGestures;
   const audioCtrlOn = !!activeTab?.settings?.audioCtrl;
   useEffect(() => {
@@ -889,8 +902,13 @@ function AppInner() {
     const mon = createAttentionMonitor({
       blinkThreshold: state.global.webcamCalib?.threshold ?? 0.5,
       // MediaPipe FaceLandmarker is battery/CPU-heavy on phones — sample at half the rate there
-      // (still well inside the doze/away grace windows) to keep the reader responsive.
-      intervalMs: deviceKind() === 'Mobile' ? 500 : 250,
+      // (still well inside the doze/away grace windows) to keep the reader responsive. Eye gestures
+      // MEASURE durations, so they need a much finer clock: at 250ms a 700ms hold could read as
+      // anything from 500 to 1000ms and no window would be hittable.
+      intervalMs: eyeGesturesOn
+        ? (deviceKind() === 'Mobile' ? 90 : 60)
+        : (deviceKind() === 'Mobile' ? 500 : 250),
+      onSample: (s) => eyeDetectorRef.current?.push(s),
       onStream: (s) => setWebcamStream(s),
       onState: (s) => setWebcamState(s),
       onAttention: (attentive) => {
@@ -904,14 +922,17 @@ function AppInner() {
           if (f.attentive) f.watchedMs += now - f.lastTs; else f.awayMs += now - f.lastTs;
           f.lastTs = now;
           if (!attentive) f.distractions += 1;
-          if (f.attentive !== attentive) pushBioLog(attentive ? { source: 'camera', icon: '👀', text: 'Back — watching', tone: 'ok' } : { source: 'camera', icon: '🙈', text: 'Looked away', tone: 'warn' });
+          // Only narrate look-aways for the guards the user actually switched on. Eye gestures keep
+          // the camera running without them, and a feed full of "Looked away" from a guard you never
+          // enabled is noise.
+          if (f.attentive !== attentive && (webcamAttentionRef.current || focusStatsRef.current)) pushBioLog(attentive ? { source: 'camera', icon: '👀', text: 'Back — watching', tone: 'ok' } : { source: 'camera', icon: '🙈', text: 'Looked away', tone: 'warn' });
           f.attentive = attentive;
         }
       },
       onDoze: (dozing) => {
         // doze → stop read-aloud (it's otherwise exempt from the guards). No auto-resume: if you
         // nodded off, it just stops, like the wind-down timer.
-        if (dozing) pushBioLog({ source: 'camera', icon: '💤', text: 'Drowsy — eyes shut', tone: 'warn' });
+        if (dozing && webcamDozeRef.current) pushBioLog({ source: 'camera', icon: '💤', text: 'Drowsy — eyes shut', tone: 'warn' });
         if (dozing && webcamDozeRef.current && playingRef.current && activeTabRef.current?.settings.readAloud) {
           engineRef.current.pause();
           setPlaying(false);
@@ -935,7 +956,7 @@ function AppInner() {
       },
       onProximity: (close) => {
         setTooClose(distanceNudgeRef.current ? close : false);
-        if (close) pushBioLog({ source: 'camera', icon: '↔', text: 'Too close to the screen', tone: 'warn' });
+        if (close && distanceNudgeRef.current) pushBioLog({ source: 'camera', icon: '↔', text: 'Too close to the screen', tone: 'warn' });
       },
     });
     webcamRef.current = mon;
@@ -960,7 +981,49 @@ function AppInner() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camOn]);
+  }, [camOn, eyeGesturesOn]);
+
+  // ── Eye gestures ────────────────────────────────────────────────────────────────────────────
+  // The camera monitor above pushes every frame into this detector; it decides what was deliberate
+  // and how long you held it, then resolves the mapping to a command. Rows come from a ref so
+  // editing them in the dialog takes effect without rebuilding the detector mid-blink.
+  const eyeDetectorRef = useRef(null);
+  const eyeCueRef = useRef(null);
+  const eyeRowsRef = useRef([]);
+  eyeRowsRef.current = eyeGestureCfg?.rows || [];
+  const [eyeHold, setEyeHold] = useState(null); // { kind, ms, inWindow } — live meter for the dialog
+  useEffect(() => {
+    if (!eyeGesturesOn) {
+      eyeDetectorRef.current = null;
+      eyeCueRef.current?.close();
+      eyeCueRef.current = null;
+      setEyeHold(null);
+      return undefined;
+    }
+    if (!eyeCueRef.current) eyeCueRef.current = createEyeCue();
+    const cueOn = () => !!state.global.eyeGestures?.cue;
+    const cueVol = () => state.global.eyeGestures?.cueVolume ?? 1;
+    eyeDetectorRef.current = createEyeGestureDetector({
+      getRows: () => eyeRowsRef.current,
+      onHold: (h) => setEyeHold(h.ms >= 200 ? h : null),
+      onCue: (c) => { if (cueOn()) eyeCueRef.current?.play(c, cueVol()); },
+      onGesture: ({ kind, ms, row }) => {
+        setEyeHold(null);
+        if (cueOn()) eyeCueRef.current?.play('fired', cueVol());
+        const cmd = COMMANDS.find((c) => c.id === row.commandId);
+        const label = EYE_KINDS.find((k) => k.id === kind)?.label || kind;
+        pushBioLog({ source: 'eyes', icon: '👁', text: `${label} ${Math.round(ms)}ms → ${cmd?.label || row.commandId}`, tone: 'ok' });
+        cmd?.run(cmdCtx());
+      },
+      onIgnored: ({ kind, ms, why }) => {
+        setEyeHold(null);
+        // Telling you the hold you DID make is how you learn the windows; silence just feels broken.
+        if (why === 'no window') setStatus(`👁 ${EYE_KINDS.find((k) => k.id === kind)?.label || kind} held ${Math.round(ms)}ms — no action mapped to that length.`);
+      },
+    });
+    return () => { eyeDetectorRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eyeGesturesOn]);
 
   function playPause() {
     if (!activeTab) return;
@@ -2398,8 +2461,8 @@ function AppInner() {
           </span>
         )}
         {camOn && webcamState !== 'off' && (
-          <button className={`webcam-badge wb-${webcamState}`} title={state.global.webcamPreview ? 'Webcam — frames are analysed on your device and never leave it' : 'Show the camera popup'} onClick={() => updateGlobal({ webcamPreview: true })}>
-            📷 {WEBCAM_LABEL[webcamState] || webcamState}
+          <button className={`webcam-badge wb-${webcamShownState(webcamState)}`} title={state.global.webcamPreview ? 'Webcam — frames are analysed on your device and never leave it' : 'Show the camera popup'} onClick={() => updateGlobal({ webcamPreview: true })}>
+            📷 {WEBCAM_LABEL[webcamShownState(webcamState)] || webcamShownState(webcamState)}
           </button>
         )}
         {handGesturesOn && handState !== 'off' && (
@@ -2495,6 +2558,7 @@ function AppInner() {
           onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
           onCalibrateHand={() => openDialog({ kind: 'hand-calib' })}
           isCompact={isCompact}
+          hold={eyeHold}
           onClose={closeDialog}
         />
       )}
@@ -2711,7 +2775,7 @@ function AppInner() {
       {(camOn || handGesturesOn || audioCtrlOn) && state.global.webcamPreview !== false && (webcamStream || gestureStream || audioCtrlOn) && (
         <BiometricFeed
           stream={webcamStream || gestureStream || null}
-          camState={camOn ? webcamState : (handGesturesOn ? 'watching' : null)}
+          camState={camOn ? webcamShownState(webcamState) : (handGesturesOn ? 'watching' : null)}
           handState={handGesturesOn ? handState : null}
           scope={micScope}
           mode={state.global.audioCtrlMode || 'Both'}

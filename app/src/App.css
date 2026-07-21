@@ -2269,6 +2269,24 @@
 .bio-seq-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px dashed var(--divider); }
 .bio-seq-row select { max-width: 150px; font-size: 11px; }
 .bio-seq-arrow { color: var(--status-fg); font-weight: 700; }
+/* Eye gestures: one mapping per row (gesture · hold range · action), with its problems inline. */
+.bio-eye-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px dashed var(--divider); }
+.bio-eye-row.bad { background: color-mix(in srgb, var(--ox-bright, #b0413e) 10%, transparent); border-radius: 4px; }
+.bio-eye-row select { max-width: 170px; font-size: 11px; }
+.bio-eye-range { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--status-fg); }
+.bio-eye-range input { width: 62px; font-size: 11px; }
+.bio-eye-problem { flex-basis: 100%; font-size: 11px; }
+.bio-eye-problem.error { color: var(--ox-bright, #b0413e); }
+.bio-eye-problem.warn { color: #b58900; }
+/* Live hold meter — the only way to tune a duration window without guessing. */
+.bio-eye-meter {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 10px; margin: 4px 0; border: 1px solid var(--divider); border-radius: 6px;
+  background: color-mix(in srgb, var(--toggle-active-bg) 6%, transparent); min-height: 32px;
+}
+.bio-eye-kind { font-size: 12px; font-weight: 600; }
+.bio-eye-ms { font-family: Consolas, monospace; font-size: 14px; font-variant-numeric: tabular-nums; }
+.bio-eye-ms.in { color: #3fb950; font-weight: 700; }
 /* Typing progress: overall + weekly summaries */
 .tp-overall { font-size: 12px; line-height: 1.5; }
 .tp-up { color: #3fb950; }
