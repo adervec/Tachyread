@@ -90,6 +90,7 @@ const MENUS = {
     { label: 'Application Settings...', action: 'app-settings' },
     { label: 'Default Tab Settings...', action: 'def-settings' },
     { label: 'Reset Tab to Default Settings', action: 'reset-tab' },
+    { label: 'Apply Default Settings to All Tabs', action: 'apply-defaults-all' },
     { kind: 'separator' },
     { label: 'Font Manager...', action: 'font-manager' },
     { label: 'Biometric Controls...', action: 'biometric-settings' },

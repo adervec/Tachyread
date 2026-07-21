@@ -38,6 +38,9 @@ const WALL_JOINERS = [
   ['🔹', 'Blue diamond'], ['🍃', 'Leaf'], ['✦', 'Star'],
 ];
 
+// Temporary style a line gets as it first scrolls into the Lines pane (settles back over N seconds).
+const LINE_ENTRY_EFFECTS = ['Fade', 'Glow', 'Highlight', 'Rise', 'Color'];
+
 const GUIDE_COLORS = ['Red', 'Pink', 'Orange', 'Green', 'Blue', 'Purple'];
 const ALIGNMENTS = ['Left', 'Center', 'Right', 'Justify'];
 
@@ -386,6 +389,23 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
         <label className="inline-check" title="Faint vertical rules across the pane">
           <input type="checkbox" checked={!!s.linesGridV} onChange={(e) => patch({ linesGridV: e.target.checked })} /> Vertical
         </label>
+      </Field>
+      <Field label="New-line entry effect (Lines pane)">
+        <select value={s.linesEntryEffect || ''} onChange={(e) => patch({ linesEntryEffect: e.target.value })} title="Give each line a brief style as it first scrolls into view, easing back to normal">
+          <option value="">Off</option>
+          {LINE_ENTRY_EFFECTS.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+        {s.linesEntryEffect && (
+          <>
+            <input
+              type="range" min={1} max={10} step={1}
+              value={Math.max(1, Math.min(10, s.linesEntrySecs || 3))}
+              onChange={(e) => patch({ linesEntrySecs: Number(e.target.value) })}
+              title="How long the effect lasts before the line settles to normal"
+            />
+            <span className="range-val">{Math.max(1, Math.min(10, s.linesEntrySecs || 3))}s</span>
+          </>
+        )}
       </Field>
       <Field label="Word substitutions (this document)">
         <WordSwapsEditor swaps={s.wordSwaps || {}} onChange={(m) => patch({ wordSwaps: m })} />

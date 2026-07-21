@@ -39,22 +39,42 @@ export const GESTURE_INFO = {
 };
 const GESTURE_BY_LABEL = { Thumb_Up: 'thumbUp', Thumb_Down: 'thumbDown', Closed_Fist: 'fist', Victory: 'victory', Pointing_Up: 'pointUp', ILoveYou: 'iLoveYou' };
 
-// Hold-to-fire for discrete gestures: a classification must persist `holdTicks` consecutive
-// feeds before it fires, then a cooldown gates the next fire (holding through the cooldown
-// re-fires — natural key-repeat for the WPM nudges). Single-frame misclassifications — the main
-// false-positive source — never accumulate enough ticks to fire. Pure; see the test file.
-export function createGestureTrigger({ holdTicks = 4, cooldownMs = 1500 } = {}) {
+export const DEFAULT_HOLD_MS = 400;  // a discrete gesture must persist this long to fire (≈4 frames)
+export const HOLD_MIN_MS = 150;      // floor for the per-gesture setting (below this it's a flicker)
+export const HOLD_MAX_MS = 3000;
+// The "held" discrete gestures a minimum-hold time applies to. Motion gestures (wave, swipes) and
+// the scroll joystick aren't held poses, so a hold time is meaningless for them.
+export const HELD_GESTURES = ['thumbUp', 'thumbDown', 'fist', 'victory', 'pointUp', 'iLoveYou', 'pinch'];
+
+// Clamp a user-entered hold time into the allowed range (or the default when unset/garbage).
+export function clampHoldMs(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return DEFAULT_HOLD_MS;
+  return Math.max(HOLD_MIN_MS, Math.min(HOLD_MAX_MS, n));
+}
+
+// Hold-to-fire for discrete gestures: a classification must persist for at least its minimum hold
+// TIME before it fires, then a cooldown gates the next fire (holding through the cooldown re-fires —
+// natural key-repeat for the WPM nudges). Timing by the clock rather than a frame count means the
+// threshold is a real duration the user can set, independent of the camera's sample rate. Single-
+// frame misclassifications — the main false-positive source — never survive to fire; a longer hold
+// filters the deliberate-looking accidentals too. `getMinHoldMs(kind)` supplies the per-gesture
+// time; a plain `minHoldMs` is the fallback. Pure; see the test file.
+export function createGestureTrigger({ getMinHoldMs, minHoldMs = DEFAULT_HOLD_MS, cooldownMs = 1500 } = {}) {
+  const holdFor = (k) => {
+    const v = getMinHoldMs ? getMinHoldMs(k) : minHoldMs;
+    return Math.max(0, Number(v ?? minHoldMs) || 0);
+  };
   let kind = null;
-  let ticks = 0;
+  let startedAt = 0;
   let firedAt = -Infinity;
   return {
     feed(k, now) {
-      if (k !== kind) { kind = k; ticks = 0; }
+      if (k !== kind) { kind = k; startedAt = now; } // a new (or lost) gesture restarts the hold clock
       if (!k) return null;
-      ticks++;
-      if (ticks >= holdTicks && now - firedAt >= cooldownMs) {
+      if (now - startedAt >= holdFor(k) && now - firedAt >= cooldownMs) {
         firedAt = now;
-        ticks = 0;
+        startedAt = now; // continued hold re-fires after another full hold (key repeat)
         return k;
       }
       return null;
@@ -173,7 +193,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 // thumbDown, fist, victory) — each gated by the `gestures` config.
 export function createGestureMonitor({
   onState, onHand, onScroll, onWave, onGesture, onStream,
-  calib = DEFAULT_HAND_CALIB, gestures = DEFAULT_GESTURES, intervalMs = 100, deadFrac = 0.18,
+  calib = DEFAULT_HAND_CALIB, gestures = DEFAULT_GESTURES, holdMs = null, intervalMs = 100, deadFrac = 0.18,
 } = {}) {
   let stream = null;
   let video = null;
@@ -183,12 +203,14 @@ export function createGestureMonitor({
   let state = 'off';
   let cal = { ...DEFAULT_HAND_CALIB, ...(calib || {}) };
   let gest = { ...DEFAULT_GESTURES, ...(gestures || {}) };
+  let hold = { ...(holdMs || {}) }; // per-gesture minimum hold time (ms); missing → the default
   let lastY = null; // latest palm height while a hand is visible (calibration reads this)
   let lastV = 0;
   let suppressScrollUntil = 0; // a wave/swipe wobbles y too — don't scroll off the gesture itself
   const wave = createWaveDetector();
   const swipe = createSwipeDetector();
-  const trigger = createGestureTrigger();
+  // Per-gesture hold time, read live so tuning it in Settings takes effect without a restart.
+  const trigger = createGestureTrigger({ getMinHoldMs: (k) => hold[k] });
 
   const setState = (s) => { if (s !== state) { state = s; onState?.(s); } };
   const emitScroll = (v) => { if (v !== lastV) { lastV = v; onScroll?.(v); } else if (v) onScroll?.(v); };
@@ -330,5 +352,6 @@ export function createGestureMonitor({
     getState: () => state,
     setCalib: (c) => { cal = { ...DEFAULT_HAND_CALIB, ...(c || {}) }; },
     setGestures: (g) => { gest = { ...DEFAULT_GESTURES, ...(g || {}) }; },
+    setHoldMs: (h) => { hold = { ...(h || {}) }; },
   };
 }

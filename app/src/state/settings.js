@@ -42,6 +42,8 @@ export function defaultFileSettings() {
     lineSpacing: 1.5, // Lines-pane line-height multiplier
     linesGridH: false, // faint horizontal gridlines on the Lines pane background
     linesGridV: false, // faint vertical gridlines on the Lines pane background
+    linesEntryEffect: '', // temporary style for a line as it first scrolls in ('' = off; Fade|Glow|Highlight|Rise|Color)
+    linesEntrySecs: 3, // how long the entry effect lasts before settling to normal (1–10s)
     wordSwaps: {}, // per-document display substitutions: { "word in text": "shown as" } (display only)
     wallText: false, // "wall of text": merge source lines into flowing blocks (newlines → spaces/tabs)
     wallBreakEvery: 0, // in wall mode, also start a new block every N source lines (0 = only sections/%)
@@ -304,6 +306,9 @@ export function defaultGlobalSettings() {
     handGestures: false,
     handCalib: null,
     handGestureSet: null,
+    // Per-gesture minimum hold time (ms) for the held discrete hand gestures — raise it to filter
+    // accidental flicks. { thumbUp|fist|victory|…: ms }; a missing entry uses DEFAULT_HOLD_MS.
+    handHoldMs: null,
     // Eye-gesture controls (Biometric Controls → Eye gestures). Deliberate blinks / winks / eye
     // rolls mapped to commands by how long you hold them. Unlike the other camera features this one
     // runs on mobile too — it's explicitly opt-in, so the battery cost is the user's call.
@@ -374,6 +379,10 @@ export function defaultGlobalSettings() {
     // When on, mouse-wheel / trackpad scrolling over the reader advances/rewinds the reading
     // position instead of scrolling the pane.
     scrollAdvances: false,
+    // How brittle scroll-to-read's break-out is: the word budget a scroll may credit inside 3s
+    // before it decides you were flinging, not reading, and switches scroll mode off. Lower = more
+    // brittle; 0 = never auto-exit. Default 600 (≈ several screenfuls).
+    scrollBreakWords: 600,
     // Focus mode: fullscreen + fade chrome + (Chromium) black out other monitors. focusDim is how
     // dark the other-monitor cover windows are (1 = pure black, lower = dark grey).
     focusMode: false,

@@ -183,6 +183,25 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
           </span>
         </div>
       </Field>
+      <Field label="Scroll-to-read break-out">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <select
+            value={String(g.scrollBreakWords ?? 600)}
+            onChange={(e) => patch({ scrollBreakWords: Number(e.target.value) })}
+          >
+            <option value="0">Never break out</option>
+            <option value="1200">Very tolerant (1200 words)</option>
+            <option value="600">Balanced (600 — default)</option>
+            <option value="300">Sensitive (300 words)</option>
+            <option value="150">Brittle (150 words)</option>
+          </select>
+          <span className="settings-note" style={{ margin: 0 }}>
+            How eagerly a fast scroll switches scroll-to-read off. A brittle setting bails the moment
+            you fling; a tolerant one lets you scroll hard and keep reading. “Never” leaves it on no
+            matter how fast you go (the tracker still won’t credit impossibly fast reading as pace).
+          </span>
+        </div>
+      </Field>
       <Field label="Pause when text isn’t visible">
         <label className="inline-check">
           <input

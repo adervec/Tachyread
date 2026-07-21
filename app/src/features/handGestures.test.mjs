@@ -39,19 +39,40 @@ fired = 0;
 [0.5, 0.51, 0.5, 0.51, 0.5, 0.51].forEach((x, i) => { if (w.feed(x, 1000 + i * 100)) fired++; });
 assert.equal(fired, 0, 'tremor is not a wave');
 
-// Hold trigger: a gesture must persist holdTicks feeds; single-frame flickers never fire.
-let tg = createGestureTrigger({ holdTicks: 4, cooldownMs: 1500 });
-assert.equal(tg.feed('thumbUp', 1000), null, 'tick 1 — not yet');
-assert.equal(tg.feed('thumbUp', 1100), null, 'tick 2');
-assert.equal(tg.feed('thumbUp', 1200), null, 'tick 3');
-assert.equal(tg.feed('thumbUp', 1300), 'thumbUp', 'tick 4 — fires');
-assert.equal(tg.feed('thumbUp', 1400), null, 'cooldown holds');
-assert.equal(tg.feed('thumbUp', 3100), null, 'post-cooldown, hold ticks still accumulating…');
-assert.equal(tg.feed('thumbUp', 3200), null, '…');
-assert.equal(tg.feed('thumbUp', 3300), 'thumbUp', '…and a continued hold re-fires (key repeat)');
+// Hold trigger: a gesture must persist for at least its minimum hold TIME; single-frame flickers
+// never fire. (Timed by the clock, so the threshold is a real duration, not a frame count.)
+let tg = createGestureTrigger({ minHoldMs: 400, cooldownMs: 1500 });
+assert.equal(tg.feed('thumbUp', 1000), null, 'first frame — hold clock starts');
+assert.equal(tg.feed('thumbUp', 1200), null, '200ms held — not yet');
+assert.equal(tg.feed('thumbUp', 1300), null, '300ms — still under 400');
+assert.equal(tg.feed('thumbUp', 1400), 'thumbUp', '400ms held — fires');
+assert.equal(tg.feed('thumbUp', 1600), null, 'cooldown holds (fired 200ms ago)');
+assert.equal(tg.feed('thumbUp', 2800), null, 'still inside the 1500ms cooldown');
+assert.equal(tg.feed('thumbUp', 2950), 'thumbUp', 'a continued hold re-fires once the cooldown clears (key repeat)');
 
-tg = createGestureTrigger({ holdTicks: 4, cooldownMs: 1500 });
-['fist', null, 'fist', 'thumbUp', 'fist', 'fist'].forEach((k, i) => assert.equal(tg.feed(k, 1000 + i * 100), null, `flicker ${i} never fires`));
+// Per-gesture times: a getter can make one gesture slow and another quick.
+tg = createGestureTrigger({ getMinHoldMs: (k) => (k === 'fist' ? 800 : 300), cooldownMs: 1500 });
+assert.equal(tg.feed('fist', 0), null, 'fist start');
+assert.equal(tg.feed('fist', 400), null, 'fist at 400ms — its floor is 800');
+assert.equal(tg.feed('fist', 800), 'fist', 'fist fires at its own 800ms');
+tg = createGestureTrigger({ getMinHoldMs: (k) => (k === 'fist' ? 800 : 300), cooldownMs: 1500 });
+assert.equal(tg.feed('victory', 0), null, 'victory start');
+assert.equal(tg.feed('victory', 300), 'victory', 'victory fires at its shorter 300ms');
+
+// Raising the hold time filters an accidental that a shorter one would have let through.
+const quick = createGestureTrigger({ minHoldMs: 200, cooldownMs: 1500 });
+const slow = createGestureTrigger({ minHoldMs: 900, cooldownMs: 1500 });
+// a ~500ms brush of the gesture then gone
+const brush = [['fist', 0], ['fist', 200], ['fist', 400], [null, 500]];
+let q = null, s = null;
+brush.forEach(([k, t]) => { q = tg && (quick.feed(k, t) || q); s = slow.feed(k, t) || s; });
+assert.equal(q, 'fist', 'a 200ms threshold fires on a half-second brush');
+assert.equal(s, null, 'a 900ms threshold rejects the same brush as accidental');
+
+// A flicker between different gestures never accumulates on any one of them.
+tg = createGestureTrigger({ minHoldMs: 400, cooldownMs: 1500 });
+[['fist', 0], [null, 100], ['fist', 200], ['thumbUp', 300], ['fist', 400], ['fist', 500]]
+  .forEach(([k, t], i) => assert.equal(tg.feed(k, t), null, `flicker ${i} never fires`));
 
 // Swipe: one fast directional sweep fires after the confirm delay; a reversal (a wave stroke) cancels.
 let sd = createSwipeDetector({ sweep: 0.24, minStep: 0.015, windowMs: 700, confirmMs: 320, cooldownMs: 1400 });
