@@ -4,6 +4,8 @@ import { AppProvider, useApp } from './state/AppContext.jsx';
 import MenuBar from './components/MenuBar.jsx';
 import TabBar from './components/TabBar.jsx';
 import RsvpPane from './components/RsvpPane.jsx';
+import ReaderTrail from './components/ReaderTrail.jsx';
+import { resolveCursorCss } from './features/cursors.js';
 import DashboardPane from './components/DashboardPane.jsx';
 import FloatingFace from './components/FloatingFace.jsx';
 import FloatingStats from './components/FloatingStats.jsx';
@@ -31,6 +33,7 @@ import NotesDialog from './dialogs/NotesDialog.jsx';
 import FootnoteOverlay from './dialogs/FootnoteOverlay.jsx';
 import TtsPopupDialog from './dialogs/TtsPopupDialog.jsx';
 import FaceLibraryDialog from './dialogs/FaceLibraryDialog.jsx';
+import CursorManagerDialog from './dialogs/CursorManagerDialog.jsx';
 import TypingProgressDialog from './dialogs/TypingProgressDialog.jsx';
 import AppSettingsDialog from './dialogs/AppSettingsDialog.jsx';
 import BookFinishedDialog from './dialogs/BookFinishedDialog.jsx';
@@ -1913,6 +1916,7 @@ function AppInner() {
     }
     if (action === 'tts-popup' && activeTab) return openDialog({ kind: 'tts-popup' });
     if (action === 'face-library') return openDialog({ kind: 'face-library' });
+    if (action === 'cursor-manager') return openDialog({ kind: 'cursor-manager' });
     if (action === 'disclaimer') return openDialog({ kind: 'disclaimer' });
     if (action === 'typing-progress') return openDialog({ kind: 'typing-progress' });
     if (action === 'typing-plans') return openDialog({ kind: 'typing-plan' });
@@ -1964,6 +1968,11 @@ function AppInner() {
   // and pauses playback — there's no room to do both, and you're not reading the text then.
   const auxOpen = isCompact && (state.showToc || (state.showSource && !!activeTab?.doc?.source) || state.showIndex);
   const panesFull = linesLocked || auxOpen;
+  // Per-tab reading cursor + trail (only over the reader panes). resolveCursorCss falls back to '' —
+  // no override — for the system cursor or a missing custom, so the reader is never left blank.
+  const readerCursor = activeTab ? resolveCursorCss(activeTab.settings.cursorId, state.global.customCursors) : '';
+  // Canvas needs a concrete colour (it can't resolve CSS vars), so default to a bright, theme-neutral one.
+  const trailColor = activeTab?.settings.cursorTrailColor || '#ff5c5c';
 
   // Mobile reading-view switch: show exactly one of ToC / Index (or neither → back to the reader).
   const showAuxOnly = (which) => {
@@ -2351,7 +2360,12 @@ function AppInner() {
               )}
             </div>
           )}
-          <div className={`main-area${panesFull ? ' panes-full' : ''}`} {...gestureHandlers}>
+          <div
+            className={`main-area${panesFull ? ' panes-full' : ''}${readerCursor ? ' has-reader-cursor' : ''}`}
+            style={readerCursor ? { '--reader-cursor': readerCursor } : undefined}
+            {...gestureHandlers}
+          >
+            <ReaderTrail mode={activeTab.settings.cursorTrail} color={trailColor} trailMs={activeTab.settings.cursorTrailMs} />
             {isCompact && readerRotation && !auxOpen ? (
               <ReaderRotator rotation={readerRotation}>
                 <PaneLayout panes={panes} widths={paneWidths} onResize={resizePane} />
@@ -2657,6 +2671,7 @@ function AppInner() {
         <TtsPopupDialog tab={dlgTab} onClose={closeDialog} />
       )}
       {dialog?.kind === 'face-library' && <FaceLibraryDialog onClose={closeDialog} />}
+      {dialog?.kind === 'cursor-manager' && <CursorManagerDialog tab={activeTab} onClose={closeDialog} />}
       {dialog?.kind === 'disclaimer' && (
         <DisclaimerDialog
           onClose={() => {

@@ -1858,6 +1858,36 @@
   position: fixed; inset: 0; z-index: 100000; pointer-events: none;
   background: #ff8b1e; mix-blend-mode: multiply;
 }
+/* Per-tab reading cursor — applied only inside the reader panes when the active tab sets one, so
+   menus, dialogs and controls keep the normal pointer. Gated by the class so an unset tab leaves
+   the panes' own cursors alone. */
+.main-area.has-reader-cursor .line-pane,
+.main-area.has-reader-cursor .line-pane-list,
+.main-area.has-reader-cursor .line-pane-split,
+.main-area.has-reader-cursor .rsvp-pane,
+.main-area.has-reader-cursor .source-html,
+.main-area.has-reader-cursor .source-frame,
+.main-area.has-reader-cursor .source-canvas-wrap { cursor: var(--reader-cursor); }
+.main-area { position: relative; }
+/* The trail canvas floats over the reader area, click-through, under the controls. */
+.reader-trail { position: absolute; inset: 0; pointer-events: none; z-index: 40; }
+/* Cursor Manager */
+.cur-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; margin: 4px 0; }
+.cur-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; position: relative;
+  padding: 8px 4px; border: 1px solid var(--divider); border-radius: 8px; background: var(--input-bg, transparent);
+  cursor: pointer; font-size: 11px;
+}
+.cur-cell.on { border-color: var(--toggle-active-bg); box-shadow: inset 0 0 0 1px var(--toggle-active-bg); }
+.cur-swatch { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; }
+.cur-native { font-size: 18px; color: var(--menu-fg); }
+.cur-name { text-align: center; line-height: 1.15; color: var(--menu-fg); }
+.cur-del { position: absolute; top: 2px; right: 4px; color: var(--status-fg); font-size: 13px; line-height: 1; }
+.cur-del:hover { color: var(--ox-bright, #b0413e); }
+.cur-builder { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0; }
+.cur-preview {
+  padding: 4px 10px; border: 1px dashed var(--divider); border-radius: 6px; font-size: 12px; color: var(--status-fg);
+}
 .app.focus-on .app-status { opacity: 0.12; transition: opacity 0.25s ease; }
 .app.focus-on .app-chrome:hover,
 .app.focus-on .controls-bar:hover,
