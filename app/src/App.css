@@ -2339,6 +2339,16 @@
 .lj-recat-from { color: var(--status-fg); text-decoration: line-through; white-space: nowrap; }
 .lj-recat-to { color: #3fb950; font-weight: 600; white-space: nowrap; }
 .lj-recat .settings-note { margin: 0; }
+/* Trackyread "Fading" — retention bar per finished book slipping out of memory. */
+.lj-fading { list-style: none; padding: 0; margin: 4px 0; display: flex; flex-direction: column; gap: 4px; }
+.lj-fading li { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.lj-fade-bar { flex: 0 0 90px; height: 8px; border-radius: 4px; background: var(--track-bg, rgba(128,128,128,0.2)); overflow: hidden; }
+.lj-fade-fill { display: block; height: 100%; border-radius: 4px; background: #3fb950; }
+.lj-fade-faded .lj-fade-fill { background: #d24a43; }
+.lj-fade-fading .lj-fade-fill { background: #e3b341; }
+.lj-fade-pct { flex: 0 0 34px; text-align: right; font-variant-numeric: tabular-nums; color: var(--status-fg); }
+.lj-fade-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lj-fade-meta { flex: 0 0 auto; margin: 0; white-space: nowrap; }
 .bio-eye-kind { font-size: 12px; font-weight: 600; }
 .bio-eye-ms { font-family: Consolas, monospace; font-size: 14px; font-variant-numeric: tabular-nums; }
 .bio-eye-ms.in { color: #3fb950; font-weight: 700; }
