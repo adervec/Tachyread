@@ -24,6 +24,11 @@ export const COMMANDS = [
   { id: 'restart', label: 'Restart (to top)', icon: '⟲', run: (c) => c.nav?.('restart') },
   { id: 'pageDown', label: 'Page down', icon: '⇟', run: (c) => c.page?.(1) },
   { id: 'pageUp', label: 'Page up', icon: '⇞', run: (c) => c.page?.(-1) },
+  // Direct scroll by a "tick" (the App Settings tick size); great for hands-free scroll-reading.
+  { id: 'scrollTickDown', label: 'Scroll down a tick', icon: '⤓', run: (c) => c.scrollTicks?.(1, 1) },
+  { id: 'scrollTickUp', label: 'Scroll up a tick', icon: '⤒', run: (c) => c.scrollTicks?.(-1, 1) },
+  { id: 'scrollTickDownBig', label: 'Scroll down 3 ticks', icon: '⏬', run: (c) => c.scrollTicks?.(1, 3) },
+  { id: 'scrollTickUpBig', label: 'Scroll up 3 ticks', icon: '⏫', run: (c) => c.scrollTicks?.(-1, 3) },
   { id: 'jumpToCurrent', label: 'Jump to current word', icon: '⌖', run: (c) => c.jumpToCurrent?.() },
   { id: 'jumpFrontier', label: 'Jump to latest unread', icon: '⇥', run: (c) => c.jumpToFrontier?.() },
   { id: 'jumpGap', label: 'Jump to first unread gap', icon: '↷', run: (c) => c.jumpToGap?.() },
