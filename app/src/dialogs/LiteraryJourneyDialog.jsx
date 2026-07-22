@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { scanMiscategorized, applyRecat, recatSummary } from '../features/journeyRecat.js';
+import { forgettingScan } from '../features/journeyForgetting.js';
 import { fmtDateTime } from '../features/dateFmt.js';
 import {
   getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef, saveLibraryRef,
@@ -189,6 +190,10 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   const [recat, setRecat] = useState(null);
   const [recatPick, setRecatPick] = useState(() => new Set());
   const [recatMsg, setRecatMsg] = useState('');
+  const [fadingAll, setFadingAll] = useState(false);
+  // Books slipping out of memory (finished, decayed below "fresh"). now() is stable per open so the
+  // list doesn't reshuffle under the user; reopening the tab re-evaluates.
+  const fading = useMemo(() => (books ? forgettingScan(books) : []), [books]);
   const [cleanMsg, setCleanMsg] = useState('');
   // "This Book in Trackyread" entry points: focus an already-linked book, or run the link flow.
   // linkName mirrors the prop but can also be set by the embedded Files table's "link…" action.
@@ -582,6 +587,39 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                       </li>
                     );
                   })}</ul></>
+              )}
+
+              <div className="rh-section-h">🧠 Fading — books you may be forgetting</div>
+              <p className="settings-note">
+                Estimated from a forgetting curve: how much you’d likely still have of each finished book,
+                decaying with time since you last read it and firming up with every re-read. Leads with the
+                ones still worth a quick refresh before they slip further.
+              </p>
+              {fading.length === 0 ? (
+                <p className="settings-note">Nothing fading — your finished books are either fresh or already re-read. ✅</p>
+              ) : (
+                <ul className="lj-fading">
+                  {fading.slice(0, fadingAll ? fading.length : 8).map((f) => (
+                    <li key={f.id} className={`lj-fade-${f.tier}`}>
+                      <span className="lj-fade-bar" title={`~${Math.round(f.retention * 100)}% retained`}>
+                        <span className="lj-fade-fill" style={{ width: `${Math.round(f.retention * 100)}%` }} />
+                      </span>
+                      <span className="lj-fade-pct">{Math.round(f.retention * 100)}%</span>
+                      <span className="lj-fade-title"><b>{f.title}</b>{f.author ? ` — ${f.author}` : ''}</span>
+                      <span className="settings-note lj-fade-meta">
+                        {f.tier === 'faded' ? 'likely gone' : 'fading'} · {f.daysSince}d ago{f.reads > 1 ? ` · read ${f.reads}×` : ''}
+                      </span>
+                      <button
+                        className="link-btn"
+                        title="Add to the queue for a refresher read"
+                        onClick={async () => { const b = books.find((x) => x.id === f.id); if (b) await shelve(b, 'queue'); }}
+                      >📋 Refresh</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {fading.length > 8 && (
+                <button className="link-btn" onClick={() => setFadingAll((v) => !v)}>{fadingAll ? 'Show fewer' : `Show all ${fading.length}`}</button>
               )}
 
               <div className="rh-section-h">Recently finished</div>

@@ -44,6 +44,12 @@ export function defaultFileSettings() {
     linesGridV: false, // faint vertical gridlines on the Lines pane background
     linesEntryEffect: '', // temporary style for a line as it first scrolls in ('' = off; Fade|Glow|Highlight|Rise|Color)
     linesEntrySecs: 3, // how long the entry effect lasts before settling to normal (1–10s)
+    // Per-tab reading cursor (shows only over the reader panes). cursorId = '' (system) or a premade
+    // / custom-cursor id (see features/cursors.js). Trail is a fading wake behind the pointer.
+    cursorId: '',
+    cursorTrail: 'off',       // off | fade | seismograph
+    cursorTrailColor: '',     // '' = a sensible default
+    cursorTrailMs: 900,       // trail fade duration (ms)
     wordSwaps: {}, // per-document display substitutions: { "word in text": "shown as" } (display only)
     wallText: false, // "wall of text": merge source lines into flowing blocks (newlines → spaces/tabs)
     wallBreakEvery: 0, // in wall mode, also start a new block every N source lines (0 = only sections/%)
@@ -182,7 +188,7 @@ export function countOffDefaultSettings(settings, defaults) {
 export const GLOBAL_DATA_KEYS = new Set([
   'recentFiles', 'ocrTemplates', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey', 'translateKey', 'settingsProfiles',
   'readingList', 'drillBestSpan', 'bestFlowWpm', 'bestDictationWpm', 'webcamCalib', 'sync',
-  'deviceName', 'fileDefaults', 'ambient',
+  'deviceName', 'fileDefaults', 'ambient', 'customCursors',
 ]);
 
 // Reset global preferences to defaults while keeping the user's data (GLOBAL_DATA_KEYS).
@@ -221,6 +227,7 @@ export function defaultGlobalSettings() {
     // Named settings profiles (device-local): tab = reusable tab-settings snapshots
     // (tabDefaultsFrom), app = application-preference snapshots (syncableGlobalSettings).
     settingsProfiles: { tab: [], app: [] }, // each: { name, data, savedAt }
+    customCursors: [], // user-made reading cursors: [{ id, name, base (premade id), color, size }]
     ocrTemplates: [], // saved Grab layout templates: { name, regions:[{fx,fy,fw,fh}] }
     tocTierIcons: ['📖', '📑', '📄', '§', '•'], // TOC-bar icon per hierarchy tier (index = level)
     drillBestSpan: 0, // best perceptual-span drill width (words) reached
