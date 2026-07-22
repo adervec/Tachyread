@@ -5,6 +5,23 @@ import { COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP
 import { stepLabel } from '../features/triggerSequences.js';
 import { EYE_KINDS, FACE_KINDS, ALL_KINDS, validateEyeMappings, kindFloorMs, DELIBERATE_MS, MAX_HOLD_MS } from '../features/eyeGestures.js';
 import { createEyeCue } from '../features/eyeCue.js';
+import ProfilesBar from '../components/ProfilesBar.jsx';
+
+// Every global key this dialog owns — a biometric "profile" snapshots and restores exactly these,
+// so you can keep a "desk webcam", a "couch, gestures only", or a "quiet, eye-gestures" setup and
+// switch between them. Calibration (hand rest heights, blink threshold) travels with the profile
+// since it's part of a physical setup.
+const BIO_PROFILE_KEYS = [
+  'webcamAttention', 'webcamDoze', 'webcamAwayAlarm', 'webcamAwayAlarmSec', 'webcamEscalatingAlarm',
+  'webcamDistanceNudge', 'webcamFocusStats', 'webcamPreview', 'webcamCalib', 'mobileCamera',
+  'handGestures', 'handGestureSet', 'handCalib', 'gestureMap', 'gestureHands', 'handHoldMs',
+  'voiceCommands', 'clapMap', 'clapOff', 'audioCtrlMode', 'triggerSeqs', 'eyeGestures',
+];
+function captureBioProfile(g) {
+  const out = {};
+  for (const k of BIO_PROFILE_KEYS) if (g[k] !== undefined) out[k] = g[k];
+  return out;
+}
 import { createRecognizer, speechRecognitionSupported } from '../features/speechRecognition.js';
 import { getLanguage } from '../state/languages.js';
 
@@ -88,6 +105,13 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
 
   return (
     <Dialog title="Biometric Controls" onClose={onClose} width={600} buttons={<button onClick={onClose}>Close</button>}>
+      <ProfilesBar
+        kind="bio"
+        profiles={g.settingsProfiles}
+        onChange={(p) => patch({ settingsProfiles: p })}
+        capture={() => captureBioProfile(g)}
+        apply={(data) => patch({ ...data })}
+      />
       <Field label="Front camera on phones & tablets">
         <label className="inline-check">
           <input type="checkbox" checked={!!g.mobileCamera} onChange={(e) => patch({ mobileCamera: e.target.checked })} />
