@@ -49,20 +49,37 @@ export const COMMANDS = [
 
 export const COMMAND_BY_ID = Object.fromEntries(COMMANDS.map((c) => [c.id, c]));
 
+// Parametric "set the reading speed to an exact value" command, encoded as `setWpm:<n>` so it fits
+// the same string-id mapping model as every other command. Any trigger can point at a specific WPM.
+const SET_WPM_RE = /^setWpm:(\d{2,4})$/;
+export function parseSetWpm(id) {
+  const m = typeof id === 'string' && id.match(SET_WPM_RE);
+  return m ? Number(m[1]) : null;
+}
+export function setWpmCommandId(wpm) {
+  return `setWpm:${Math.max(50, Math.min(2000, Math.round(Number(wpm) || 0)))}`;
+}
+
 // Fire a command by id. Returns true if the id was known (an empty/unknown id is a no-op — that's how
 // "unassigned" triggers behave). ctx is the action bag above.
 export function runCommand(id, ctx) {
+  const wpm = parseSetWpm(id);
+  if (wpm != null) { ctx.setWpmValue?.(wpm); return true; }
   const cmd = id && COMMAND_BY_ID[id];
   if (cmd) cmd.run(ctx);
   return !!cmd;
 }
 
 export function labelFor(id) {
+  const wpm = parseSetWpm(id);
+  if (wpm != null) return `Set speed to ${wpm} WPM`;
   return COMMAND_BY_ID[id]?.label || id || '(none)';
 }
 
 // "⏯ Play / pause" — the feed / legend action string for a command id.
 export function actionLabel(id) {
+  const wpm = parseSetWpm(id);
+  if (wpm != null) return `🎯 Set ${wpm} WPM`;
   const c = COMMAND_BY_ID[id];
   return c ? `${c.icon} ${c.label}` : '';
 }

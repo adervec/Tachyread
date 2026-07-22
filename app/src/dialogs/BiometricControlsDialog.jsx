@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { DEFAULT_GESTURES, GESTURE_INFO, HELD_GESTURES, DEFAULT_HOLD_MS, HOLD_MIN_MS, HOLD_MAX_MS, clampHoldMs } from '../features/handGestures.js';
-import { COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from '../features/commandRegistry.js';
+import { COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP, parseSetWpm, setWpmCommandId } from '../features/commandRegistry.js';
 import { stepLabel } from '../features/triggerSequences.js';
 import { EYE_KINDS, FACE_KINDS, ALL_KINDS, validateEyeMappings, kindFloorMs, DELIBERATE_MS, MAX_HOLD_MS } from '../features/eyeGestures.js';
 import { createEyeCue } from '../features/eyeCue.js';
@@ -14,7 +14,7 @@ import ProfilesBar from '../components/ProfilesBar.jsx';
 const BIO_PROFILE_KEYS = [
   'webcamAttention', 'webcamDoze', 'webcamAwayAlarm', 'webcamAwayAlarmSec', 'webcamEscalatingAlarm',
   'webcamDistanceNudge', 'webcamFocusStats', 'webcamPreview', 'webcamCalib', 'mobileCamera',
-  'handGestures', 'handGestureSet', 'handCalib', 'gestureMap', 'gestureHands', 'handHoldMs',
+  'handGestures', 'handGestureSet', 'handCalib', 'gestureMap', 'gestureHands', 'handHoldMs', 'holdPauseGesture',
   'voiceCommands', 'clapMap', 'clapOff', 'audioCtrlMode', 'triggerSeqs', 'eyeGestures',
 ];
 function captureBioProfile(g) {
@@ -37,13 +37,30 @@ function Field({ label, children }) {
   );
 }
 
-// A <select> of every reader command (plus an "unassigned" option). Value is a commandId.
+// A <select> of every reader command (plus an "unassigned" option). Value is a commandId — including
+// the parametric `setWpm:<n>` (choose "Set specific WPM…" and a number input appears beside it).
 function CommandSelect({ value, onChange, disabled }) {
+  const setWpm = parseSetWpm(value);
   return (
-    <select value={value ?? ''} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-      <option value="">— none —</option>
-      {COMMANDS.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}
-    </select>
+    <span className="cmd-select">
+      <select
+        value={setWpm != null ? '__setwpm' : (value ?? '')}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value === '__setwpm' ? setWpmCommandId(setWpm ?? 300) : e.target.value)}
+      >
+        <option value="">— none —</option>
+        <option value="__setwpm">🎯 Set specific WPM…</option>
+        {COMMANDS.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}
+      </select>
+      {setWpm != null && (
+        <input
+          type="number" min={50} max={2000} step={25} className="cmd-wpm" disabled={disabled}
+          value={setWpm}
+          onChange={(e) => onChange(setWpmCommandId(e.target.value))}
+          title="Target reading speed for this trigger"
+        />
+      )}
+    </span>
   );
 }
 
@@ -242,6 +259,25 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
         held gesture only fires after you hold it for its <strong>hold time</strong> (default {DEFAULT_HOLD_MS}ms) —
         raise a jittery one to filter accidentals. Unticking a gesture above <strong>disables it but keeps
         its mapping</strong> for later.
+      </p>
+      <Field label="Hold-to-pause gesture">
+        <div className="bio-gesture-maps">
+          <select value={g.holdPauseGesture || ''} disabled={!g.handGestures} onChange={(e) => patch({ holdPauseGesture: e.target.value })}>
+            <option value="">— off —</option>
+            <option value="openPalm">✋ Open palm (raised hand)</option>
+            <option value="fist">✊ Fist</option>
+            <option value="victory">✌ Victory</option>
+            <option value="pointUp">☝ Point up</option>
+            <option value="iLoveYou">🤟 Rock / ILY</option>
+            <option value="thumbUp">👍 Thumb up</option>
+            <option value="thumbDown">👎 Thumb down</option>
+          </select>
+        </div>
+      </Field>
+      <p className="settings-note">
+        Momentary: autoplay pauses <b>while you hold this gesture up</b> and resumes the moment you drop it —
+        unlike a mapped command, which toggles once. Pick a gesture you haven’t mapped to a command (and note
+        the open palm also drives the scroll joystick).
       </p>
       <Field label="Hand calibration">
         <button onClick={onCalibrateHand} disabled={!onCalibrateHand || !g.handGestures} title={g.handGestures ? '' : 'Turn on Hand gestures first'}>

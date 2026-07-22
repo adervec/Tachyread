@@ -3,7 +3,7 @@
 // Run: node src/features/commandRegistry.test.mjs
 import assert from 'node:assert';
 import {
-  runCommand, labelFor, actionLabel, matchVoice,
+  runCommand, labelFor, actionLabel, matchVoice, parseSetWpm, setWpmCommandId,
   COMMAND_BY_ID, DEFAULT_VOICE_COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_CLAP_MAP,
 } from './commandRegistry.js';
 
@@ -16,6 +16,7 @@ function spyCtx() {
     setPlaying: (v) => calls.push(['setPlaying', v]),
     nav: (k) => calls.push(['nav', k]),
     adjustWpm: (d) => calls.push(['adjustWpm', d]),
+    setWpmValue: (v) => calls.push(['setWpmValue', v]),
     page: (d) => calls.push(['page', d]),
     jumpToCurrent: () => calls.push(['jumpToCurrent']),
     jumpToFrontier: () => calls.push(['jumpToFrontier']),
@@ -64,6 +65,20 @@ assert.equal(runCommand('', c), false, 'empty id → false');
 assert.equal(runCommand(undefined, c), false, 'undefined id → false');
 assert.equal(runCommand('bogus', c), false, 'unknown id → false');
 assert.equal(c.calls.length, 0, 'no ctx calls for empty/unknown ids');
+
+// --- parametric setWpm:<n> command ---
+assert.equal(parseSetWpm('setWpm:400'), 400, 'parses a target WPM');
+assert.equal(parseSetWpm('setWpm:0'), null, 'a 1-digit value is not a valid target');
+assert.equal(parseSetWpm('wpmUp'), null, 'a normal command is not a setWpm');
+assert.equal(parseSetWpm(''), null, 'empty → null');
+assert.equal(setWpmCommandId(400), 'setWpm:400', 'builds the id');
+assert.equal(setWpmCommandId(5000), 'setWpm:2000', 'clamps to the max');
+assert.equal(setWpmCommandId(10), 'setWpm:50', 'clamps to the min');
+c = spyCtx();
+assert.equal(runCommand('setWpm:333', c), true, 'a setWpm id is a known command');
+assert.deepEqual(c.calls, [['setWpmValue', 333]], 'and calls setWpmValue with the target');
+assert.match(actionLabel('setWpm:450'), /450/, 'its feed label names the speed');
+assert.match(labelFor('setWpm:450'), /450 WPM/, 'and so does its picker label');
 
 // --- matchVoice against the editable phrase list ---
 // Exact + contained matches.
