@@ -732,11 +732,33 @@ function AppInner() {
     patchSettings(activeTab.id, { goal: { type: 'Section', start, end, label, baseline: start, set: true } });
   }
 
+  // Scroll the Lines-pane scroller directly by a number of "ticks" (each tick = the scrollTickLines
+  // setting × the line height), the same predictable, uniform motion a wheel notch gives. Used by
+  // the biometric-mappable scroll commands, and — when scrollNavTicks is on — by the nav buttons in
+  // scroll mode so they behave like the keyboard's plain scrolling rather than a semantic jump.
+  function scrollReaderTicks(dir, ticks = 1) {
+    const wrap = document.querySelector('.line-pane-list');
+    if (!wrap) return;
+    const scroller = [...wrap.querySelectorAll('*')].find((el) => /(auto|scroll)/.test(getComputedStyle(el).overflowY)) || wrap;
+    if (!scroller) return;
+    const row = wrap.querySelector('.line-row');
+    const lineH = row ? row.getBoundingClientRect().height : 26;
+    const per = Math.max(1, state.global.scrollTickLines || 2);
+    scroller.scrollBy({ top: Math.sign(dir) * ticks * per * lineH, behavior: 'smooth' });
+  }
+
   function nav(kind) {
     if (!activeTab) return;
     // In scroll-to-read the nav buttons drive the SCROLL, not the index: snap the current line to
     // the configured read point, then scroll by the corresponding amount (LinePane executes it).
     if (state.global.scrollAdvances && state.showLines !== false) {
+      // Optional: make the buttons/biometrics scroll by uniform ticks (like the keyboard's plain
+      // scroll) instead of the semantic per-kind amount, so all three inputs feel identical.
+      if (state.global.scrollNavTicks) {
+        const t = { prevWord: [-1, 0.5], nextWord: [1, 0.5], prevLine: [-1, 1], nextLine: [1, 1], prevPara: [-1, 3], nextPara: [1, 3] }[kind];
+        if (kind === 'restart') { scrollReaderTicks(-1, 100000); return; }
+        if (t) { scrollReaderTicks(t[0], t[1]); return; }
+      }
       setScrollCmd((c) => ({ token: (c?.token || 0) + 1, kind }));
       return;
     }
@@ -1129,6 +1151,7 @@ function AppInner() {
     toggleStats: () => dispatch({ type: 'TOGGLE_STATS' }),
     switchTab: (d) => cycleTabs(d),
     sourcePage: (d) => jumpSourcePage(d),
+    scrollTicks: (dir, ticks) => scrollReaderTicks(dir, ticks),
   });
   // Latest voice-command phrase list, read live by the recognizer's matcher (so edits in Biometric
   // Controls take effect without toggling voice off/on).

@@ -394,6 +394,11 @@ export function defaultGlobalSettings() {
     // before it decides you were flinging, not reading, and switches scroll mode off. Lower = more
     // brittle; 0 = never auto-exit. Default 600 (≈ several screenfuls).
     scrollBreakWords: 600,
+    // A "scroll tick" = this many lines (biometric scroll commands + optional scroll-mode nav ticks).
+    scrollTickLines: 2,
+    // When on, the nav buttons / biometric nav commands scroll by uniform ticks in scroll mode
+    // (like the keyboard's plain scrolling) instead of the semantic per-kind jump.
+    scrollNavTicks: false,
     // Focus mode: fullscreen + fade chrome + (Chromium) black out other monitors. focusDim is how
     // dark the other-monitor cover windows are (1 = pure black, lower = dark grey).
     focusMode: false,

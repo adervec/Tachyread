@@ -221,6 +221,26 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
           </span>
         </div>
       </Field>
+      <Field label="Scroll tick size (lines)">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <input
+            type="number" min={1} max={20} step={1} style={{ width: 70 }}
+            value={g.scrollTickLines ?? 2}
+            onChange={(e) => patch({ scrollTickLines: Math.max(1, Math.min(20, Number(e.target.value) || 2)) })}
+          />
+          <span className="settings-note" style={{ margin: 0 }}>
+            How far one “scroll tick” moves. Map the <b>Scroll up/down a tick</b> commands to any voice,
+            gesture, clap or eye/face gesture in Biometric Controls for hands-free scrolling.
+          </span>
+        </div>
+      </Field>
+      <Field label="Scroll-mode nav uses ticks">
+        <label className="inline-check">
+          <input type="checkbox" checked={!!g.scrollNavTicks} onChange={(e) => patch({ scrollNavTicks: e.target.checked })} />
+          In scroll mode, make the nav buttons and biometric nav commands scroll by uniform ticks (like
+          the keyboard) instead of jumping by word/line/paragraph
+        </label>
+      </Field>
       <Field label="Pause when text isn’t visible">
         <label className="inline-check">
           <input
