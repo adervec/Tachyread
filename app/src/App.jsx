@@ -99,6 +99,7 @@ import { buildTabPdf } from './features/exportPdf.js';
 import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
 import { createEyeGestureDetector, eyeMappingsUsable, ALL_KINDS } from './features/eyeGestures.js';
+import { createHoldPause } from './features/holdPause.js';
 import { createEyeCue } from './features/eyeCue.js';
 import { createGestureMonitor, DEFAULT_HAND_CALIB, DEFAULT_GESTURES, GESTURE_INFO } from './features/handGestures.js';
 import { runCommand, actionLabel, matchVoice, matchVoiceRow, COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from './features/commandRegistry.js';
@@ -1152,6 +1153,7 @@ function AppInner() {
     switchTab: (d) => cycleTabs(d),
     sourcePage: (d) => jumpSourcePage(d),
     scrollTicks: (dir, ticks) => scrollReaderTicks(dir, ticks),
+    setWpmValue: (wpm) => { const t = activeTabRef.current; if (t) patchSettings(t.id, { wpm: Math.max(50, Math.min(2000, Math.round(wpm))) }); },
   });
   // Latest voice-command phrase list, read live by the recognizer's matcher (so edits in Biometric
   // Controls take effect without toggling voice off/on).
@@ -1193,6 +1195,29 @@ function AppInner() {
     seqFeedRef.current?.(`g:${kind}${hand ? `:${hand}` : ''}`);
   };
 
+  // Hold-to-pause: while a chosen gesture is held up, autoplay pauses; it resumes the moment you drop
+  // it. Driven by the raw per-frame gesture (not the fire-once path); the grace/state logic is the
+  // pure controller from features/holdPause.js. Momentary — distinct from a mapped toggle.
+  const holdPauseCtl = useRef(null);
+  if (!holdPauseCtl.current) holdPauseCtl.current = createHoldPause();
+  const holdPauseRef = useRef(null);
+  holdPauseRef.current = (rawGesture) => {
+    const action = holdPauseCtl.current.feed({
+      want: state.global.holdPauseGesture, raw: rawGesture, playing: playingRef.current, now: Date.now(),
+    });
+    if (action === 'pause') {
+      engineRef.current.pause();
+      setPlaying(false);
+      cancelSpeech();
+      if (activeTabRef.current) flushReadState(activeTabRef.current);
+      setStatus('✋ Holding — paused');
+    } else if (action === 'resume' && !scrollAdvancesRef.current && activeTabRef.current) {
+      engineRef.current.start();
+      setPlaying(true);
+      setStatus('▶ Released — resumed');
+    }
+  };
+
   // Hand-gesture controls (opt-in): open palm = scroll joystick over the Lines pane (raise/lower
   // = direction, distance from your calibrated rest = speed); a wave toggles play/pause.
   const [handState, setHandState] = useState('off');
@@ -1215,8 +1240,9 @@ function AppInner() {
       onState: setHandState,
       onStream: (s) => setGestureStream(s),
       onGesture: (kind, hand) => handleGestureRef.current?.(kind, hand),
-      onHand: ({ present, v }) => {
+      onHand: ({ present, v, gesture }) => {
         setHandState(!present ? 'watching' : v < 0 ? 'scroll-up' : v > 0 ? 'scroll-down' : 'hand');
+        holdPauseRef.current?.(present ? gesture : null);
       },
       onScroll: (v) => { handVelRef.current = v; },
       onWave: (hand) => handleGestureRef.current?.('wave', hand),

@@ -2382,6 +2382,8 @@
 .bio-eye-kind { font-size: 12px; font-weight: 600; }
 .bio-eye-ms { font-family: Consolas, monospace; font-size: 14px; font-variant-numeric: tabular-nums; }
 .bio-eye-ms.in { color: #3fb950; font-weight: 700; }
+.cmd-select { display: inline-flex; align-items: center; gap: 4px; }
+.cmd-select .cmd-wpm { width: 66px; font-size: 11px; }
 /* Typing progress: overall + weekly summaries */
 .tp-overall { font-size: 12px; line-height: 1.5; }
 .tp-up { color: #3fb950; }

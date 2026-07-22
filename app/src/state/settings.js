@@ -317,6 +317,9 @@ export function defaultGlobalSettings() {
     handGestures: false,
     handCalib: null,
     handGestureSet: null,
+    // Momentary "hold-to-pause": while this gesture is held up, autoplay pauses and resumes when you
+    // drop it. '' = off. A gesture kind (openPalm|fist|victory|pointUp|iLoveYou|thumbUp|thumbDown).
+    holdPauseGesture: '',
     // Per-gesture minimum hold time (ms) for the held discrete hand gestures — raise it to filter
     // accidental flicks. { thumbUp|fist|victory|…: ms }; a missing entry uses DEFAULT_HOLD_MS.
     handHoldMs: null,
