@@ -2,7 +2,9 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { groupForChecksum, masterOf } from '../features/bookGroups.js';
 import { finishedNotRereading } from '../features/recentFilter.js';
-import { getBinding } from '../state/storage.js';
+import { getBinding, getLibraryBooks } from '../state/storage.js';
+import { bookCoverSrc, proceduralCover } from '../features/bookCovers.js';
+import { bookCoverUrl } from '../features/openLibrary.js';
 
 // Short labels for the dialog tabs (menus use longer "…" titles). Fallback is the raw kind.
 const PANEL_LABELS = {
@@ -21,6 +23,7 @@ export default function TabBar() {
   const { panels, activePanelId, tabs } = state;
   const groups = state.global.bookGroups || [];
   const multiRow = !!state.global.tabBarMultiRow;
+  const tiles = !!state.global.tabTiles; // desktop: tabs as a scrollable cover-tile row
   const noDocs = tabs.length === 0;
   const dragId = useRef(null);                 // document tab being dragged
   const [dropId, setDropId] = useState(null);  // tab the drop indicator is on
@@ -45,6 +48,28 @@ export default function TabBar() {
     return () => { live = false; window.removeEventListener('tachyread-bindings-changed', load); };
   }, []);
   const hasBindings = Object.keys(bindings).length > 0;
+
+  // In tile mode, resolve each open file's cover (checksum → bound book → master cover). Loaded only
+  // while tiles are on. ponytail: reloads on binding changes, not on every cover edit — toggle tiles
+  // off/on (or reopen) to pick up a freshly-added cover.
+  const [coverByCs, setCoverByCs] = useState({});
+  useEffect(() => {
+    if (!tiles) return undefined;
+    let live = true;
+    const load = async () => {
+      try {
+        const [bind, books] = await Promise.all([getBinding(), getLibraryBooks()]);
+        const byId = {};
+        for (const b of books) { const src = bookCoverSrc(b) || bookCoverUrl(b, 'M'); if (src) byId[b.id] = src; }
+        const map = {};
+        for (const [cs, id] of Object.entries(bind || {})) if (byId[id]) map[cs] = byId[id];
+        if (live) setCoverByCs(map);
+      } catch { /* ignore */ }
+    };
+    load();
+    window.addEventListener('tachyread-bindings-changed', load);
+    return () => { live = false; window.removeEventListener('tachyread-bindings-changed', load); };
+  }, [tiles]);
 
   // A doc-scoped panel (its docTabId names a file tab) renders in a GROUP right after that file's
   // tab, titled with the file / book-group name; unscoped panels stay leftmost.
@@ -96,6 +121,7 @@ export default function TabBar() {
       { label: 'Close all', n: tabs.length, fn: () => closeAllTabs() },
       { sep: true },
       { label: multiRow ? '✓ Multi-row tabs' : 'Multi-row tabs', fn: () => updateGlobal({ tabBarMultiRow: !multiRow }) },
+      { label: tiles ? '✓ Tab tiles (covers)' : 'Tab tiles (covers)', fn: () => updateGlobal({ tabTiles: !tiles }) },
     ];
     return (
       <>
@@ -118,7 +144,7 @@ export default function TabBar() {
   };
 
   return (
-    <div className={`tab-bar${multiRow ? ' multi-row' : ''}`}>
+    <div className={`tab-bar${multiRow ? ' multi-row' : ''}${tiles ? ' tiles' : ''}`}>
       {/* Unscoped dialog tabs first (leftmost); doc-scoped ones render inside their file's group below. */}
       {panels.filter((p) => p.docTabId == null).map((p) => renderPanel(p, null))}
       {noDocs && panels.length === 0 && (
@@ -160,6 +186,15 @@ export default function TabBar() {
             onDragEnd={() => { dragId.current = null; setDropId(null); }}
             title={named ? `${named.name} — ${fileName}${cs === masterOf(named) ? ' (master)' : ''}` : (tab.lazy ? `${fileName} — tap to load` : fileName)}
           >
+            {tiles && (
+              <img
+                className="tab-tile-cover"
+                src={coverByCs[cs] || proceduralCover({ title: label })}
+                alt=""
+                loading="lazy"
+                onError={(e) => { e.target.style.opacity = 0.2; }}
+              />
+            )}
             {hasBindings && (
               <span
                 className={`tab-track ${cs && bindings[cs] ? 'in' : 'out'}`}
