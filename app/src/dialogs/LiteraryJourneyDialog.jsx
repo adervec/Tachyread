@@ -151,7 +151,7 @@ function GoalCard({ books, goals, onSetGoal }) {
   );
 }
 
-export default function LiteraryJourneyDialog({ global, onPatch, initialTab, focusBookId, linkChecksum, linkFileName, onClose }) {
+export default function LiteraryJourneyDialog({ global, onPatch, initialTab, focusBookId, linkChecksum, linkFileName, openChecksums = [], onClose }) {
   const { openRecent } = useApp();
   const [books, setBooks] = useState(null);
   const [refs, setRefs] = useState({ authors: null, genres: null, subgenres: null });
@@ -556,7 +556,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                 })}
               </div>
 
-              {ai?.analysis && (<><div className="rh-section-h">AI analysis</div><p className="lj-analysis">{ai.analysis}</p></>)}
+              {ai?.analysis && (<><div className="rh-section-h">AI analysis{ai.updatedAt ? <span className="lj-analysis-time"> · {fmtDateTime(ai.updatedAt)}</span> : null}</div><p className="lj-analysis">{ai.analysis}</p></>)}
               {ai?.recommendations?.length > 0 && (
                 <><div className="rh-section-h">Recommended next</div>
                   <ul className="lj-recs">{ai.recommendations.slice(0, 8).map((r, i) => {
@@ -772,7 +772,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
             </div>
           )}
 
-          {tab === 'queue' && <QueueView books={books} fileStats={fileStats} bindMap={bindMap || {}} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
+          {tab === 'queue' && <QueueView books={books} fileStats={fileStats} bindMap={bindMap || {}} openChecksums={openChecksums} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
           {tab === 'series' && <SeriesView books={books} crossNotes={crossNotes} onDeleteCross={async (id) => { await deleteCrossNote(id); setCrossNotes(await getCrossNotes()); }} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
           {tab === 'groups' && (
             <GroupsView
@@ -1694,13 +1694,21 @@ function ConstellationView({ books, ai }) {
 // ── Queue / shortlist view ───────────────────────────────────────────────────────────────────────
 // The on-deck list (books shelved 'queue') with time estimates, plus a compact browser to pull books
 // out of the vast to-read recommendation pile into the queue. Reshelving is one tap.
-function QueueView({ books, onShelve, onOpen, fileStats = {}, bindMap = {} }) {
+function QueueView({ books, onShelve, onOpen, fileStats = {}, bindMap = {}, openChecksums = [] }) {
   const [wpm, setWpm] = useState(250);
   const [q, setQ] = useState('');
   const [recBy, setRecBy] = useState('all');
   const [cat, setCat] = useState('all'); // separate queue per content category
-  // Recently read but NOT on deck: in-progress books and anything whose linked file was read in the
-  // last 30 days — surfaced so an active read can be queued (or resumed) with one tap.
+  // Book ids currently open in a reader tab (via their linked file's checksum) — so open files can be
+  // queued with one tap even before they've accrued reading history.
+  const openBookIds = useMemo(() => {
+    const s = new Set();
+    for (const cs of openChecksums || []) { const id = bindMap[cs]; if (id) s.add(id); }
+    return s;
+  }, [openChecksums, bindMap]);
+  // Recently read / open but NOT on deck: currently-open files, in-progress books, and anything whose
+  // linked file was read in the last 30 days — surfaced so each can be queued (or resumed) with one
+  // tap, or all at once. Open files sort first, then most-recently read.
   const recentUnqueued = useMemo(() => {
     const cutoff = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
     const lastReadOf = {};
@@ -1710,11 +1718,11 @@ function QueueView({ books, onShelve, onOpen, fileStats = {}, bindMap = {} }) {
     }
     return books
       .filter((b) => readStatus(b) !== 'queue')
-      .map((b) => ({ b, st: readStatus(b), lastRead: lastReadOf[b.id] || null }))
-      .filter((x) => x.st === 'reading' || (x.lastRead && x.lastRead >= cutoff))
-      .sort((a, b2) => String(b2.lastRead || '').localeCompare(String(a.lastRead || '')))
-      .slice(0, 12);
-  }, [books, bindMap, fileStats]);
+      .map((b) => ({ b, st: readStatus(b), lastRead: lastReadOf[b.id] || null, open: openBookIds.has(b.id) }))
+      .filter((x) => x.open || x.st === 'reading' || (x.lastRead && x.lastRead >= cutoff))
+      .sort((a, b2) => (Number(b2.open) - Number(a.open)) || String(b2.lastRead || '').localeCompare(String(a.lastRead || '')))
+      .slice(0, 16);
+  }, [books, bindMap, fileStats, openBookIds]);
   // Category pills with live counts — every content type that has anything on deck.
   const queuedAll = useMemo(() => books.filter((b) => readStatus(b) === 'queue'), [books]);
   const catCounts = useMemo(() => {
@@ -1736,6 +1744,14 @@ function QueueView({ books, onShelve, onOpen, fileStats = {}, bindMap = {} }) {
         ))}
       </div>
       <div className="rh-section-h">On deck — {cat === 'all' ? 'everything' : CONTENT_TYPES[cat]} ({queue.count})</div>
+      {queue.count > 0 && (
+        <div className="lj-queue-totals" title="Words are from each book's record (real, or estimated from page count); sentences and lines are derived from the word total at English averages (~15 words/sentence, ~12/line).">
+          <b>{queue.count}</b> item{queue.count === 1 ? '' : 's'}
+          <span className="lj-qt-sep">·</span><b>{queue.totalWords.toLocaleString()}</b> words
+          <span className="lj-qt-sep">·</span>≈<b>{queue.totalSentences.toLocaleString()}</b> sentences
+          <span className="lj-qt-sep">·</span>≈<b>{queue.totalLines.toLocaleString()}</b> lines
+        </div>
+      )}
       <div className="lj-inline">
         <span className="settings-note">≈ {queue.totalHours} h total at</span>
         <input type="number" className="lj-wpm" min="100" max="800" step="10" value={wpm} onChange={(e) => setWpm(Number(e.target.value) || 250)} />
@@ -1768,13 +1784,16 @@ function QueueView({ books, onShelve, onOpen, fileStats = {}, bindMap = {} }) {
 
       {recentUnqueued.length > 0 && (
         <>
-          <div className="rh-section-h">Recently read — not on deck</div>
+          <div className="rh-section-h lj-sh-row">
+            <span>Recently read &amp; open — not on deck</span>
+            <button className="lj-queue-all" title="Add every item below to the queue" onClick={() => { for (const { b } of recentUnqueued) onShelve(b, 'queue'); }}>📋 Queue all ({recentUnqueued.length})</button>
+          </div>
           <div className="lj-list">
-            {recentUnqueued.map(({ b, st, lastRead }) => (
+            {recentUnqueued.map(({ b, st, lastRead, open }) => (
               <div key={b.id} className="lj-row">
                 <button className="lj-row-hit" onClick={() => onOpen(b.id)} title="Open in Library">
-                  <span className={`lj-status lj-${st}`}>{STATUS_LABEL[st].split(' ')[0]}</span>
-                  <span className="lj-row-main"><b>{b.title}</b><em>{b.author}{lastRead ? ` · last read ${lastRead}` : ''}</em></span>
+                  <span className={`lj-status lj-${st}`}>{open ? '📂' : STATUS_LABEL[st].split(' ')[0]}</span>
+                  <span className="lj-row-main"><b>{b.title}</b><em>{b.author}{open ? ' · open now' : ''}{lastRead ? ` · last read ${lastRead}` : ''}</em></span>
                   <span className="lj-row-meta">{b.genre || ''}</span>
                 </button>
                 <span className="lj-row-acts">
@@ -2421,6 +2440,8 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
     if (aiPatch.analysis && ai?.analysis && ai.analysis !== aiPatch.analysis) {
       nextAi.analysisHistory = [{ text: ai.analysis, at: ai.updatedAt || Date.now() }, ...(ai.analysisHistory || [])].slice(0, 20);
     }
+    // Stamp when the analysis blurb was (re)generated so the Dashboard can show its age.
+    if (aiPatch.analysis) nextAi.updatedAt = Date.now();
     // Dressed-up weekly summaries land keyed by their week's Monday (Analytics prefers these).
     if (weeklyAdds?.length) {
       nextAi.weeklies = { ...(ai?.weeklies || {}) };

@@ -3652,6 +3652,7 @@
 .lj-diffbar-fill { width: 60%; min-height: 2px; background: var(--toggle-active-bg, #3a86ff); border-radius: 3px 3px 0 0; }
 .lj-diffbar em { font-size: 10px; color: var(--status-fg); margin-top: 4px; font-style: normal; }
 .lj-analysis { background: var(--panel-bg, rgba(127,127,127,0.06)); border: 1px solid var(--divider); border-radius: 8px; padding: 8px 10px; line-height: 1.5; white-space: pre-wrap; }
+.lj-analysis-time { font-weight: 400; text-transform: none; letter-spacing: 0; opacity: 0.7; }
 .lj-recs, .lj-recent { list-style: none; margin: 0; padding: 0; }
 .lj-recs li, .lj-recent li { padding: 4px 0; border-bottom: 1px solid var(--divider); }
 .lj-recent em { color: var(--status-fg); font-size: 11px; margin-left: 6px; }
@@ -3968,6 +3969,12 @@ button.rh-link-chip:hover { opacity: 1; background: color-mix(in srgb, var(--acc
 
 /* Queue / on-deck */
 .lj-wpm { width: 64px; }
+.rh-section-h.lj-sh-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lj-queue-all { font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; padding: 2px 8px; border: 1px solid var(--divider); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.lj-queue-all:hover { background: var(--menu-hover, rgba(127,127,127,0.12)); }
+.lj-queue-totals { font-size: 12px; color: var(--status-fg); margin: 2px 0 4px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; }
+.lj-queue-totals b { color: var(--menu-fg); font-variant-numeric: tabular-nums; }
+.lj-qt-sep { opacity: 0.5; margin: 0 2px; }
 .lj-queue-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .lj-queue-item { display: grid; grid-template-columns: 24px 1fr auto auto; gap: 8px; align-items: center; border-bottom: 1px solid var(--divider); padding: 5px 2px; }
 .lj-queue-rank { color: var(--status-fg); font-variant-numeric: tabular-nums; text-align: right; }

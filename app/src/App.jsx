@@ -2708,7 +2708,7 @@ function AppInner() {
         <StatisticsDialog tabs={state.tabs} activeTabId={state.activeTabId} onClose={closeDialog} />
       )}
       {dialog?.kind === 'literary-journey' && (
-        <LiteraryJourneyDialog global={state.global} onPatch={(p) => updateGlobal(p)} initialTab={dialog.tab} focusBookId={dialog.focusBookId} linkChecksum={dialog.linkChecksum} linkFileName={dialog.linkFileName} onClose={closeDialog} />
+        <LiteraryJourneyDialog global={state.global} onPatch={(p) => updateGlobal(p)} initialTab={dialog.tab} focusBookId={dialog.focusBookId} linkChecksum={dialog.linkChecksum} linkFileName={dialog.linkFileName} openChecksums={state.tabs.filter((t) => !t.lazy && t.settings?.contentChecksum).map((t) => t.settings.contentChecksum)} onClose={closeDialog} />
       )}
       {dialog?.kind === 'proper-names' && dlgTab && (
         <ProperNamesDialog
