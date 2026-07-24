@@ -34,6 +34,7 @@ import FootnoteOverlay from './dialogs/FootnoteOverlay.jsx';
 import TtsPopupDialog from './dialogs/TtsPopupDialog.jsx';
 import FaceLibraryDialog from './dialogs/FaceLibraryDialog.jsx';
 import CursorManagerDialog from './dialogs/CursorManagerDialog.jsx';
+import BulkAddWizard from './dialogs/BulkAddWizard.jsx';
 import TypingProgressDialog from './dialogs/TypingProgressDialog.jsx';
 import AppSettingsDialog from './dialogs/AppSettingsDialog.jsx';
 import BookFinishedDialog from './dialogs/BookFinishedDialog.jsx';
@@ -1973,6 +1974,7 @@ function AppInner() {
     if (action === 'tts-popup' && activeTab) return openDialog({ kind: 'tts-popup' });
     if (action === 'face-library') return openDialog({ kind: 'face-library' });
     if (action === 'cursor-manager') return openDialog({ kind: 'cursor-manager' });
+    if (action === 'bulk-add') return openDialog({ kind: 'bulk-add' });
     if (action === 'disclaimer') return openDialog({ kind: 'disclaimer' });
     if (action === 'typing-progress') return openDialog({ kind: 'typing-progress' });
     if (action === 'typing-plans') return openDialog({ kind: 'typing-plan' });
@@ -2729,6 +2731,7 @@ function AppInner() {
       )}
       {dialog?.kind === 'face-library' && <FaceLibraryDialog onClose={closeDialog} />}
       {dialog?.kind === 'cursor-manager' && <CursorManagerDialog tab={activeTab} onClose={closeDialog} />}
+      {dialog?.kind === 'bulk-add' && <BulkAddWizard onClose={closeDialog} />}
       {dialog?.kind === 'disclaimer' && (
         <DisclaimerDialog
           onClose={() => {
