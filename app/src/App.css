@@ -3969,6 +3969,22 @@ button.rh-link-chip:hover { opacity: 1; background: color-mix(in srgb, var(--acc
 
 /* Queue / on-deck */
 .lj-wpm { width: 64px; }
+/* Bulk-add-from-folder wizard */
+.ba-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; font-size: 13px; }
+.ba-formats { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.ba-fmt { font-size: 12px; padding: 3px 9px; border: 1px solid var(--divider); border-radius: 999px; background: transparent; color: inherit; cursor: pointer; }
+.ba-fmt.on { background: var(--accent, #4a90d9); color: #fff; border-color: transparent; }
+.ba-onlynew { display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 4px 0 2px; cursor: pointer; }
+.rh-section-h.ba-listh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ba-count { font-weight: 400; text-transform: none; letter-spacing: 0; opacity: 0.75; }
+.ba-list { max-height: 42vh; overflow-y: auto; border: 1px solid var(--divider); border-radius: 8px; padding: 2px; }
+.ba-row { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--divider); font-size: 13px; cursor: pointer; }
+.ba-row:last-child { border-bottom: none; }
+.ba-row.seen { opacity: 0.6; }
+.ba-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ba-new { font-style: normal; font-size: 10px; font-weight: 700; color: #2ea043; text-transform: uppercase; letter-spacing: 0.5px; }
+.ba-old { font-style: normal; font-size: 10px; color: var(--status-fg); text-transform: uppercase; letter-spacing: 0.5px; }
+.ba-meta { font-size: 11px; color: var(--status-fg); font-variant-numeric: tabular-nums; }
 .rh-section-h.lj-sh-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .lj-queue-all { font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; padding: 2px 8px; border: 1px solid var(--divider); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
 .lj-queue-all:hover { background: var(--menu-hover, rgba(127,127,127,0.12)); }
