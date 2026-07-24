@@ -3,6 +3,7 @@
 import assert from 'node:assert';
 import {
   retentionOf, retentionTier, memoryStabilityDays, forgettingScan, forgettingSummary,
+  driftingScan, DRIFT_MIN_DAYS, DRIFT_COLD_DAYS,
   BASE_STABILITY_DAYS, REREAD_FACTOR, FRESH_ABOVE, FADED_BELOW,
 } from './journeyForgetting.js';
 
@@ -74,5 +75,31 @@ assert.deepEqual(forgettingSummary(scan), { fading: 1, faded: 1 }, JSON.stringif
 // Stable ordering between runs.
 assert.deepEqual(forgettingScan(lib, NOW).map((s) => s.id), ids, 'order is deterministic');
 assert.deepEqual(forgettingScan([], NOW), [], 'empty library → empty scan');
+
+// ── drifting scan: unfinished reads gone stale ─────────────────────────────────
+const driftLib = [
+  { id: 'warm', title: 'On It', inProgress: true },        // read recently → not drifting
+  { id: 'drift', title: 'Drifting', inProgress: true },     // ~20d → drifting
+  { id: 'cold', title: 'Cold', inProgress: true },          // ~60d → cold
+  { id: 'noanchor', title: 'No File', inProgress: true },   // no lastRead → skipped
+  { id: 'fin', title: 'Done', completion: true, finishTime: daysAgo(60) }, // finished → not drifting
+  { id: 'aband', title: 'Dropped', shelf: 'abandoned' },    // deliberate stop → excluded
+];
+const lastReadOf = {
+  warm: NOW - 2 * DAY,
+  drift: daysAgo(20),
+  cold: new Date(daysAgo(60)).toISOString().slice(0, 10), // date-string form also accepted
+  aband: daysAgo(90),
+};
+const drift = driftingScan(driftLib, lastReadOf, NOW);
+const dIds = drift.map((d) => d.id);
+assert.deepEqual(dIds, ['cold', 'drift'], `only stale in-progress books, coldest first: ${JSON.stringify(dIds)}`);
+assert.equal(drift.find((d) => d.id === 'cold').tier, 'cold', 'past the cold threshold → cold');
+assert.equal(drift.find((d) => d.id === 'drift').tier, 'drifting', 'between thresholds → drifting');
+assert.ok(!dIds.includes('warm'), 'recently-read in-progress book is not drifting');
+assert.ok(!dIds.includes('fin') && !dIds.includes('aband'), 'finished and abandoned are excluded');
+assert.ok(!dIds.includes('noanchor'), 'no last-read anchor → skipped');
+assert.ok(DRIFT_MIN_DAYS < DRIFT_COLD_DAYS, 'sane drift thresholds');
+assert.deepEqual(driftingScan([], {}, NOW), [], 'empty → empty');
 
 console.log('journeyForgetting: all assertions passed ✅');

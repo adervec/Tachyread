@@ -94,3 +94,30 @@ export function forgettingSummary(scan) {
   for (const s of scan || []) out[s.tier] = (out[s.tier] || 0) + 1;
   return out;
 }
+
+// A different flavour of forgetting: books you're partway through and have DRIFTED away from. Unlike
+// the finished-book curve above, these aren't done — the risk is losing your place / the thread, so
+// they're worth resuming, not just refreshing. Keyed on when the book's linked file was last read
+// (lastReadOf: bookId → date string or epoch ms). Only in-progress ('reading') books count — an
+// abandoned book was a deliberate stop, not drift.
+export const DRIFT_MIN_DAYS = 10;   // untouched this long → you're starting to drift
+export const DRIFT_COLD_DAYS = 45;  // this long → you've likely lost the thread
+export function driftingScan(books, lastReadOf = {}, now = Date.now()) {
+  const parse = (v) => (typeof v === 'number' ? v : (v ? Date.parse(v) : NaN));
+  const out = [];
+  for (const b of books || []) {
+    if (readStatus(b) !== 'reading') continue;
+    const last = parse(lastReadOf[b.id]);
+    if (!Number.isFinite(last)) continue;             // no last-read anchor → can't judge drift
+    const days = Math.round((now - last) / DAY);
+    if (days < DRIFT_MIN_DAYS) continue;              // still warm
+    out.push({
+      id: b.id,
+      title: b.title || 'Untitled',
+      author: b.author || '',
+      daysSince: days,
+      tier: days >= DRIFT_COLD_DAYS ? 'cold' : 'drifting',
+    });
+  }
+  return out.sort((a, b) => b.daysSince - a.daysSince);
+}

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { scanMiscategorized, applyRecat, recatSummary } from '../features/journeyRecat.js';
-import { forgettingScan } from '../features/journeyForgetting.js';
+import { forgettingScan, driftingScan } from '../features/journeyForgetting.js';
 import { fmtDateTime } from '../features/dateFmt.js';
 import {
   getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef, saveLibraryRef,
@@ -191,6 +191,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   const [recatPick, setRecatPick] = useState(() => new Set());
   const [recatMsg, setRecatMsg] = useState('');
   const [fadingAll, setFadingAll] = useState(false);
+  const [driftAll, setDriftAll] = useState(false);
   // Books slipping out of memory (finished, decayed below "fresh"). now() is stable per open so the
   // list doesn't reshuffle under the user; reopening the tab re-evaluates.
   const fading = useMemo(() => (books ? forgettingScan(books) : []), [books]);
@@ -351,6 +352,13 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     return m;
   }, [bindMap]);
   const fileFacts = (b) => fileStats[csForBook[b.id]] || null;
+  // Unfinished reads you've drifted away from — anchored on when each book's file was last read.
+  const drifting = useMemo(() => {
+    if (!books) return [];
+    const lastReadOf = {};
+    for (const b of books) { const lr = fileStats[csForBook[b.id]]?.lastRead; if (lr) lastReadOf[b.id] = lr; }
+    return driftingScan(books, lastReadOf);
+  }, [books, fileStats, csForBook]);
   const filtered = useMemo(() => {
     if (!books) return [];
     let base = filterBooks(books, flt);
@@ -589,7 +597,42 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                   })}</ul></>
               )}
 
-              <div className="rh-section-h">🧠 Fading — books you may be forgetting</div>
+              {drifting.length > 0 && (
+                <>
+                  <div className="rh-section-h">🌫️ Drifting — unfinished reads going cold</div>
+                  <p className="settings-note">
+                    Books you’re partway through but haven’t opened in a while. The risk here isn’t forgetting
+                    the gist — it’s losing your place and the thread. Resume before they go cold.
+                  </p>
+                  <ul className="lj-fading">
+                    {drifting.slice(0, driftAll ? drifting.length : 6).map((d) => {
+                      const cov = Math.round((fileStats[csForBook[d.id]]?.coverage || 0) * 100);
+                      return (
+                        <li key={d.id} className={`lj-fade-${d.tier === 'cold' ? 'faded' : 'fading'}`}>
+                          <span className="lj-fade-bar" title={`${cov}% read so far`}>
+                            <span className="lj-fade-fill" style={{ width: `${cov}%` }} />
+                          </span>
+                          <span className="lj-fade-pct">{cov}%</span>
+                          <span className="lj-fade-title"><b>{d.title}</b>{d.author ? ` — ${d.author}` : ''}</span>
+                          <span className="settings-note lj-fade-meta">
+                            {d.tier === 'cold' ? 'gone cold' : 'drifting'} · {d.daysSince}d untouched
+                          </span>
+                          <button
+                            className="link-btn"
+                            title="Bring it back on deck to resume"
+                            onClick={async () => { const b = books.find((x) => x.id === d.id); if (b) await shelve(b, 'queue'); }}
+                          >📋 Resume</button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {drifting.length > 6 && (
+                    <button className="link-btn" onClick={() => setDriftAll((v) => !v)}>{driftAll ? 'Show fewer' : `Show all ${drifting.length}`}</button>
+                  )}
+                </>
+              )}
+
+              <div className="rh-section-h">🧠 Fading — finished books you may be forgetting</div>
               <p className="settings-note">
                 Estimated from a forgetting curve: how much you’d likely still have of each finished book,
                 decaying with time since you last read it and firming up with every re-read. Leads with the
