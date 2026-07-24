@@ -271,6 +271,12 @@ export function recentWordsPerDay(books, windowDays = 90, now = Date.now()) {
   return Math.round(words / spanDays);
 }
 
+// Book records store a word count (real, or estimated from pages) but not sentence/line counts, so
+// those are derived from words at English averages. ponytail: fixed ratios; swap for real per-book
+// structure if books ever carry doc.sentences/lines.
+const WORDS_PER_SENTENCE = 15;
+const WORDS_PER_LINE = 12;
+
 // The on-deck queue as an ordered list (highest rec first) with per-book hours AND a projected
 // completion date per book, assuming the queue is read IN ORDER at the reader's recent words/day.
 export function queueWithEstimates(books, wpm = 250, opts = {}) {
@@ -280,10 +286,16 @@ export function queueWithEstimates(books, wpm = 250, opts = {}) {
   const items = books.filter((b) => readStatus(b) === 'queue')
     .sort((a, b) => (Number(b.recScore) || 0) - (Number(a.recScore) || 0))
     .map((b) => {
-      cumWords += bookWords(b);
+      const words = bookWords(b);
+      cumWords += words;
       const etc = wordsPerDay && cumWords ? new Date(now + (cumWords / wordsPerDay) * 86400000).toISOString().slice(0, 10) : null;
-      return { book: b, hours: estHours(b, wpm), etc };
+      return { book: b, words, hours: estHours(b, wpm), etc };
     });
   const totalHours = round1(items.reduce((s, i) => s + (i.hours || 0), 0));
-  return { items, totalHours, count: items.length, wordsPerDay };
+  const totalWords = items.reduce((s, i) => s + (i.words || 0), 0);
+  return {
+    items, totalHours, count: items.length, wordsPerDay, totalWords,
+    totalSentences: Math.round(totalWords / WORDS_PER_SENTENCE),
+    totalLines: Math.round(totalWords / WORDS_PER_LINE),
+  };
 }
