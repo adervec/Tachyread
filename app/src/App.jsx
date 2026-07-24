@@ -1924,7 +1924,14 @@ function AppInner() {
       // the layout to it and hides all chrome (Esc or the ⛶ overlay exits). Same look as mobile
       // immersive, minus the accelerometer shake toggle.
       if (state.showLines === false) dispatch({ type: 'TOGGLE_LINES' });
-      setImmersive(true);
+      setImmersive('lines');
+      return;
+    }
+    if (action === 'fullscreen-source') {
+      // Same, for the Source pane. Only meaningful when the tab actually has a source view.
+      if (!activeTab?.doc?.source) { setStatus('This tab has no source view to full-screen.'); return; }
+      if (!state.showSource) dispatch({ type: 'TOGGLE_SOURCE' });
+      setImmersive('source');
       return;
     }
     if (action === 'reset-tab' && activeTab) {
@@ -2251,7 +2258,7 @@ function AppInner() {
 
   return (
     <div
-      className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}${forcePortrait != null ? ' force-portrait' : ''}${immersive ? ' immersive' : ''}${!isCompact && immersive ? ' lines-full' : ''}`}
+      className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}${forcePortrait != null ? ' force-portrait' : ''}${immersive ? ' immersive' : ''}${!isCompact && immersive === 'lines' ? ' lines-full' : ''}${!isCompact && immersive === 'source' ? ' source-full' : ''}`}
       style={forcePortrait != null ? { transform: `translate(-50%, -50%) rotate(${forcePortrait}deg)` } : undefined}
     >
       {immersive && (
@@ -2348,6 +2355,17 @@ function AppInner() {
                   🗐 Source
                 </button>
               )}
+              {/* Full-screen reading: hide ALL chrome (menus, tabs, controls, status) — a tiny
+                  ⛶ overlay (or a vigorous shake, if enabled) brings it back. Always shown so it
+                  full-screens whatever view is up — Lines, Fast, or the Source/ToC/Index panes. */}
+              <button
+                className="rv-rotate"
+                title="Full-screen the current view — hides all menus and controls (tap the small ⛶ overlay to exit)"
+                aria-label="Full-screen the current view"
+                onClick={() => setImmersive(true)}
+              >
+                ⛶
+              </button>
               {!auxOpen && (
                 <>
                   {/* Reader-area content toggles (faces / stats / incognito) live HERE on the top
@@ -2375,16 +2393,6 @@ function AppInner() {
                     onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}
                   >
                     🕶
-                  </button>
-                  {/* Full-screen reading: hide ALL chrome (menus, tabs, controls, status) — a tiny
-                      ⛶ overlay (or a vigorous shake, if enabled) brings it back. */}
-                  <button
-                    className="rv-rotate"
-                    title="Full-screen reading — hides all menus and controls (tap the small ⛶ overlay to exit)"
-                    aria-label="Full-screen reading"
-                    onClick={() => setImmersive(true)}
-                  >
-                    ⛶
                   </button>
                   {/* Rotate JUST the reader box (not the menus/controls) by a quarter-turn. */}
                   <button

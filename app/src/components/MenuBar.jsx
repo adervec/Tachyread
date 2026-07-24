@@ -466,6 +466,16 @@ export default function MenuBar({ onFileOpen, onAction }) {
         >
           ⛶
         </button>
+        {activeTab?.doc?.source && (
+          <button
+            className="menu-font-btn"
+            title="Full-screen Source view — fills the screen with the Source pane and hides all chrome (Esc to exit)"
+            aria-label="Full-screen Source view"
+            onClick={() => onAction('fullscreen-source')}
+          >
+            ⛶🗐
+          </button>
+        )}
         <FontQuickPick activeTab={activeTab} patchSettings={patchSettings} global={state.global} updateGlobal={updateGlobal} />
         <button
           className="menu-font-btn"
