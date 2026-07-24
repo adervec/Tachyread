@@ -3,6 +3,7 @@ import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { scanMiscategorized, applyRecat, recatSummary } from '../features/journeyRecat.js';
 import { forgettingScan, driftingScan } from '../features/journeyForgetting.js';
+import { bookCovers, bookCoverSrc, addCover, removeCover, setMaster, coverId, coverSpecToSvg, proceduralCover, coverPromptFor, parseCoverSpec } from '../features/bookCovers.js';
 import { fmtDateTime } from '../features/dateFmt.js';
 import {
   getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef, saveLibraryRef,
@@ -710,14 +711,15 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                 <label className="inline-check" title="Show cover thumbnails in the list — loads them from covers.openlibrary.org for visible books with an ISBN or fetched cover">
                   <input type="checkbox" checked={showCovers} onChange={(e) => onPatch?.({ ljCovers: e.target.checked })} /> Covers
                 </label>
+                <CoverBatchButton books={filtered} legacyOf={(b) => bookCoverUrl(b)} apiKey={global?.anthropicKey} onSaveBook={saveBook} onReload={reload} />
                 <span className="lj-spacer" />
                 <button onClick={() => setAdding(true)}>+ Add book</button>
                 <button onClick={() => exportView('json')}>Export view (JSON)</button>
                 <button onClick={() => exportView('md')}>Export view (Markdown)</button>
               </div>
 
-              {adding && <BookEditor book={{ id: '', title: '', author: '', genre: '', fnf: 'F', type: 'long' }} isNew onCancel={() => setAdding(false)} onSave={async (b) => { await saveBook({ ...b, id: deriveId(b) }); setAdding(false); }} />}
-              {selBook && <BookEditor book={selBook} books={books} docMeta={docMeta} bindMap={bindMap} fileStats={fileStats} groups={global?.bookGroups} crossNotes={crossNotes} onSaveCross={async (n) => { await saveCrossNote(n); setCrossNotes(await getCrossNotes()); }} onDeleteCross={async (id) => { await deleteCrossNote(id); setCrossNotes(await getCrossNotes()); }} onBind={bind} onProgress={setProgressFor} onCancel={() => setSelected(null)} onSave={saveBook} onDelete={() => removeBook(selBook.id)} />}
+              {adding && <BookEditor book={{ id: '', title: '', author: '', genre: '', fnf: 'F', type: 'long' }} isNew apiKey={global?.anthropicKey} onCancel={() => setAdding(false)} onSave={async (b) => { await saveBook({ ...b, id: deriveId(b) }); setAdding(false); }} />}
+              {selBook && <BookEditor book={selBook} books={books} docMeta={docMeta} bindMap={bindMap} fileStats={fileStats} groups={global?.bookGroups} crossNotes={crossNotes} apiKey={global?.anthropicKey} onSaveCross={async (n) => { await saveCrossNote(n); setCrossNotes(await getCrossNotes()); }} onDeleteCross={async (id) => { await deleteCrossNote(id); setCrossNotes(await getCrossNotes()); }} onBind={bind} onProgress={setProgressFor} onCancel={() => setSelected(null)} onSave={saveBook} onDelete={() => removeBook(selBook.id)} />}
 
               <div className="lj-tablewrap">
                 <table className="lj-table">
@@ -760,7 +762,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                       const st = readStatus(b);
                       const rc = finishCount(b);
                       const tgs = bookTags(b);
-                      const cov = showCovers ? bookCoverUrl(b, 'S') : null;
+                      const cov = showCovers ? (bookCoverSrc(b) || bookCoverUrl(b, 'S')) : null;
                       const cs = csForBook[b.id];
                       const ff = fileFacts(b);
                       return (
@@ -1100,8 +1102,156 @@ function CrossNotesBlock({ book, books, crossNotes, onSaveCross, onDeleteCross }
   );
 }
 
+// Downscale an uploaded image to a small JPEG data URL so many covers don't bloat the synced library.
+function downscaleImage(file, maxW = 420) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxW / (img.width || maxW));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      cv.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      try { resolve(cv.toDataURL('image/jpeg', 0.82)); } catch (e) { reject(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that image.')); };
+    img.src = url;
+  });
+}
+
+// Multi-cover gallery for one book: attach several covers (upload / URL / Open Library / procedural /
+// AI-designed) and pick which is the master shown on tiles. A legacy single cover (coverUrl/coverId)
+// shows as the first entry and is folded into covers[] the moment anything is changed.
+function CoverGallery({ b, onChange, legacy, apiKey, model }) {
+  const [busy, setBusy] = useState(null);
+  const [msg, setMsg] = useState('');
+  const [url, setUrl] = useState('');
+  const stored = bookCovers(b);
+  // What we show: real covers[], or (when empty) the legacy cover as an implicit, not-yet-saved entry.
+  const list = stored.length ? stored : (legacy ? [{ id: '__legacy', src: legacy, source: 'link', legacy: true }] : []);
+  const master = bookCoverSrc(b) || legacy || null;
+  // Book with the legacy cover materialised into covers[], so mutations persist it alongside new ones.
+  const materialized = stored.length || !legacy ? b : { ...b, covers: [{ id: coverId(legacy), src: legacy, source: 'link' }], coverMaster: undefined };
+  const push = (cover) => onChange(addCover(materialized, cover));
+
+  async function onUpload(e) {
+    const files = [...(e.target.files || [])];
+    e.target.value = '';
+    if (!files.length) return;
+    setBusy('upload'); setMsg('');
+    try {
+      let m = materialized;
+      for (const f of files) { const src = await downscaleImage(f); const patch = addCover(m, { src, source: 'upload' }); m = { ...m, ...patch }; }
+      onChange({ covers: m.covers, coverMaster: m.coverMaster });
+    } catch (err) { setMsg(String(err?.message || err)); }
+    setBusy(null);
+  }
+  function addUrl() {
+    const u = url.trim();
+    if (!/^https?:\/\//i.test(u) && !u.startsWith('data:')) { setMsg('Enter an http(s) or data: image URL.'); return; }
+    push({ src: u, source: 'link' }); setUrl(''); setMsg('');
+  }
+  function addProcedural() {
+    push({ src: proceduralCover({ title: b.title, author: b.author, genre: b.genre }), source: 'proc' });
+    setMsg('');
+  }
+  async function addAi() {
+    if (!apiKey) { setMsg('Add your Anthropic API key in Settings to have Claude design a cover.'); return; }
+    setBusy('ai'); setMsg('Claude is designing a cover…');
+    try {
+      const reply = await askClaude([{ role: 'user', content: coverPromptFor(b) }], { key: apiKey, model: model || 'claude-sonnet-5', maxTokens: 320, source: 'cover-design' });
+      const spec = parseCoverSpec(reply);
+      if (!spec) { setMsg('Could not read a cover design from the reply — try again, or use Auto.'); }
+      else { push({ src: coverSpecToSvg(spec, { title: b.title, author: b.author }), source: 'ai', spec }); setMsg('AI cover added.'); }
+    } catch (err) { setMsg('AI cover failed: ' + (err?.message || err)); }
+    setBusy(null);
+  }
+  function remove(id) {
+    if (id === '__legacy') { onChange({ coverUrl: '', coverId: null }); return; }
+    onChange(removeCover(b, id));
+  }
+  function makeMaster(id) {
+    if (id === '__legacy') return; // legacy is already the shown one when covers[] is empty
+    onChange(setMaster(materialized.covers ? materialized : b, id));
+  }
+
+  return (
+    <div className="lj-covers">
+      <div className="lj-cover-grid">
+        {list.length === 0 && <span className="lj-cover lj-cover-none" title="No cover yet">📕</span>}
+        {list.map((c) => {
+          const isMaster = c.src === master;
+          return (
+            <div key={c.id} className={`lj-cover-cell${isMaster ? ' master' : ''}`}>
+              <img className="lj-cover" src={c.src} alt="" loading="lazy" onError={(ev) => { ev.target.style.opacity = 0.2; }} />
+              <button type="button" className={`lj-cover-star${isMaster ? ' on' : ''}`} title={isMaster ? 'Master cover (shown on tiles)' : 'Make this the master cover'} onClick={() => makeMaster(c.id)}>{isMaster ? '★' : '☆'}</button>
+              <button type="button" className="lj-cover-del" title="Remove this cover" onClick={() => remove(c.id)}>×</button>
+              <span className="lj-cover-src">{c.legacy ? 'link' : c.source}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="lj-cover-actions">
+        <label className="lj-cover-btn" title="Upload one or more images (downscaled locally)">⬆ Upload<input type="file" accept="image/*" multiple hidden onChange={onUpload} /></label>
+        <button type="button" className="lj-cover-btn" disabled={busy === 'ai'} onClick={addAi} title="Have Claude design a cover (needs your API key)">✨ AI cover</button>
+        <button type="button" className="lj-cover-btn" onClick={addProcedural} title="Generate a stylised cover from the book's own details — no API needed">🎨 Auto</button>
+      </div>
+      <div className="lj-cover-url">
+        <input placeholder="Image URL…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addUrl())} />
+        <button type="button" onClick={addUrl} disabled={!url.trim()}>＋ Add URL</button>
+      </div>
+      {msg && <p className="settings-note lj-cover-msg">{msg}</p>}
+    </div>
+  );
+}
+
+// Batch cover generation for the books CURRENTLY IN VIEW that lack a cover — "confabulate covers for a
+// subset" is just: filter the library to the subset, then Auto (procedural, instant) or AI (Claude).
+function CoverBatchButton({ books, legacyOf, apiKey, model, onSaveBook, onReload }) {
+  const [busy, setBusy] = useState(false);
+  const [prog, setProg] = useState('');
+  const coverless = (books || []).filter((b) => !bookCoverSrc(b) && !legacyOf(b));
+  if (coverless.length === 0) return <span className="settings-note" title="Every book in view already has a cover">🖼 all covered</span>;
+
+  async function auto() {
+    setBusy(true);
+    for (let i = 0; i < coverless.length; i++) {
+      const b = coverless[i];
+      setProg(`${i + 1}/${coverless.length}`);
+      await onSaveBook({ ...b, ...addCover(b, { src: proceduralCover({ title: b.title, author: b.author, genre: b.genre }), source: 'proc' }) });
+    }
+    setProg(''); setBusy(false); onReload?.();
+  }
+  async function ai() {
+    if (!apiKey) { setProg('needs API key'); return; }
+    setBusy(true);
+    const batch = coverless.slice(0, 20); // cap the spend; re-run for more
+    for (let i = 0; i < batch.length; i++) {
+      const b = batch[i];
+      setProg(`Claude ${i + 1}/${batch.length}`);
+      try {
+        const reply = await askClaude([{ role: 'user', content: coverPromptFor(b) }], { key: apiKey, model: model || 'claude-sonnet-5', maxTokens: 320, source: 'cover-design' });
+        const spec = parseCoverSpec(reply);
+        const src = spec ? coverSpecToSvg(spec, { title: b.title, author: b.author }) : proceduralCover({ title: b.title, author: b.author, genre: b.genre });
+        await onSaveBook({ ...b, ...addCover(b, { src, source: spec ? 'ai' : 'proc', ...(spec ? { spec } : {}) }) });
+      } catch { /* skip this one, keep going */ }
+    }
+    setProg(''); setBusy(false); onReload?.();
+  }
+
+  return (
+    <span className="lj-coverbatch">
+      <button disabled={busy} onClick={auto} title={`Generate a stylised cover for ${coverless.length} book(s) in view without one — no API`}>🎨 Auto-cover {coverless.length}</button>
+      <button disabled={busy} onClick={ai} title={apiKey ? 'Have Claude design covers for the coverless books in view (up to 20)' : 'Add an Anthropic API key in Settings to use this'}>✨ AI-cover</button>
+      {prog && <span className="settings-note">{prog}</span>}
+    </span>
+  );
+}
+
 // Inline add/edit card for one book.
-function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {}, fileStats = {}, groups = [], crossNotes = [], onSaveCross, onDeleteCross, onBind, onProgress, onSave, onCancel, onDelete }) {
+function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {}, fileStats = {}, groups = [], crossNotes = [], apiKey, aiModel, onSaveCross, onDeleteCross, onBind, onProgress, onSave, onCancel, onDelete }) {
   const [b, setB] = useState(book);
   useEffect(() => { setB(book); }, [book]);
   const status = readStatus(b);
@@ -1169,21 +1319,13 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
   const totalSecs = estimateTotalSecs({ readSecs: b.readSecs, words: bookWordCount(b), audiobookFinish: b.audiobookFinish, eyeFrac });
   return (
     <div className="lj-editor">
-      {/* Cover art: preview + one-line controls (custom URL / fetch / remove) instead of fiddling
-          with ISBNs to coax a cover out. */}
+      {/* Covers: a gallery (upload / URL / Open Library / procedural / AI-designed) with a master pick,
+          plus the Open Library fetch that fills blank details alongside a cover. */}
       <div className="lj-cover-ed">
-        {cover
-          ? <img className="lj-cover" src={cover} alt="" loading="lazy" onError={(e) => { e.target.style.opacity = 0.25; }} />
-          : <span className="lj-cover lj-cover-none" title="No cover yet — paste an image URL or fetch from Open Library">📕</span>}
+        <CoverGallery b={b} onChange={set} legacy={cover} apiKey={apiKey} model={aiModel} />
         <div className={`lj-cover-ctl ${dcls('coverUrl', 'coverId') || ''}`}>
-          <input
-            placeholder="Custom cover image URL…"
-            value={b.coverUrl || ''}
-            onChange={(e) => set({ coverUrl: e.target.value.trim() })}
-            title="Paste any image URL to use as this book's cover (wins over the Open Library one)"
-          />
-          <button type="button" disabled={olBusy || (!b.title && !b.isbn)} title="Fetch a cover (and blank details) from Open Library" onClick={fetchOl}>🔎 Fetch</button>
-          {(b.coverUrl || b.coverId) && <button type="button" title="Remove the cover (custom URL and fetched cover id)" onClick={() => set({ coverUrl: '', coverId: null })}>🗑 Remove</button>}
+          <button type="button" disabled={olBusy || (!b.title && !b.isbn)} title="Fetch a cover + blank details from Open Library" onClick={fetchOl}>🔎 Open Library</button>
+          {olMsg && <span className="settings-note">{olMsg}</span>}
         </div>
       </div>
       <div className="lj-editor-grid">
