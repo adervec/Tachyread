@@ -346,6 +346,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   const recOptions = useMemo(() => (books ? [...new Set(books.map(recommender))].sort((a, b) => a.localeCompare(b)) : []), [books]);
   const tagOptions = useMemo(() => (books ? allTags(books) : []), [books]);
   const showCovers = !!global?.ljCovers; // Library-list cover thumbnails (hotlinks Open Library — opt-in)
+  const ljView = global?.ljView === 'tiles' ? 'tiles' : 'table'; // Library list: table vs cover-tile grid
   // Reverse binding (book id → file checksum) + per-book reading facts for the table's File/Started/%.
   const csForBook = useMemo(() => {
     const m = {};
@@ -708,9 +709,15 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               </div>
               <div className="lj-toolbar2">
                 <span className="settings-note">{filtered.length} match{filtered.length === 1 ? '' : 'es'}</span>
-                <label className="inline-check" title="Show cover thumbnails in the list — loads them from covers.openlibrary.org for visible books with an ISBN or fetched cover">
-                  <input type="checkbox" checked={showCovers} onChange={(e) => onPatch?.({ ljCovers: e.target.checked })} /> Covers
-                </label>
+                <span className="lj-viewtoggle" role="tablist" aria-label="List view">
+                  <button className={ljView !== 'tiles' ? 'on' : ''} onClick={() => onPatch?.({ ljView: 'table' })} title="Table view">▤ Table</button>
+                  <button className={ljView === 'tiles' ? 'on' : ''} onClick={() => onPatch?.({ ljView: 'tiles' })} title="Cover tile grid">▦ Tiles</button>
+                </span>
+                {ljView !== 'tiles' && (
+                  <label className="inline-check" title="Show cover thumbnails in the list — loads them from covers.openlibrary.org for visible books with an ISBN or fetched cover">
+                    <input type="checkbox" checked={showCovers} onChange={(e) => onPatch?.({ ljCovers: e.target.checked })} /> Covers
+                  </label>
+                )}
                 <CoverBatchButton books={filtered} legacyOf={(b) => bookCoverUrl(b)} apiKey={global?.anthropicKey} onSaveBook={saveBook} onReload={reload} />
                 <span className="lj-spacer" />
                 <button onClick={() => setAdding(true)}>+ Add book</button>
@@ -721,6 +728,22 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               {adding && <BookEditor book={{ id: '', title: '', author: '', genre: '', fnf: 'F', type: 'long' }} isNew apiKey={global?.anthropicKey} onCancel={() => setAdding(false)} onSave={async (b) => { await saveBook({ ...b, id: deriveId(b) }); setAdding(false); }} />}
               {selBook && <BookEditor book={selBook} books={books} docMeta={docMeta} bindMap={bindMap} fileStats={fileStats} groups={global?.bookGroups} crossNotes={crossNotes} apiKey={global?.anthropicKey} onSaveCross={async (n) => { await saveCrossNote(n); setCrossNotes(await getCrossNotes()); }} onDeleteCross={async (id) => { await deleteCrossNote(id); setCrossNotes(await getCrossNotes()); }} onBind={bind} onProgress={setProgressFor} onCancel={() => setSelected(null)} onSave={saveBook} onDelete={() => removeBook(selBook.id)} />}
 
+              {ljView === 'tiles' ? (
+                <div className="lj-tilegrid">
+                  {shown.map((b) => {
+                    const st = readStatus(b);
+                    const src = bookCoverSrc(b) || bookCoverUrl(b, 'M') || proceduralCover({ title: b.title, author: b.author, genre: b.genre });
+                    return (
+                      <button key={b.id} className={`lj-tile${selected === b.id ? ' on' : ''}`} onClick={() => { setSelected(selected === b.id ? null : b.id); setAdding(false); }} title={`${b.title}${b.author ? ' — ' + b.author : ''}`}>
+                        <img className="lj-tile-cover" src={src} alt="" loading="lazy" onError={(e) => { e.target.style.opacity = 0.2; }} />
+                        <span className={`lj-tile-status lj-${st}`} title={STATUS_LABEL[st]}>{STATUS_LABEL[st].split(' ')[0]}</span>
+                        <span className="lj-tile-title">{b.title}</span>
+                        {b.author && <span className="lj-tile-author">{b.author}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
               <div className="lj-tablewrap">
                 <table className="lj-table">
                   <thead>
@@ -808,6 +831,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                   </tbody>
                 </table>
               </div>
+              )}
               {filtered.length > limit && (
                 <div className="lj-inline">
                   <button className="lj-more" onClick={() => setLimit(limit + 200)}>Load more ({filtered.length - limit} left)</button>
