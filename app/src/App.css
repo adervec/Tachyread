@@ -3835,6 +3835,24 @@
   border-color: var(--toggle-active-bg);
   background: color-mix(in srgb, var(--toggle-active-bg) 7%, transparent);
 }
+/* Multi-cover gallery in the book editor */
+.lj-covers { flex: 1 1 auto; min-width: 0; }
+.lj-cover-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.lj-cover-cell { position: relative; width: 68px; }
+.lj-cover-cell .lj-cover { width: 68px; height: 102px; object-fit: cover; }
+.lj-cover-cell.master .lj-cover { outline: 2px solid var(--accent, #d9b25a); outline-offset: 1px; }
+.lj-cover-star { position: absolute; top: 2px; left: 2px; border: none; background: rgba(0,0,0,0.55); color: #ffd76a; border-radius: 4px; width: 20px; height: 20px; padding: 0; font-size: 13px; line-height: 1; cursor: pointer; }
+.lj-cover-star.on { color: #ffcf3f; }
+.lj-cover-del { position: absolute; top: 2px; right: 2px; border: none; background: rgba(0,0,0,0.55); color: #fff; border-radius: 4px; width: 20px; height: 20px; padding: 0; font-size: 14px; line-height: 1; cursor: pointer; }
+.lj-cover-src { position: absolute; bottom: 0; left: 0; right: 0; font-size: 9px; text-align: center; background: rgba(0,0,0,0.5); color: #fff; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 0 0 4px 4px; }
+.lj-cover-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.lj-cover-btn { font-size: 12px; padding: 3px 9px; border: 1px solid var(--divider); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.lj-cover-btn:hover { background: var(--menu-hover, rgba(127,127,127,0.12)); }
+.lj-cover-url { display: flex; gap: 6px; }
+.lj-cover-url input { flex: 1 1 auto; min-width: 0; font-size: 11px; }
+.lj-cover-msg { margin: 4px 0 0; }
+.lj-coverbatch { display: inline-flex; align-items: center; gap: 6px; }
+.lj-coverbatch button { font-size: 12px; }
 .lj-cover-ed { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
 .lj-cover-ed .lj-cover-none { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 76px; border: 1px dashed var(--divider); border-radius: 4px; font-size: 22px; opacity: 0.6; }
 .lj-cover-ctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
