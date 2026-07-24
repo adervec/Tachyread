@@ -3461,6 +3461,10 @@
 .app.immersive .app-status,
 .app.immersive .incognito-banner,
 .app.immersive .chapter-heading { display: none; }
+/* With chrome/dock/status hidden, content-area is the only remaining grid child; grid auto-flow
+   would drop it into the `auto` row-1 track (collapsing it to content height). Span every row so it
+   fills the viewport — this is what actually makes the reading pane full-bleed on mobile. */
+.app.immersive .content-area { grid-row: 1 / -1; min-height: 0; }
 .immersive-exit {
   position: fixed; top: 6px; right: 6px; z-index: 6500;
   width: 30px; height: 30px; padding: 0; line-height: 1;
@@ -3481,6 +3485,32 @@
 }
 .app.lines-full .splitter { display: none; }
 .app.lines-full .line-pane { height: 100vh; }
+/* Desktop full-screen Source: same collapse, targeting the Source pane instead. */
+.app.source-full .main-split { display: block; height: 100vh; overflow: hidden; }
+.app.source-full .main-split > .pane { display: none !important; }
+.app.source-full .main-split > .pane:has(.source-pane) {
+  display: block !important;
+  width: 100% !important;
+  height: 100vh !important;
+  flex: none !important;
+}
+.app.source-full .splitter { display: none; }
+.app.source-full .source-pane { height: 100vh; }
+/* Mobile full-screen: with chrome hidden, stretch the one visible pane to fill the viewport instead
+   of leaving it at the stacked-layout min-height (which left dead space below Lines/Source). Works
+   for whichever single pane is up — Lines, Fast, Source, ToC, Index. */
+@media (max-width: 860px), (pointer: coarse) and (max-height: 860px) {
+  .app.immersive .main-split { overflow: hidden; }
+  .app.immersive .main-split > .pane {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    border-bottom: none !important;
+  }
+  .app.immersive .line-pane,
+  .app.immersive .source-pane,
+  .app.immersive .rsvp-pane { height: 100%; }
+}
 
 /* Phones & portrait tablets: side-by-side panes get cramped — stack them vertically and let the
    column scroll. The mouse-only resize splitters are hidden. Landscape tablets/laptops keep the
