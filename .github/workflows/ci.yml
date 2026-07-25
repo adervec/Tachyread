@@ -67,3 +67,50 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+  test:
+    name: Self-checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Every feature module's assert-based self-check (*.test.mjs / *.demo.mjs), discovered
+      # automatically — a new module's check is picked up with zero CI edits.
+      - name: Run self-checks
+        run: npm test
+
+  smoke:
+    name: Smoke (app boots)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Boots the BUILT app in the runner's installed Chrome (playwright-core, no browser download),
+      # opens a document, plays, opens Help — fails on any console/page error.
+      - name: Smoke
+        run: npm run smoke

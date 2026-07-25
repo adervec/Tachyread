@@ -1156,8 +1156,11 @@ function CoverGallery({ b, onChange, legacy, apiKey, model }) {
   // What we show: real covers[], or (when empty) the legacy cover as an implicit, not-yet-saved entry.
   const list = stored.length ? stored : (legacy ? [{ id: '__legacy', src: legacy, source: 'link', legacy: true }] : []);
   const master = bookCoverSrc(b) || legacy || null;
-  // Book with the legacy cover materialised into covers[], so mutations persist it alongside new ones.
-  const materialized = stored.length || !legacy ? b : { ...b, covers: [{ id: coverId(legacy), src: legacy, source: 'link' }], coverMaster: undefined };
+  // Book with the legacy cover materialised into covers[], so mutations persist it alongside new
+  // ones. The legacy entry is stamped as MASTER — it's the cover the user has been seeing, and
+  // adding a second cover must not silently displace it (same rule as addCover for normal books).
+  const legacyEntry = stored.length || !legacy ? null : { id: coverId(legacy), src: legacy, source: 'link' };
+  const materialized = legacyEntry ? { ...b, covers: [legacyEntry], coverMaster: legacyEntry.id } : b;
   const push = (cover) => onChange(addCover(materialized, cover));
 
   async function onUpload(e) {

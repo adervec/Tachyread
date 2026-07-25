@@ -23,13 +23,15 @@ export default function BulkAddWizard({ onClose }) {
   const [onlyNew, setOnlyNew] = useState(true);
   const [checked, setChecked] = useState(() => new Set()); // paths the user has ticked
 
-  // Names the app already knows: previously opened (recentFiles) + currently open tabs.
-  const knownNames = useMemo(() => {
+  // Names the app already knows: previously opened (recentFiles) + currently open tabs. Snapshot at
+  // dialog open — state.tabs changes identity on every background progress flush (e.g. a tab still
+  // auto-playing), and a live dependency would cascade into `selectable` and wipe hand-picked ticks.
+  const [knownNames] = useState(() => {
     const s = new Set();
     for (const r of state.global.recentFiles || []) if (r?.name) s.add(String(r.name).toLowerCase());
-    for (const t of state.tabs || []) { const n = t?.doc?.fileName; if (n) s.add(String(n).toLowerCase()); }
+    for (const t of state.tabs || []) { const n = t?.lazy ? t.fileName : t?.doc?.fileName; if (n) s.add(String(n).toLowerCase()); }
     return s;
-  }, [state.global.recentFiles, state.tabs]);
+  });
 
   const descs = useMemo(() => files.map((f) => ({ name: f.name, path: f.webkitRelativePath || f.name, size: f.size })), [files]);
   const allItems = useMemo(() => planBulkAdd(descs, { knownNames }), [descs, knownNames]); // format-agnostic (for counts)
