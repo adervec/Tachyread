@@ -51,6 +51,9 @@ assert.ok(!/javascript:/.test(badDec) && !/url\(evil\)/.test(badDec), 'invalid c
 
 // ── procedural cover is deterministic ──────────────────────────────────────────
 assert.equal(proceduralCover({ title: 'Same', author: 'A' }), proceduralCover({ title: 'Same', author: 'A' }), 'same book → same cover');
+// Regression (fuzz find): null/undefined title must not crash — this runs in tile-grid RENDER.
+assert.ok(proceduralCover({ title: null, author: undefined, genre: 0 }).startsWith('data:image/svg+xml,'), 'null-ish fields render a cover, not a crash');
+assert.ok(proceduralCover({}).startsWith('data:image/svg+xml,'), 'empty book renders a cover');
 assert.notEqual(proceduralSpec({ title: 'Alpha' }).bg[0], proceduralSpec({ title: 'Zeta zzzz' }).bg[0], 'different titles → different palettes (usually)');
 assert.equal(proceduralSpec({ title: 'T', genre: 'Fantasy' }).motif, 'tower', 'genre steers the motif');
 
