@@ -21,10 +21,16 @@ export default function ReaderTrail({ mode, color, trailMs }) {
     let lastScrollTop = null;
     let lastFrame = performance.now();
 
+    // Resolve the scrollable element ONCE and cache it — this runs inside the rAF loop, and a
+    // querySelectorAll('*') + getComputedStyle sweep per frame is a real cost on long documents.
+    // isConnected re-resolves after react-window remounts the pane.
+    let scroller = null;
     const scrollerOf = () => {
+      if (scroller && scroller.isConnected) return scroller;
       const wrap = host.querySelector('.line-pane-list');
       if (!wrap) return null;
-      return [...wrap.querySelectorAll('*')].find((el) => /(auto|scroll)/.test(getComputedStyle(el).overflowY)) || wrap;
+      scroller = [...wrap.querySelectorAll('*')].find((el) => /(auto|scroll)/.test(getComputedStyle(el).overflowY)) || wrap;
+      return scroller;
     };
 
     function onMove(e) {
