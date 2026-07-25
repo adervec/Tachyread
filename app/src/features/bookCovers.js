@@ -25,8 +25,9 @@ let seq = 0;
 // Deterministic-ish id (no Date.now/Math.random — those break workflow replay; a counter + a hash of
 // the src is enough to be unique within a book's short list).
 export function coverId(src = '') {
+  const t = String(src ?? ''); // coerce BEFORE indexing — raw null/undefined would crash charCodeAt
   let h = 0;
-  for (let i = 0; i < String(src).length; i++) h = (h * 31 + src.charCodeAt(i)) & 0x7fffffff;
+  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) & 0x7fffffff;
   return `cv_${h.toString(36)}_${(seq++).toString(36)}`;
 }
 
@@ -123,7 +124,9 @@ const PALETTES = [
   ['#25324a', '#121a2a', '#8a9cd0'], ['#402038', '#22101d', '#e06aa8'],
 ];
 const GENRE_MOTIF = { fantasy: 'tower', 'sci-fi': 'orbit', scifi: 'orbit', science: 'orbit', history: 'grid', poetry: 'wave', romance: 'rings', mystery: 'diamond', thriller: 'diamond', nature: 'mountain', philosophy: 'rings', reference: 'grid' };
-function hash(s) { let h = 0; for (let i = 0; i < String(s).length; i++) h = (h * 31 + s.charCodeAt(i)) & 0x7fffffff; return h; }
+// String() FIRST, then index the coerced value — indexing the raw arg crashes on null/undefined
+// (found by fuzzing: a book with no title took down the tile grids via proceduralCover in render).
+function hash(s) { const t = String(s ?? ''); let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) & 0x7fffffff; return h; }
 
 export function proceduralSpec({ title = '', genre = '' } = {}) {
   const p = PALETTES[hash(title || 'x') % PALETTES.length];
