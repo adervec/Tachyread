@@ -88,7 +88,7 @@ import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence } from './state/storage.js';
 import { bookFromOpenedDoc } from './features/trackyreadAdd.js';
 import { sectionChecksum } from './document/sectionHash.js';
 import { acquireInstance } from './state/singleInstance.js';
@@ -1742,6 +1742,15 @@ function AppInner() {
     return () => window.removeEventListener('tachyread-doc-opened', onOpened);
   }, [state.global.trackyreadNudge, state.incognito]);
   function dismissTrackNudge() { if (trackNudge) trackDismissed.current.add(trackNudge.checksum); setTrackNudge(null); }
+
+  // Publish THIS device's open-file checksums for cross-device presence (a tab shows a badge if the
+  // same file is open elsewhere). Written to IDB; it rides the next progress-sync push. Not in
+  // incognito — that session leaves no trace. Keyed on the checksum list so tab-switches don't refire.
+  const openCsKey = state.tabs.map((t) => (t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum) || '').filter(Boolean).sort().join('|');
+  useEffect(() => {
+    if (state.incognito) return;
+    setSelfPresence(openCsKey ? openCsKey.split('|') : []).catch(() => {});
+  }, [openCsKey, state.incognito]);
   async function addToTrackyread(open) {
     const n = trackNudge;
     if (!n) return;

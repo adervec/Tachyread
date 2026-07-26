@@ -3,9 +3,20 @@
 
 import { openDB } from 'idb';
 import { defaultGlobalSettings, defaultFileSettings, tabDefaultsFrom, syncableGlobalSettings } from './settings.js';
+import { mergePresence, presenceList } from '../features/presence.js';
 
 const DB_NAME = 'Tachyread';
 const DB_VERSION = 12;
+
+// A stable per-device id, kept in localStorage so it never syncs (each device must stay distinct).
+// Drives cross-device "open files" presence.
+export function getDeviceId() {
+  try {
+    let id = localStorage.getItem('tachyread-device-id');
+    if (!id) { id = 'dev-' + (crypto?.randomUUID?.() || Math.random().toString(36).slice(2) + Date.now().toString(36)); localStorage.setItem('tachyread-device-id', id); }
+    return id;
+  } catch { return 'dev-anon'; }
+}
 
 let _dbPromise = null;
 
@@ -614,6 +625,33 @@ export async function getBinding() {
   const db = await getDB();
   return (await db.get('library', 'binding'))?.map || {};
 }
+
+// ── Cross-device presence: which files are open on other devices (last-known, via sync). Stored in
+// the `global` store under 'presence' = { self: {open, at}, peers: [{deviceId,name,at,open}] }. Its
+// own key (not inside settings) so frequent self updates never race the settings writer.
+export async function getPresence() {
+  const db = await getDB();
+  return (await db.get('global', 'presence')) || { self: null, peers: [] };
+}
+export async function getPresencePeers() {
+  return (await getPresence()).peers || [];
+}
+// Record THIS device's currently-open file checksums (called whenever tabs open/close).
+export async function setSelfPresence(openChecksums) {
+  const db = await getDB();
+  const pres = (await db.get('global', 'presence')) || { self: null, peers: [] };
+  pres.self = { open: [...new Set((openChecksums || []).filter(Boolean))], at: Date.now() };
+  await db.put('global', pres, 'presence');
+}
+// Merge an incoming presence list (from a synced bundle) into the known peers, and notify the UI.
+export async function applyRemotePresence(incoming) {
+  if (!Array.isArray(incoming) || !incoming.length) return;
+  const db = await getDB();
+  const pres = (await db.get('global', 'presence')) || { self: null, peers: [] };
+  pres.peers = mergePresence(pres.peers, incoming, { selfId: getDeviceId() });
+  await db.put('global', pres, 'presence');
+  if (typeof window !== 'undefined') { try { window.dispatchEvent(new Event('tachyread-presence-changed')); } catch { /* non-DOM */ } }
+}
 export async function setBinding(checksum, bookId) {
   if (!checksum) return;
   const db = await getDB();
@@ -1198,6 +1236,10 @@ export async function exportProgressData() {
     for (const k of chunkKeys) { const top = entryClips(lines[k])[0]; if (!top) continue; if (top.source === 'mic') mic++; else tts++; updatedAt = Math.max(updatedAt, top.createdAt || 0); }
     out.audiobookMarkers[abKeys[i]] = { chunks: chunkKeys.length, mic, tts, updatedAt, device: g.deviceName || '', name: nameByChecksum.get(abKeys[i]) || '' };
   }
+  // Cross-device "open files" presence: my current open files + every known fresh peer (so the shared
+  // file carries the union of devices). Read for the tab indicator on the receiving end.
+  const pres = (await db.get('global', 'presence')) || { self: null, peers: [] };
+  out.presence = presenceList(pres.self, pres.peers, { selfId: getDeviceId(), name: g.deviceName || '' });
   return out;
 }
 
@@ -1321,6 +1363,8 @@ export async function importProgressData(bundle) {
   g.remoteAudiobooks = [...remoteAb.values()];
   g.bookGroups = mergeBookGroups(g.bookGroups, bundle.bookGroups);
   await db.put('global', g, 'settings');
+  // Merge other devices' open-files presence (its own store key + a change event for the tab bar).
+  await applyRemotePresence(bundle.presence);
   // Surface position conflicts wherever the sync was triggered from (App listens and shows a
   // deconflict prompt); also PERSISTED because the manual "Restore from sync" path reloads the
   // page right after import — App re-raises any pending ones on boot.

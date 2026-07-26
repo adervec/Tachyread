@@ -2,9 +2,10 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { groupForChecksum, masterOf } from '../features/bookGroups.js';
 import { finishedNotRereading } from '../features/recentFilter.js';
-import { getBinding, getLibraryBooks } from '../state/storage.js';
+import { getBinding, getLibraryBooks, getPresencePeers } from '../state/storage.js';
 import { bookCoverSrc, proceduralCover } from '../features/bookCovers.js';
 import { bookCoverUrl } from '../features/openLibrary.js';
+import { presenceByChecksum, presenceLabel } from '../features/presence.js';
 
 // Short labels for the dialog tabs (menus use longer "…" titles). Fallback is the raw kind.
 const PANEL_LABELS = {
@@ -48,6 +49,17 @@ export default function TabBar() {
     return () => { live = false; window.removeEventListener('tachyread-bindings-changed', load); };
   }, []);
   const hasBindings = Object.keys(bindings).length > 0;
+
+  // Cross-device presence: checksum → other devices that have it open (from the last sync pull).
+  // Reloaded when a sync merges new presence (tachyread-presence-changed).
+  const [presence, setPresence] = useState({});
+  useEffect(() => {
+    let live = true;
+    const load = () => getPresencePeers().then((peers) => { if (live) setPresence(presenceByChecksum(peers)); }).catch(() => {});
+    load();
+    window.addEventListener('tachyread-presence-changed', load);
+    return () => { live = false; window.removeEventListener('tachyread-presence-changed', load); };
+  }, []);
 
   // In tile mode, resolve each open file's cover (checksum → bound book → master cover). Loaded only
   // while tiles are on. ponytail: reloads on binding changes, not on every cover edit — toggle tiles
@@ -200,6 +212,9 @@ export default function TabBar() {
                 className={`tab-track ${cs && bindings[cs] ? 'in' : 'out'}`}
                 title={cs && bindings[cs] ? 'Tracked in Trackyread' : 'Not in Trackyread'}
               />
+            )}
+            {cs && presence[cs]?.length > 0 && (
+              <span className="tab-elsewhere" title={`Also open on ${presenceLabel(presence[cs])} (as of the last sync)`} aria-label="Also open on another device">🖥</span>
             )}
             <span className="name">{label}{mark && <sup className="tab-grp-mark">{mark}</sup>}</span>
             <button
