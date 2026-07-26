@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { resetGlobalToDefaults, syncableGlobalSettings } from '../state/settings.js';
 import ProfilesBar from '../components/ProfilesBar.jsx';
+import DeviceInfo from '../components/DeviceInfo.jsx';
 import { LANGUAGES } from '../state/languages.js';
 import { ANTHROPIC_MODELS } from '../features/anthropic.js';
 import { TRANSLATE_PROVIDERS, TARGET_LANGS, translateConfigured, translateText } from '../features/translateService.js';
@@ -62,11 +63,13 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
       }
     >
       <p className="settings-note">
-        General app-wide options. Camera &amp; Gestures, Comfort &amp; Breaks and the Font Manager
-        have their own pages under <strong>Settings</strong>; typing and audio options live under
-        <strong> Typing</strong> and <strong>Audio</strong>. Per-document appearance is in
-        <strong> Settings → Tab Settings</strong>.
+        General app-wide options, <strong>specific to this device</strong>. Camera &amp; Gestures,
+        Comfort &amp; Breaks and the Font Manager have their own pages under <strong>Settings</strong>;
+        typing and audio options live under <strong>Typing</strong> and <strong>Audio</strong>.
+        Per-document appearance is in <strong> Settings → Tab Settings</strong> (that one follows you).
       </p>
+
+      <DeviceInfo />
 
       <ProfilesBar
         kind="app"

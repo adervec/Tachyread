@@ -6,6 +6,7 @@ import { stepLabel } from '../features/triggerSequences.js';
 import { EYE_KINDS, FACE_KINDS, ALL_KINDS, validateEyeMappings, kindFloorMs, DELIBERATE_MS, MAX_HOLD_MS } from '../features/eyeGestures.js';
 import { createEyeCue } from '../features/eyeCue.js';
 import ProfilesBar from '../components/ProfilesBar.jsx';
+import DeviceInfo from '../components/DeviceInfo.jsx';
 
 // Every global key this dialog owns — a biometric "profile" snapshots and restores exactly these,
 // so you can keep a "desk webcam", a "couch, gestures only", or a "quiet, eye-gestures" setup and
@@ -122,6 +123,7 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
 
   return (
     <Dialog title="Biometric Controls" onClose={onClose} width={600} buttons={<button onClick={onClose}>Close</button>}>
+      <DeviceInfo note="Your camera, calibration and gesture/voice/eye mappings are specific to this device — they’re tuned to its screen and camera and don’t sync." />
       <ProfilesBar
         kind="bio"
         profiles={g.settingsProfiles}
