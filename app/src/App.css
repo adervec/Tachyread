@@ -1882,6 +1882,10 @@
 .main-area.has-reader-cursor .line-pane,
 .main-area.has-reader-cursor .line-pane-list,
 .main-area.has-reader-cursor .line-pane-split,
+/* .line-row sets `cursor: pointer` (tap a line to jump) which, being on the element under the mouse,
+   beats the pane's inherited cursor — so the custom cursor showed everywhere EXCEPT the line rows.
+   Override the rows (and their words, which inherit) so the reader cursor covers the whole lines area. */
+.main-area.has-reader-cursor .line-row,
 .main-area.has-reader-cursor .rsvp-pane,
 .main-area.has-reader-cursor .source-html,
 .main-area.has-reader-cursor .source-frame,
