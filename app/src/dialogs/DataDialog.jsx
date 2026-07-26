@@ -236,7 +236,8 @@ export default function DataDialog({ onClose }) {
           <p className="settings-note">
             Syncs your <strong>reading progress, tab settings, and application settings</strong> across your
             devices — reading position per file (keyed by content), your Default Tab Settings, and your
-            preferences. Your files, document text, and grabbed pages <strong>never leave this device</strong>,
+            preferences. Tabs also show a small 🖥 badge when the same file is open on another synced
+            device (as of the last sync). Your files, document text, and grabbed pages <strong>never leave this device</strong>,
             and nothing goes through our servers: it's your browser talking to your own Google Drive (a private
             app-data folder) or a local folder your Drive / Dropbox / OneDrive desktop app already syncs.
           </p>
