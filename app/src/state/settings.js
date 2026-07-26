@@ -350,6 +350,8 @@ export function defaultGlobalSettings() {
     autoMinimizeControls: false,
     // Shake-to-toggle full-screen reading on phones (devicemotion; iOS asks permission once).
     shakeFullscreen: false,
+    // Offer to add an untracked document to Trackyread when it's opened (a dismissible banner).
+    trackyreadNudge: true,
     // Recently used reading fonts for the top-bar quick picker: [{ stack, label }]
     recentFonts: [],
     // Custom trigger sequences (Biometric Controls): [{ steps: ['g:fist','v:play'], commandId, on }]

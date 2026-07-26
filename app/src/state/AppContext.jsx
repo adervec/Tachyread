@@ -400,6 +400,9 @@ export function AppProvider({ children }) {
       const ng = { ...g, recentFiles, scrollAdvances: false };
       dispatch({ type: 'SET_GLOBAL', global: ng });
       saveGlobal(ng).catch(() => {});
+      // Let App offer to add this document to Trackyread if it isn't tracked yet. Interactive,
+      // persisted opens only (not session restore, not incognito) — the listener checks the binding.
+      try { window.dispatchEvent(new CustomEvent('tachyread-doc-opened', { detail: { checksum: doc.contentChecksum, fileName: doc.fileName, words: doc.words.length } })); } catch { /* non-DOM */ }
     }
     return tab;
   }, [buildTabData]);

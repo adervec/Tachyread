@@ -88,7 +88,8 @@ import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook } from './state/storage.js';
+import { bookFromOpenedDoc } from './features/trackyreadAdd.js';
 import { sectionChecksum } from './document/sectionHash.js';
 import { acquireInstance } from './state/singleInstance.js';
 import { startVoiceCommands, startClapDetector } from './features/audioControl.js';
@@ -1724,6 +1725,37 @@ function AppInner() {
   }, [state.globalHydrated, isCompact, state.global.eyeWarmup, updateGlobal]);
   function dismissWarmupNudge() { setWarmupNudge(false); }
 
+  // "Add to Trackyread" nudge: when an UNTRACKED document is opened, offer to add it to the tracker
+  // right then. Fires on interactive opens only (openDoc emits the event for non-silent, non-incognito
+  // opens); skipped when already bound, when the user turned it off, or once per checksum this session.
+  const [trackNudge, setTrackNudge] = useState(null); // { checksum, fileName, words } | null
+  const trackDismissed = useRef(new Set());
+  useEffect(() => {
+    const onOpened = async (e) => {
+      const d = e.detail || {};
+      if (!d.checksum || state.global.trackyreadNudge === false || state.incognito) return;
+      if (trackDismissed.current.has(d.checksum)) return;
+      try { const map = await getBinding(); if (map[d.checksum]) return; } catch { return; } // already tracked
+      setTrackNudge(d);
+    };
+    window.addEventListener('tachyread-doc-opened', onOpened);
+    return () => window.removeEventListener('tachyread-doc-opened', onOpened);
+  }, [state.global.trackyreadNudge, state.incognito]);
+  function dismissTrackNudge() { if (trackNudge) trackDismissed.current.add(trackNudge.checksum); setTrackNudge(null); }
+  async function addToTrackyread(open) {
+    const n = trackNudge;
+    if (!n) return;
+    trackDismissed.current.add(n.checksum);
+    setTrackNudge(null);
+    const book = bookFromOpenedDoc({ fileName: n.fileName, words: n.words });
+    try {
+      await saveLibraryBook(book);
+      await setBinding(n.checksum, book.id); // fires tachyread-bindings-changed → tab dot + tiles refresh
+      setStatus(`Added “${book.title}” to Trackyread.`);
+      if (open) openDialog({ kind: 'literary-journey', tab: 'library', focusBookId: book.id });
+    } catch (err) { setStatus('Could not add to Trackyread: ' + (err?.message || err)); }
+  }
+
   // One-click backup to the configured sync target (menu-bar ☁ Sync). Routes the user to setup when
   // the target isn't ready, otherwise pushes the backup and stamps lastSync.
   async function doSyncNow() {
@@ -2304,6 +2336,17 @@ function AppInner() {
           <button onClick={dismissWarmupNudge}>Not today</button>
           <button onClick={() => { dismissWarmupNudge(); updateGlobal({ eyeWarmup: { ...(state.global.eyeWarmup || {}), prompt: false } }); }}>Don’t ask</button>
           <button className="ew-nudge-x" title="Dismiss" onClick={dismissWarmupNudge}>×</button>
+        </div>
+      )}
+      {trackNudge && (
+        <div className="ew-nudge track-nudge" role="status">
+          <span>📚 Add <b>{trackNudge.fileName}</b> to Trackyread?</span>
+          <span className="grow" />
+          <button className="toggle-on" onClick={() => addToTrackyread(false)} title="Add this document to your reading tracker (status: reading)">Add ▸</button>
+          <button onClick={() => addToTrackyread(true)} title="Add it and open Trackyread to fill in details">Add &amp; edit…</button>
+          <button onClick={dismissTrackNudge}>Not now</button>
+          <button onClick={() => { dismissTrackNudge(); updateGlobal({ trackyreadNudge: false }); }}>Don’t ask</button>
+          <button className="ew-nudge-x" title="Dismiss" onClick={dismissTrackNudge}>×</button>
         </div>
       )}
       {/* The reading view stays MOUNTED (just hidden) while a dialog tab is focused, so closing the
