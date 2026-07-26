@@ -121,9 +121,10 @@ export const HELP_SECTIONS = [
   },
   {
     id: 'data', title: '☁ Sync, backup & privacy',
-    say: 'Back up and sync your reading progress, tab settings and application settings through a local folder or your own Google Drive. Incognito reading pauses all tracking. Everything runs in your browser — no accounts, no servers of ours, no telemetry.',
+    say: 'Back up and sync your reading progress and tab settings through a local folder or your own Google Drive. Application and biometric settings are specific to each device and stay put. Incognito reading pauses all tracking. Everything runs in your browser — no accounts, no servers of ours, no telemetry.',
     body: [
-      'Data Management (Settings menu) backs up and syncs reading progress, tab settings and application settings via a local folder or your own Google Drive. Book Groups link editions of the same book so progress carries across formats. Your API keys stay on the device and are never synced.',
+      'Data Management (Settings menu) backs up and syncs reading progress and tab settings (Default Tab Settings + per-file display) via a local folder or your own Google Drive. Book Groups link editions of the same book so progress carries across formats.',
+      'Application settings and biometric settings are DEVICE-SPECIFIC — they’re tuned to each device’s screen, camera and habits, so they don’t sync. Each device shows its own name + ID on the Application Settings and Biometric Controls pages. Your API keys also stay on the device and are never synced.',
       'Incognito Reading (View menu) pauses ALL tracking and persistence; exiting rewinds positions as if the session never happened.',
       'Everything runs in your browser: no accounts, no servers of ours, no telemetry. OCR models, fonts and TTS voices download from CDNs only when their features are used.',
     ],

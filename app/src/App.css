@@ -3869,6 +3869,15 @@
 .lj-cover-url { display: flex; gap: 6px; }
 .lj-cover-url input { flex: 1 1 auto; min-width: 0; font-size: 11px; }
 .lj-cover-msg { margin: 4px 0 0; }
+/* "This device" panel on the device-specific settings pages */
+.device-info { border: 1px solid var(--divider); border-radius: 8px; padding: 8px 10px; margin: 6px 0 10px; background: var(--panel-bg, rgba(127,127,127,0.05)); }
+.device-info-title { font-weight: 700; font-size: 12px; }
+.device-info-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 5px; }
+.device-info-name { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.device-info-name input { width: 160px; }
+.device-info-fact { font-size: 12px; color: var(--status-fg); }
+.device-info-fact code { font-size: 11px; }
+.device-info-note { margin: 6px 0 0; }
 .lj-coverbatch { display: inline-flex; align-items: center; gap: 6px; }
 .lj-coverbatch button { font-size: 12px; }
 /* Library list: table ↔ cover-tile grid */

@@ -198,12 +198,14 @@ export function resetGlobalToDefaults(current) {
   return out;
 }
 
-// The slice of global settings that cloud-syncs as "application settings": every preference PLUS the
-// Default Tab Settings (fileDefaults). User DATA / libraries (the rest of GLOBAL_DATA_KEYS), device-
-// local sync metadata, and the sync timestamp itself stay on the device. bookGroups sync through the
-// progress merge instead. Mirrored by isSyncedGlobalKey (which keys, when changed, bump the stamp).
-const GLOBAL_SYNC_EXCLUDE = new Set([...GLOBAL_DATA_KEYS, 'settingsUpdatedAt']); // note: keeps fileDefaults
-export function isSyncedGlobalKey(k) { return k === 'fileDefaults' || !GLOBAL_SYNC_EXCLUDE.has(k); }
+// Only the Default Tab Settings (fileDefaults) sync at the GLOBAL level — reading/display defaults
+// should follow you between devices. Every other global setting is DEVICE-SPECIFIC and stays put:
+// application preferences (language, blue-light, scroll/WPM defaults, view toggles, focus/mobile UI)
+// AND the whole biometric setup (camera, hand/eye calibration, gesture/voice/clap/eye mappings),
+// because those are tuned to a particular device's screen, camera and habits. Per-file tab/display
+// settings still sync via the progress bundle's fileSettings. Mirrored on import — incoming settings
+// are re-filtered through this same rule, so a stale bundle can't push app settings onto a device.
+export function isSyncedGlobalKey(k) { return k === 'fileDefaults'; }
 export function syncableGlobalSettings(g) {
   const out = {};
   for (const k of Object.keys(g || {})) if (isSyncedGlobalKey(k)) out[k] = g[k];
