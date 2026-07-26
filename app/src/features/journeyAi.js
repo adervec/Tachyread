@@ -175,6 +175,7 @@ export function buildDigest(dataset, instruction) {
     '```',
     heavy ? SCHEMA_HEAVY : SCHEMA_LIGHT,
     '```',
+    'If the request JSON declares a `requestHash`, echo it verbatim as a top-level `requestHash` field of your reply.',
     '',
     '## Data',
     '```json',
@@ -187,8 +188,19 @@ export function buildDigest(dataset, instruction) {
 export function buildCoworkRequest(dataset, instruction) {
   return {
     protocol: 'tachyread-journey', protocolVersion: 1, kind: 'cowork-request', generatedAt: Date.now(),
+    requestHash: contentHash(JSON.stringify(dataset)), // declared hash — agents echo it back (CoworkSyncHub COWORK-PROTOCOL.md)
     instruction, ids: dataset.unreadCandidates.map((b) => b.id).concat(dataset.recentFinishes.map((b) => b.id)),
     dataset,
+  };
+}
+
+// cowork.json discovery manifest (cowork-manifest v1, see CoworkSyncHub/COWORK-PROTOCOL.md):
+// lets a hub/agent auto-configure the folder without Tachyread-specific code.
+export function buildCoworkManifest() {
+  return {
+    protocol: 'cowork-manifest', protocolVersion: 1, app: 'tachyread',
+    channels: [{ name: 'journey', request: ['journey-cowork-request.json'],
+      instructions: 'journey-instructions.md', replyPath: 'journey-cowork-response.json' }],
   };
 }
 

@@ -18,7 +18,7 @@ import { sectionSpan } from '../document/toc.js';
 import { askClaude, anthropicConfigured } from '../features/anthropic.js';
 import {
   getInstruction, LIGHT_INSTRUCTION, HEAVY_PLACEHOLDER, KNOWLEDGE_GRAPH_INSTRUCTION, CLASSIFY_INSTRUCTION, buildDataset, buildDigest, buildProgress, AI_NOTE_TYPES,
-  buildCoworkRequest, buildApiMessages, parseAiOutput, applyAiOutput, contentHash,
+  buildCoworkRequest, buildCoworkManifest, buildApiMessages, parseAiOutput, applyAiOutput, contentHash,
 } from '../features/journeyAi.js';
 import {
   normalizeSeed, filterBooks, sortBooks, libraryStats, exportJourneyMarkdown,
@@ -2689,6 +2689,7 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
       const dataset = await datasetWithProgress(mode === 'light');
       await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(buildCoworkRequest(dataset, { mode, text }), null, 2));
       await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, { mode, text }));
+      await writeToDir(dir, 'cowork.json', JSON.stringify(buildCoworkManifest(), null, 2)); // discovery manifest for hubs
       await logActivity('request', `Wrote cowork request (${mode}) to “${dir.name}”`);
       setMsg('Wrote journey-cowork-request.json + journey-instructions.md. Drop the reply as journey-cowork-response.json, then Read response.');
     } catch (e) { setMsg('Write failed: ' + (e?.message || e)); }
