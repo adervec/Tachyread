@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { deepEqual } from '../features/deepEqual.js';
 
 const UNDO_MS = 120000; // an "Update" can be undone for two minutes
 
@@ -8,8 +9,30 @@ const UNDO_MS = 120000; // an "Update" can be undone for two minutes
 export default function ProfilesBar({ kind, profiles, onChange, capture, apply }) {
   const all = profiles && typeof profiles === 'object' ? profiles : { tab: [], app: [] };
   const list = all[kind] || [];
-  const [sel, setSel] = useState('');
+  // Current settings, recomputed each render so the button-enable logic tracks live edits.
+  const current = capture();
+  // The profile (if any) whose data EXACTLY matches the current settings right now. `find` returns
+  // the same list element by reference when the match is unchanged, so the effect below is stable.
+  const matching = list.find((p) => deepEqual(p.data, current)) || null;
+  // Preselect the matching profile when the dialog opens (once). If the current settings are exactly
+  // a saved profile, that profile shows selected from the start.
+  const [sel, setSel] = useState(() => (list.find((p) => deepEqual(p.data, capture()))?.name || ''));
   const selProfile = list.find((p) => p.name === sel) || null;
+  // Keep the dropdown honest: while nothing is hand-selected, reflect whichever profile the live
+  // settings now match (or clear when they match none) — but never fight a manual selection.
+  useEffect(() => {
+    setSel((cur) => {
+      if (cur && list.some((p) => p.name === cur)) {
+        // Hand-selected profile still loaded verbatim? fine. Edited away from it but now matching
+        // another? snap to the match. Otherwise keep the manual selection.
+        if (deepEqual(selProfile?.data, current)) return cur;
+        return matching ? matching.name : cur;
+      }
+      return matching ? matching.name : '';
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matching]);
+  const selMatchesCurrent = !!selProfile && deepEqual(selProfile.data, current);
 
   // An "Update" overwrites a profile in place — easy to do by accident, and there's no other copy.
   // Keep the pre-update data around for UNDO_MS so a mis-click is recoverable. `left` ticks the
@@ -68,9 +91,9 @@ export default function ProfilesBar({ kind, profiles, onChange, capture, apply }
         <option value="">— pick a profile —</option>
         {list.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
       </select>
-      <button disabled={!selProfile} onClick={() => apply(selProfile.data)} title="Apply this profile's settings">Load</button>
-      <button onClick={saveAs} title="Save the current settings as a new profile">Save as…</button>
-      <button disabled={!selProfile} onClick={update} title="Overwrite this profile with the current settings">Update</button>
+      <button disabled={!selProfile || selMatchesCurrent} onClick={() => apply(selProfile.data)} title={selMatchesCurrent ? 'These settings already match this profile' : 'Apply this profile\'s settings'}>Load</button>
+      <button disabled={!!matching} onClick={saveAs} title={matching ? `These settings are already saved as “${matching.name}”` : 'Save the current settings as a new profile'}>Save as…</button>
+      <button disabled={!selProfile || selMatchesCurrent} onClick={update} title={selMatchesCurrent ? 'This profile already holds these exact settings' : 'Overwrite this profile with the current settings'}>Update</button>
       <button disabled={!selProfile} onClick={rename} title="Rename this profile">Rename</button>
       <button disabled={!selProfile} className="grab-trash" onClick={remove} title="Delete this profile">🗑</button>
       {undo && (
