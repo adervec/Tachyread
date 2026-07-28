@@ -19,6 +19,7 @@ import ChapterHeading from './components/ChapterHeading.jsx';
 import PaneLayout from './components/PaneLayout.jsx';
 import ReaderRotator from './components/ReaderRotator.jsx';
 import FaceStage from './components/FaceStage.jsx';
+import FocusPanels from './components/FocusPanels.jsx';
 import PerfMonitor from './components/PerfMonitor.jsx';
 import { useIsCompact, deviceKind, isCompactScreen } from './state/device.js';
 import BiometricFeed from './components/BiometricFeed.jsx';
@@ -1347,14 +1348,18 @@ function AppInner() {
   // straight from the toggle click — the user gesture is what unlocks fullscreen / window-management /
   // pop-ups, so this can't live in an effect.
   const focusCoversRef = useRef([]);
+  // The cover windows also live in state so <FocusPanels> can portal widgets into them; the ref stays
+  // the imperative source of truth for the teardown/poll effects (no stale-closure surprises).
+  const [focusCovers, setFocusCovers] = useState([]);
+  const setCovers = (arr) => { focusCoversRef.current = arr; setFocusCovers(arr); };
   async function toggleFocusMode() {
     if (state.global.focusMode) {
-      exitFocus(focusCoversRef.current); focusCoversRef.current = [];
+      exitFocus(focusCoversRef.current); setCovers([]);
       updateGlobal({ focusMode: false });
       return;
     }
     const res = await enterFocus(document.documentElement, state.global.focusDim ?? 0.92);
-    focusCoversRef.current = res.covers;
+    setCovers(res.covers);
     updateGlobal({ focusMode: true });
     const msg = {
       unsupported: 'Focus on. Multi-monitor blackout needs Chrome or Edge — app is fullscreen only.',
@@ -1372,7 +1377,7 @@ function AppInner() {
   useEffect(() => {
     const onFsChange = () => {
       if (!document.fullscreenElement && state.global.focusMode) {
-        exitFocus(focusCoversRef.current); focusCoversRef.current = [];
+        exitFocus(focusCoversRef.current); setCovers([]);
         updateGlobal({ focusMode: false });
       }
     };
@@ -1388,7 +1393,7 @@ function AppInner() {
     if (!covers || !covers.length) return undefined; // single monitor / pop-ups blocked: nothing to watch
     const id = setInterval(() => {
       if (covers.every((w) => !w || w.closed)) {
-        exitFocus(focusCoversRef.current); focusCoversRef.current = [];
+        exitFocus(focusCoversRef.current); setCovers([]);
         updateGlobal({ focusMode: false });
       }
     }, 800);
@@ -3048,6 +3053,10 @@ function AppInner() {
       {/* Single shared WebGL context for every 3D reader face (drei <View> portals here).
           Mounted only while faces are actually shown so there's no idle render loop. */}
       {!!activeTab?.settings?.showEyes && <FaceStage />}
+      {/* Focus panels: render the chosen reading widgets onto the blacked-out other-monitor covers. */}
+      {state.global.focusMode && state.global.focusShowWidgets && focusCovers.length > 0 && activeTab && (
+        <FocusPanels covers={focusCovers} tab={activeTab} readingMode={readingMode} />
+      )}
     </div>
   );
 }
