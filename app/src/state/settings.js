@@ -410,5 +410,10 @@ export function defaultGlobalSettings() {
     // dark the other-monitor cover windows are (1 = pure black, lower = dark grey).
     focusMode: false,
     focusDim: 0.92,
+    // Focus panels: show a customizable, reorderable set of reading widgets on the other-monitor
+    // cover windows (instead of plain blackout). Master opt-in + an ordered [{id, on}] list ([] =
+    // catalog defaults). Device-local (monitor layout is per-device) — see features/focusWidgets.js.
+    focusShowWidgets: false,
+    focusPanels: [],
   };
 }

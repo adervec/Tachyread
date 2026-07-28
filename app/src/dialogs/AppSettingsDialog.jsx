@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { resetGlobalToDefaults, syncableGlobalSettings } from '../state/settings.js';
+import { FOCUS_WIDGET_LABEL, focusPanelList, reorderPanels } from '../features/focusWidgets.js';
 import ProfilesBar from '../components/ProfilesBar.jsx';
 import DeviceInfo from '../components/DeviceInfo.jsx';
 import { LANGUAGES } from '../state/languages.js';
@@ -15,6 +16,36 @@ function Field({ label, children }) {
     <div className="field-row">
       <label>{label}</label>
       <div>{children}</div>
+    </div>
+  );
+}
+
+// Pick + drag-reorder which reading widgets show on the Focus-mode cover monitors. `list` is the
+// folded [{id, on}] from focusPanelList; onChange gets the next list to persist. DnD mirrors TabBar.
+function FocusPanelPicker({ list, onChange }) {
+  const dragId = useRef(null);
+  const [dropId, setDropId] = useState(null);
+  return (
+    <div className="focus-panel-picker">
+      {list.map((e) => (
+        <div
+          key={e.id}
+          className={`fpp-row${dropId === e.id ? ' drop-target' : ''}`}
+          draggable
+          onDragStart={(ev) => { dragId.current = e.id; ev.dataTransfer.effectAllowed = 'move'; }}
+          onDragOver={(ev) => { if (dragId.current && dragId.current !== e.id) { ev.preventDefault(); setDropId(e.id); } }}
+          onDragLeave={() => setDropId((d) => (d === e.id ? null : d))}
+          onDrop={(ev) => { ev.preventDefault(); if (dragId.current && dragId.current !== e.id) onChange(reorderPanels(list, dragId.current, e.id)); dragId.current = null; setDropId(null); }}
+          onDragEnd={() => { dragId.current = null; setDropId(null); }}
+          title="Drag to reorder"
+        >
+          <span className="fpp-grip" aria-hidden="true">⠿</span>
+          <label className="inline-check">
+            <input type="checkbox" checked={e.on} onChange={(ev) => onChange(list.map((x) => (x.id === e.id ? { ...x, on: ev.target.checked } : x)))} />
+            {FOCUS_WIDGET_LABEL[e.id] || e.id}
+          </label>
+        </div>
+      ))}
     </div>
   );
 }
@@ -190,6 +221,23 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
           Wrap open tabs onto multiple rows instead of squeezing them into one (also in a tab’s right-click menu)
         </label>
       </Field>
+
+      <div className="field-section">Focus mode panels</div>
+      <Field label="Show widgets on other monitors">
+        <label className="inline-check">
+          <input type="checkbox" checked={!!g.focusShowWidgets} onChange={(e) => patch({ focusShowWidgets: e.target.checked })} />
+          In Focus mode, fill the blacked-out other monitors with reading widgets instead of plain black
+        </label>
+      </Field>
+      {g.focusShowWidgets && (
+        <Field label="Panels — pick &amp; drag to reorder">
+          <FocusPanelPicker list={focusPanelList(g.focusPanels)} onChange={(next) => patch({ focusPanels: next })} />
+        </Field>
+      )}
+      <p className="settings-note">
+        Cover panels need Chrome or Edge with the “window management” permission, pop-ups allowed, and a
+        second monitor — otherwise this setup saves but nothing shows. It’s specific to this device.
+      </p>
 
       <div className="field-section">Reading guard</div>
       <Field label="Idle grace period (seconds)">

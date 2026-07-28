@@ -23,6 +23,21 @@ export function repaintCovers(covers, dim) {
   (covers || []).forEach((w) => { if (w && !w.closed) paintCover(w, dim); });
 }
 
+// Make a cover window able to render our widgets: copy the app's stylesheets into its <head>, plus
+// the ACTIVE theme (applyTheme writes CSS vars as an inline style + a theme-dark/light class on
+// <html> — cloning stylesheets alone would leave the cover on the default palette). Called once per
+// cover; safe to re-run to refresh the theme. All best-effort — a closed window just no-ops.
+export function adoptStyles(win) {
+  try {
+    const head = win.document.head;
+    for (const n of document.querySelectorAll('style, link[rel="stylesheet"]')) head.appendChild(n.cloneNode(true));
+    const src = document.documentElement;
+    const dst = win.document.documentElement;
+    dst.setAttribute('style', src.getAttribute('style') || '');
+    dst.className = src.className; // theme-dark / theme-light + any root flags
+  } catch { /* window already closed */ }
+}
+
 // Returns { covers: Window[], reason } where reason explains any fallback (for a status message).
 export async function enterFocus(rootEl, dim) {
   try { await rootEl?.requestFullscreen?.(); } catch { /* user may decline fullscreen */ }
@@ -37,6 +52,7 @@ export async function enterFocus(rootEl, dim) {
     const w = window.open('about:blank', '', feats);
     if (!w) continue; // pop-up blocked
     paintCover(w, dim);
+    adoptStyles(w); // so the focus-panel widgets (if enabled) render styled + themed
     // Try to fullscreen the cover so it hides the taskbar too; if the browser refuses (no activation
     // in the new window), the screen-positioned pop-up already covers the work area.
     try { const p = w.document.documentElement.requestFullscreen?.(); p?.catch?.(() => {}); } catch { /* noop */ }
