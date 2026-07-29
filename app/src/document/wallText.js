@@ -40,7 +40,7 @@ export function buildWallDoc(doc, headLevels, { breakEvery = 0, pctEvery = 0, jo
     if (headLevels && headLevels.has(i)) { // headings stand alone
       flush();
       const mi = merged.length;
-      merged.push({ lineNumber: ln.lineNumber, text: ln.text, startWordIndex: ln.startWordIndex, endWordIndex: ln.endWordIndex, isEmpty: !!ln.isEmpty, srcStart: i, srcEnd: i });
+      merged.push({ lineNumber: ln.lineNumber, text: ln.text, startWordIndex: ln.startWordIndex, endWordIndex: ln.endWordIndex, isEmpty: !!ln.isEmpty, isParaStart: true, srcStart: i, srcEnd: i });
       headingLevels.set(mi, headLevels.get(i));
       for (let w = Math.max(0, ln.startWordIndex); w <= ln.endWordIndex && w < totalWords; w++) wordToLine[w] = mi;
       curSlice = pctEvery && totalWords ? Math.floor((Math.max(0, ln.startWordIndex) / totalWords) * pctEvery) : -1;
@@ -53,7 +53,9 @@ export function buildWallDoc(doc, headLevels, { breakEvery = 0, pctEvery = 0, jo
       curSlice = slice;
     }
     if (breakEvery > 0 && srcSinceBreak >= breakEvery) flush();
-    if (!cur) cur = { lineNumber: ln.lineNumber, text: '', startWordIndex: -1, endWordIndex: -1, isEmpty: false, srcStart: i, srcEnd: i };
+    // Each merged block is its own paragraph — blocks aren't separated by empty lines, so without
+    // this getParagraphRange would treat the whole wall as one giant paragraph (reveal/nav overshoot).
+    if (!cur) cur = { lineNumber: ln.lineNumber, text: '', startWordIndex: -1, endWordIndex: -1, isEmpty: false, isParaStart: true, srcStart: i, srcEnd: i };
     if (ln.isEmpty) {
       if (cur.text) cur.text += '\t'; // paragraph break → an indent tab (only between text)
     } else {
@@ -66,5 +68,7 @@ export function buildWallDoc(doc, headLevels, { breakEvery = 0, pctEvery = 0, jo
   }
   flush();
   if (!merged.length) merged.push({ lineNumber: 1, text: '', startWordIndex: -1, endWordIndex: -1, isEmpty: true, srcStart: 0, srcEnd: 0 });
-  return { ...doc, lines: merged, wordToLine, headingLevels };
+  // Drop the source-line-indexed header/footer set — the merged lines are re-indexed, so carrying it
+  // over dimmed the WRONG merged blocks (its indices no longer mean anything here).
+  return { ...doc, lines: merged, wordToLine, headingLevels, headerFooterLines: new Set() };
 }
