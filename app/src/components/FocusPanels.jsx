@@ -4,6 +4,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { useLineSweep } from './useLineSweep.js';
 import { recordSpark } from '../features/wpmSpark.js';
 import { focusPanelsToShow } from '../features/focusWidgets.js';
+import { syncTheme } from '../features/focusMode.js';
 
 // Renders the user's chosen reading widgets onto EACH Focus-mode cover window (the blacked-out other
 // monitors). Lives in the MAIN React tree so `useApp()` + the live tab flow through the portals; the
@@ -22,9 +23,12 @@ export default function FocusPanels({ covers, tab, readingMode }) {
     const id = setInterval(() => {
       setNow(Date.now());
       if (tab.tracker) recordSpark(tab.id, tab.tracker.sessionNewWords || 0);
+      // Keep each cover's theme current — a mid-focus theme switch only changes <html> vars/class,
+      // which the once-per-cover adoptStyles snapshotted; re-sync it (idempotent, cheap).
+      for (const w of covers || []) if (w && !w.closed) syncTheme(w);
     }, 1000);
     return () => clearInterval(id);
-  }, [tab]);
+  }, [tab, covers]);
 
   const ids = focusPanelsToShow(g.focusPanels, g.focusShowWidgets);
   if (!ids.length) return null;

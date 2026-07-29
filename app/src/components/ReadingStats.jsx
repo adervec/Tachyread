@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { recordSpark, getSpark, sparkBuckets, sparkPoints, SPARK_MAX_WPM } from '../features/wpmSpark.js';
+import { fmtDate } from '../features/dateFmt.js';
 
 function fmtDuration(ms) {
   const s = Math.floor((ms || 0) / 1000);
@@ -95,7 +96,7 @@ export default function ReadingStats({ tab }) {
   }
   let today = 0;
   if (show.today && tracker) {
-    const key = new Date().toISOString().slice(0, 10);
+    const key = fmtDate(Date.now()); // LOCAL day — must match the tracker's daily bucket key
     today = tracker.dailyArray().find((d) => d.date === key)?.words || 0;
   }
   const reg = show.regressions && tracker ? tracker.regressionStats() : null;

@@ -27,14 +27,23 @@ export function repaintCovers(covers, dim) {
 // the ACTIVE theme (applyTheme writes CSS vars as an inline style + a theme-dark/light class on
 // <html> — cloning stylesheets alone would leave the cover on the default palette). Called once per
 // cover; safe to re-run to refresh the theme. All best-effort — a closed window just no-ops.
+// Copy the ACTIVE theme onto a cover's <html>: the theme's CSS vars are an inline style + a
+// theme-dark/light class on document.documentElement (applyTheme writes them there), NOT in the
+// stylesheets. Idempotent (just sets attributes), so it's safe to call repeatedly to keep a cover's
+// theme live as the user switches themes mid-focus.
+export function syncTheme(win) {
+  try {
+    const src = document.documentElement, dst = win.document.documentElement;
+    dst.setAttribute('style', src.getAttribute('style') || '');
+    dst.className = src.className; // theme-dark / theme-light + any root flags
+  } catch { /* window already closed */ }
+}
+
 export function adoptStyles(win) {
   try {
     const head = win.document.head;
     for (const n of document.querySelectorAll('style, link[rel="stylesheet"]')) head.appendChild(n.cloneNode(true));
-    const src = document.documentElement;
-    const dst = win.document.documentElement;
-    dst.setAttribute('style', src.getAttribute('style') || '');
-    dst.className = src.className; // theme-dark / theme-light + any root flags
+    syncTheme(win);
   } catch { /* window already closed */ }
 }
 

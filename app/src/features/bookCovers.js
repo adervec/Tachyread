@@ -32,6 +32,7 @@ export function coverId(src = '') {
 }
 
 export function addCover(b, cover) {
+  if (!cover || !cover.src) return {}; // nothing to add — never throw on a null/empty cover
   const list = bookCovers(b).slice();
   const c = { id: cover.id || coverId(cover.src), src: cover.src, source: cover.source || 'upload', ...(cover.spec ? { spec: cover.spec } : {}) };
   list.push(c);
@@ -94,7 +95,8 @@ function motifSvg(motif, accent) {
 
 // spec: { bg:[c1,c2], accent, titleColor, authorColor, font:'serif'|'sans'|'mono', motif }.
 // Returns an SVG data URL (2:3 poster). Missing/invalid fields fall back to sensible defaults.
-export function coverSpecToSvg(spec = {}, { title = '', author = '' } = {}) {
+export function coverSpecToSvg(spec, { title = '', author = '' } = {}) {
+  spec = spec || {}; // a default param only fills `undefined`; parseCoverSpec can return null
   const bg0 = safeColor(spec.bg?.[0], '#2a3550');
   const bg1 = safeColor(spec.bg?.[1], '#161d2e');
   const accent = safeColor(spec.accent, '#d9b25a');
@@ -128,13 +130,15 @@ const GENRE_MOTIF = { fantasy: 'tower', 'sci-fi': 'orbit', scifi: 'orbit', scien
 // (found by fuzzing: a book with no title took down the tile grids via proceduralCover in render).
 function hash(s) { const t = String(s ?? ''); let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) & 0x7fffffff; return h; }
 
-export function proceduralSpec({ title = '', genre = '' } = {}) {
+export function proceduralSpec(book) {
+  const { title = '', genre = '' } = book || {};
   const p = PALETTES[hash(title || 'x') % PALETTES.length];
   const g = String(genre || '').toLowerCase();
   const motif = GENRE_MOTIF[Object.keys(GENRE_MOTIF).find((k) => g.includes(k))] || MOTIFS[1 + (hash(title) % (MOTIFS.length - 1))];
   return { bg: [p[0], p[1]], accent: p[2], titleColor: '#ffffff', authorColor: '#c9d2e0', font: hash(title) % 2 ? 'serif' : 'sans', motif };
 }
-export function proceduralCover({ title = '', author = '', genre = '' } = {}) {
+export function proceduralCover(book) {
+  const { title = '', author = '', genre = '' } = book || {};
   return coverSpecToSvg(proceduralSpec({ title, genre }), { title, author });
 }
 

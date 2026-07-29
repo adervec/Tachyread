@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { allFiles, allDocMeta, allFocusSessions, getBinding, getLibraryBooks } from '../state/storage.js';
+import { fmtDate } from '../features/dateFmt.js';
 import { MAX_REAL_WPM } from '../engine/readingTracker.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────────────────────
@@ -14,7 +15,9 @@ function fmtDur(secs) {
   if (m) return `${m}m ${s % 60}s`;
   return `${s}s`;
 }
-function dayKey(d) { return d.toISOString().slice(0, 10); }
+// LOCAL day key — the streak cursor anchors on local midnight, so the key must be local too, or the
+// streak drops "today" for anyone off UTC (the confirmed bug).
+function dayKey(d) { return fmtDate(d); }
 function wpmOf(words, secs) { return secs > 0 ? Math.min(MAX_REAL_WPM, Math.round((words / secs) * 60)) : 0; }
 // "pages 1–42 of 300" (PDF/grabbed images) or "sections …" (EPUB/HTML), from the source-page summary.
 function sourcePageLabel(b) {

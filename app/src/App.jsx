@@ -1354,7 +1354,9 @@ function AppInner() {
   const setCovers = (arr) => { focusCoversRef.current = arr; setFocusCovers(arr); };
   async function toggleFocusMode() {
     if (state.global.focusMode) {
-      exitFocus(focusCoversRef.current); setCovers([]);
+      // Unmount the widget portals (setCovers([])) BEFORE closing the windows, so React never
+      // reconciles portal-child removal against an already-closed document.
+      const cv = focusCoversRef.current; setCovers([]); exitFocus(cv);
       updateGlobal({ focusMode: false });
       return;
     }
@@ -1377,7 +1379,7 @@ function AppInner() {
   useEffect(() => {
     const onFsChange = () => {
       if (!document.fullscreenElement && state.global.focusMode) {
-        exitFocus(focusCoversRef.current); setCovers([]);
+        const cv = focusCoversRef.current; setCovers([]); exitFocus(cv);
         updateGlobal({ focusMode: false });
       }
     };
@@ -1389,12 +1391,18 @@ function AppInner() {
   // focus down (exit fullscreen, drop focus-on).
   useEffect(() => {
     if (!state.global.focusMode) return undefined;
-    const covers = focusCoversRef.current;
-    if (!covers || !covers.length) return undefined; // single monitor / pop-ups blocked: nothing to watch
+    if (!focusCoversRef.current?.length) return undefined; // single monitor / pop-ups blocked: nothing to watch
     const id = setInterval(() => {
-      if (covers.every((w) => !w || w.closed)) {
-        exitFocus(focusCoversRef.current); setCovers([]);
-        updateGlobal({ focusMode: false });
+      const all = focusCoversRef.current || [];
+      const live = all.filter((w) => w && !w.closed);
+      if (live.length === all.length) return; // nothing closed since last check
+      if (!live.length) {
+        // Last cover closed → end focus (unmount portals first, then close/exit fullscreen).
+        setCovers([]); exitFocus(all); updateGlobal({ focusMode: false });
+      } else {
+        // Some (not all) covers closed → drop them from state so their portals unmount and we stop
+        // rendering into a dead document each tick (leak). Focus stays on for the remaining monitors.
+        setCovers(live);
       }
     }, 800);
     return () => clearInterval(id);

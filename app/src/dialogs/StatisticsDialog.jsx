@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { allFiles } from '../state/storage.js';
 import { MAX_REAL_WPM } from '../engine/readingTracker.js';
+import { fmtDate } from '../features/dateFmt.js';
 
 function fmtTime(secs) {
   if (!secs) return '0s';
@@ -61,7 +62,7 @@ export default function StatisticsDialog({ tabs = [], activeTabId, onClose }) {
     allFiles().then(setFiles);
   }, []);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = fmtDate(Date.now()); // LOCAL day (matches the tracker's bucket keys)
 
   function aggregate(filterFn) {
     let words = 0, secs = 0;
@@ -85,7 +86,7 @@ export default function StatisticsDialog({ tabs = [], activeTabId, onClose }) {
   const last7 = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(); d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
+    const key = fmtDate(d); // LOCAL day (d is stepped by whole local days)
     last7.push({ date: key, ...aggregate((x) => x === key) });
   }
 
