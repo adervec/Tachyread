@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
-import { resetGlobalToDefaults, syncableGlobalSettings } from '../state/settings.js';
+import { resetGlobalToDefaults, appProfileSettings } from '../state/settings.js';
 import { FOCUS_WIDGET_LABEL, focusPanelList, reorderPanels } from '../features/focusWidgets.js';
 import ProfilesBar from '../components/ProfilesBar.jsx';
 import DeviceInfo from '../components/DeviceInfo.jsx';
@@ -106,7 +106,7 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         kind="app"
         profiles={g.settingsProfiles}
         onChange={(p) => patch({ settingsProfiles: p })}
-        capture={() => syncableGlobalSettings(g)}
+        capture={() => appProfileSettings(g)}
         apply={(data) => { setG({ ...g, ...data }); onPatch(data); }}
       />
       <div className="dlg-cols">

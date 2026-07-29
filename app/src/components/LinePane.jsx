@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { List, useDynamicRowHeight, useListRef } from 'react-window';
-import { ReadStatus, orpIndex, getLineIndex, getParagraphRange } from '../document/readerDocument.js';
+import { ReadStatus, orpIndex, getLineIndex, getParagraphRange, WS_SPLIT, isWsRun } from '../document/readerDocument.js';
 import { getTocEntries } from '../document/toc.js';
 import { buildWallDoc, WALL_SEP } from '../document/wallText.js';
 import { resolveHeadingPack } from '../state/themes.js';
@@ -40,12 +40,14 @@ function orpClass(settings) {
 
 function renderWords(line, opts) {
   const text = line.text;
-  const words = text.split(/(\s+)/);
+  // Split on EXACTLY the reader's whitespace class (space/tab/NBSP) so word indices here match the
+  // model's — `\s` also splits ideographic/em spaces the reader keeps in-word, drifting the highlight.
+  const words = text.split(WS_SPLIT);
   let wordIdx = line.startWordIndex;
   const elems = [];
   let runIdx = 0;
   for (const rawTok of words) {
-    if (rawTok === '' || /^\s+$/.test(rawTok)) {
+    if (rawTok === '' || isWsRun(rawTok)) {
       elems.push(<span key={runIdx++}>{rawTok}</span>);
       continue;
     }

@@ -186,8 +186,8 @@ export function countOffDefaultSettings(settings, defaults) {
 // restores every preference to its default but preserves these so a reset never destroys the
 // user's library, history, saved work, sync setup, or their separate Default Tab Settings.
 export const GLOBAL_DATA_KEYS = new Set([
-  'recentFiles', 'ocrTemplates', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey', 'translateKey', 'settingsProfiles',
-  'readingList', 'drillBestSpan', 'bestFlowWpm', 'bestDictationWpm', 'webcamCalib', 'sync',
+  'recentFiles', 'ocrTemplates', 'ocrProfiles', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey', 'translateKey', 'settingsProfiles',
+  'readingList', 'drillBestSpan', 'bestFlowWpm', 'bestDictationWpm', 'webcamCalib', 'handCalib', 'sync',
   'deviceName', 'fileDefaults', 'ambient', 'customCursors',
 ]);
 
@@ -209,6 +209,17 @@ export function isSyncedGlobalKey(k) { return k === 'fileDefaults'; }
 export function syncableGlobalSettings(g) {
   const out = {};
   for (const k of Object.keys(g || {})) if (isSyncedGlobalKey(k)) out[k] = g[k];
+  return out;
+}
+
+// What an "application settings PROFILE" snapshots: every application PREFERENCE (incl. Default Tab
+// Settings + the biometric setup), excluding user DATA / identity / sync metadata. This is DECOUPLED
+// from what syncs (only fileDefaults) — a profile is a local save/restore of your whole preference
+// set, so it must still capture prefs even though prefs no longer cloud-sync.
+const PROFILE_EXCLUDE = new Set([...GLOBAL_DATA_KEYS, 'settingsUpdatedAt']);
+export function appProfileSettings(g) {
+  const out = {};
+  for (const k of Object.keys(g || {})) if (k === 'fileDefaults' || !PROFILE_EXCLUDE.has(k)) out[k] = g[k];
   return out;
 }
 
