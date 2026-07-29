@@ -4,7 +4,10 @@
 // deep-equal: it ignores key ORDER (settings objects get rebuilt in varying order) and treats a
 // missing key and an `undefined` value as the same (JSON round-trips drop undefined). Pure; see
 // deepEqual.test.mjs.
-export function deepEqual(a, b) {
+export function deepEqual(a, b, depth = 0) {
+  // Defensive recursion cap — settings snapshots are shallow + acyclic (JSON round-tripped), but a
+  // pathological deep/cyclic object shouldn't overflow the stack; past the cap, fall back to identity.
+  if (depth > 100) return a === b;
   if (a === b) return true; // handles null===null, undefined===undefined, same-ref, equal primitives
   // Past the === check, a null or undefined on either side can't match (null ≠ undefined ≠ a value).
   if (a === null || b === null || a === undefined || b === undefined) return false;
@@ -15,7 +18,7 @@ export function deepEqual(a, b) {
   if (aArr !== bArr) return false;
   if (aArr) {
     if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) if (!deepEqual(a[i], b[i])) return false;
+    for (let i = 0; i < a.length; i++) if (!deepEqual(a[i], b[i], depth + 1)) return false;
     return true;
   }
   // Plain objects: compare the union of keys, skipping any whose value is undefined on both sides.
@@ -23,7 +26,7 @@ export function deepEqual(a, b) {
   for (const k of keys) {
     const va = a[k], vb = b[k];
     if (va === undefined && vb === undefined) continue;
-    if (!deepEqual(va, vb)) return false;
+    if (!deepEqual(va, vb, depth + 1)) return false;
   }
   return true;
 }

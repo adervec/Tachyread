@@ -49,8 +49,8 @@ export function presenceByChecksum(peers, { now = Date.now(), maxAgeMs = PRESENC
 
 // A friendly label for the devices sharing a checksum: "Laptop", "Laptop & Phone", "3 other devices".
 export function presenceLabel(entries) {
-  const names = (entries || []).map((e) => (e.name || '').trim()).filter(Boolean);
   if (!entries?.length) return '';
+  const names = entries.map((e) => (e?.name || '').trim()).filter(Boolean); // guard null entries before .name
   if (!names.length) return entries.length === 1 ? 'another device' : `${entries.length} other devices`;
   if (names.length === 1) return names[0];
   if (names.length === 2) return `${names[0]} & ${names[1]}`;

@@ -59,8 +59,13 @@ export const MAX_REAL_WPM = 2000;
 const SHORT_REGRESSION = 2;
 const REG_CAP = 400; // max recent regression events retained (session-only)
 
+// LOCAL calendar day (not UTC) — daily buckets label the user's own activity, and consumers
+// (Statistics "today", the reading-streak counter) anchor on local midnight. A UTC key rolled the
+// day over at the wrong time and broke streaks for anyone not on UTC (e.g. a morning read in
+// UTC+5:30 got bucketed under the previous UTC day, so "today" never counted → streak short by 1).
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function toBase64(bytes) {

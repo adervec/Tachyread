@@ -18,8 +18,9 @@ const norm = (s) => String(s || '').trim().toLowerCase();
 // Returns one row per file: { name, path, size, ext, supported, isNew, inFormat }.
 export function planBulkAdd(descs, { knownNames = new Set(), formats = null } = {}) {
   const known = knownNames instanceof Set ? new Set([...knownNames].map(norm)) : new Set((knownNames || []).map(norm));
-  const allow = formats ? new Set(formats.map((e) => e.toLowerCase())) : null;
+  const allow = formats ? new Set(formats.map((e) => String(e || '').toLowerCase())) : null;
   return (descs || []).map((d) => {
+    d = d || {};
     const ext = fileExt(d.name);
     const supported = SUPPORTED_EXTS.includes(ext);
     return {
@@ -37,12 +38,12 @@ export function planBulkAdd(descs, { knownNames = new Set(), formats = null } = 
 // Count of supported files per extension (for the format filter chips).
 export function extCounts(items) {
   const c = {};
-  for (const it of items || []) if (it.supported) c[it.ext] = (c[it.ext] || 0) + 1;
+  for (const it of items || []) if (it && it.supported) c[it.ext] = (c[it.ext] || 0) + 1;
   return c;
 }
 
 // The rows that would be added under the current filters: supported, in the chosen format, and (when
 // onlyNew) not already added.
 export function selectableRows(items, { onlyNew = true } = {}) {
-  return (items || []).filter((it) => it.supported && it.inFormat && (!onlyNew || it.isNew));
+  return (items || []).filter((it) => it && it.supported && it.inFormat && (!onlyNew || it.isNew));
 }

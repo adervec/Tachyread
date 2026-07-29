@@ -32,4 +32,8 @@ assert.ok(deepEqual(A, B), 'deep nested + reordered + trailing-undefined match')
 assert.ok(!deepEqual(A, { ...B, night: { on: true, strength: 0.5 } }), 'a deep change is caught');
 assert.ok(!deepEqual(A, { ...B, orpStyles: ['glow'] }), 'a nested array change is caught');
 
+// defensive: pathological cyclic / very deep input must not overflow the stack (returns, doesn't throw)
+{ const a = {}; a.self = a; const b = {}; b.self = b; assert.equal(deepEqual(a, b), false, 'cyclic → false, no stack overflow'); }
+{ let a = {}, b = {}, ca = a, cb = b; for (let i = 0; i < 5000; i++) { ca.n = {}; cb.n = {}; ca = ca.n; cb = cb.n; } assert.equal(deepEqual(a, b), false, '5000-deep → returns, no overflow'); }
+
 console.log('deepEqual: all cases pass');

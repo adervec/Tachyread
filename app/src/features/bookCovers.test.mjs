@@ -70,4 +70,12 @@ assert.equal(junk.accent, '#d9b25a', 'a bad colour falls back');
 assert.equal(parseCoverSpec('no json here'), null, 'no JSON → null');
 assert.ok(MOTIFS.includes('none') && MOTIFS.length > 5, 'a motif vocabulary exists');
 
+// defensive: null/undefined into the render/collection helpers must not throw (siblings of the fixed
+// hash crash — parseCoverSpec can return null, callers may pass a bare book).
+assert.ok(coverSpecToSvg(null).startsWith('data:image/svg+xml,'), 'coverSpecToSvg(null) → a cover, not a crash');
+assert.deepEqual(addCover({ covers: [] }, null), {}, 'addCover with a null cover → no-op');
+assert.deepEqual(addCover({ covers: [] }, { source: 'upload' }), {}, 'addCover with no src → no-op');
+assert.ok(proceduralCover(null).startsWith('data:image/svg+xml,') && proceduralCover(undefined).startsWith('data:'), 'proceduralCover(null/undefined) → a cover');
+assert.ok(proceduralSpec(null).bg && proceduralSpec().accent, 'proceduralSpec(null) → a valid spec');
+
 console.log('bookCovers: all cases pass');

@@ -53,4 +53,9 @@ assert.equal(presenceLabel([{ deviceId: 'x' }]), 'another device', 'unnamed sing
 assert.equal(presenceLabel([{ deviceId: 'x' }, { deviceId: 'y' }]), '2 other devices', 'unnamed multiple');
 assert.equal(presenceLabel([]), '');
 
+// defensive: null entries in the label must not throw (guard runs before .name)
+assert.doesNotThrow(() => presenceLabel([null, undefined]), 'null entries tolerated');
+assert.equal(presenceLabel([null, undefined]), '2 other devices', 'null entries counted, no names');
+assert.equal(presenceLabel([null, { name: 'Laptop' }]), 'Laptop', 'a null beside a named device');
+
 console.log('presence: all cases pass');

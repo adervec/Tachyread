@@ -38,4 +38,11 @@ sel = selectableRows(epubOnly, { onlyNew: false });
 assert.equal(sel.length, 3, 'onlyNew off re-includes the already-added epub');
 
 assert.ok(SUPPORTED_EXTS.includes('docx') && SUPPORTED_EXTS.includes('md'), 'supported set covers the reader formats');
+// defensive: null/garbage entries must not throw (descs come from a FileList, but harden anyway)
+assert.doesNotThrow(() => planBulkAdd([null, undefined, { name: null }, { name: 'ok.txt' }]), 'null descs tolerated');
+assert.equal(planBulkAdd([null, { name: 'ok.txt' }]).length, 2, 'null desc → a row with empty ext, no crash');
+assert.doesNotThrow(() => planBulkAdd([{ name: 'a.txt' }], { formats: [null, 5, 'TXT'] }), 'non-string formats tolerated');
+assert.deepEqual(extCounts([null, { supported: true, ext: 'txt' }]), { txt: 1 }, 'extCounts skips null entries');
+assert.deepEqual(selectableRows([null, undefined]), [], 'selectableRows skips null entries');
+
 console.log('bulkAdd: all cases pass');
