@@ -1,6 +1,7 @@
 // Self-check for buildWallDoc. Run: node app/src/document/wallText.demo.mjs
 import assert from 'node:assert';
 import { buildWallDoc, WALL_SEP } from './wallText.js';
+import { getParagraphRange } from './readerDocument.js';
 
 // A tiny doc: heading, two prose lines, a blank (para break), one more prose line, then a 2nd section.
 // words: [Ch,One, a,b,c, d,e, (blank), f,g, Ch,Two, h,i]
@@ -60,5 +61,21 @@ const toks = w3.lines[1].text.split(/\s+/).filter((t) => t && t[0] !== WALL_SEP 
 assert.equal(toks.length, 7, `7 real words, got ${toks.length}: ${JSON.stringify(toks)}`);
 // Whitespace inside the marker is stripped so it stays a single token.
 assert.equal(buildWallDoc(doc, heads, { joiner: ' • ' }).lines[1].text, `a b c ${WALL_SEP}• d e\tf g`);
+
+// Each merged block is a paragraph start, so paragraph reveal/nav treats blocks separately instead of
+// swallowing the whole wall as one paragraph (blocks have no blank lines between them).
+assert.ok(w.lines.every((ln) => ln.isParaStart), 'every merged block is a paragraph start');
+// getParagraphRange on a wall block returns JUST that block, not everything to the end.
+assert.deepEqual(getParagraphRange(w, 1), { startLine: 1, endLine: 1 }, 'para range is the single block, not the rest of the wall');
+assert.deepEqual(getParagraphRange(w, 2), { startLine: 2, endLine: 2 }, 'next block is its own paragraph');
+// The source-line-indexed header/footer set is dropped (re-indexing made it point at the wrong blocks).
+const withHF = buildWallDoc({ ...doc, headerFooterLines: new Set([1, 2]) }, heads, { breakEvery: 0 });
+assert.equal(withHF.headerFooterLines.size, 0, 'header/footer set dropped in the wall doc (no mis-flagged blocks)');
+
+// getParagraphRange on a NORMAL doc (no isParaStart set) is UNCHANGED by the fix: the end walk still
+// bounds on the blank line at index 3, and the backward walk runs to the top (no boundary above).
+const norm = { lines: doc.lines }; // blank at index 3, no isParaStart anywhere
+assert.deepEqual(getParagraphRange(norm, 2), { startLine: 0, endLine: 2 }, 'normal doc: paragraph bounded by the blank at 3 (end), top (start)');
+assert.deepEqual(getParagraphRange(norm, 4), { startLine: 4, endLine: 6 }, 'normal doc: paragraph after the blank runs to the end');
 
 console.log('wallText.demo: all assertions passed ✅');

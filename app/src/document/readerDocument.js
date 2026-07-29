@@ -267,7 +267,10 @@ export function getParagraphRange(doc, lineIndex) {
   while (start > 0 && !doc.lines[start].isEmpty && !doc.lines[start].isParaStart) start--;
   if (doc.lines[start].isEmpty) start++;
   let end = lineIndex;
-  while (end < doc.lines.length - 1 && !doc.lines[end + 1].isEmpty) end++;
+  // Stop at a blank line OR the next paragraph start. For normal docs a para start follows a blank, so
+  // this is a no-op; for wall-of-text (blocks with no blanks between them) it stops each block being
+  // swallowed into the next — reveal/nav "one paragraph" would otherwise cover the rest of the doc.
+  while (end < doc.lines.length - 1 && !doc.lines[end + 1].isEmpty && !doc.lines[end + 1].isParaStart) end++;
   return { startLine: start, endLine: end };
 }
 
