@@ -42,6 +42,7 @@ const MENUS = {
     { label: 'Proper Names Index...', shortcut: 'Ctrl+I', action: 'proper-names' },
     { label: 'Preview Footnote', shortcut: 'Ctrl+Shift+F', action: 'footnote' },
     { label: 'Incognito Reading (no tracking)', action: 'toggle-incognito' },
+    { label: 'Reduce Blue Light (bedtime)', shortcut: 'B', action: 'toggle-bluelight' },
     { label: 'Reading Cursor & Trail...', action: 'cursor-manager' },
     { label: 'Face Library...', action: 'face-library' },
   ],

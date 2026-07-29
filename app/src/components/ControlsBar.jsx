@@ -255,6 +255,25 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             )}
           </div>
           <div className="mode-pair">
+            <span title="Blue-light reduction: warm the whole app to cut blue light for evening/bedtime reading. Independent of focus mode.">BLUE LIGHT{!isCompact && <kbd className="key-hint">B</kbd>}</span>
+            <button
+              className={state.global.nightShift ? 'toggle-on' : ''}
+              onClick={() => updateGlobal({ nightShift: !state.global.nightShift })}
+              title="Reduce blue light (bedtime) — warm the whole app"
+            >
+              {state.global.nightShift ? 'On' : 'Off'}
+            </button>
+            {state.global.nightShift && (
+              <input
+                type="range" min={0.1} max={0.85} step={0.05}
+                value={state.global.nightShiftStrength ?? 0.4}
+                onChange={(e) => updateGlobal({ nightShiftStrength: Number(e.target.value) })}
+                title="How warm — deeper cuts more blue"
+                style={{ width: 70 }}
+              />
+            )}
+          </div>
+          <div className="mode-pair">
             <span title="Scroll-to-read (Lines pane): scroll the text normally and whatever passes the top edge counts as read — your reading position follows the topmost visible line.">SCROLL{!isCompact && <kbd className="key-hint">S</kbd>}</span>
             <button
               className={state.global.scrollAdvances ? 'toggle-on' : ''}

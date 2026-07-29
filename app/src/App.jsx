@@ -1347,6 +1347,10 @@ function AppInner() {
   // Focus mode: fullscreen the app + (Chromium) black out other monitors with cover windows. Must run
   // straight from the toggle click — the user gesture is what unlocks fullscreen / window-management /
   // pop-ups, so this can't live in an effect.
+  // Blue-light reduction is its OWN first-class control (bottom bar + B key + View menu) — independent
+  // of focus mode; it just flips the global warm-overlay flag.
+  function toggleBlueLight() { updateGlobal({ nightShift: !state.global.nightShift }); }
+
   const focusCoversRef = useRef([]);
   // The cover windows also live in state so <FocusPanels> can portal widgets into them; the ref stays
   // the imperative source of truth for the teardown/poll effects (no stale-closure surprises).
@@ -1535,6 +1539,7 @@ function AppInner() {
       if (key === 's') { k.toggleScrollRead(); return; }
       if (key === 'v') { k.toggleAudioCtrl(); return; }
       if (key === 'f') { k.toggleFocusMode(); return; }
+      if (key === 'b') { k.toggleBlueLight(); return; }
       if (key === 'i') { k.dispatch({ type: 'TOGGLE_INCOGNITO' }); return; }
     }
     document.addEventListener('keydown', onKey);
@@ -2053,6 +2058,7 @@ function AppInner() {
     if (action === 'ambient') return openDialog({ kind: 'ambient' });
     if (action === 'take-break') return setBreakSignal((n) => n + 1);
     if (action === 'toggle-incognito') { dispatch({ type: 'TOGGLE_INCOGNITO' }); return; }
+    if (action === 'toggle-bluelight') { toggleBlueLight(); return; }
     if (action === 'toggle-dark' && activeTab) {
       patchSettings(activeTab.id, { darkMode: !activeTab.settings.darkMode });
     }
@@ -2197,7 +2203,7 @@ function AppInner() {
   // Refresh the key handler's live context every render (handler is bound once, reads from this ref).
   kbdRef.current = {
     activeTab, state, showFootnote, playPause, nav, pageLines, jumpToCurrent, triggerOpen,
-    openClipboard, openDialog, closeDialog, setShowFootnote, toggleFocusMode, dispatch,
+    openClipboard, openDialog, closeDialog, setShowFootnote, toggleFocusMode, toggleBlueLight, dispatch,
     toggleReadAloud, toggleAudioCtrl, toggleScrollRead, adjustWpm, cycleTabs, togglePane, jumpToFrontier, jumpToGap,
     immersiveRef, setImmersive,
   };
