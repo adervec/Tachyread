@@ -34,7 +34,7 @@ export const HELP_SECTIONS = [
       'New words entering the Lines pane can get a distinct style for a few seconds, so your eye catches what just arrived.',
       'Reading cursor & trail (View menu): pick a custom cursor that shows only in the reader areas, from a rich set of premades or your own. It can leave a fading trail — or a seismograph trail that draws as the lines scroll under a still cursor.',
       'Full-screen reading fills the screen with just the Lines pane (desktop ⛶ or menu) or the Source pane (⛶🗐), hiding all chrome. On phones the reading area fills edge to edge. Esc or the small ⛶ overlay exits.',
-      'Blue-light filter (App Settings) warms the whole app for bedtime reading; Focus mode fullscreens and (on Chrome/Edge) blacks out your other monitors.',
+      'Blue-light reduction warms the whole app for bedtime reading — its own control in the bottom bar (BLUE LIGHT), the View menu, or the B key (App Settings has the strength). It’s independent of Focus mode, which fullscreens and (on Chrome/Edge) blacks out your other monitors.',
     ],
   },
   {
@@ -150,7 +150,7 @@ export const HELP_SECTIONS = [
         ['1', 'Fast Reader'], ['2', 'Lines'], ['3', 'Table of Contents'], ['4', 'Stats'], ['5', 'Index'], ['6', 'Faces'],
       ] },
       { name: 'Toggle modes', keys: [
-        ['a', 'Read-aloud (TTS)'], ['s', 'Scroll-to-read'], ['v', 'Voice commands'], ['f', 'Focus mode'], ['i', 'Incognito reading'],
+        ['a', 'Read-aloud (TTS)'], ['s', 'Scroll-to-read'], ['v', 'Voice commands'], ['f', 'Focus mode'], ['b', 'Blue-light reduction'], ['i', 'Incognito reading'],
       ] },
       { name: 'Tabs & dialogs', keys: [
         ['Ctrl+PgUp PgDn', 'Previous / next tab'], ['Esc', 'Close footnote, else the focused dialog tab'],
