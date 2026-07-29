@@ -1201,7 +1201,7 @@ export async function exportProgressData() {
   const rsVals = await db.getAll('readstate');
   for (let i = 0; i < rsKeys.length; i++) {
     const v = rsVals[i] || {};
-    out.readstate[rsKeys[i]] = { maskB64: v.maskB64 || '', wpmB64: v.wpmB64 || '', lifetimeActiveMs: v.lifetimeActiveMs || 0, daily: v.daily || [], paraTsB64: v.paraTsB64 || '' };
+    out.readstate[rsKeys[i]] = { maskB64: v.maskB64 || '', wpmB64: v.wpmB64 || '', srcB64: v.srcB64 || '', lifetimeActiveMs: v.lifetimeActiveMs || 0, daily: v.daily || [], paraTsB64: v.paraTsB64 || '' };
   }
   // Notes / annotations — the whole list (tombstones included) so deletes sync too.
   const noteKeys = await db.getAllKeys('notes');
@@ -1254,6 +1254,9 @@ export async function importProgressData(bundle) {
     await tx.store.put({
       maskB64: orMaskB64(cur.maskB64, inc.maskB64),
       wpmB64: cur.wpmB64 || inc.wpmB64 || '',
+      // Preserve the local per-word "how it was first read" source mask — the record is REPLACED, not
+      // merged into, so any field not carried here is wiped on every pull (bug: srcB64 was dropped).
+      srcB64: cur.srcB64 || inc.srcB64 || '',
       lifetimeActiveMs: Math.max(cur.lifetimeActiveMs || 0, inc.lifetimeActiveMs || 0),
       daily: mergeDaily(cur.daily, inc.daily),
       paraTsB64: cur.paraTsB64 || inc.paraTsB64 || '',

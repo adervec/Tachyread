@@ -1,6 +1,7 @@
 // Document format parsers: TXT, DOCX (mammoth), PDF (pdf.js), EPUB (epub.js), HTML, Markdown.
-import { readerDocFromText, attachChecksum } from './readerDocument.js';
+import { readerDocFromText, attachChecksum, countWords } from './readerDocument.js';
 import { mdToHtml } from './markdown.js';
+import { sanitizeHtml } from './sanitizeHtml.js';
 import { resolveLink } from '../features/webGrab.js';
 
 async function parseTxt(file, onProgress) {
@@ -21,17 +22,12 @@ async function parseDocx(file, onProgress) {
   return readerDocFromText(text, file.name);
 }
 
-// Approximate token count matching readerDocFromText's tokenization (whitespace runs).
-function tokenCount(text) {
-  return (text.match(/\S+/g) || []).length;
-}
-
 // Build a word→segment map so the source-page view can sync to the reading position.
 function attachSegments(doc, segmentTexts, source) {
   const map = new Uint32Array(doc.words.length);
   let wi = 0;
   for (let s = 0; s < segmentTexts.length; s++) {
-    const n = tokenCount(segmentTexts[s]);
+    const n = countWords(segmentTexts[s]); // MUST match readerDocFromText's tokenization exactly
     for (let k = 0; k < n && wi < doc.words.length; k++) map[wi++] = s;
   }
   while (wi < doc.words.length) map[wi++] = Math.max(0, segmentTexts.length - 1);
@@ -74,16 +70,6 @@ async function parsePdf(file, onProgress) {
   const doc = readerDocFromText(pageTexts.join('\n\n'), file.name);
   attachSegments(doc, pageTexts, { kind: 'pdf', pdfData, pageCount: pdf.numPages });
   return doc;
-}
-
-// Strip scripts and inline event handlers so retained EPUB HTML can be rendered safely.
-function sanitizeHtml(html) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
-    .replace(/\sdata-tx-idx="[^"]*"/gi, '') // the structure picker's element indices — never shown
-    .replace(/javascript:/gi, '');
 }
 
 async function parseEpub(file, onProgress) {

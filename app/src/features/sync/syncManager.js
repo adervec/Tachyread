@@ -6,6 +6,14 @@
 import { exportProgressData, importProgressData, exportLibraryData, importLibraryData, getLibraryChangedAt, getLibrarySyncState, setLibrarySyncState } from '../../state/storage.js';
 import { getSyncProvider, PROGRESS_FILE_NAME, LIBRARY_FILE_NAME } from './syncProviders.js';
 
+// Read + parse a downloaded sync blob, turning a truncated/corrupt cloud file into a clear message
+// instead of a raw "Unexpected token" JSON error surfaced to the user.
+async function parseSyncBlob(blob, what) {
+  const text = await blob.text();
+  try { return JSON.parse(text); }
+  catch { throw new Error(`The ${what} sync file is corrupt or incomplete — try “Back up now” from a device that has your data.`); }
+}
+
 export async function backupToProvider(providerId, cfg, opts = {}) {
   const p = getSyncProvider(providerId);
   if (!p) throw new Error('Unknown sync target.');
@@ -24,7 +32,7 @@ export async function restoreFromProvider(providerId, cfg, opts = {}) {
   const conn = await p.connect(cfg, opts);
   const blob = await p.download(conn, PROGRESS_FILE_NAME);
   if (!blob) throw new Error('No Tachyread progress sync found in that location yet — back up first.');
-  const bundle = JSON.parse(await blob.text());
+  const bundle = await parseSyncBlob(blob, 'progress');
   const r = await importProgressData(bundle);
   return { at: Date.now(), merged: r.merged };
 }
@@ -56,7 +64,7 @@ export async function restoreLibraryFromProvider(providerId, cfg, opts = {}) {
   const conn = await p.connect(cfg, opts);
   const blob = await p.download(conn, LIBRARY_FILE_NAME);
   if (!blob) throw new Error('No Tachyread library sync found in that location yet — back up first.');
-  const bundle = JSON.parse(await blob.text());
+  const bundle = await parseSyncBlob(blob, 'library');
   return importLibraryData(bundle, { mode: 'merge' });
 }
 
@@ -81,7 +89,7 @@ export async function syncLibraryWithProvider(providerId, cfg, opts = {}) {
   let pulled = false;
   if (remoteNew && remoteStamp !== null) {
     const blob = await p.download(conn, LIBRARY_FILE_NAME);
-    if (blob) { await importLibraryData(JSON.parse(await blob.text()), { mode: 'merge', fromSync: true }); pulled = true; }
+    if (blob) { await importLibraryData(await parseSyncBlob(blob, 'library'), { mode: 'merge', fromSync: true }); pulled = true; }
   }
 
   // Push only when we have local changes (or the remote file doesn't exist yet).

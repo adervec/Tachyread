@@ -36,7 +36,16 @@ export async function computeChecksum(text) {
   return 'fb' + (h >>> 0).toString(16);
 }
 
-const WS_RE = /[ \t\u00A0]+/;
+// The word tokenizer: split ONLY on space / tab / NBSP. Every whitespace-ish char the reader keeps
+// in-word (ideographic space U+3000, em space, U+2028\u2026) must stay in-word EVERYWHERE, or the display
+// tokenizer / segment maps drift from these indices (wrong word highlighted, wrong source page).
+// WS_SPLIT is the capturing form for renderers that need to keep the separators.
+export const WS_RE = /[ \t\u00A0]+/;
+export const WS_SPLIT = /([ \t\u00A0]+)/;
+export function countWords(text) { return String(text == null ? '' : text).split(WS_RE).filter(Boolean).length; }
+// True iff the token is a NON-EMPTY run of ONLY reader-whitespace (space/tab/NBSP) — i.e. a separator,
+// not a word. Ideographic/em spaces are NOT whitespace here, so a token containing them is a word.
+export function isWsRun(tok) { return tok !== '' && String(tok).split(WS_RE).every((x) => x === ''); }
 
 function detectHeaderFooterLines(lines) {
   const result = new Set();

@@ -89,7 +89,7 @@ import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal } from './state/storage.js';
 import { bookFromOpenedDoc } from './features/trackyreadAdd.js';
 import { sectionChecksum } from './document/sectionHash.js';
 import { acquireInstance } from './state/singleInstance.js';
@@ -1807,7 +1807,15 @@ function AppInner() {
     (async () => {
       try {
         await syncWithProvider(cfg.provider, cfg, { silent: true });
-        updateGlobal({ sync: { ...cfg, lastSync: Date.now(), profile: getDriveProfile() || cfg.profile } });
+        // The pull merged the remote global (fileDefaults, book groups, grab/audiobook markers) into
+        // IDB but NOT into React state — adopt it, else the trailing sync-stamp write below would
+        // overwrite the merged global with the stale in-memory copy (and never converge). Set state +
+        // persist directly so the LWW settingsUpdatedAt from the merge is preserved (updateGlobal would
+        // bump it, making this device falsely "newest").
+        const fresh = await loadGlobal();
+        const merged = { ...fresh, sync: { ...(fresh.sync || cfg), lastSync: Date.now(), profile: getDriveProfile() || cfg.profile } };
+        dispatch({ type: 'SET_GLOBAL', global: merged });
+        await saveGlobal(merged);
       } catch { /* offline or no prior grant — use “Sync now” in Data once to grant */ }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1910,9 +1918,12 @@ function AppInner() {
       return;
     }
     if (action === 'disconnect') {
-      // Keep the saved session so reopening reconnects to these same files.
-      const open = state.tabs.map((t) => ({ checksum: t.doc.contentChecksum, fileName: t.doc.fileName }));
-      saveSession({ open, active: activeTab?.doc.contentChecksum || null }).catch(() => {});
+      // Keep the saved session so reopening reconnects to these same files. Lazy (restored, not-yet-
+      // hydrated) tabs have doc===null — read their checksum/name from the placeholder fields, or this
+      // throws before saving (and skips the final backup below).
+      const csOf = (t) => (t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum);
+      const open = state.tabs.map((t) => ({ checksum: csOf(t), fileName: t.lazy ? t.fileName : t.doc?.fileName })).filter((o) => o.checksum);
+      saveSession({ open, active: (activeTab ? csOf(activeTab) : null) || null }).catch(() => {});
       const finish = () => { setClosing('disconnect'); setTimeout(() => { try { window.close(); } catch { /* tab not script-opened */ } }, 50); };
       // Best-effort final backup if auto-sync is on and the target is silently usable.
       const cfg = state.global.sync;

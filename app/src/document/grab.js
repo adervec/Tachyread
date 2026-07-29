@@ -1,6 +1,6 @@
 // Build a reader document from grabbed/OCR'd segments. Each segment keeps its original image
 // so the Source pane can show the captured page beside the reading position (like PDF pages).
-import { readerDocFromText, attachChecksum } from './readerDocument.js';
+import { readerDocFromText, attachChecksum, countWords } from './readerDocument.js';
 
 const SEGMENT_SEPARATOR = '\n\n';
 
@@ -13,7 +13,7 @@ export async function buildGrabbedDoc(segments, name = 'Grabbed text') {
   const map = new Uint32Array(doc.words.length);
   let wi = 0;
   for (let s = 0; s < texts.length; s++) {
-    const n = (texts[s].match(/\S+/g) || []).length;
+    const n = countWords(texts[s]); // MUST match readerDocFromText's tokenization (WS_RE), not /\S+/
     for (let k = 0; k < n && wi < doc.words.length; k++) map[wi++] = s;
   }
   while (wi < doc.words.length) map[wi++] = Math.max(0, texts.length - 1);

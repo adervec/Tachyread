@@ -70,7 +70,9 @@ export function goalTargetIndex(tab, goal) {
 export function computeGoalStatus(tab, goal) {
   if (!goal || goal.type === 'None') return 'No active goal';
   const idx = tab.settings.wordIndex;
-  const total = tab.doc.words.length;
+  // Guard against a 0-word doc (empty/unparsed) — matches goalFraction/goalTargetIndex, and keeps the
+  // percent goals from rendering "NaN%"/"Infinity%" (the focus-panel goal widget shows this string).
+  const total = tab.doc.words.length || 1;
   if (goal.type === 'Section') {
     if (!(goal.end > goal.start)) return 'Set a section goal from the TOC';
     const pct = Math.max(0, Math.min(100, ((idx - goal.start) / (goal.end - goal.start)) * 100));
