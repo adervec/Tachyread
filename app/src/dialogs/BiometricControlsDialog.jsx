@@ -3,7 +3,9 @@ import Dialog from './Dialog.jsx';
 import { DEFAULT_GESTURES, GESTURE_INFO, HELD_GESTURES, DEFAULT_HOLD_MS, HOLD_MIN_MS, HOLD_MAX_MS, clampHoldMs } from '../features/handGestures.js';
 import { COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP, parseSetWpm, setWpmCommandId } from '../features/commandRegistry.js';
 import { stepLabel } from '../features/triggerSequences.js';
-import { EYE_KINDS, FACE_KINDS, ALL_KINDS, validateEyeMappings, kindFloorMs, DELIBERATE_MS, MAX_HOLD_MS } from '../features/eyeGestures.js';
+import { EYE_KINDS, GAZE_KINDS, FACE_KINDS, ALL_KINDS, validateEyeMappings, kindFloorMs, DELIBERATE_MS, MAX_HOLD_MS } from '../features/eyeGestures.js';
+import { holdScrollRows, clampHoldSecs, HOLD_SCROLL_MIN_SECS, HOLD_SCROLL_MAX_SECS } from '../features/holdScroll.js';
+import { checkBioProfile } from '../features/bioProfileCheck.js';
 import { createEyeCue } from '../features/eyeCue.js';
 import ProfilesBar from '../components/ProfilesBar.jsx';
 import DeviceInfo from '../components/DeviceInfo.jsx';
@@ -16,7 +18,7 @@ const BIO_PROFILE_KEYS = [
   'webcamAttention', 'webcamDoze', 'webcamAwayAlarm', 'webcamAwayAlarmSec', 'webcamEscalatingAlarm',
   'webcamDistanceNudge', 'webcamFocusStats', 'webcamPreview', 'webcamCalib', 'mobileCamera',
   'handGestures', 'handGestureSet', 'handCalib', 'gestureMap', 'gestureHands', 'handHoldMs', 'holdPauseGesture',
-  'voiceCommands', 'clapMap', 'clapOff', 'audioCtrlMode', 'triggerSeqs', 'eyeGestures',
+  'holdScroll', 'voiceCommands', 'clapMap', 'clapOff', 'audioCtrlMode', 'triggerSeqs', 'eyeGestures',
 ];
 function captureBioProfile(g) {
   const out = {};
@@ -121,6 +123,13 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
 
   const setRows = (rows) => patch({ voiceCommands: rows });
 
+  // Whole-profile conflict / overlap check, live on every edit — the per-row eye validation still
+  // shows inline; this catches the CROSS-feature fights (hold-scroll vs mappings, phrase overlaps,
+  // shadowed sequences, confusable poses).
+  const profileFlags = checkBioProfile(g);
+  const hsRows = holdScrollRows(g.holdScroll);
+  const patchHoldScroll = (dir, p) => patch({ holdScroll: hsRows.map((r) => (r.dir === dir ? { ...r, ...p } : r)) });
+
   return (
     <Dialog title="Biometric Controls" onClose={onClose} width={600} buttons={<button onClick={onClose}>Close</button>}>
       <DeviceInfo note="Your camera, calibration and gesture/voice/eye mappings are specific to this device — they’re tuned to its screen and camera and don’t sync." />
@@ -131,6 +140,16 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
         capture={() => captureBioProfile(g)}
         apply={(data) => patch({ ...data })}
       />
+      <div className={`bio-check${profileFlags.some((f) => f.level === 'error') ? ' has-error' : profileFlags.length ? ' has-warn' : ''}`}>
+        <div className="bio-check-head">🩺 Profile check</div>
+        {profileFlags.length === 0
+          ? <p className="settings-note" style={{ margin: 0 }}>✓ No conflicts or overlaps in this setup.</p>
+          : profileFlags.map((f, i) => (
+            <div key={i} className={`bio-check-flag ${f.level}`}>
+              {f.level === 'error' ? '⛔' : f.level === 'warn' ? '⚠' : 'ℹ'} {f.message}
+            </div>
+          ))}
+      </div>
       <Field label="Front camera on phones & tablets">
         <label className="inline-check">
           <input type="checkbox" checked={!!g.mobileCamera} onChange={(e) => patch({ mobileCamera: e.target.checked })} />
@@ -281,6 +300,40 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
         unlike a mapped command, which toggles once. Pick a gesture you haven’t mapped to a command (and note
         the open palm also drives the scroll joystick).
       </p>
+      <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>Hold to scroll</div>
+      <p className="settings-note" style={{ marginTop: 0 }}>
+        Map scroll up / down to <b>holding a gesture for longer than a threshold</b>: once the hold
+        crosses it, the Lines pane scrolls steadily until you let go. A gesture used here is owned by
+        hold-to-scroll — its one-shot command mapping above won’t fire (the profile check flags it).
+      </p>
+      {hsRows.map((r) => (
+        <Field key={r.dir} label={r.dir === 'up' ? '⬆ Hold to scroll up' : '⬇ Hold to scroll down'}>
+          <div className="bio-gesture-maps">
+            <select
+              value={r.gesture}
+              disabled={!g.handGestures}
+              onChange={(e) => patchHoldScroll(r.dir, { gesture: e.target.value })}
+            >
+              <option value="">— off —</option>
+              {HELD_GESTURES.map((k) => (
+                <option key={k} value={k}>{GESTURE_INFO[k].icon} {GESTURE_INFO[k].label}</option>
+              ))}
+            </select>
+            {r.gesture && (
+              <label className="bio-hold" title="Hold the gesture longer than this before scrolling starts">
+                <span className="bio-hand-lbl">for &gt;</span>
+                <input
+                  type="number" min={HOLD_SCROLL_MIN_SECS} max={HOLD_SCROLL_MAX_SECS} step={0.1}
+                  disabled={!g.handGestures}
+                  value={r.secs}
+                  onChange={(e) => patchHoldScroll(r.dir, { secs: clampHoldSecs(e.target.value) })}
+                />
+                <span className="bio-hand-lbl">s</span>
+              </label>
+            )}
+          </div>
+        </Field>
+      ))}
       <Field label="Hand calibration">
         <button onClick={onCalibrateHand} disabled={!onCalibrateHand || !g.handGestures} title={g.handGestures ? '' : 'Turn on Hand gestures first'}>
           🖐 Calibrate hand range…
@@ -472,6 +525,9 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
               <optgroup label="Eyes">
                 {EYE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {k.label}</option>)}
               </optgroup>
+              <optgroup label="Gaze (held, head still)">
+                {GAZE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {k.label} — min {k.floor}ms</option>)}
+              </optgroup>
               <optgroup label="Face poses (held)">
                 {FACE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {k.label} — min {k.floor}ms</option>)}
               </optgroup>
@@ -495,14 +551,14 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
             {mine.map((p, k) => (
               <span key={k} className={`bio-eye-problem ${p.level}`}>{p.level === 'error' ? '⛔' : '⚠'} {p.message}</span>
             ))}
-            {FACE_KINDS.find((k) => k.id === r.kind)?.natural && (
+            {ALL_KINDS.find((k) => k.id === r.kind)?.natural && (
               <span className="bio-eye-problem warn">
-                ⚠ You’ll make this face without meaning to — hold it noticeably longer than feels natural, and
+                ⚠ You’ll do this without meaning to — hold it noticeably longer than feels natural, and
                 prefer it for harmless actions.
               </span>
             )}
-            {FACE_KINDS.find((k) => k.id === r.kind)?.hint && (
-              <span className="bio-eye-problem warn">ℹ {FACE_KINDS.find((k) => k.id === r.kind).hint}</span>
+            {ALL_KINDS.find((k) => k.id === r.kind)?.hint && (
+              <span className="bio-eye-problem warn">ℹ {ALL_KINDS.find((k) => k.id === r.kind).hint}</span>
             )}
           </div>
         );

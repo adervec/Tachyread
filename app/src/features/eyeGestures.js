@@ -27,6 +27,20 @@ export const EYE_KINDS = [
   { id: 'rollCCW', label: 'Eye roll — anticlockwise', icon: '🔄' },
 ];
 
+// Held GAZE positions: park your eyes hard left / right / up (without moving your head) and hold.
+// Duration-windowed like the poses. Floors are high because reading constantly sweeps the eyes
+// sideways — only a parked, sustained gaze can mean anything. An eye ROLL passes through these
+// zones too, but only for a fraction of a second each, so it never reaches a gaze floor; and a
+// parked gaze accumulates no roll angle — the two coexist cleanly.
+export const GAZE_KINDS = [
+  { id: 'gazeLeft', label: 'Gaze far left (held)', icon: '⬅👀', floor: 800, natural: true },
+  { id: 'gazeRight', label: 'Gaze far right (held)', icon: '👀➡', floor: 800, natural: true },
+  { id: 'gazeUp', label: 'Gaze up (held)', icon: '👀⬆', floor: 700 },
+];
+export const GAZE_BY_ID = Object.fromEntries(GAZE_KINDS.map((k) => [k.id, k]));
+export const GAZE_OFF_X = 0.30;  // how far off-centre (0..0.5) the iris must sit horizontally
+export const GAZE_OFF_Y = 0.26;  // and vertically (up only — reading looks down all the time)
+
 // Held FACE poses, same duration-window idea as the eye gestures. Each reads one or two of the
 // face model's expression scores (0 = neutral, 1 = full).
 //
@@ -40,22 +54,31 @@ export const FACE_KINDS = [
   { id: 'pucker', label: 'Pucker / kiss', icon: '😙', shapes: ['mouthPucker'], min: 0.5, floor: 600 },
   { id: 'mouthLeft', label: 'Mouth to the left', icon: '↖', shapes: ['mouthLeft'], min: 0.45, floor: 600 },
   { id: 'mouthRight', label: 'Mouth to the right', icon: '↗', shapes: ['mouthRight'], min: 0.45, floor: 600 },
+  { id: 'jawLeft', label: 'Jaw to the left', icon: '↰', shapes: ['jawLeft'], min: 0.4, floor: 600 },
+  { id: 'jawRight', label: 'Jaw to the right', icon: '↱', shapes: ['jawRight'], min: 0.4, floor: 600 },
+  { id: 'jawForward', label: 'Jaw jutted forward', icon: '🗿', shapes: ['jawForward'], min: 0.45, floor: 700 },
+  { id: 'sneer', label: 'Nose scrunch (sneer)', icon: '😤', shapes: ['noseSneerLeft', 'noseSneerRight'], min: 0.4, floor: 600 },
+  { id: 'funnel', label: 'Mouth “O” (funnel)', icon: '⭕', shapes: ['mouthFunnel'], min: 0.5, floor: 600 },
+  { id: 'eyesWide', label: 'Eyes wide open', icon: '😳', shapes: ['eyeWideLeft', 'eyeWideRight'], min: 0.55, floor: 600, natural: true },
+  { id: 'squint', label: 'Squint (held)', icon: '😖', shapes: ['eyeSquintLeft', 'eyeSquintRight'], min: 0.6, floor: 800, natural: true },
   { id: 'browsUp', label: 'Eyebrows raised', icon: '😯', shapes: ['browInnerUp', 'browOuterUpLeft', 'browOuterUpRight'], min: 0.5, floor: 700, natural: true },
   { id: 'mouthOpen', label: 'Mouth open (held)', icon: '😮', shapes: ['jawOpen'], min: 0.45, floor: 700, natural: true },
   { id: 'frown', label: 'Brows down (frown)', icon: '😠', shapes: ['browDownLeft', 'browDownRight'], min: 0.5, floor: 800, natural: true },
+  { id: 'mouthFrown', label: 'Mouth corners down', icon: '☹', shapes: ['mouthFrownLeft', 'mouthFrownRight'], min: 0.5, floor: 800, natural: true },
   { id: 'smile', label: 'Smile (held)', icon: '😊', shapes: ['mouthSmileLeft', 'mouthSmileRight'], min: 0.5, floor: 900, natural: true },
 ];
 export const FACE_BY_ID = Object.fromEntries(FACE_KINDS.map((k) => [k.id, k]));
-export const ALL_KINDS = [...EYE_KINDS, ...FACE_KINDS];
+export const ALL_KINDS = [...EYE_KINDS, ...GAZE_KINDS, ...FACE_KINDS];
 export const EYE_KIND_IDS = ALL_KINDS.map((k) => k.id);
 // Every blendshape the detector reads, so the camera layer can ship just these instead of all 52.
 export const FACE_SHAPE_KEYS = [...new Set(FACE_KINDS.flatMap((k) => k.shapes))];
 
 export const DELIBERATE_MS = 450;  // below this it's a natural blink, not a command
-// The shortest hold this gesture may be mapped at — natural blinking for the eyes, and the
-// pose-specific floors above for the face.
+// The shortest hold this gesture may be mapped at — natural blinking for the eyes, the
+// pose-specific floors for the face, and the (high) parked-gaze floors: reading sweeps the eyes
+// constantly, so a gaze must be parked well past any reading saccade before it can mean anything.
 export function kindFloorMs(kind) {
-  return FACE_BY_ID[kind]?.floor ?? DELIBERATE_MS;
+  return GAZE_BY_ID[kind]?.floor ?? FACE_BY_ID[kind]?.floor ?? DELIBERATE_MS;
 }
 export const MAX_HOLD_MS = 5000;   // a hold longer than this is you resting your eyes, not signalling
 export const REFRACTORY_MS = 700;  // quiet period after a fire
@@ -92,7 +115,9 @@ export function validateEyeMappings(rows) {
         code: 'floor',
         message: FACE_BY_ID[r?.kind]
           ? `${FACE_BY_ID[r.kind].label} needs at least ${floor}ms — anything shorter happens on its own while you read or talk`
-          : `Under ${floor}ms is natural blinking — it would fire while you read`,
+          : GAZE_BY_ID[r?.kind]
+            ? `${GAZE_BY_ID[r.kind].label} needs at least ${floor}ms — reading parks the eyes there briefly all the time`
+            : `Under ${floor}ms is natural blinking — it would fire while you read`,
       });
     }
     if (max > MAX_HOLD_MS) out.push({ index: i, level: 'error', code: 'ceiling', message: `Over ${MAX_HOLD_MS / 1000}s is resting your eyes, not signalling` });
@@ -249,12 +274,26 @@ export function createEyeGestureDetector({
       lastInWindow = inWindow;
       return;
     }
-    if (pose) { finishPose(t); return; }
+    if (pose && !GAZE_BY_ID[pose.kind]) { finishPose(t); return; }
 
-    // Both eyes open: watch for a rolling sweep of the iris around the eye. Angles are accumulated
-    // as signed deltas, so a back-and-forth reading sweep cancels out instead of adding up.
+    // Iris-derived signals, eyes open. Parked-GAZE holds and rolling sweeps track in PARALLEL: a
+    // roll transits each gaze zone far too briefly to reach a gaze floor, and a parked gaze
+    // accumulates no roll angle — neither steals the other.
     const x = Number(s?.irisX), y = Number(s?.irisY);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) { roll = null; return; }
+    if (!Number.isFinite(x) || !Number.isFinite(y)) { if (pose) finishPose(t); roll = null; return; }
+    // Gaze zone — unmirrored camera, so the USER's left is frame-x-increasing (like the swipes).
+    const gz = x - 0.5 > GAZE_OFF_X ? 'gazeLeft' : 0.5 - x > GAZE_OFF_X ? 'gazeRight' : 0.5 - y > GAZE_OFF_Y ? 'gazeUp' : null;
+    if (gz) {
+      if (!pose || pose.kind !== gz) { finishPose(t); pose = { kind: gz, start: t }; }
+      const gms = t - pose.start;
+      const inWindow = gms >= kindFloorMs(gz) ? matchEyeHold(rows(), gz, gms) : null;
+      const next = nextEyeWindow(rows(), gz, gms);
+      onHold?.({ kind: gz, ms: gms, inWindow, next });
+      if (inWindow && inWindow !== lastInWindow) onCue?.('enter');
+      else if (!inWindow && lastInWindow) onCue?.(next ? 'leave' : 'over');
+      lastInWindow = inWindow;
+      // fall through — the roll accumulator below keeps tracking during the hold
+    } else if (pose) finishPose(t); // gaze back toward centre — the hold ends (and matches, if windowed)
     const dx = x - 0.5, dy = y - 0.5;
     const r = Math.hypot(dx, dy);
     if (r < ROLL_RADIUS) { roll = null; return; }     // too near centre for the angle to mean much

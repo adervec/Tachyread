@@ -1,7 +1,7 @@
 // ponytail: the gesture math truth table — joystick deadzone/direction/speed curve, the wave
 // detector's reversal counting + cooldown, and the discrete-gesture hold trigger.
 // Run: node src/features/handGestures.test.mjs
-import { scrollVelocity, createWaveDetector, createGestureTrigger, createSwipeDetector, isPinch, DEFAULT_HAND_CALIB, DEFAULT_GESTURES, GESTURE_INFO } from './handGestures.js';
+import { scrollVelocity, createWaveDetector, createGestureTrigger, createSwipeDetector, isPinch, fingerStates, detectHandPose, DEFAULT_HAND_CALIB, DEFAULT_GESTURES, GESTURE_INFO, HELD_GESTURES } from './handGestures.js';
 import assert from 'node:assert';
 
 // Joystick: deadzone at rest, up = negative (scroll up), down = positive, farther = faster.
@@ -119,9 +119,47 @@ const openHand = mkHand({
 });
 assert(!isPinch(openHand), 'open hand is not a pinch');
 
+// ── landmark-derived poses (finger patterns + pointing directions) ──────────
+// Synthetic hands: wrist at (0.5,0.95), middle MCP at (0.5,0.75) → span 0.2. Extended tips sit
+// ≥0.30 from the wrist (ratio ≥1.5); curled tips ≈0.15–0.18 (ratio ≤0.9). Index MCP is lm[5].
+const mkPose = (over) => mkHand({ 5: { x: 0.46, y: 0.78 }, ...over });
+const EXT = { index: { x: 0.44, y: 0.63 }, middle: { x: 0.5, y: 0.62 }, ring: { x: 0.56, y: 0.64 }, pinky: { x: 0.62, y: 0.68 } };
+const CURL = { index: { x: 0.5, y: 0.8 }, middle: { x: 0.52, y: 0.8 }, ring: { x: 0.54, y: 0.8 }, pinky: { x: 0.6, y: 0.8 } };
+const THUMB_CURL = { x: 0.48, y: 0.8 };   // hugs the index MCP
+const THUMB_EXT = { x: 0.3, y: 0.75 };    // well away from the index MCP
+
+const threeHand = mkPose({ 4: THUMB_CURL, 8: EXT.index, 12: EXT.middle, 16: EXT.ring, 20: CURL.pinky });
+assert.equal(detectHandPose(threeHand), 'threeUp', 'index+middle+ring up, pinky+thumb tucked = three');
+const fourHand = mkPose({ 4: THUMB_CURL, 8: EXT.index, 12: EXT.middle, 16: EXT.ring, 20: EXT.pinky });
+assert.equal(detectHandPose(fourHand), 'fourUp', 'four fingers up, thumb tucked = four');
+const shakaHand = mkPose({ 4: THUMB_EXT, 8: CURL.index, 12: CURL.middle, 16: CURL.ring, 20: EXT.pinky });
+assert.equal(detectHandPose(shakaHand), 'callMe', 'thumb+pinky out = call me');
+const hornsHand = mkPose({ 4: THUMB_CURL, 8: EXT.index, 12: CURL.middle, 16: CURL.ring, 20: EXT.pinky });
+assert.equal(detectHandPose(hornsHand), 'horns', 'index+pinky out, thumb tucked = horns');
+
+// Pointing directions come from the index tip relative to its MCP (unmirrored frame: the USER's
+// left is frame-x-increasing, like the swipes).
+const downHand = mkHand({ 0: { x: 0.5, y: 0.5 }, 9: { x: 0.5, y: 0.7 }, 5: { x: 0.46, y: 0.68 },
+  4: { x: 0.47, y: 0.66 }, 8: { x: 0.46, y: 0.88 }, 12: { x: 0.5, y: 0.62 }, 16: { x: 0.52, y: 0.62 }, 20: { x: 0.54, y: 0.62 } });
+assert.equal(detectHandPose(downHand), 'pointDown', 'index alone, tip well below its MCP = point down');
+const leftHand = mkHand({ 0: { x: 0.3, y: 0.8 }, 9: { x: 0.5, y: 0.8 }, 5: { x: 0.48, y: 0.76 },
+  4: { x: 0.5, y: 0.78 }, 8: { x: 0.72, y: 0.76 }, 12: { x: 0.36, y: 0.78 }, 16: { x: 0.36, y: 0.8 }, 20: { x: 0.36, y: 0.82 } });
+assert.equal(detectHandPose(leftHand), 'pointLeft', 'index tip toward frame-right = the USER\'s left');
+const rightHand = mkHand({ 0: { x: 0.7, y: 0.8 }, 9: { x: 0.5, y: 0.8 }, 5: { x: 0.52, y: 0.76 },
+  4: { x: 0.5, y: 0.78 }, 8: { x: 0.28, y: 0.76 }, 12: { x: 0.64, y: 0.78 }, 16: { x: 0.64, y: 0.8 }, 20: { x: 0.64, y: 0.82 } });
+assert.equal(detectHandPose(rightHand), 'pointRight', 'index tip toward frame-left = the USER\'s right');
+
+// Fail-closed: a half-bent finger is neither extended nor curled → no pose, not the wrong pose.
+const midHand = mkPose({ 4: THUMB_CURL, 8: EXT.index, 12: EXT.middle, 16: EXT.ring, 20: { x: 0.6, y: 0.76 } }); // pinky ratio ~1.07 = mid
+assert.equal(detectHandPose(midHand), null, 'ambiguous finger → no pose');
+assert.equal(detectHandPose(null), null, 'no landmarks → null');
+const fs1 = fingerStates(threeHand);
+assert.deepEqual([fs1.index, fs1.middle, fs1.ring, fs1.pinky, fs1.thumb], ['ext', 'ext', 'ext', 'curl', 'curl'], 'finger states read as expected');
+
 // Config sanity: every configurable gesture has display info; discrete ones default off.
 assert.deepEqual(Object.keys(DEFAULT_GESTURES).sort(), Object.keys(GESTURE_INFO).sort(), 'toggles and display info agree');
 assert(DEFAULT_GESTURES.scroll && DEFAULT_GESTURES.wave, 'original gestures stay on by default');
 assert(!DEFAULT_GESTURES.thumbUp && !DEFAULT_GESTURES.fist && !DEFAULT_GESTURES.victory, 'new discrete gestures default off');
 assert(!DEFAULT_GESTURES.pointUp && !DEFAULT_GESTURES.iLoveYou && !DEFAULT_GESTURES.pinch && !DEFAULT_GESTURES.swipeLeft && !DEFAULT_GESTURES.swipeRight, 'expanded gestures default off');
+assert(['pointDown', 'pointLeft', 'pointRight', 'threeUp', 'fourUp', 'callMe', 'horns'].every((k) => DEFAULT_GESTURES[k] === false && HELD_GESTURES.includes(k)), 'derived poses default off and are hold-gated');
 console.log('ok');
