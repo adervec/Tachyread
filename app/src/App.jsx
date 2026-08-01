@@ -35,6 +35,7 @@ import FootnoteOverlay from './dialogs/FootnoteOverlay.jsx';
 import TtsPopupDialog from './dialogs/TtsPopupDialog.jsx';
 import FaceLibraryDialog from './dialogs/FaceLibraryDialog.jsx';
 import CursorManagerDialog from './dialogs/CursorManagerDialog.jsx';
+import CrosshairDialog from './dialogs/CrosshairDialog.jsx';
 import BulkAddWizard from './dialogs/BulkAddWizard.jsx';
 import TypingProgressDialog from './dialogs/TypingProgressDialog.jsx';
 import AppSettingsDialog from './dialogs/AppSettingsDialog.jsx';
@@ -2095,6 +2096,7 @@ function AppInner() {
     if (action === 'tts-popup' && activeTab) return openDialog({ kind: 'tts-popup' });
     if (action === 'face-library') return openDialog({ kind: 'face-library' });
     if (action === 'cursor-manager') return openDialog({ kind: 'cursor-manager' });
+    if (action === 'crosshairs') return openDialog({ kind: 'crosshairs' });
     if (action === 'bulk-add') return openDialog({ kind: 'bulk-add' });
     if (action === 'disclaimer') return openDialog({ kind: 'disclaimer' });
     if (action === 'typing-progress') return openDialog({ kind: 'typing-progress' });
@@ -2867,6 +2869,15 @@ function AppInner() {
       )}
       {dialog?.kind === 'face-library' && <FaceLibraryDialog onClose={closeDialog} />}
       {dialog?.kind === 'cursor-manager' && <CursorManagerDialog tab={activeTab} onClose={closeDialog} />}
+      {dialog?.kind === 'crosshairs' && (
+        <CrosshairDialog
+          global={state.global}
+          onPatchGlobal={updateGlobal}
+          settings={activeTab?.settings || null}
+          onPatch={activeTab ? (p) => patchSettings(activeTab.id, p) : null}
+          onClose={closeDialog}
+        />
+      )}
       {dialog?.kind === 'bulk-add' && <BulkAddWizard onClose={closeDialog} />}
       {dialog?.kind === 'disclaimer' && (
         <DisclaimerDialog

@@ -36,6 +36,7 @@ export const HELP_SECTIONS = [
       'Wall-of-text mode can replace newlines with a chosen sequence of characters or emoji, so paragraphs flow the way you like.',
       'New words entering the Lines pane can get a distinct style for a few seconds, so your eye catches what just arrived.',
       'Reading cursor & trail (View menu): pick a custom cursor that shows only in the reader areas, from a rich set of premades or your own. It can leave a fading trail — or a seismograph trail that draws as the lines scroll under a still cursor.',
+      'Crosshairs (View menu): design a STABLE of overlay markers for the Lines area — combine shape, image and emoji layers with transparency and behind-the-glass distortion (blur, invert, hue, heat-haze warp), then place any of them on a tab and drag them where your eye should anchor. Designs are shared; placement and size are per tab.',
       'Full-screen reading fills the screen with just the Lines pane (desktop ⛶ or menu) or the Source pane (⛶🗐), hiding all chrome. On phones the reading area fills edge to edge. Esc or the small ⛶ overlay exits.',
       'Blue-light reduction warms the whole app for bedtime reading — its own control in the bottom bar (BLUE LIGHT), the View menu, or the B key (App Settings has the strength). It’s independent of Focus mode, which fullscreens and (on Chrome/Edge) blacks out your other monitors.',
     ],
