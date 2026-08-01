@@ -68,7 +68,9 @@ export function defaultFileSettings() {
     contentChecksum: '',
     highlightORP: false,
     orpColor: '', // ORP letter colour in the Lines pane ('' = theme default, usually red)
-    orpStyles: ['Bold'], // combinable Lines-pane ORP looks: Bold | Glow | Pulse | Underline | Box | Background | Larger | Italic | Caps
+    orpStyles: ['Bold'], // combinable Lines-pane ORP looks (see SettingsDialog ORP_STYLES)
+    orpLargerPct: 18, // how much bigger the 'Larger' ORP style draws the letter (+% of the text size)
+    orpFont: '', // ORP letter font in the Lines pane ('' = same as the text; a different font re-wraps lines)
     statsChip: {}, // stats-chip block toggles (see STATS_CHIP_ITEMS; {} = the default layout)
     orpHorizontalPercent: 0.5,
     rsvpFocus: 'none', // eye-focuser at the ORP: none | fisheye | pulse | converge
