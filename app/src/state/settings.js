@@ -364,6 +364,10 @@ export function defaultGlobalSettings() {
     // This turns that same floating-chip layout on for desktop too (the dock face/stats move out to
     // float), so the reading area stays clear.
     chipMode: false,
+    // Last desktop pane setup ({ showRsvp, showLines, showToc, showStats, showSource, showIndex }),
+    // restored on launch so the app opens with the layout you left. null = the boot defaults.
+    // Compact screens ignore it (they boot with their own minimal stack).
+    paneLayout: null,
     // Auto-minimize the controls dock while playing on compact screens, for more text room.
     autoMinimizeControls: false,
     // Shake-to-toggle full-screen reading on phones (devicemotion; iOS asks permission once).
