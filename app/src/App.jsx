@@ -103,6 +103,7 @@ import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
 import { createEyeGestureDetector, eyeMappingsUsable, ALL_KINDS } from './features/eyeGestures.js';
 import { createHoldPause } from './features/holdPause.js';
+import { createHoldScroll, holdScrollOwns } from './features/holdScroll.js';
 import { createEyeCue } from './features/eyeCue.js';
 import { createGestureMonitor, DEFAULT_HAND_CALIB, DEFAULT_GESTURES, GESTURE_INFO } from './features/handGestures.js';
 import { runCommand, actionLabel, matchVoice, matchVoiceRow, COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from './features/commandRegistry.js';
@@ -1192,6 +1193,13 @@ function AppInner() {
   const handleGestureRef = useRef(null);
   handleGestureRef.current = (kind, hand) => {
     if (!activeTab) return;
+    // A gesture used by hold-to-scroll is OWNED by it: its one-shot mapping (and sequence feed)
+    // must not fire mid-hold, or every hold would also run the mapped command. The profile
+    // checker on the Biometric Controls page flags this ownership on the mapping.
+    if (holdScrollOwns(state.global.holdScroll, kind)) {
+      pushBioLog({ source: 'camera', icon: GESTURE_INFO[kind]?.icon || '🖐', text: `${GESTURE_INFO[kind]?.label || kind} — hold to scroll`, tone: 'gesture' });
+      return;
+    }
     const gmap = { ...DEFAULT_GESTURE_MAP, ...(state.global.gestureMap || {}) };
     const cmdId = (hand && gmap[`${kind}:${hand}`]) || gmap[kind];
     const info = GESTURE_INFO[kind];
@@ -1227,15 +1235,24 @@ function AppInner() {
   };
 
   // Hand-gesture controls (opt-in): open palm = scroll joystick over the Lines pane (raise/lower
-  // = direction, distance from your calibrated rest = speed); a wave toggles play/pause.
+  // = direction, distance from your calibrated rest = speed); a wave toggles play/pause. Any held
+  // pose can additionally be a hold-to-scroll trigger ("hold X for > Y seconds" → steady scroll
+  // until released) — its velocity merges with the joystick's in the same pump.
   const [handState, setHandState] = useState('off');
   const handRef = useRef(null);
   const handVelRef = useRef(0);
+  const holdScrollVelRef = useRef(0);
+  const holdScrollCtl = useRef(null);
+  if (!holdScrollCtl.current) holdScrollCtl.current = createHoldScroll();
+  const holdScrollCfgRef = useRef(null);
+  holdScrollCfgRef.current = state.global.holdScroll || [];
   useEffect(() => {
     if (!handGesturesOn) {
       handRef.current?.stop();
       handRef.current = null;
       handVelRef.current = 0;
+      holdScrollVelRef.current = 0;
+      holdScrollCtl.current.reset();
       setHandState('off');
       setGestureStream(null);
       return undefined;
@@ -1248,8 +1265,11 @@ function AppInner() {
       onState: setHandState,
       onStream: (s) => setGestureStream(s),
       onGesture: (kind, hand) => handleGestureRef.current?.(kind, hand),
-      onHand: ({ present, v, gesture }) => {
-        setHandState(!present ? 'watching' : v < 0 ? 'scroll-up' : v > 0 ? 'scroll-down' : 'hand');
+      onHand: ({ present, v, gesture, kind }) => {
+        const hv = holdScrollCtl.current.feed({ rows: holdScrollCfgRef.current, kind: present ? kind : null, now: Date.now() });
+        holdScrollVelRef.current = hv;
+        const ev = v || hv; // joystick wins the indicator; hold-scroll shows the same way
+        setHandState(!present ? 'watching' : ev < 0 ? 'scroll-up' : ev > 0 ? 'scroll-down' : 'hand');
         holdPauseRef.current?.(present ? gesture : null);
       },
       onScroll: (v) => { handVelRef.current = v; },
@@ -1257,12 +1277,13 @@ function AppInner() {
     });
     handRef.current = mon;
     mon.start();
-    // Smooth scroll pump: apply the joystick velocity to the Lines pane scroller every frame.
+    // Smooth scroll pump: apply the joystick + hold-to-scroll velocity to the Lines pane scroller
+    // every frame (joystick deflection wins while both are somehow active).
     let scroller = null;
     let raf;
     const pump = () => {
       raf = requestAnimationFrame(pump);
-      const v = handVelRef.current;
+      const v = handVelRef.current || holdScrollVelRef.current;
       if (!v) return;
       if (!scroller || !scroller.isConnected) {
         const wrap = document.querySelector('.line-pane-list');
@@ -1278,6 +1299,8 @@ function AppInner() {
       mon.stop();
       handRef.current = null;
       handVelRef.current = 0;
+      holdScrollVelRef.current = 0;
+      holdScrollCtl.current.reset();
       setHandState('off');
       setGestureStream(null);
     };

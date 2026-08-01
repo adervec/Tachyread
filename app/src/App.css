@@ -2409,6 +2409,25 @@
 .lp-endpad { height: 85vh; display: flex; align-items: flex-start; justify-content: center; padding-top: 2em; }
 .lp-endpad span { color: var(--status-fg); opacity: 0.5; font-size: 11px; letter-spacing: 0.2em; }
 
+/* Biometric Controls: whole-profile conflict/overlap check panel (top of the dialog). */
+.bio-check {
+  border: 1px solid var(--divider);
+  border-left: 3px solid #2e9d4f;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bio-check.has-warn { border-left-color: #d9a012; }
+.bio-check.has-error { border-left-color: var(--ox-bright, #b0413e); }
+.bio-check-head { font-weight: 600; font-size: 12px; }
+.bio-check-flag { font-size: 12px; line-height: 1.45; }
+.bio-check-flag.error { color: var(--ox-bright, #b0413e); }
+.bio-check-flag.warn { color: #d9a012; }
+.bio-check-flag.info { opacity: 0.8; }
+
 /* Biometric Controls: per-hand gesture maps + sequence builder rows */
 .bio-gesture-maps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .bio-hand-lbl { font-size: 10px; font-weight: 700; color: var(--status-fg); }

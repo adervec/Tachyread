@@ -4,6 +4,7 @@ import assert from 'node:assert';
 import {
   createEyeGestureDetector, validateEyeMappings, eyeMappingsUsable, matchEyeHold, nextEyeWindow,
   DELIBERATE_MS, MAX_HOLD_MS, WINK_MARGIN, kindFloorMs,
+  ALL_KINDS, GAZE_KINDS, FACE_KINDS, FACE_SHAPE_KEYS,
 } from './eyeGestures.js';
 
 const row = (kind, minMs, maxMs, commandId = 'playPause', on = true) => ({ kind, minMs, maxMs, commandId, on });
@@ -199,5 +200,51 @@ const poseThenBlink = [
   ...hold({ t0: 800, ms: 300 }),
 ];
 assert.equal(run(poseThenBlink, faceRows).fired.length, 1, 'closing your eyes ends the pose cleanly');
+
+// ── expanded catalog: new face poses ────────────────────────────────────────
+// Every kind is unique, has an icon + label, and its blendshapes ship to the camera layer.
+{
+  const ids = ALL_KINDS.map((k) => k.id);
+  assert.equal(new Set(ids).size, ids.length, 'kind ids are unique');
+  assert.ok(ALL_KINDS.every((k) => k.icon && k.label), 'every kind has icon + label');
+  for (const id of ['jawLeft', 'jawRight', 'jawForward', 'sneer', 'funnel', 'eyesWide', 'squint', 'mouthFrown']) {
+    assert.ok(FACE_KINDS.some((k) => k.id === id), `new face kind ${id} exists`);
+  }
+  for (const shape of ['jawLeft', 'jawRight', 'jawForward', 'noseSneerLeft', 'mouthFunnel', 'eyeWideLeft', 'eyeSquintLeft', 'mouthFrownLeft']) {
+    assert.ok(FACE_SHAPE_KEYS.includes(shape), `camera layer ships ${shape}`);
+  }
+}
+const jawRows = [row('jawLeft', 700, 1400, 'prevLine')];
+const jaw = run(poseScript({ ms: 900, shapes: { jawLeft: 0.7 } }), jawRows);
+assert.equal(jaw.fired.length, 1, `jaw-left fires, got ${JSON.stringify(jaw)}`);
+assert.equal(jaw.fired[0].kind, 'jawLeft');
+assert.equal(run(poseScript({ ms: 900, shapes: { jawLeft: 0.2 } }), jawRows).fired.length, 0, 'a faint jaw shift is nothing');
+
+// ── parked-gaze holds ───────────────────────────────────────────────────────
+// Park the iris hard off-centre and hold; recentring releases and fires the windowed command.
+function gazeScript({ t0 = 0, ms, x = 0.5, y = 0.5, afterMs = 900, step = 60 }) {
+  const out = [];
+  for (let t = t0; t < t0 + ms; t += step) out.push({ t, blinkL: 0, blinkR: 0, irisX: x, irisY: y });
+  for (let t = t0 + ms; t < t0 + ms + afterMs; t += step) out.push({ t, blinkL: 0, blinkR: 0, irisX: 0.5, irisY: 0.5 });
+  return out;
+}
+const gazeRows = [row('gazeLeft', 900, 1800, 'nextPara'), row('gazeUp', 700, 1500, 'pageUp')];
+const gl = run(gazeScript({ ms: 1200, x: 0.85 }), gazeRows);
+assert.equal(gl.fired.length, 1, `a parked far-left gaze fires, got ${JSON.stringify(gl)}`);
+assert.equal(gl.fired[0].kind, 'gazeLeft', 'user-left = frame-x-increasing (unmirrored camera)');
+assert.equal(gl.fired[0].row.commandId, 'nextPara');
+const gu = run(gazeScript({ ms: 900, y: 0.2 }), gazeRows);
+assert.equal(gu.fired[0]?.kind, 'gazeUp', 'a held upward gaze is its own gesture');
+// Reading saccades brush the zones only briefly — under every gaze floor, so nothing fires.
+assert.equal(run(gazeScript({ ms: 300, x: 0.85 }), gazeRows).fired.length, 0, 'a 300ms glance is reading, not a command');
+assert.ok(validateEyeMappings([row('gazeLeft', 500, 900)]).some((p) => p.code === 'floor'), 'gaze windows may not start below their floor');
+assert.equal(kindFloorMs('gazeLeft'), GAZE_KINDS.find((k) => k.id === 'gazeLeft').floor, 'gaze kinds carry their own floor');
+
+// A roll TRANSITS the gaze zones without firing them — and still fires as a roll with gaze rows armed.
+const rollWithGaze = run(circle({}), [...rollRows, ...gazeRows]);
+assert.equal(rollWithGaze.fired.length, 1, `roll with gaze rows armed fires exactly once, got ${JSON.stringify(rollWithGaze.fired)}`);
+assert.equal(rollWithGaze.fired[0].kind, 'rollCW', 'and it is the roll, not a gaze');
+// And the reading-sweep immunity holds with gaze rows armed too.
+assert.equal(run(sweeps, [...rollRows, ...gazeRows]).fired.length, 0, 'reading sweeps fire neither rolls nor gazes');
 
 console.log('eyeGestures: all assertions passed ✅');

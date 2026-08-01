@@ -334,6 +334,10 @@ export function defaultGlobalSettings() {
     // Momentary "hold-to-pause": while this gesture is held up, autoplay pauses and resumes when you
     // drop it. '' = off. A gesture kind (openPalm|fist|victory|pointUp|iLoveYou|thumbUp|thumbDown).
     holdPauseGesture: '',
+    // Hold-to-scroll: scroll up/down mapped to "holding gesture X for > Y seconds" — the pane
+    // scrolls steadily while the hold lasts. [{ dir:'up'|'down', gesture, secs, on }]; null = off.
+    // A gesture used here is OWNED by hold-to-scroll (its one-shot mapping is suppressed).
+    holdScroll: null,
     // Per-gesture minimum hold time (ms) for the held discrete hand gestures — raise it to filter
     // accidental flicks. { thumbUp|fist|victory|…: ms }; a missing entry uses DEFAULT_HOLD_MS.
     handHoldMs: null,

@@ -23,6 +23,8 @@ export const DEFAULT_HAND_CALIB = { centerY: 0.5, topY: 0.28, bottomY: 0.72 };
 export const DEFAULT_GESTURES = {
   scroll: true, wave: true, thumbUp: false, thumbDown: false, fist: false, victory: false,
   pointUp: false, iLoveYou: false, pinch: false, swipeLeft: false, swipeRight: false,
+  pointDown: false, pointLeft: false, pointRight: false, threeUp: false, fourUp: false,
+  callMe: false, horns: false,
 };
 export const GESTURE_INFO = {
   scroll: { icon: '✋', label: 'Palm joystick', desc: 'Open palm above/below your rest height scrolls up/down — farther is faster' },
@@ -33,9 +35,18 @@ export const GESTURE_INFO = {
   victory: { icon: '✌', label: 'Victory', desc: 'Two-finger V held for a moment' },
   pointUp: { icon: '☝', label: 'Point up', desc: 'Index finger pointing up, held for a moment' },
   iLoveYou: { icon: '🤟', label: 'Rock / ILY', desc: 'Thumb + index + pinky extended, held for a moment' },
-  pinch: { icon: '🤏', label: 'Pinch', desc: 'Thumb and index tips together (other fingers open), held for a moment' },
+  pinch: { icon: '🤏', label: 'Pinch / OK', desc: 'Thumb and index tips together (other fingers open), held for a moment' },
   swipeLeft: { icon: '👈', label: 'Swipe left', desc: 'One fast open-palm sweep toward your left' },
   swipeRight: { icon: '👉', label: 'Swipe right', desc: 'One fast open-palm sweep toward your right' },
+  // Landmark-derived poses (no canned classifier class) — finger extension patterns + pointing
+  // directions, all held poses like the ones above.
+  pointDown: { icon: '👇', label: 'Point down', desc: 'Index finger pointing down, held for a moment' },
+  pointLeft: { icon: '☜', label: 'Point left', desc: 'Index finger pointing to YOUR left, held for a moment' },
+  pointRight: { icon: '☞', label: 'Point right', desc: 'Index finger pointing to YOUR right, held for a moment' },
+  threeUp: { icon: '3️⃣', label: 'Three fingers', desc: 'Index + middle + ring up, pinky and thumb tucked, held for a moment' },
+  fourUp: { icon: '4️⃣', label: 'Four fingers', desc: 'Four fingers up with the thumb tucked, held for a moment' },
+  callMe: { icon: '🤙', label: 'Call me (shaka)', desc: 'Thumb + pinky out, middle fingers curled, held for a moment' },
+  horns: { icon: '🤘', label: 'Horns', desc: 'Index + pinky out, thumb tucked (unlike Rock/ILY), held for a moment' },
 };
 const GESTURE_BY_LABEL = { Thumb_Up: 'thumbUp', Thumb_Down: 'thumbDown', Closed_Fist: 'fist', Victory: 'victory', Pointing_Up: 'pointUp', ILoveYou: 'iLoveYou' };
 
@@ -44,7 +55,8 @@ export const HOLD_MIN_MS = 150;      // floor for the per-gesture setting (below
 export const HOLD_MAX_MS = 3000;
 // The "held" discrete gestures a minimum-hold time applies to. Motion gestures (wave, swipes) and
 // the scroll joystick aren't held poses, so a hold time is meaningless for them.
-export const HELD_GESTURES = ['thumbUp', 'thumbDown', 'fist', 'victory', 'pointUp', 'iLoveYou', 'pinch'];
+export const HELD_GESTURES = ['thumbUp', 'thumbDown', 'fist', 'victory', 'pointUp', 'iLoveYou', 'pinch',
+  'pointDown', 'pointLeft', 'pointRight', 'threeUp', 'fourUp', 'callMe', 'horns'];
 
 // Clamp a user-entered hold time into the allowed range (or the default when unset/garbage).
 export function clampHoldMs(v) {
@@ -141,6 +153,53 @@ export function isPinch(lm) {
   let ext = 0;
   for (const tip of [12, 16, 20]) if (lm[tip] && d(lm[tip], lm[0]) > span * 1.45) ext++;
   return ext >= 2;
+}
+
+// Per-finger extended / curled states from the landmarks, scale-free (distances relative to the
+// wrist→middle-MCP span, like isPinch). A finger is only "extended" or "curled" when it's CLEARLY
+// so — the gap between the two thresholds fails closed, so a half-bent finger matches no pose
+// rather than the wrong one. The thumb uses its distance from the index MCP (it can't extend away
+// from the wrist the way the fingers do). Pure — see the test file.
+export function fingerStates(lm) {
+  if (!lm || !lm[0] || !lm[9]) return null;
+  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const span = Math.max(0.02, d(lm[0], lm[9])); // wrist → middle MCP
+  const f = (tip) => (lm[tip] ? d(lm[tip], lm[0]) / span : 0);
+  const state = (r, ext, curl) => (r > ext ? 'ext' : r < curl ? 'curl' : 'mid');
+  const thumbR = lm[4] && lm[5] ? d(lm[4], lm[5]) / span : 0;
+  return {
+    thumb: state(thumbR, 0.55, 0.38),
+    index: state(f(8), 1.45, 1.2),
+    middle: state(f(12), 1.45, 1.2),
+    ring: state(f(16), 1.4, 1.15),
+    pinky: state(f(20), 1.25, 1.0),
+  };
+}
+
+// Landmark-derived held poses beyond the canned classifier's set: finger-count poses, shaka,
+// horns, and pointing directions. Only consulted when the canned classifier saw nothing (its
+// classes win — they're the better-trained detector for their own poses). Direction convention:
+// the camera is unmirrored, so the USER's right is frame-x-decreasing (same as the swipes).
+// Returns a gesture kind or null. Pure — see the test file.
+export function detectHandPose(lm) {
+  const fs = fingerStates(lm);
+  if (!fs) return null;
+  const { thumb, index, middle, ring, pinky } = fs;
+  if (index === 'ext' && middle === 'ext' && ring === 'ext' && pinky === 'ext' && thumb === 'curl') return 'fourUp';
+  if (index === 'ext' && middle === 'ext' && ring === 'ext' && pinky === 'curl' && thumb === 'curl') return 'threeUp';
+  if (thumb === 'ext' && pinky === 'ext' && index === 'curl' && middle === 'curl' && ring === 'curl') return 'callMe';
+  if (index === 'ext' && pinky === 'ext' && middle === 'curl' && ring === 'curl' && thumb === 'curl') return 'horns';
+  // Pointing: index alone extended; direction from the index tip relative to its MCP. Up is the
+  // canned Pointing_Up class, so only down/left/right are derived here.
+  if (index === 'ext' && middle === 'curl' && ring === 'curl' && pinky === 'curl' && lm[8] && lm[5]) {
+    const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const span = Math.max(0.02, d(lm[0], lm[9]));
+    const dx = lm[8].x - lm[5].x;
+    const dy = lm[8].y - lm[5].y;
+    if (Math.abs(dy) > Math.abs(dx) && dy > span * 0.5) return 'pointDown';
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > span * 0.5) return dx > 0 ? 'pointLeft' : 'pointRight';
+  }
+  return null;
 }
 
 // Swipe = ONE fast sustained horizontal sweep (unlike the wave's back-and-forth): displacement
@@ -269,7 +328,7 @@ export function createGestureMonitor({
       wave.reset();
       swipe.reset();
       emitScroll(0);
-      onHand?.({ present: false, gesture: null, y: null, v: 0 });
+      onHand?.({ present: false, gesture: null, kind: null, y: null, v: 0 });
       return;
     }
     const y = lm[PALM].y;
@@ -280,7 +339,7 @@ export function createGestureMonitor({
       suppressScrollUntil = now + 900;
       emitScroll(0);
       onWave?.(hand);
-      onHand?.({ present: true, gesture, y, v: 0, hand });
+      onHand?.({ present: true, gesture, kind: 'openPalm', y, v: 0, hand });
       return;
     }
     // One-shot open-palm sweeps. The detector's directions are frame coords; the (unmirrored)
@@ -293,20 +352,23 @@ export function createGestureMonitor({
           suppressScrollUntil = now + 600;
           emitScroll(0);
           onGesture?.(kind, hand);
-          onHand?.({ present: true, gesture, y, v: 0, hand });
+          onHand?.({ present: true, gesture, kind: 'openPalm', y, v: 0, hand });
           return;
         }
       }
     } else swipe.reset();
-    // Held discrete gestures — canned classifications plus the landmark-derived pinch. Only
-    // enabled kinds accumulate hold ticks.
-    let kind = GESTURE_BY_LABEL[gesture] || null;
-    if (!kind && gest.pinch && isPinch(lm)) kind = 'pinch';
+    // Held discrete poses — canned classifications, then the landmark-derived ones (pinch and the
+    // finger-pattern/pointing poses). The canned classes win where they exist; only enabled kinds
+    // accumulate hold ticks toward a mapped fire, but the RESOLVED kind is always reported on
+    // onHand so momentary hold features (hold-to-pause, hold-to-scroll) can use any pose.
+    let kind = GESTURE_BY_LABEL[gesture] || (open ? 'openPalm' : null);
+    if (!kind && isPinch(lm)) kind = 'pinch';
+    if (!kind) kind = detectHandPose(lm);
     const fired = trigger.feed(kind && gest[kind] ? kind : null, now);
     if (fired) onGesture?.(fired, hand);
     const v = gest.scroll && open && now > suppressScrollUntil ? scrollVelocity(y, cal, deadFrac) : 0;
     emitScroll(v);
-    onHand?.({ present: true, gesture, y, v, hand });
+    onHand?.({ present: true, gesture, kind, y, v, hand });
   }
 
   function stop() {
