@@ -48,6 +48,9 @@ export function defaultFileSettings() {
     linesGridV: false, // faint vertical gridlines on the Lines pane background
     linesEntryEffect: '', // temporary style for a line as it first scrolls in ('' = off; Fade|Glow|Highlight|Rise|Color)
     linesEntrySecs: 3, // how long the entry effect lasts before settling to normal (1–10s)
+    // Placed reading crosshairs over the Lines area (per tab): [{ id (crosshairStable design id),
+    // x, y (pane fractions), size (px) }]. The designs live in global.crosshairStable.
+    linesCrosshairs: [],
     // Per-tab reading cursor (shows only over the reader panes). cursorId = '' (system) or a premade
     // / custom-cursor id (see features/cursors.js). Trail is a fading wake behind the pointer.
     cursorId: '',
@@ -194,7 +197,7 @@ export function countOffDefaultSettings(settings, defaults) {
 export const GLOBAL_DATA_KEYS = new Set([
   'recentFiles', 'ocrTemplates', 'ocrProfiles', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey', 'translateKey', 'settingsProfiles',
   'readingList', 'drillBestSpan', 'bestFlowWpm', 'bestDictationWpm', 'webcamCalib', 'handCalib', 'sync',
-  'deviceName', 'fileDefaults', 'ambient', 'customCursors',
+  'deviceName', 'fileDefaults', 'ambient', 'customCursors', 'crosshairStable',
 ]);
 
 // Reset global preferences to defaults while keeping the user's data (GLOBAL_DATA_KEYS).
@@ -247,6 +250,9 @@ export function defaultGlobalSettings() {
     // (tabDefaultsFrom), app = application-preference snapshots (syncableGlobalSettings).
     settingsProfiles: { tab: [], app: [] }, // each: { name, data, savedAt }
     customCursors: [], // user-made reading cursors: [{ id, name, base (premade id), color, size }]
+    // The crosshair STABLE: saved overlay-marker designs for the Lines area (features/crosshairs.js).
+    // User-created content — preserved on settings reset. Placement is per tab (linesCrosshairs).
+    crosshairStable: [],
     ocrTemplates: [], // saved Grab layout templates: { name, regions:[{fx,fy,fw,fh}] }
     tocTierIcons: ['📖', '📑', '📄', '§', '•'], // TOC-bar icon per hierarchy tier (index = level)
     drillBestSpan: 0, // best perceptual-span drill width (words) reached

@@ -1651,6 +1651,35 @@
 @media (prefers-reduced-motion: reduce) {
   .line-row .orp-Pulse, .line-row .orp-Shimmer, .line-row .orp-Flash, .line-row .orp-Bob, .line-row .orp-Tilt.orp-Bob { animation: none; }
 }
+/* Reading crosshairs (View → Crosshairs): per-tab overlay markers on the Lines area. The overlay
+   itself never eats clicks; each placed crosshair is its own draggable pointer target. */
+.line-pane { position: relative; }
+.xh-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+.xh-item { pointer-events: none; }
+.xh-item.xh-drag { pointer-events: auto; cursor: grab; touch-action: none; }
+.xh-item.xh-drag:active { cursor: grabbing; }
+.xh-fx { position: absolute; inset: 0; border-radius: 50%; }
+.xh-item .xh-layer {
+  position: absolute; left: 50%; top: 50%; width: 100%; height: 100%;
+  display: block; user-select: none;
+}
+.xh-item img.xh-layer { object-fit: contain; }
+.xh-item .xh-emoji { display: flex; align-items: center; justify-content: center; line-height: 1; }
+.xh-defs { position: absolute; }
+/* Crosshair manager dialog */
+.xh-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; align-items: center; }
+.xh-preview {
+  position: relative; height: 150px; overflow: hidden; border: 1px solid var(--divider);
+  border-radius: 6px; margin: 6px 0; padding: 8px 10px;
+}
+.xh-preview-text { font-size: 15px; line-height: 1.6; opacity: 0.9; }
+.xh-layer-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 3px 0; font-size: 12px; }
+.xh-layer-row label { display: inline-flex; align-items: center; gap: 3px; }
+.xh-layer-row input[type='range'] { width: 72px; }
+.xh-layer-tag { border: 1px solid var(--divider); border-radius: 10px; padding: 2px 8px; }
+.xh-emoji-in { width: 52px; text-align: center; font-size: 16px; }
+.xh-placed { margin-top: 6px; }
+
 /* Wall-of-text newline marker — faint so it punctuates without competing with the text. */
 .line-row .wall-sep { opacity: 0.45; }
 .joiner-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }

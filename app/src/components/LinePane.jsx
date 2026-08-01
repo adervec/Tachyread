@@ -10,6 +10,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { translateText, translateConfigured, cacheKey } from '../features/translateService.js';
 import { getCachedTranslation, putCachedTranslation, appendAppLog } from '../state/storage.js';
 import { swapLookup, applySwap } from '../features/wordSwaps.js';
+import CrosshairOverlay from './CrosshairOverlay.jsx';
 
 // Reading-pointer feature archived for now (not useful). Flip to true to restore it, and uncomment
 // its Settings section in dialogs/SettingsDialog.jsx.
@@ -636,7 +637,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   const split = !!settings.linePaneSplit;
 
   // ── translation (translate obscure mode + side-by-side parallel view) ──────────────────────────
-  const { state: appState, updateGlobal, setStatus } = useApp();
+  const { state: appState, updateGlobal, setStatus, patchSettings } = useApp();
   const gt = appState.global;
   const trCfg = useMemo(() => ({
     translateProvider: gt.translateProvider || 'mymemory',
@@ -1127,6 +1128,12 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
           />
         </div>
       )}
+      {/* Placed reading crosshairs (View → Crosshairs): per-tab overlay markers, draggable in place. */}
+      <CrosshairOverlay
+        placements={settings.linesCrosshairs}
+        stable={gt.crosshairStable}
+        onChange={(pl) => patchSettings(tab.id, { linesCrosshairs: pl })}
+      />
       <WordMenu menu={menu} onClose={() => setMenu(null)} onJumpWord={onJumpWord} onAddNote={onAddNote} />
     </div>
   );

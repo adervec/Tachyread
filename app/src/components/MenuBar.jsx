@@ -44,6 +44,7 @@ const MENUS = {
     { label: 'Incognito Reading (no tracking)', action: 'toggle-incognito' },
     { label: 'Reduce Blue Light (bedtime)', shortcut: 'B', action: 'toggle-bluelight' },
     { label: 'Reading Cursor & Trail...', action: 'cursor-manager' },
+    { label: 'Crosshairs (Lines overlays)...', action: 'crosshairs' },
     { label: 'Face Library...', action: 'face-library' },
   ],
   // Drills & practice.
