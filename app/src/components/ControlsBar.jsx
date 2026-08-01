@@ -16,13 +16,23 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', modeIdleFrac = null, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, onJumpToFrontier, onJumpToGap }) {
+export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', modeIdleFrac = null, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, onJumpToFrontier, onJumpToGap, onOpenBiometric }) {
   const { patchSettings, state, updateGlobal } = useApp();
   const isCompact = useIsCompact();
   // Mobile: the expanded dock shows the FULL controls immediately (no "more" disclosure) —
   // paginated between Steps / Modes / Goal so it never becomes one tall scrolling stack.
   const moreOpen = true;
   const [morePage, setMorePage] = useState(0);
+  // One BIOMETRIC control unifies the old separate voice-command toggle and the camera "watching"
+  // buttons: the button opens a quick popup with every hands-free source in one place.
+  const [bioOpen, setBioOpen] = useState(false);
+  const bioRef = useRef(null);
+  useEffect(() => {
+    if (!bioOpen) return undefined;
+    const onDoc = (e) => { if (e.target.isConnected && !bioRef.current?.contains(e.target)) setBioOpen(false); };
+    document.addEventListener('pointerdown', onDoc);
+    return () => document.removeEventListener('pointerdown', onDoc);
+  }, [bioOpen]);
   // On phones the full playback row (10 nav buttons + speed unit + mode toggles + goal) would wrap
   // into a tall stack that eats the reader — hence the Steps/Modes/Goal pager above.
   const { doc, settings } = tab;
@@ -297,10 +307,45 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
               />
             )}
           </div>
-          <div className="mode-pair">
-            <span>VOICE COMMAND{!isCompact && <kbd className="key-hint">V</kbd>}</span>
-            <button className={audioCtrl ? 'toggle-on' : ''} onClick={onToggleAudioCtrl} title="Voice / clap commands">{audioCtrl ? 'On' : 'Off'}</button>
-          </div>
+          {(() => {
+            const g = state.global;
+            const camGuardOn = !!(g.webcamAttention || g.webcamDoze || g.webcamAwayAlarm || g.webcamDistanceNudge || g.webcamFocusStats);
+            const bioCount = [audioCtrl, camGuardOn, !!g.handGestures, !!g.eyeGestures?.on].filter(Boolean).length;
+            const row = (icon, label, on, toggle, extra) => (
+              <label className="bio-quick-row">
+                <input type="checkbox" checked={on} onChange={toggle} />
+                <span className="bqr-icon" aria-hidden="true">{icon}</span>
+                <span className="bqr-label">{label}</span>
+                {extra}
+              </label>
+            );
+            return (
+              <div className="mode-pair bio-pair" ref={bioRef}>
+                <span title="Biometric controls — voice/clap commands, camera watching (attention & doze) and hand gestures, unified in one popup.">BIOMETRIC</span>
+                <button
+                  className={bioCount ? 'toggle-on' : ''}
+                  onClick={() => setBioOpen((v) => !v)}
+                  title="Voice, camera & gesture controls — click for the quick panel"
+                  aria-expanded={bioOpen}
+                >
+                  {bioCount ? `On · ${bioCount}` : 'Off'}
+                </button>
+                {bioOpen && (
+                  <div className="bio-quick-pop">
+                    {row('🎤', 'Voice / clap commands', !!audioCtrl, onToggleAudioCtrl, !isCompact && <kbd className="key-hint">V</kbd>)}
+                    {row('👀', 'Watching — pause when you look away', !!g.webcamAttention, () => updateGlobal({ webcamAttention: !g.webcamAttention }))}
+                    {row('😴', 'Doze detection', !!g.webcamDoze, () => updateGlobal({ webcamDoze: !g.webcamDoze }))}
+                    {row('🖐', 'Hand gestures', !!g.handGestures, () => updateGlobal({ handGestures: !g.handGestures }))}
+                    <div className="bio-quick-actions">
+                      <button onClick={() => { setBioOpen(false); onOpenBiometric?.(); }} title="Every biometric option — mappings, calibration, eye gestures, alarms">⚙ All controls…</button>
+                      <button onClick={() => { setBioOpen(false); updateGlobal({ webcamPreview: true }); }} title="Show the Biometric Control Feed popup (self-view + event log)">📡 Live feed</button>
+                    </div>
+                    <p className="bio-quick-note">Camera &amp; audio are analysed on your device and never leave it.</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           <div className="mode-pair">
             <span>TIMER</span>
             <select

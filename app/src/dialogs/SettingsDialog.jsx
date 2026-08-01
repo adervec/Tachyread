@@ -14,6 +14,8 @@ const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel']
 // const POINTER_STYLES = ['Arrow', 'Diamond', 'Star', 'Circle', 'Hand'];
 // const POINTER_PLACEMENTS = ['Above', 'Below', 'Left', 'Right'];
 const CURRENT_WORD_STYLES = ['Underline', 'Overline', 'Bold', 'Italic', 'Color', 'Background', 'Box', 'Glow'];
+// Looks for the already-read words in the CURRENT line (combinable; empty = they look like any other).
+const DONE_WORD_STYLES = ['Dim', 'Faint', 'Strikethrough', 'Italic', 'Color', 'Background'];
 // Lines-pane ORP looks (combinable). Larger/Caps change glyph metrics, so they re-wrap lines — the
 // title says so; the rest are paint-only.
 const ORP_STYLES = ['Bold', 'Glow', 'Pulse', 'Shimmer', 'Underline', 'Box', 'Background', 'Dot', 'Italic', 'Larger', 'Caps'];
@@ -69,6 +71,7 @@ const HINTS = {
   'Bionic font': 'Bold the first few letters of each word to pull your eye through the line faster.',
   'Current-line highlight': 'Tint the whole current line in the Lines pane. Off, the line looks like any other and only the current-word highlight marks your position.',
   'Current-word highlight (combine any)': 'How the word you are on is marked in the Lines pane — combine any of underline, bold, background, colour, box.',
+  'Completed words in current line (combine any)': 'Style the words you have already read within the current line — dim, strike through, tint… Handy when lines are paragraph-sized (wall of text), so you can see at a glance where you are inside the block. Empty = off.',
   'Auto-collapse completed sections': 'Fold away ToC sections once you have finished reading them.',
   'Show faces': 'Animated reader faces whose expression tracks your pace and progress.',
   'Paragraph break (sec)': 'Extra pause the auto-player takes at the end of a paragraph.',
@@ -145,6 +148,14 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
     if (set.has(name)) set.delete(name);
     else set.add(name);
     patch({ currentWordStyles: [...set] });
+  }
+
+  const doneStyles = Array.isArray(s.doneWordStyles) ? s.doneWordStyles : [];
+  function toggleDoneStyle(name) {
+    const set = new Set(doneStyles);
+    if (set.has(name)) set.delete(name);
+    else set.add(name);
+    patch({ doneWordStyles: [...set] });
   }
 
   const orpStyles = Array.isArray(s.orpStyles) ? s.orpStyles : ['Bold'];
@@ -549,6 +560,19 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
             >{hex ? '' : 'A'}</button>
           ))}
           <input type="color" className="swatch-custom" value={s.currentWordColor || '#ffd54f'} onChange={(e) => patch({ currentWordColor: e.target.value })} title="Custom colour" />
+        </div>
+      </Field>
+      <Field label="Completed words in current line (combine any)">
+        <div className="checkbox-group">
+          {DONE_WORD_STYLES.map((name) => {
+            const active = doneStyles.includes(name);
+            return (
+              <label key={name} className="checkbox-pill">
+                <input type="checkbox" checked={active} onChange={() => toggleDoneStyle(name)} />
+                {name}
+              </label>
+            );
+          })}
         </div>
       </Field>
       <Field label="Current-word font size adjust (pt)">

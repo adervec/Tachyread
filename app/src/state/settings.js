@@ -36,6 +36,7 @@ export function defaultFileSettings() {
     contextWordsAfter: 0,
     currentLineHighlight: true, // tint the current line's row in the Lines pane (off = position shown by the word highlight only)
     currentWordStyles: ['Underline'], // combinable: Underline | Bold | Italic | Color | Background | Box | Glow | Overline
+    doneWordStyles: [], // completed words in the CURRENT line (combinable: Dim | Faint | Strikethrough | Italic | Color | Background); [] = off
     currentWordColor: '', // highlight colour for Color/Background/Box/Glow/Underline styles ('' = theme default)
     currentWordFontDelta: 0, // current-word font-size adjust in points (−3..+3)
     rightPaneFontSize: 12,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Dialog from './Dialog.jsx';
+import ProfilesBar from '../components/ProfilesBar.jsx';
 import { useVoices } from '../features/tts.js';
 import { ENGLISH_VOICES, defaultVoiceForLang, downloadVoice, isVoiceDownloaded, piperSupported } from '../features/piperTts.js';
 import { elevenVoices, ELEVEN_MODELS } from '../features/elevenLabs.js';
@@ -56,6 +57,13 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
 
   return (
     <Dialog title="Audio Settings" onClose={onClose} width={540} buttons={<button onClick={onClose}>Close</button>}>
+      <ProfilesBar
+        kind="audio"
+        profiles={global.settingsProfiles}
+        onChange={(p) => onPatchGlobal({ settingsProfiles: p })}
+        capture={() => ({ offlineVoice: !!global.offlineVoice, offlineVoiceId: global.offlineVoiceId || '', ttsSpeed: global.ttsSpeed ?? 1, ttsAutoStopMin: global.ttsAutoStopMin || 0, elevenModel: global.elevenModel || 'eleven_multilingual_v2' })}
+        apply={(data) => onPatchGlobal(data)}
+      />
       <div className="field-section">Read aloud (TTS)</div>
       {piperSupported() && (
         <>

@@ -30,6 +30,8 @@ export const HELP_SECTIONS = [
     say: 'Tune how the text looks and where your eye lands. The optimal-recognition-point letter can glow or pulse. Bionic text bolds word-starts. Freshly arrived words can flash a highlight. Custom cursors and fading trails work in the reader areas, and full-screen mode fills the screen with just the reading.',
     body: [
       'Tab Settings holds sizes, alignment, line spacing, bionic text, reveal/hide modes and the ORP (optimal recognition point) highlight — the pivot letter can be tinted, glow, pulse and more.',
+      'Completed words in the current line can take their own look (dim, faint, strikethrough, tint…) — Tab Settings → "Completed words in current line". Especially useful with paragraph-sized lines, where it shows exactly how far into the block you are.',
+      'Jumping to a word (J / ⌖, Find, Go-to) centers that EXACT word in the Lines pane — even inside a paragraph-sized wall-of-text block, not just its line.',
       'Wall-of-text mode can replace newlines with a chosen sequence of characters or emoji, so paragraphs flow the way you like.',
       'New words entering the Lines pane can get a distinct style for a few seconds, so your eye catches what just arrived.',
       'Reading cursor & trail (View menu): pick a custom cursor that shows only in the reader areas, from a rich set of premades or your own. It can leave a fading trail — or a seismograph trail that draws as the lines scroll under a still cursor.',
@@ -55,6 +57,7 @@ export const HELP_SECTIONS = [
       'Hold-to-pause: pick a gesture that pauses auto-play only while you hold it up, resuming the moment you drop it.',
       'Eye & face gestures: map blinks, winks (left and right differ), eye-rolls and timed eye positions — plus face poses like tongue-out — to actions, within duration ranges that filter natural movement. An optional audio cue helps you hit the sweet spot; illegal overlapping mappings are filtered out. Works on mobile once the camera is enabled in settings.',
       'Voice commands ("play", "pause", "next", "back") and clap detection can each fire commands too.',
+      'One BIOMETRIC button in the controls bar unifies it all: its popup toggles voice/clap commands, camera watching (attention & doze) and hand gestures, and links to the full Biometric Controls page and the live feed. While any source is active, a single status-bar badge (📷 🖐 🎤) shows what’s running and opens the feed.',
       'Profiles: save a whole biometric setup as a named profile and switch between them; after updating a profile an Undo is available for two minutes.',
       'Webcam guards (all optional, all on-device): pause when you look away, stop read-aloud when you doze, away alarms, posture nudges, and focus analytics. Frames never leave your device.',
     ],
@@ -125,6 +128,7 @@ export const HELP_SECTIONS = [
     body: [
       'Data Management (Settings menu) backs up and syncs reading progress and tab settings (Default Tab Settings + per-file display) via a local folder or your own Google Drive. Book Groups link editions of the same book so progress carries across formats.',
       'Application settings and biometric settings are DEVICE-SPECIFIC — they’re tuned to each device’s screen, camera and habits, so they don’t sync. Each device shows its own name + ID on the Application Settings and Biometric Controls pages. Your API keys also stay on the device and are never synced.',
+      'Every settings page (Tab, Application, Biometric, Audio, Comfort, Typing) has a Profiles bar with BUILT-IN presets optimized for desktop, phone and tablet — load one to apply sensible defaults for that device class (only the settings it covers change; built-ins can’t be edited, but Save as… copies one into your own profile).',
       'Incognito Reading (View menu) pauses ALL tracking and persistence; exiting rewinds positions as if the session never happened.',
       'Everything runs in your browser: no accounts, no servers of ours, no telemetry. OCR models, fonts and TTS voices download from CDNs only when their features are used.',
     ],

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Dialog from './Dialog.jsx';
+import ProfilesBar from '../components/ProfilesBar.jsx';
 import { DEFAULT_COMFORT } from '../engine/comfort.js';
 
 // Eye-comfort settings: 20-20-20 microbreaks and fatigue-aware speed easing. Split out of
@@ -24,6 +25,13 @@ export default function ComfortSettingsDialog({ global, onPatch, onClose }) {
 
   return (
     <Dialog title="Comfort & Breaks" onClose={onClose} width={520} buttons={<button onClick={onClose}>Close</button>}>
+      <ProfilesBar
+        kind="comfort"
+        profiles={g.settingsProfiles}
+        onChange={(p) => { setG({ ...g, settingsProfiles: p }); onPatch({ settingsProfiles: p }); }}
+        capture={() => ({ comfort })}
+        apply={(data) => patchComfort(data.comfort || {})}
+      />
       <Field label="Eye-rest microbreaks">
         <label className="inline-check">
           <input
