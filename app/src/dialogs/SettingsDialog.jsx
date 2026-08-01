@@ -16,9 +16,24 @@ const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel']
 const CURRENT_WORD_STYLES = ['Underline', 'Overline', 'Bold', 'Italic', 'Color', 'Background', 'Box', 'Glow'];
 // Looks for the already-read words in the CURRENT line (combinable; empty = they look like any other).
 const DONE_WORD_STYLES = ['Dim', 'Faint', 'Strikethrough', 'Italic', 'Color', 'Background'];
-// Lines-pane ORP looks (combinable). Larger/Caps change glyph metrics, so they re-wrap lines — the
-// title says so; the rest are paint-only.
-const ORP_STYLES = ['Bold', 'Glow', 'Pulse', 'Shimmer', 'Underline', 'Box', 'Background', 'Dot', 'Italic', 'Larger', 'Caps'];
+// Lines-pane ORP looks (combinable). Larger/Caps change glyph metrics, so they re-wrap lines, and
+// Tilt/Bob use an inline box that can add a wrap point at the letter — the titles say so; the rest
+// are paint-only.
+const ORP_STYLES = ['Bold', 'Glow', 'Pulse', 'Shimmer', 'Flash', 'Underline', 'Overline', 'Box', 'Ring', 'Background', 'Invert', 'Outline', 'Shadow', 'Dot', 'Italic', 'Tilt', 'Bob', 'Larger', 'Caps'];
+// ORP letter fonts (Lines pane). '' = same font as the surrounding text.
+const ORP_FONTS = [
+  ['', 'Same as the text'],
+  ['Georgia, serif', 'Georgia (serif)'],
+  ["'Times New Roman', serif", 'Times New Roman'],
+  ['Verdana, sans-serif', 'Verdana'],
+  ["'Courier New', monospace", 'Courier New (mono)'],
+  ["'Lexend', sans-serif", 'Lexend'],
+  ["'Atkinson Hyperlegible', sans-serif", 'Atkinson Hyperlegible'],
+  ["'OpenDyslexic', 'Comic Sans MS', sans-serif", 'OpenDyslexic'],
+  ["'Comic Sans MS', cursive", 'Comic Sans MS'],
+  ['Impact, sans-serif', 'Impact'],
+  ["'Segoe Script', 'Comic Sans MS', cursive", 'Segoe Script'],
+];
 // Named highlight colours shared by the current-word highlight and the source cursor. '' = theme default.
 const HIGHLIGHT_COLORS = [
   ['', 'Theme'], ['#ffd54f', 'Amber'], ['#4fd8ff', 'Cyan'], ['#7dff8a', 'Green'],
@@ -53,6 +68,8 @@ const HINTS = {
   'Context words after': 'How many words after the current one to show faintly around the Fast Reader word.',
   'Show guide lines': 'Draw crosshair guides through the Fast Reader word to anchor your gaze.',
   'Highlight ORP character': 'Tint the Optimal Recognition Point (the letter your eye should land on) so words centre themselves.',
+  'ORP larger size (+%)': 'How much bigger the "Larger" ORP style draws the pivot letter, as a percentage of the text size. Changing it re-wraps lines.',
+  'ORP letter font (Lines)': 'Draw the pivot letter in a font of its own so it stands apart from the text. A different font changes the letter’s width, so lines re-wrap.',
   'ORP horizontal position (%)': 'Where across the pane the ORP letter is pinned — 50% centres it. The word halves grow to keep the ORP at this spot every word.',
   'Eye focuser at the ORP': 'An extra effect that pulls the eye onto the ORP letter each word: fisheye (nearby letters swell toward it), pulse (the ORP flares), or converge (two bars sweep in and settle on it).',
   'Breathe the pace (sinusoidal WPM)': 'Let the reading speed rise and fall smoothly around your WPM so the eye gets brief rests. The average speed is unchanged.',
@@ -279,7 +296,11 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
             <label
               key={name}
               className="checkbox-pill"
-              title={name === 'Larger' || name === 'Caps' ? `${name} — changes the letter's size, so lines re-wrap` : name}
+              title={name === 'Larger' || name === 'Caps'
+                ? `${name} — changes the letter's size, so lines re-wrap`
+                : name === 'Tilt' || name === 'Bob'
+                  ? `${name} — the letter sits in its own little box, which can let a line wrap at it`
+                  : name}
             >
               <input type="checkbox" checked={orpStyles.includes(name)} onChange={() => toggleOrpStyle(name)} />
               {name}
@@ -287,9 +308,32 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           ))}
         </div>
       </Field>
+      {orpStyles.includes('Larger') && (
+        <Field label="ORP larger size (+%)">
+          <input
+            type="range" min={5} max={80} step={1}
+            value={s.orpLargerPct ?? 18}
+            onChange={(e) => patch({ orpLargerPct: Math.max(5, Math.min(80, Number(e.target.value) || 18)) })}
+          />
+          <span className="range-val">+{s.orpLargerPct ?? 18}%</span>
+        </Field>
+      )}
+      <Field label="ORP letter font (Lines)">
+        <select value={s.orpFont || ''} onChange={(e) => patch({ orpFont: e.target.value })}>
+          {s.orpFont && !ORP_FONTS.some(([v]) => v === s.orpFont) && <option value={s.orpFont}>{s.orpFont.split(',')[0].replace(/['"]/g, '')}</option>}
+          {ORP_FONTS.map(([v, l]) => <option key={v || 'same'} value={v}>{l}</option>)}
+        </select>
+      </Field>
       {/* Live preview — these are purely visual, and hunting for the effect in the pane behind the
           dialog is a pain. Reuses the real .line-row/.orp-* rules so it can't drift. */}
-      <div className="line-row orp-preview" style={s.orpColor ? { '--lines-orp': s.orpColor } : undefined}>
+      <div
+        className="line-row orp-preview"
+        style={{
+          ...(s.orpColor ? { '--lines-orp': s.orpColor } : {}),
+          ...(s.orpLargerPct != null ? { '--orp-larger': `${(100 + s.orpLargerPct) / 100}em` } : {}),
+          ...(s.orpFont ? { '--orp-font': s.orpFont } : {}),
+        }}
+      >
         <span className="text">
           The qu<span className={['orp-char', ...orpStyles.map((st) => `orp-${st}`)].join(' ')}>i</span>ck brown fox
           {' '}jumps o<span className={['orp-char', ...orpStyles.map((st) => `orp-${st}`)].join(' ')}>v</span>er the lazy dog

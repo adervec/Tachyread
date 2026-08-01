@@ -1038,6 +1038,10 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   if (settings.fontFamily) paneStyle.fontFamily = settings.fontFamily;
   if (settings.currentWordColor) paneStyle['--cw-color'] = settings.currentWordColor;
   if (settings.orpColor) paneStyle['--lines-orp'] = settings.orpColor;
+  // ORP letter tuning: how much bigger the 'Larger' style draws it, and an optional font of its
+  // own. CSS-var-driven so the .orp-* rules stay static (fallbacks preserve pre-setting tabs).
+  if (settings.orpLargerPct != null) paneStyle['--orp-larger'] = `${(100 + settings.orpLargerPct) / 100}em`;
+  if (settings.orpFont) paneStyle['--orp-font'] = settings.orpFont;
   return (
     <div
       className={`line-pane${headingPack ? ` hsp-${headingPack}` : ''}${settings.currentLineHighlight === false ? ' no-curline' : ''}`}
