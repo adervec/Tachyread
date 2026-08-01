@@ -1601,6 +1601,15 @@
 .line-row .word.current.style-Box { outline: 1.5px solid var(--cw-color, var(--orp-fg)); border-radius: 3px; padding: 0 2px; }
 .line-row .word.current.style-Glow { text-shadow: 0 0 6px var(--cw-color, var(--orp-fg)), 0 0 10px var(--cw-color, var(--orp-fg)); }
 .line-row .word.hidden-word { visibility: hidden; }
+/* Completed words in the CURRENT line (Tab Settings → "Completed words in current line") — the
+   already-read part of a paragraph-sized line visibly recedes. Paint-only, like the ORP looks,
+   so toggling styles never re-wraps the line (Strikethrough/Italic don't change metrics either). */
+.line-row .word.done.done-Dim { opacity: 0.55; }
+.line-row .word.done.done-Faint { opacity: 0.28; }
+.line-row .word.done.done-Strikethrough { text-decoration: line-through; text-decoration-thickness: 1px; }
+.line-row .word.done.done-Italic { font-style: italic; }
+.line-row .word.done.done-Color { color: var(--cw-color, var(--orp-fg)); }
+.line-row .word.done.done-Background { background: color-mix(in srgb, var(--cw-color, #ffeb3b) 16%, transparent); border-radius: 2px; }
 /* ORP letter: colour always, plus any combination of the looks below (Tab Settings → ORP style).
    Everything here is paint-only — nothing that changes glyph metrics, or every word on the page
    would re-wrap when you switched style. `orp-Larger`/`orp-Caps` are the deliberate exceptions and
@@ -2337,6 +2346,46 @@
 }
 .mode-block .mode-pair { display: flex; align-items: center; gap: 4px; }
 .mode-block button { font-size: 11px; padding: 3px 8px; }
+
+/* BIOMETRIC quick panel — the one popup unifying voice/clap commands, camera watching and hand
+   gestures (replaces the old separate VOICE COMMAND toggle + status-bar watching buttons). Opens
+   UP out of the bottom controls bar. */
+.mode-pair.bio-pair { position: relative; }
+.bio-quick-pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  min-width: 250px;
+  padding: 8px;
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  background: var(--menu-bg, var(--panel-bg, #fff));
+  color: var(--menu-fg, inherit);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.32);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-transform: none;
+}
+.bio-quick-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  letter-spacing: normal;
+}
+.bio-quick-row:hover { background: color-mix(in srgb, var(--toggle-active-bg) 10%, transparent); }
+.bio-quick-row .bqr-label { flex: 1; text-align: left; }
+.bio-quick-actions { display: flex; gap: 6px; margin-top: 5px; }
+.bio-quick-actions button { flex: 1; font-size: 11px; padding: 4px 6px; }
+.bio-quick-note { margin: 5px 2px 0; font-size: 10px; opacity: 0.65; }
+/* Compact dock: keep the popup on-screen (the pair may sit near the screen edge). */
+.controls-bar.compact .bio-quick-pop { left: 0; transform: none; max-width: min(300px, calc(100vw - 24px)); }
 
 /* Compact playback: a fixed transport bar (page/line + play, symmetric) with a chevron that
    expands the slide-in; the finer steps appear as their own aligned row. The chevron replaces the

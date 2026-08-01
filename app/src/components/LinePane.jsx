@@ -59,6 +59,9 @@ function renderWords(line, opts) {
     // Per-document display substitution (render one word as another) — display only.
     const tok = opts.swaps ? applySwap(rawTok, opts.swaps) : rawTok;
     const isCurrentWord = opts.isCurrent && wordIdx === opts.currentWordIndex;
+    // Completed words in the CURRENT line (already read, before the current word) can take their
+    // own look — with paragraph-sized lines (wall mode) it shows where you are inside the block.
+    const isDone = opts.isCurrent && opts.doneStyles && opts.doneStyles.length > 0 && wordIdx < opts.currentWordIndex;
     const isProperName = opts.properNamesSet && opts.properNamesSet.has(stripPunct(tok).toLowerCase());
     let inner;
     // Apply bionic / ORP marks to every word EXCEPT the current word itself (it has its own
@@ -92,6 +95,7 @@ function renderWords(line, opts) {
       'word',
       isCurrentWord ? 'current' : '',
       ...styleClasses,
+      ...(isDone ? ['done', ...opts.doneStyles.map((st) => `done-${st}`)] : []),
       isProperName ? 'proper-name' : '',
       hidden ? 'hidden-word' : '',
     ].filter(Boolean).join(' ');
@@ -231,6 +235,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
               highlightORP: dsettings.highlightORP,
               orpCls: dsettings.orpCls,
               currentWordStyles: dsettings.currentWordStyles,
+              doneStyles: dsettings.doneWordStyles,
               properNamesSet: propNameKeys,
               isHeaderFooter: isHF,
               hideBeyond: ctx.hideBeyond,
@@ -551,6 +556,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       highlightORP: settings.highlightORP,
       orpCls: orpClass(settings),
       currentWordStyles: currentWordStyles(settings),
+      doneWordStyles: Array.isArray(settings.doneWordStyles) ? settings.doneWordStyles : [],
       currentWordFontDelta: settings.currentWordFontDelta || 0,
       swaps: swapLookup(settings.wordSwaps),
     }),
@@ -559,7 +565,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       settings.currentLineFontSizeBoost,
       settings.textAlignment, settings.showPointer, settings.pointerStyle, settings.pointerPlacement,
       settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP, settings.orpStyles,
-      settings.currentWordStyles, settings.currentWordStyle, settings.currentWordFontDelta, settings.wordSwaps, wall,
+      settings.currentWordStyles, settings.currentWordStyle, settings.doneWordStyles, settings.currentWordFontDelta, settings.wordSwaps, wall,
     ]
   );
 
@@ -620,12 +626,40 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   }, [trEnabled, translateObscure, parallelOn, currentLine, visRange, doc, split, settings.blurLinesBefore, settings.blurLinesAfter]);
   const translations = useLineTranslations(doc, neededLines, trCfg, trEnabled);
 
+  // After a row snap, nudge the scroll so the current WORD itself sits centered — rows can be
+  // paragraph-sized (wall mode), where centering the row can still leave the exact word off-screen.
+  // Sets scrollTop on the real scroller directly (scrollIntoView doesn't reliably move the
+  // virtualized list), at a few settling points: react-window renders the target row async after
+  // scrollToRow, then shifts positions again as dynamic row heights are measured in.
+  const wordSnapSeq = useRef(0);
+  const centerCurrentWordSoon = (rowIndex) => {
+    const seq = ++wordSnapSeq.current;
+    const snap = () => {
+      if (seq !== wordSnapSeq.current) return;
+      const wrap = listWrapRef.current;
+      const el = wrap?.querySelector('.line-row .word.current');
+      if (!el) {
+        // Target row not rendered yet — a deep jump lands on ESTIMATED offsets that drift as real
+        // row heights measure in. Re-issue the row snap; the next retry then finds the word.
+        if (rowIndex != null) listRef.current?.scrollToRow?.({ index: rowIndex, align: 'center' });
+        return;
+      }
+      const scroller = [...wrap.querySelectorAll('*')].find((n) => /(auto|scroll)/.test(getComputedStyle(n).overflowY)) || wrap;
+      const sr = scroller.getBoundingClientRect();
+      const wr = el.getBoundingClientRect();
+      scroller.scrollTop += (wr.top + wr.height / 2) - (sr.top + sr.height / 2);
+    };
+    [80, 320, 750, 1200].forEach((ms) => setTimeout(snap, ms));
+  };
+
   useEffect(() => {
     // In scroll-to-read mode the scroll is the user's — don't yank it back to centre the cursor.
     if (split || !settings.centerOnCurrent || scrollRead) return;
     const api = listRef.current;
     if (!api?.scrollToRow) return;
     api.scrollToRow({ index: currentLine, align: 'center' });
+    centerCurrentWordSoon(currentLine);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentLine, settings.centerOnCurrent, split, listRef, scrollRead]);
 
   // Opening a file should land on the current line — but dynamic row heights are only measured
@@ -635,17 +669,20 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     if (split || scrollRead) return;
     const t = setTimeout(() => {
       listRef.current?.scrollToRow?.({ index: currentLine, align: 'center' });
+      centerCurrentWordSoon(currentLine);
     }, 400); // ponytail: one-shot delay beats a ResizeObserver settle-detector here
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc]);
 
   // "Jump to current word": recenter on demand (bumped by a control), regardless of centerOnCurrent
-  // or scroll-to-read — so you can always snap back to where you're reading.
+  // or scroll-to-read — so you can always snap back to where you're reading. The row snap lands the
+  // right line; centerCurrentWordSoon then puts the EXACT word in the middle.
   useEffect(() => {
     if (!recenterKey || split) return;
     const api = listRef.current;
     api?.scrollToRow?.({ index: currentLine, align: 'center' });
+    centerCurrentWordSoon(currentLine);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recenterKey]);
 

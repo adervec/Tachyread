@@ -728,6 +728,11 @@ function AppInner() {
     }
     if (opts.nav) ttsNavResyncRef.current = true; // manual jump during read-aloud → resync speech
     patchSettings(activeTab.id, { wordIndex: next });
+    // A deliberate jump-to-elsewhere (ToC/Find/Go-to/Index/line tap — src 'jump' or untagged, same
+    // rule as the mode detector above) recenters the Lines pane on the EXACT target word. Line-level
+    // centering alone can't: a wall-of-text block is one huge "line", so the line often doesn't
+    // even change. Word-step/line/para/page/scroll moves keep their own follow behaviour.
+    if ((opts.src || 'jump') === 'jump') setRecenterKey((k) => k + 1);
   }
 
   // Set "finish this section" (start→end words) as the active goal — used by the TOC pane.
@@ -2658,6 +2663,7 @@ function AppInner() {
             onJumpToCurrent={jumpToCurrent}
             onJumpToFrontier={jumpToFrontier}
             onJumpToGap={jumpToGap}
+            onOpenBiometric={() => openDialog({ kind: 'biometric-settings' })}
           />
         ) : (
           <div className="controls-bar" style={{ opacity: 0.5 }}>
@@ -2677,21 +2683,23 @@ function AppInner() {
             {ttsStatus === 'native' ? ' · native' : ''}
           </span>
         )}
-        {camOn && webcamState !== 'off' && (
-          <button className={`webcam-badge wb-${webcamShownState(webcamState)}`} title={state.global.webcamPreview ? 'Webcam — frames are analysed on your device and never leave it' : 'Show the camera popup'} onClick={() => updateGlobal({ webcamPreview: true })}>
-            📷 {WEBCAM_LABEL[webcamShownState(webcamState)] || webcamShownState(webcamState)}
-          </button>
-        )}
-        {handGesturesOn && handState !== 'off' && (
-          <button className={`webcam-badge wb-${handState.startsWith('scroll') || handState === 'hand' ? 'watching' : handState}`} title={state.global.webcamPreview ? 'Hand gestures — open palm above/below rest scrolls (farther = faster), a wave toggles play/pause. Frames stay on your device.' : 'Show the camera popup'} onClick={() => updateGlobal({ webcamPreview: true })}>
-            🖐 {HAND_LABEL[handState] || handState}
-          </button>
-        )}
-        {audioCtrlOn && (
-          <button className="webcam-badge wb-watching" title={state.global.webcamPreview !== false ? 'Voice / clap commands listening — audio is analysed on your device.' : 'Show the Biometric Control Feed'} onClick={() => updateGlobal({ webcamPreview: true })}>
-            🎤 listening
-          </button>
-        )}
+        {/* ONE unified biometric badge (was three separate 📷 / 🖐 / 🎤 buttons): every active
+            hands-free source in a single button that opens the Biometric Control Feed. */}
+        {(() => {
+          const parts = [];
+          if (camOn && webcamState !== 'off') parts.push(`📷 ${WEBCAM_LABEL[webcamShownState(webcamState)] || webcamShownState(webcamState)}`);
+          if (handGesturesOn && handState !== 'off') parts.push(`🖐 ${HAND_LABEL[handState] || handState}`);
+          if (audioCtrlOn) parts.push('🎤 listening');
+          if (!parts.length) return null;
+          const tone = camOn && webcamState !== 'off' ? webcamShownState(webcamState)
+            : handGesturesOn && handState !== 'off' ? (handState.startsWith('scroll') || handState === 'hand' ? 'watching' : handState)
+            : 'watching';
+          return (
+            <button className={`webcam-badge wb-${tone}`} title="Biometric controls active — camera & audio are analysed on your device and never leave it. Click to show the Biometric Control Feed." onClick={() => updateGlobal({ webcamPreview: true })}>
+              {parts.join(' · ')}
+            </button>
+          );
+        })()}
       </div>
 
       {/* Dialogs. A docked (tab) panel portals into the .dialog-slot inside .content-area so it fills

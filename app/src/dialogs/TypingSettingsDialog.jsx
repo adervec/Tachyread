@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Dialog from './Dialog.jsx';
+import ProfilesBar from '../components/ProfilesBar.jsx';
 
 // Typing-practice settings, reachable from the Typing menu (they used to hide inside Tab
 // Settings). Everything here is a per-tab setting under settings.typing / typingEndFanfare;
@@ -24,6 +25,13 @@ export default function TypingSettingsDialog({ settings, onPatch, global, onPatc
 
   return (
     <Dialog title="Typing Settings" onClose={onClose} width={520} buttons={<button onClick={onClose}>Close</button>}>
+      <ProfilesBar
+        kind="typing"
+        profiles={global.settingsProfiles}
+        onChange={(p) => onPatchGlobal({ settingsProfiles: p })}
+        capture={() => ({ typing: { caseSensitive: !!t.caseSensitive, lowercase: !!t.lowercase, noSpecial: !!t.noSpecial, bypassNonQwerty: t.bypassNonQwerty !== false } })}
+        apply={(data) => patchTyping(data.typing || {})}
+      />
       <p className="settings-note">
         How typing runs behave for this tab. Run length, drills, one-word mode and sounds live on
         the typing screen itself; a run can start with ▶ Start or just by typing the first letter.
