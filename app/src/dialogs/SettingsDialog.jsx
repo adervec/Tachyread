@@ -77,6 +77,7 @@ const HINTS = {
   'Breathe period (sec per cycle)': 'Seconds for one full fast → slow → fast cycle of the breathing pace.',
   'Hide Fast Reader pane': 'Remove the flashing-word pane entirely and read only from the Lines pane.',
   'Line spacing (1 = single)': 'Vertical spacing between lines in the Lines pane.',
+  'Auto font size (target chars per line)': 'Let the pane WIDTH drive the font: the size auto-adjusts so roughly this many characters fit on each line, and it follows window resizes and device rotation. Overrides the fixed font size; the A− / A+ buttons then nudge this target instead. 0 = off.',
   '% separators': 'Show faint percentage markers down the Lines pane so you can see how far through you are.',
   'Wall of text (merge lines into blocks)': 'Flow the source lines together into solid blocks (line breaks become spaces; paragraph breaks become an indent tab) instead of one row per source line. Blocks break at headings, % markers, or the interval below.',
   'Wall: break every N lines (0 = sections / % only)': 'In wall-of-text mode, also start a new block every this-many source lines. 0 keeps blocks running until the next heading or % marker.',
@@ -410,8 +411,20 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           min={8}
           max={40}
           value={s.rightPaneFontSize}
+          disabled={(s.autoFontCpl || 0) > 0}
+          title={(s.autoFontCpl || 0) > 0 ? 'Auto font size is on — the pane width drives the font' : ''}
           onChange={(e) => patch({ rightPaneFontSize: Math.max(8, Math.min(40, Number(e.target.value) || 12)) })}
         />
+      </Field>
+      <Field label="Auto font size (target chars per line)">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="range" min={0} max={140} step={5}
+            value={s.autoFontCpl || 0}
+            onChange={(e) => { const v = Number(e.target.value) || 0; patch({ autoFontCpl: v === 0 ? 0 : Math.max(20, v) }); }}
+          />
+          <span className="range-val">{s.autoFontCpl ? `~${s.autoFontCpl} chars` : 'Off'}</span>
+        </div>
       </Field>
       <Field label="Line spacing (1 = single)">
         <input

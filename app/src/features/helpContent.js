@@ -30,6 +30,7 @@ export const HELP_SECTIONS = [
     say: 'Tune how the text looks and where your eye lands. The optimal-recognition-point letter can glow or pulse. Bionic text bolds word-starts. Freshly arrived words can flash a highlight. Custom cursors and fading trails work in the reader areas, and full-screen mode fills the screen with just the reading.',
     body: [
       'Tab Settings holds sizes, alignment, line spacing, bionic text, reveal/hide modes and the ORP (optimal recognition point) highlight — 19 combinable looks for the pivot letter in the Lines pane (glow, pulse, flash, ring, invert, outline, shadow, tilt, bob…), with a tunable "Larger" size (+5…80%) and even its own font, all shown in a live preview.',
+      'Auto font size (Tab Settings): let the Lines pane WIDTH drive the font — the size adjusts so roughly your target number of characters fits per line, following window resizes and rotation. A− / A+ then nudge the target instead of the pixel size.',
       'Completed words in the current line can take their own look (dim, faint, strikethrough, tint…) — Tab Settings → "Completed words in current line". Especially useful with paragraph-sized lines, where it shows exactly how far into the block you are.',
       'Jumping to a word (J / ⌖, Find, Go-to) centers that EXACT word in the Lines pane — even inside a paragraph-sized wall-of-text block, not just its line.',
       'Wall-of-text mode can replace newlines with a chosen sequence of characters or emoji, so paragraphs flow the way you like.',

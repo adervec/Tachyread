@@ -291,6 +291,21 @@ export default function MenuBar({ onFileOpen, onAction }) {
     else if (action === 'open-doc') chooseDoc();
     else onAction(action);
   }
+
+  // A− / A+ for the reading font. With auto-fit font size on (Tab Settings → "Auto font size"),
+  // the width drives the size — so the buttons nudge the chars-per-line TARGET instead
+  // (bigger font = fewer characters per line).
+  function adjustReadingFont(dir) {
+    if (!activeTab) return;
+    const s = activeTab.settings;
+    if ((s.autoFontCpl || 0) > 0) {
+      patchSettings(activeTab.id, { autoFontCpl: Math.max(20, Math.min(200, s.autoFontCpl - dir * 5)) });
+    } else if (dir > 0) {
+      patchSettings(activeTab.id, { rightPaneFontSize: Math.min(60, (s.rightPaneFontSize || 12) + 1) });
+    } else {
+      patchSettings(activeTab.id, { rightPaneFontSize: Math.max(8, (s.rightPaneFontSize || 12) - 1) });
+    }
+  }
   function closeDrawer() { setOpenMenu(null); setSub(null); }
 
   // Compact (phone/tablet) menu: a single hamburger that opens a scrollable drawer with the panel
@@ -314,7 +329,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
           disabled={!activeTab}
           title="Smaller reading font"
           aria-label="Smaller reading font"
-          onClick={() => activeTab && patchSettings(activeTab.id, { rightPaneFontSize: Math.max(8, (activeTab.settings.rightPaneFontSize || 12) - 1) })}
+          onClick={() => adjustReadingFont(-1)}
         >
           A−
         </button>
@@ -323,7 +338,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
           disabled={!activeTab}
           title="Larger reading font"
           aria-label="Larger reading font"
-          onClick={() => activeTab && patchSettings(activeTab.id, { rightPaneFontSize: Math.min(60, (activeTab.settings.rightPaneFontSize || 12) + 1) })}
+          onClick={() => adjustReadingFont(1)}
         >
           A+
         </button>
@@ -484,7 +499,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
           disabled={!activeTab}
           title="Smaller reading font (Lines pane)"
           aria-label="Smaller reading font"
-          onClick={() => activeTab && patchSettings(activeTab.id, { rightPaneFontSize: Math.max(8, (activeTab.settings.rightPaneFontSize || 12) - 1) })}
+          onClick={() => adjustReadingFont(-1)}
         >
           A−
         </button>
@@ -493,7 +508,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
           disabled={!activeTab}
           title="Larger reading font (Lines pane)"
           aria-label="Larger reading font"
-          onClick={() => activeTab && patchSettings(activeTab.id, { rightPaneFontSize: Math.min(60, (activeTab.settings.rightPaneFontSize || 12) + 1) })}
+          onClick={() => adjustReadingFont(1)}
         >
           A+
         </button>

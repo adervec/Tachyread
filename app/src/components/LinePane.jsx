@@ -24,6 +24,23 @@ function stripPunct(w) {
   return w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 }
 
+// Average character width of a rendered font family as a fraction of the font size, measured once
+// per family via canvas over a prose-like sample (proportional text averages ≈0.5em, but real
+// fonts vary — Courier ≈0.6, condensed faces less). Feeds the auto-fit font size.
+const charWidthCache = new Map();
+function charWidthRatio(family) {
+  if (charWidthCache.has(family)) return charWidthCache.get(family);
+  let k = 0.5;
+  try {
+    const ctx = document.createElement('canvas').getContext('2d');
+    ctx.font = `100px ${family}`;
+    const sample = 'the quick brown fox jumps over the lazy dog, 42 times.';
+    k = ctx.measureText(sample).width / sample.length / 100 || 0.5;
+  } catch { /* canvas unavailable → the 0.5 prose average */ }
+  charWidthCache.set(family, k);
+  return k;
+}
+
 // Combinable current-word highlight styles, with back-compat for the old single string.
 function currentWordStyles(settings) {
   if (Array.isArray(settings.currentWordStyles)) return settings.currentWordStyles;
@@ -569,12 +586,41 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     ]
   );
 
+  // Auto-fit font size: the pane's WIDTH drives the font so roughly `autoFontCpl` characters fit
+  // per line (follows window resizes and device rotation). The available line width is read off a
+  // real row's text block; the font's average char width is canvas-measured per family. Half-px
+  // rounding + a 0.5px change gate keep row remeasures from churning.
+  const autoCpl = Math.max(0, Math.min(200, Number(settings.autoFontCpl) || 0));
+  const [autoSize, setAutoSize] = useState(0);
+  useEffect(() => {
+    if (!autoCpl) { setAutoSize(0); return undefined; }
+    const root = paneVisRef.current;
+    if (!root || typeof ResizeObserver === 'undefined') return undefined;
+    const compute = () => {
+      const textEl = root.querySelector('.line-row .text');
+      if (!textEl) return;
+      const avail = textEl.getBoundingClientRect().width;
+      if (!(avail > 40)) return;
+      const fam = getComputedStyle(textEl).fontFamily || 'sans-serif';
+      const size = Math.round(Math.max(8, Math.min(60, avail / (autoCpl * charWidthRatio(fam)))) * 2) / 2;
+      setAutoSize((s) => (Math.abs(s - size) >= 0.5 ? size : s));
+    };
+    compute();
+    const t = setTimeout(compute, 350); // rows render async — one settling pass
+    const ro = new ResizeObserver(compute);
+    ro.observe(root);
+    return () => { clearTimeout(t); ro.disconnect(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCpl, settings.fontFamily]);
+
   // Dynamic row heights — initial guess, then react-window measures via observeRowElements.
   // On phones, floor the line font at a comfortably readable size (the 12px default is too small on
   // a small high-DPI screen) while still honouring a larger user setting.
-  const baseFont = compact
-    ? Math.max(15, settings.rightPaneFontSize || 12)
-    : settings.rightPaneFontSize || 12;
+  const baseFont = autoCpl && autoSize
+    ? autoSize
+    : compact
+      ? Math.max(15, settings.rightPaneFontSize || 12)
+      : settings.rightPaneFontSize || 12;
   const lineSpacing = Math.max(1, Math.min(3, settings.lineSpacing || 1.5));
   const defaultRowHeight = Math.round(baseFont * lineSpacing) + 8;
   const rowHeightCtl = useDynamicRowHeight({

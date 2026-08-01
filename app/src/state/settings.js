@@ -40,6 +40,9 @@ export function defaultFileSettings() {
     currentWordColor: '', // highlight colour for Color/Background/Box/Glow/Underline styles ('' = theme default)
     currentWordFontDelta: 0, // current-word font-size adjust in points (−3..+3)
     rightPaneFontSize: 12,
+    // Auto font size for the Lines pane: fit roughly this many characters per line — the pane's
+    // WIDTH drives the font (follows resizes/rotation). 0 = off (use rightPaneFontSize).
+    autoFontCpl: 0,
     lineSpacing: 1.5, // Lines-pane line-height multiplier
     linesGridH: false, // faint horizontal gridlines on the Lines pane background
     linesGridV: false, // faint vertical gridlines on the Lines pane background
