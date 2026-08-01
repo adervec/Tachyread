@@ -67,12 +67,16 @@ export const HELP_SECTIONS = [
   },
   {
     id: 'typing', title: '⌨ Typing practice',
-    say: 'Typing practice types your book forward from where you are. A run starts on your first keystroke and ends at the limit or after a few idle seconds. You get per-character feedback and an examinable speed-and-accuracy chart. Drills, plans, Flow Writer and Dictation round it out.',
+    say: 'Typing practice types your book forward from where you are, with the best ideas from the classic trainers built in: a pace ghost to race, stop-on-error and no-backspace discipline modes, blind mode, a consistency score, personal bests, daily streaks, a one-click drill of the words you missed, and a per-key error heatmap.',
     body: [
       'Typing menu → Typing Practice types your book forward from the reading position; finish a run and Continue to count it as read, or Discard to return.',
       'A run starts on your first keystroke (or ▶ Start for a Ready·Set·Go). It ends at the limit, on End run, or after 5s idle.',
       'Per-character feedback stays on completed words: green = correct, red = wrong, underlined = never typed, dim red = extra characters.',
-      'The results screen shows an examinable chart of raw, effective and burst WPM plus accuracy — hover it to inspect any moment of the run.',
+      '👻 Pace ghost: a marker moves through the passage at a steady speed — your last run, your personal best, or a custom WPM — so every run is a quiet race (Monkeytype\'s pace caret, TypeRacer\'s ghost).',
+      'Discipline modes: 🛑 stop-on-error refuses wrong keys (they still cost an error) and only commits complete words; 🚫⌫ confidence mode disables backspace entirely; 🙈 blind mode hides the per-character verdicts while you type — the numbers tell the tale at the end.',
+      'The results screen shows an examinable chart of raw, effective and burst WPM plus accuracy AND a consistency % (keystroke-rhythm steadiness), 🏆 personal-best banners (all-time and per mode), and your 🔥 daily typing streak.',
+      '🎯 Drill the misses: one click on the results screen builds a review drill from that run\'s mistyped and unusually slow words — practice your book\'s own hard words, not a generic list.',
+      'Typing Progress adds a keyboard-shaped per-key error heatmap and per-finger error rates mined from your runs, alongside streaks, weekly summaries and per-run consistency.',
       'Drills (Mavis-style rows, bigrams, numbers…) live in the mode dropdown; Typing Plans chains sets into workouts; Flow Writer and Dictation are separate output games.',
     ],
   },

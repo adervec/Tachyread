@@ -3035,6 +3035,29 @@
 .trw.voice { background: rgba(220, 80, 60, .35); border-radius: 3px; }
 .tr-race-result { margin: 4px 0 2px; font-weight: 700; color: var(--nav-session-read-fg); }
 .tr-race-result.caught { color: var(--orp-fg, #d24); }
+/* 👻 Pace ghost: the word a steady-WPM pacer is on — a quiet underline, not a shout. */
+.trw.pace { box-shadow: inset 0 -3px 0 rgba(140, 150, 255, 0.75); border-radius: 2px; }
+/* 🙈 Blind mode: no per-character verdicts while running — everything reads as plain pending text. */
+.tr-lines.blind .trc.correct,
+.tr-lines.blind .trc.wrong,
+.tr-lines.blind .trc.missed,
+.tr-lines.blind .trc.extra { color: inherit; background: transparent; text-decoration: none; }
+.tr-lines.blind .trw.imperfect { text-decoration: none; }
+/* 🏆 Personal-best banner + 🔥 streak line on the results screen. */
+.tr-pb { margin: 4px 0 2px; font-weight: 700; font-size: 15px; color: #d9a012; }
+.tr-streak { margin: 2px 0 4px; font-size: 12.5px; opacity: 0.85; }
+/* Typing Progress: keyboard-shaped per-key error heatmap + per-finger rollup. */
+.tp-heat { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 6px; }
+.tp-heat-row { display: flex; gap: 3px; }
+.tp-heat-key {
+  width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--divider); border-radius: 4px; font-size: 12px; font-family: monospace;
+  text-transform: uppercase; cursor: default;
+}
+.tp-heat-key.unused { opacity: 0.35; }
+.tp-fingers { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; font-size: 12px; }
+.tp-finger { border: 1px solid var(--divider); border-radius: 10px; padding: 2px 8px; }
+.tp-finger.bad { border-color: #d9534f; color: #d9534f; }
 /* Each word is an ATOMIC inline-block: nothing inside it (per-char spans, the caret anchor) can
    create a mid-word line break — words wrap only as whole units. white-space:pre keeps the
    trailing space inside the block so inter-word spacing is unchanged. */

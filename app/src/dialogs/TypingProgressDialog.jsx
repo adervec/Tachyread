@@ -4,6 +4,7 @@ import { allTypingRuns, clearTypingRuns } from '../state/storage.js';
 import { TYPING_MODE_BY_ID } from '../engine/typingModes.js';
 import { fmtDateTime } from '../features/dateFmt.js';
 import { typingWeekly, typingOverall } from '../features/typingStats.js';
+import { typingStreak, aggregateKeys, fingerStats, keyFinger } from '../features/typingUpgrades.js';
 
 function fmtDur(ms) {
   const s = Math.round((ms || 0) / 1000);
@@ -35,6 +36,37 @@ function TpChart({ runs }) {
   );
 }
 
+// Keyboard-shaped error-rate heatmap (Keybr/TIPP10-style) from the aggregated per-key profile.
+// Keys with under 5 attempts stay neutral — one early slip shouldn't paint a key red for weeks.
+const HEAT_ROWS = ['1234567890', 'qwertyuiop', 'asdfghjkl;', 'zxcvbnm,.'];
+function KeyHeatmap({ agg }) {
+  const rates = Object.values(agg).filter((v) => v.n >= 5).map((v) => v.err / v.n);
+  const maxRate = Math.max(0.02, ...rates);
+  return (
+    <div className="tp-heat">
+      {HEAT_ROWS.map((row, ri) => (
+        <div key={ri} className="tp-heat-row" style={{ paddingLeft: ri * 12 }}>
+          {[...row].map((ch) => {
+            const v = agg[ch];
+            const rate = v && v.n >= 5 ? v.err / v.n : null;
+            const heat = rate != null ? Math.min(1, rate / maxRate) : 0;
+            return (
+              <span
+                key={ch}
+                className={`tp-heat-key${v?.n ? '' : ' unused'}`}
+                style={rate != null && rate > 0 ? { background: `color-mix(in srgb, #d9534f ${Math.round(12 + heat * 70)}%, transparent)` } : undefined}
+                title={v?.n ? `${ch} · ${v.err}/${v.n} errors (${((v.err / v.n) * 100).toFixed(1)}%) · ${keyFinger(ch) || ''}` : `${ch} — not enough data yet`}
+              >
+                {ch}
+              </span>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Detailed typing-practice history — separate from reading history.
 export default function TypingProgressDialog({ onClose }) {
   const [runs, setRuns] = useState(null);
@@ -52,7 +84,10 @@ export default function TypingProgressDialog({ onClose }) {
     const errAgg = {};
     for (const r of runs) for (const [k, c] of Object.entries(r.errorKeys || {})) errAgg[k] = (errAgg[k] || 0) + c;
     const topErr = Object.entries(errAgg).sort((a, b) => b[1] - a[1]).slice(0, 14);
-    return { n, best, avgNet, avgAcc, topErr };
+    const streak = typingStreak(runs, Date.now());
+    const keyAgg = aggregateKeys(runs);       // per-key attempts+errors (runs since the upgrade)
+    const fingers = fingerStats(keyAgg);
+    return { n, best, avgNet, avgAcc, topErr, streak, keyAgg, fingers };
   }, [runs]);
 
   async function clearAll() {
@@ -83,6 +118,8 @@ export default function TypingProgressDialog({ onClose }) {
             <Stat v={stats.avgNet} l="avg net WPM" />
             <Stat v={`${stats.avgAcc}%`} l="avg accuracy" />
             <Stat v={stats.n} l="runs" />
+            <Stat v={`🔥 ${stats.streak.days}`} l="day streak" />
+            <Stat v={stats.streak.todayWords.toLocaleString()} l="words today" />
           </div>
 
           <div className="tp-legend"><span className="tp-lg-net">— net WPM</span> <span className="tp-lg-acc">— accuracy</span></div>
@@ -142,21 +179,42 @@ export default function TypingProgressDialog({ onClose }) {
             ))}
           </div>
 
+          {Object.keys(stats.keyAgg).length > 0 && (
+            <>
+              <div className="tp-section">Keyboard heatmap</div>
+              <p className="settings-note" style={{ margin: '0 0 4px' }}>
+                Error rate per key across your runs — the redder, the more that key misfires under
+                your fingers. Pick the matching row drill to work on it.
+              </p>
+              <KeyHeatmap agg={stats.keyAgg} />
+              {stats.fingers.length > 0 && (
+                <div className="tp-fingers">
+                  {stats.fingers.map((f) => (
+                    <span key={f.finger} className={`tp-finger${f.rate > 0.08 ? ' bad' : ''}`} title={`${f.err} errors in ${f.n} keys`}>
+                      {f.finger}: <b>{(f.rate * 100).toFixed(1)}%</b>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
           <div className="tp-section">Recent runs</div>
           <div className="tp-table-wrap">
             <table className="tp-table">
               <thead>
-                <tr><th>When</th><th>Mode</th><th>Device</th><th>Net</th><th>Gross</th><th>Acc</th><th>Words</th><th>Time</th><th>Tier</th></tr>
+                <tr><th>When</th><th>Mode</th><th>Device</th><th>Net</th><th>Gross</th><th>Acc</th><th>Consist.</th><th>Words</th><th>Time</th><th>Tier</th></tr>
               </thead>
               <tbody>
                 {[...runs].reverse().slice(0, 50).map((r, i) => (
                   <tr key={i}>
-                    <td>{fmtDateTime(r.ts)}</td>
+                    <td>{fmtDateTime(r.ts)}{r.pb?.allTime ? ' 🏆' : r.pb?.mode ? ' 🥇' : ''}</td>
                     <td>{r.mode ? (TYPING_MODE_BY_ID[r.mode]?.label || r.mode) : '—'}</td>
                     <td>{r.device ? <span className={`tp-dev tp-dev-${String(r.device).toLowerCase()}`}>{r.device === 'Mobile' ? '📱' : '🖥'} {r.device}</span> : '—'}</td>
                     <td>{r.netWpm}</td>
                     <td>{r.grossWpm}</td>
                     <td>{r.accuracy}%</td>
+                    <td>{r.consistency != null ? `${r.consistency}%` : '—'}</td>
                     <td>{r.words}</td>
                     <td>{fmtDur(r.durationMs)}</td>
                     <td>{r.tier}</td>

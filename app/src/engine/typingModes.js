@@ -5,6 +5,8 @@
 // generators behind the same engine. New modes = a new entry here + a generator branch; the run UI,
 // scoring, trend, and history all keep working unchanged.
 
+import { reviewPassage } from '../features/typingUpgrades.js';
+
 // kind: 'doc'  → generated from the open document (needs the reading position; supports "count as read")
 //       'drill'→ self-contained practice text (no reading position)
 export const TYPING_MODES = [
@@ -15,6 +17,9 @@ export const TYPING_MODES = [
   { id: 'bottomRow', label: 'Bottom row', kind: 'drill', desc: 'z x c v b n m drill.' },
   { id: 'numbers', label: 'Numbers & symbols', kind: 'drill', desc: 'Number-row and symbol accuracy.' },
   { id: 'quotes', label: 'Quotes', kind: 'drill', desc: 'Type a short literary quote.' },
+  // Amphetype-style review: drill the words the LAST run was missed/slow on (one click from the
+  // results screen). Needs `reviewWords` in buildPassage opts; falls back to common words without.
+  { id: 'review', label: '🎯 Review misses', kind: 'drill', desc: 'Drill the words you missed or slowed on in your last run.' },
 ];
 
 export const TYPING_MODE_BY_ID = Object.fromEntries(TYPING_MODES.map((m) => [m.id, m]));
@@ -62,9 +67,13 @@ function drillWords(chars, count, seed = 0) {
   return out;
 }
 
-// Build the passage (word array) for a mode. `seed` lets callers vary drills between attempts.
-export function buildPassage(mode, { docWords = [], startIndex = 0, max = 600, seed = 0 } = {}) {
+// Build the passage (word array) for a mode. `seed` lets callers vary drills between attempts;
+// `reviewWords` feeds the 'review' drill (the last run's problem words).
+export function buildPassage(mode, { docWords = [], startIndex = 0, max = 600, seed = 0, reviewWords = null } = {}) {
   switch (mode) {
+    case 'review':
+      if (reviewWords?.length) return reviewPassage(reviewWords, { max: Math.min(max, 60), seed });
+      return buildPassage('commonWords', { max, seed });
     case 'commonWords': {
       const out = [];
       let i = 0;

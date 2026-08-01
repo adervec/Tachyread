@@ -8,6 +8,8 @@ import { letterGrade, playGradeSound, GRADE_STATEMENTS } from '../features/grade
 import { createReadAloud } from '../features/readAloud.js';
 import { rateFromIndex } from '../features/tts.js';
 import { fmtTime } from '../features/dateFmt.js';
+import { allTypingRuns } from '../state/storage.js';
+import { consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex } from '../features/typingUpgrades.js';
 
 const DEFAULT_SOUNDS = {
   charCorrect: 'off', charWrong: 'off', wordPerfect: 'click', wordError: 'hiss',
@@ -43,7 +45,7 @@ const ENDLESS_SECS = 99999;
 // from reflowing onto the next line while it's being typed.
 const OVERTYPE_MAX = 4;
 
-const freshStats = () => ({ start: 0, chars: 0, correct: 0, errors: 0, words: 0, perfect: 0, errorKeys: {} });
+const freshStats = () => ({ start: 0, chars: 0, correct: 0, errors: 0, words: 0, perfect: 0, errorKeys: {}, keys: {} });
 
 export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns, endFanfare = true, plan = null, onPlanNext, onPlanExit }) {
   const { doc, settings } = tab;
@@ -51,6 +53,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const caseSensitive = !!cfg.caseSensitive;
   const oneWord = !!cfg.oneWord; // show one word at a time; it must be typed perfectly to advance
   const raceVoice = !!cfg.raceVoice; // race the TTS voice: it reads the passage; get caught if it passes you
+  const stopOnError = !!cfg.stopOnError; // a wrong key is refused (still costs an error) — accuracy discipline
+  const confidence = !!cfg.confidence;   // no backspace — errors cost accuracy, not time
+  const blind = !!cfg.blind;             // hide per-char verdicts while running; the numbers tell the tale at the end
   const volume = cfg.soundVolume ?? 0.4;
   const sounds = { ...DEFAULT_SOUNDS, ...(cfg.sounds || {}) };
   const tickClock = !!cfg.tickClock;
@@ -75,9 +80,16 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // when bypassed symbol tokens make the passage shorter than the doc span it covers.
   const lastGiRef = useRef(null);
   // Typing game mode: 'passage' (from the book) is the Monkeytype baseline; the rest are
-  // Mavis-Beacon-style drills generated independently of the document. `seed` varies drills on reattempt.
-  const [gameMode, setGameMode] = useState(cfg.mode || 'passage');
+  // Mavis-Beacon-style drills generated independently of the document. `seed` varies drills on
+  // reattempt. 'review' only makes sense right after a run mined problem words — never restored.
+  const [gameMode, setGameMode] = useState(cfg.mode === 'review' ? 'passage' : (cfg.mode || 'passage'));
   const [seed, setSeed] = useState(0);
+  // The last run's problem words, feeding the 🎯 Review-misses drill (Amphetype-style).
+  const reviewRef = useRef([]);
+  // Persisted run history, loaded once: personal-best detection, the 👻 pace ghost's
+  // last-run/PB speeds, and the daily-streak line on the results screen.
+  const pastRunsRef = useRef(null);
+  useEffect(() => { allTypingRuns().then((r) => { pastRunsRef.current = r || []; }).catch(() => { pastRunsRef.current = []; }); }, []);
   const isDocMode = (TYPING_MODE_BY_ID[gameMode]?.kind || 'doc') === 'doc';
   // Auto-bypass characters a QWERTY keyboard can't make (default on): normalize typographic look-
   // alikes and drop purely-decorative tokens so the drill never asks you to type a "•" or a "¶".
@@ -90,7 +102,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // line/sentence cues and forward continuation), with transformed-away tokens filtered out; `passage`
   // is the text-only array the run/render use. Built in one memo so the two stay in lockstep.
   const { prepared, passage } = useMemo(() => {
-    const raw = buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: PASSAGE_MAX, seed });
+    const raw = buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: PASSAGE_MAX, seed, reviewWords: reviewRef.current });
     const base = isDocMode ? startIndex.current : 0;
     const prep = [];
     for (let i = 0; i < raw.length; i++) {
@@ -138,6 +150,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
   const stats = useRef(freshStats());
   const wordErrors = useRef(0);
+  const intervalsRef = useRef([]);  // inter-key gaps (ms) → the consistency % at run end
+  const lastKeyTsRef = useRef(0);
+  const wordStartRef = useRef(0);   // when the current word's first char landed → per-word ms
+  const resultsRef = useRef([]);    // mirror of `results` incl. per-word ms (endRun reads it)
+  const [pacePos, setPacePos] = useState(-1); // word the 👻 pace ghost is on (-1 = off)
   const inputRef = useRef(null);
   const idleTimer = useRef(null);
   const tickTimer = useRef(null);
@@ -156,6 +173,21 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   useEffect(() => { posRef.current = pos; }, [pos]);
 
   const effLimitSecs = mode === 'endless' ? ENDLESS_SECS : limit;
+
+  // 👻 Pace ghost (Monkeytype's pace caret): a marker moving through the passage at a steady WPM —
+  // your last run, your personal best, or a custom speed. Resolved per run start (phase dep) so the
+  // async history load and fresh session runs are picked up.
+  const paceMode = cfg.pace || 'off';
+  const paceWpmVal = useMemo(() => {
+    if (paceMode === 'off') return 0;
+    if (paceMode === 'custom') return Math.max(10, Math.min(400, Number(cfg.paceWpm) || 60));
+    const all = [...(pastRunsRef.current || []), ...(sessionRuns || [])];
+    if (paceMode === 'pb') return bestNet(all) || 0;
+    const last = [...all].sort((a, b) => (a.ts || 0) - (b.ts || 0)).at(-1);
+    return last?.netWpm || 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paceMode, cfg.paceWpm, sessionRuns, phase]);
+  const paceCum = useMemo(() => buildCum(passage), [passage]);
 
   const focus = () => inputRef.current?.focus();
   useEffect(() => { focus(); }, [phase]);
@@ -190,6 +222,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       durationMs: Math.round(m.secs * 1000),
       docName: doc.fileName || 'text',
       errorKeys: { ...s.errorKeys },
+      keys: { ...s.keys },        // per-key attempts+errors → the Typing Progress heatmap
+      consistency: consistencyPct(intervalsRef.current), // keystroke-rhythm % (null on tiny runs)
       tier: netTier(net),
       grade: letterGrade(net),
       device: deviceKind(), // 'Mobile' | 'Desktop' — which device this run was typed on
@@ -198,11 +232,16 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       caught: caughtRef.current,  // did the voice catch you
       trend: trendRef.current,    // per-half-second samples for the results chart (not persisted)
     };
+    // Problem words (missed or unusually slow) → the 🎯 review drill; PBs judged against history.
+    run.problemWords = problemWords(passage, resultsRef.current);
+    run.pb = pbFlags(pastRunsRef.current || [], run);
+    pastRunsRef.current = [...(pastRunsRef.current || []), run];
     setSummary(run);
     setPhase('done');
     onSaveRun?.(run);
     if (endFanfare) playGradeSound(run.grade);
-  }, [metrics, doc, onSaveRun, gameMode, endFanfare]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metrics, doc, onSaveRun, gameMode, endFanfare, passage]);
 
   const armIdle = useCallback(() => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -227,10 +266,12 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         trendRef.current = next;
         return next;
       });
+      // 👻 pace ghost: where a steady paceWpmVal typist would be by now.
+      if (paceWpmVal > 0) setPacePos(paceWordIndex(paceCum, paceChars(paceWpmVal, m.secs)));
       if (mode !== 'endless' && mode !== 'words' && m.secs >= effLimitSecs) endRun();
     }, 500);
     return () => { if (tickTimer.current) { clearInterval(tickTimer.current); tickTimer.current = null; } };
-  }, [phase, mode, effLimitSecs, metrics, endRun]);
+  }, [phase, mode, effLimitSecs, metrics, endRun, paceWpmVal, paceCum]);
 
   // Countdown clock: tick once a second in a timed run, then accelerate + sharpen over the final ~10s.
   useEffect(() => {
@@ -330,6 +371,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     stopRace(); setVoicePos(-1); voiceRef.current = 0; caughtRef.current = false; racedRef.current = false;
     setPos(0); setBuf(''); setResults([]); setSummary(null); setTrend([]);
     stats.current = freshStats(); wordErrors.current = 0; lastGiRef.current = null;
+    resultsRef.current = []; intervalsRef.current = []; lastKeyTsRef.current = 0; wordStartRef.current = 0;
+    setPacePos(-1);
     seg.current = { line: true, sent: true, para: true };
     if (linesRef.current) linesRef.current.style.transform = 'translateY(0)';
   }
@@ -398,7 +441,12 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     }
     wordErrors.current = 0;
     lastGiRef.current = prepared[pos]?.gi ?? lastGiRef.current;
-    setResults((r) => [...r, { typed, perfect }]);
+    // Per-word time (first char → commit) feeds the problem-word mining ("unusually slow" words).
+    const ms = wordStartRef.current ? Date.now() - wordStartRef.current : 0;
+    wordStartRef.current = 0;
+    const entry = { typed, perfect, ms };
+    resultsRef.current = [...resultsRef.current, entry];
+    setResults((r) => [...r, entry]);
     setBuf('');
     const nextPos = pos + 1;
     setPos(nextPos);
@@ -415,9 +463,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     if (prevPos < 0) return;
     const prev = results[prevPos];
     setResults((r) => r.slice(0, prevPos));
+    resultsRef.current = resultsRef.current.slice(0, prevPos);
     setPos(prevPos);
     posRef.current = prevPos;
     setBuf(prev?.typed ?? '');
+    wordStartRef.current = Date.now(); // the reopened word's clock restarts
     const s = stats.current;
     s.words = Math.max(0, s.words - 1);
     if (prev?.perfect) s.perfect = Math.max(0, s.perfect - 1);
@@ -426,12 +476,23 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   }
 
   // Score the characters of `str` from index `fromLen` onward against the current target word.
+  // Also feeds the rhythm clock (inter-key intervals → consistency %), the per-key profile
+  // (attempts + errors per target key → the Typing Progress heatmap), and the per-word timer.
   function scoreChars(fromLen, str) {
     const s = stats.current;
     const target = passage[pos] || '';
+    if (str.length > fromLen) {
+      const now = Date.now();
+      if (lastKeyTsRef.current) intervalsRef.current.push(now - lastKeyTsRef.current);
+      lastKeyTsRef.current = now;
+      if (fromLen === 0 && !wordStartRef.current) wordStartRef.current = now;
+    }
     for (let p = fromLen; p < str.length; p++) {
       const ch = target[p];
       s.chars += 1;
+      const key = ch ? (caseSensitive ? ch : ch.toLowerCase()) : null;
+      const kk = key ? (s.keys[key] ||= { n: 0, err: 0 }) : null;
+      if (kk) kk.n += 1;
       if (ch !== undefined && charOk(str[p], ch)) {
         s.correct += 1;
         ping(sounds.charCorrect);
@@ -439,7 +500,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         s.errors += 1;
         wordErrors.current += 1;
         ping(sounds.charWrong);
-        if (ch) { const k = caseSensitive ? ch : ch.toLowerCase(); s.errorKeys[k] = (s.errorKeys[k] || 0) + 1; }
+        if (kk) kk.err += 1;
+        if (key) s.errorKeys[key] = (s.errorKeys[key] || 0) + 1;
       }
     }
   }
@@ -448,6 +510,33 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // that mobile soft keyboards work — many of them don't emit usable keydown events (key:"Unidentified",
   // keyCode 229). The input holds the in-progress word (value={buf}); we diff each change. Enter and
   // Escape stay on keydown since a single-line input doesn't surface them as value changes.
+  // Stop-on-error: refuse the first wrong key of an input event — it still costs an error (and a
+  // per-key mark against the TARGET letter), but never enters the buffer, so the buffer is always
+  // a correct prefix. Returns the accepted value.
+  function refuseWrong(val) {
+    const target = passage[pos] || '';
+    let accept = buf;
+    for (let p = buf.length; p < val.length; p++) {
+      if (/\s/.test(val[p])) { accept += val[p]; break; } // space flows to the commit path
+      if (charOk(val[p], target[p])) { accept += val[p]; continue; }
+      const s = stats.current;
+      s.chars += 1;
+      s.errors += 1;
+      wordErrors.current += 1;
+      ping(sounds.charWrong);
+      const ch = target[p];
+      if (ch) {
+        const k = caseSensitive ? ch : ch.toLowerCase();
+        s.errorKeys[k] = (s.errorKeys[k] || 0) + 1;
+        const kk = (s.keys[k] ||= { n: 0, err: 0 });
+        kk.n += 1;
+        kk.err += 1;
+      }
+      break; // drop the wrong key and anything after it in this event
+    }
+    return accept;
+  }
+
   function onChange(e) {
     let val = e.target.value;
     if (phase !== 'running') {
@@ -461,9 +550,22 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         return;
       }
     }
+    // Confidence mode: no corrections — a shrinking value (backspace/autocorrect) is ignored and
+    // the controlled input snaps back to the buffer.
+    if (confidence && val.length < buf.length) return;
+    if (stopOnError && val.length > buf.length) val = refuseWrong(val);
     const sp = val.search(/\s/);
     if (sp >= 0) {
       const typed = val.slice(0, sp);
+      // Stop-on-error also refuses an EARLY space: the word must be complete before it commits.
+      // The correct chars typed in this same event still score before the space is dropped.
+      if (stopOnError && typed.length < (passage[pos] || '').length) {
+        scoreChars(buf.length, typed);
+        ping(sounds.charWrong);
+        setBuf(typed);
+        armIdle();
+        return;
+      }
       scoreChars(buf.length, typed);
       armIdle();
       if (typed.length > 0) commitWord(typed); else setBuf('');
@@ -480,6 +582,12 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       e.preventDefault();
       if (phase === 'countdown') { clearCount(); setCount(null); setPhase('idle'); return; }
       phase === 'running' ? endRun() : onExitDiscard?.();
+      return;
+    }
+    // Confidence mode: backspace is off entirely — within the word AND back into the previous one.
+    if (confidence && e.key === 'Backspace' && phase === 'running') {
+      e.preventDefault();
+      ping(sounds.charWrong);
       return;
     }
     if (e.key === 'Backspace' && phase === 'running' && !oneWord && !e.target.value && pos > 0) {
@@ -541,6 +649,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           <Stat v={live.gross} l="gross wpm" />
           <Stat v={`${live.acc}%`} l="accuracy" />
           <Stat v={progressLabel} l="run" />
+          {phase === 'running' && paceWpmVal > 0 && <Stat v={paceWpmVal} l="👻 pace" />}
         </div>
         <div className="tr-controls">
           {phase !== 'running' && !plan && (
@@ -548,9 +657,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               <select
                 value={gameMode}
                 title="Typing mode — Passage types your book; the rest are drills"
-                onChange={(e) => { setGameMode(e.target.value); onPatch?.({ typing: { ...cfg, mode: e.target.value } }); reattempt(); }}
+                onChange={(e) => { setGameMode(e.target.value); if (e.target.value !== 'review') onPatch?.({ typing: { ...cfg, mode: e.target.value } }); reattempt(); }}
               >
-                {TYPING_MODES.map((tm) => <option key={tm.id} value={tm.id}>{tm.label}</option>)}
+                {TYPING_MODES.filter((tm) => tm.id !== 'review' || reviewRef.current.length > 0).map((tm) => <option key={tm.id} value={tm.id}>{tm.label}</option>)}
               </select>
               <select value={mode} onChange={(e) => { setMode(e.target.value); onPatch?.({ typing: { ...cfg, runMode: e.target.value } }); }}>
                 <option value="seconds">Seconds</option>
@@ -582,6 +691,36 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                   onChange={(e) => onPatch?.({ typing: { ...cfg, noSpecial: e.target.checked } })} />
                 <span>no&nbsp;#</span>
               </label>
+              <label className="tr-oneword" title="Stop on error — a wrong key is refused (it still costs an error), and space only commits a complete word. The classic accuracy-discipline mode.">
+                <input type="checkbox" checked={stopOnError}
+                  onChange={(e) => onPatch?.({ typing: { ...cfg, stopOnError: e.target.checked } })} />
+                <span>🛑 stop-on-err</span>
+              </label>
+              <label className="tr-oneword" title="Confidence mode — backspace is disabled entirely; errors cost accuracy, not time">
+                <input type="checkbox" checked={confidence}
+                  onChange={(e) => onPatch?.({ typing: { ...cfg, confidence: e.target.checked } })} />
+                <span>🚫⌫</span>
+              </label>
+              <label className="tr-oneword" title="Blind mode — no per-character verdicts while you type; trust your fingers and let the numbers tell the tale at the end">
+                <input type="checkbox" checked={blind}
+                  onChange={(e) => onPatch?.({ typing: { ...cfg, blind: e.target.checked } })} />
+                <span>🙈 blind</span>
+              </label>
+              <select
+                value={paceMode}
+                title="👻 Pace ghost — a marker moves through the passage at a steady speed (your last run, your best, or a custom WPM); try to stay ahead of it"
+                onChange={(e) => onPatch?.({ typing: { ...cfg, pace: e.target.value } })}
+              >
+                <option value="off">👻 off</option>
+                <option value="last">👻 last run</option>
+                <option value="pb">👻 best</option>
+                <option value="custom">👻 custom</option>
+              </select>
+              {paceMode === 'custom' && (
+                <input type="number" min={10} max={400} value={cfg.paceWpm ?? 60}
+                  onChange={(e) => onPatch?.({ typing: { ...cfg, paceWpm: Math.max(10, Math.min(400, Number(e.target.value) || 60)) } })}
+                  style={{ width: 56 }} title="Pace ghost speed (WPM)" />
+              )}
             </>
           )}
           <label className="tr-vol" title="Sound volume">🔊
@@ -623,10 +762,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       <div className="tr-viewport" style={{ display: phase === 'done' ? 'none' : undefined, ...(settings.fontFamily ? { fontFamily: settings.fontFamily } : null) }}>
         {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{count}</div>}
         <div className="tr-cursor" ref={caretRef} style={{ opacity: phase === 'running' ? 1 : 0 }} />
-        <div className={`tr-lines${oneWord ? ' one-word' : ''}`} ref={linesRef}>
+        <div className={`tr-lines${oneWord ? ' one-word' : ''}${blind ? ' blind' : ''}`} ref={linesRef}>
           {passage.map((w, i) => {
             if (oneWord && i !== pos) return null; // one-word mode shows only the current word
-            const vc = i === voicePos ? ' voice' : ''; // word the racing voice is currently speaking
+            const vc = (i === voicePos ? ' voice' : '') // word the racing voice is speaking…
+              + (i === pacePos && phase === 'running' && paceWpmVal > 0 ? ' pace' : ''); // …and the 👻 ghost's word
             if (i < pos) {
               // Committed words keep their per-character verdict (monkeytype-style): what you
               // actually typed stays visible — wrong chars, chars you never typed, and (capped)
@@ -678,9 +818,23 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               {summary.caught ? '🔊 The voice caught you!' : '🏁 You outran the voice!'}
             </div>
           )}
+          {(summary.pb?.allTime || summary.pb?.mode) && (
+            <div className="tr-pb">
+              {summary.pb.allTime ? '🏆 New all-time personal best!' : `🥇 New personal best for ${TYPING_MODE_BY_ID[summary.mode]?.label || 'this mode'}!`}
+            </div>
+          )}
           <div className="tr-results-head">
-            <strong>{summary.netWpm} net WPM</strong> · {summary.grossWpm} gross · {summary.accuracy}% acc · {summary.tier}
+            <strong>{summary.netWpm} net WPM</strong> · {summary.grossWpm} gross · {summary.accuracy}% acc
+            {summary.consistency != null ? ` · ${summary.consistency}% consistency` : ''} · {summary.tier}
           </div>
+          {(() => {
+            const stk = typingStreak(pastRunsRef.current || [], Date.now());
+            return stk.days > 0 && (
+              <div className="tr-streak">
+                🔥 {stk.days}-day typing streak · {stk.todayWords.toLocaleString()} words today
+              </div>
+            );
+          })()}
           <RunChart trend={summary.trend} />
           <div className="tr-results-actions">
             {plan ? (
@@ -693,6 +847,14 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               <>
                 {moreAhead && (
                   <button className="toggle-on" onClick={nextRun} title="New run starting where this one ended">Onward →</button>
+                )}
+                {summary.problemWords?.length >= 3 && (
+                  <button
+                    onClick={() => { reviewRef.current = summary.problemWords; setGameMode('review'); reattempt(); }}
+                    title="A quick drill built from this run's missed and unusually slow words"
+                  >
+                    🎯 Drill the misses ({summary.problemWords.length})
+                  </button>
                 )}
                 <button className={moreAhead ? '' : 'toggle-on'} onClick={stageRun} title="Re-type the exact same passage (starts when you type)">↻ Reattempt</button>
                 {isDocMode && (
