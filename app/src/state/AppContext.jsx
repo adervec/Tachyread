@@ -96,6 +96,14 @@ function reducer(state, action) {
   switch (action.type) {
     case 'SET_GLOBAL':
       return { ...state, global: action.global, globalHydrated: true };
+    case 'SET_PANES': {
+      // Restore the persisted pane layout (whitelisted view toggles only) — see global.paneLayout.
+      const patch = {};
+      for (const k of ['showRsvp', 'showLines', 'showToc', 'showStats', 'showSource', 'showIndex']) {
+        if (typeof action.panes?.[k] === 'boolean') patch[k] = action.panes[k];
+      }
+      return { ...state, ...patch };
+    }
     case 'ADD_TAB': {
       const tabs = [...state.tabs, action.tab];
       return { ...state, tabs, activeTabId: action.tab.id };

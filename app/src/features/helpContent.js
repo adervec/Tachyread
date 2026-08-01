@@ -9,7 +9,7 @@ export const HELP_SECTIONS = [
     say: 'Welcome to Tachyread. Open a book from the File menu, or drop a file onto the window. The Fast Reader flashes one word at a time; the Lines pane shows the text in context. Everything you read is tracked and restored next time.',
     body: [
       'Open a book with File → Open Document (.pdf, .epub, .docx, .txt, .md), paste text from the clipboard (Ctrl+B), or capture it from anything on screen with Grab Text (OCR). You can also drop files onto the window.',
-      'The Fast Reader pane flashes one word at a time at your WPM (Space plays/pauses); the Lines pane shows the text in context. Toggle panes from the bar at the top (ToC, Faces/Stats, Index, Fast Reader, Lines).',
+      'The Fast Reader pane flashes one word at a time at your WPM (Space plays/pauses); the Lines pane shows the text in context. Toggle panes from the bar at the top (ToC, Faces/Stats, Index, Fast Reader, Lines) — on desktop, whatever pane/chips/stats layout you leave is restored on the next launch.',
       'Everything you read is tracked per book: position, coverage, pace. Close the app and your session restores.',
       'Bulk-adding a whole shelf? File → Bulk Add from Folder scans a folder, filters by format, and opens every file you haven’t added yet.',
     ],

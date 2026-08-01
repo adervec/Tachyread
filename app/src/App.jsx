@@ -1771,6 +1771,29 @@ function AppInner() {
   }, [state.globalHydrated, isCompact, state.global.eyeWarmup, updateGlobal]);
   function dismissWarmupNudge() { setWarmupNudge(false); }
 
+  // Remember the pane setup (Fast Reader / Lines / ToC / Stats / Source / Index) across launches on
+  // desktop: restore the saved layout once stored settings hydrate, then persist every toggle.
+  // Compact screens keep their own minimal boot layout (panes stack there, so a wide-open desktop
+  // layout would be a long scroll), and chips/faces already persist via their own settings.
+  const paneRestoredRef = useRef(false);
+  useEffect(() => {
+    if (paneRestoredRef.current || !state.globalHydrated) return;
+    paneRestoredRef.current = true;
+    if (isCompact || !state.global.paneLayout) return;
+    dispatch({ type: 'SET_PANES', panes: state.global.paneLayout });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.globalHydrated]);
+  useEffect(() => {
+    if (!paneRestoredRef.current || isCompact) return;
+    const pl = {
+      showRsvp: !!state.showRsvp, showLines: state.showLines !== false, showToc: !!state.showToc,
+      showStats: !!state.showStats, showSource: !!state.showSource, showIndex: !!state.showIndex,
+    };
+    if (JSON.stringify(pl) === JSON.stringify(state.global.paneLayout)) return;
+    updateGlobal({ paneLayout: pl });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.showRsvp, state.showLines, state.showToc, state.showStats, state.showSource, state.showIndex]);
+
   // "Add to Trackyread" nudge: when an UNTRACKED document is opened, offer to add it to the tracker
   // right then. Fires on interactive opens only (openDoc emits the event for non-silent, non-incognito
   // opens); skipped when already bound, when the user turned it off, or once per checksum this session.
