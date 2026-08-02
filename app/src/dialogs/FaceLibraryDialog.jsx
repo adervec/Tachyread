@@ -7,7 +7,7 @@ import { FACE_STYLES } from '../components/faceDecor3d.js';
 
 const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel'];
 
-// Face Library: browse every procedural face style, preview how it animates across the
+// Avatar Library: browse every procedural face style, preview how it animates across the
 // WPM range, choose an art style, and assign faces to the (up to 3) reader slots.
 export default function FaceLibraryDialog({ onClose }) {
   const { activeTab, patchSettings } = useApp();
@@ -18,8 +18,8 @@ export default function FaceLibraryDialog({ onClose }) {
 
   if (!activeTab) {
     return (
-      <Dialog title="Face Library" onClose={onClose} width={680}>
-        <p>Open a document first to configure reader faces.</p>
+      <Dialog title="Avatar Library" onClose={onClose} width={680}>
+        <p>Open a document first to configure reader avatars.</p>
       </Dialog>
     );
   }
@@ -40,14 +40,14 @@ export default function FaceLibraryDialog({ onClose }) {
 
   return (
     <Dialog
-      title="Face Library"
+      title="Avatar Library"
       onClose={onClose}
       width={760}
       buttons={<button onClick={onClose}>Close</button>}
     >
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
         <label>
-          Show faces{' '}
+          Show avatars{' '}
           <input
             type="checkbox"
             checked={!!s.showEyes}
@@ -55,7 +55,7 @@ export default function FaceLibraryDialog({ onClose }) {
           />
         </label>
         <label>
-          Faces{' '}
+          Avatars{' '}
           <input
             type="number"
             min={1}
@@ -63,6 +63,14 @@ export default function FaceLibraryDialog({ onClose }) {
             value={faceCount}
             style={{ width: 48 }}
             onChange={(e) => patchSettings(activeTab.id, { faceCount: Math.max(1, Math.min(3, Number(e.target.value))) })}
+          />
+        </label>
+        <label title="Rayman-style floating hands beside each avatar — they mirror your biometric controls (gestures, joystick, claps, voice) and move with the current activity">
+          🤚 Rayman hands{' '}
+          <input
+            type="checkbox"
+            checked={!!s.avatarHands}
+            onChange={(e) => patchSettings(activeTab.id, { avatarHands: e.target.checked })}
           />
         </label>
         <label>
@@ -90,7 +98,7 @@ export default function FaceLibraryDialog({ onClose }) {
         <div style={{ textAlign: 'center' }}>
           <FacePreview faceStyle={styles[slot]} artStyle={art} wpm={wpm} size={184} />
           <div style={{ fontSize: 12, color: 'var(--status-fg)', marginTop: 4 }}>
-            Face {slot + 1}: {styles[slot]}
+            Avatar {slot + 1}: {styles[slot]}
           </div>
         </div>
       </div>
@@ -108,7 +116,7 @@ export default function FaceLibraryDialog({ onClose }) {
             <button
               key={style}
               onClick={() => assign(style)}
-              title={`Assign ${style} to face slot ${slot + 1}`}
+              title={`Assign ${style} to avatar slot ${slot + 1}`}
               style={{
                 display: 'flex',
                 flexDirection: 'column',

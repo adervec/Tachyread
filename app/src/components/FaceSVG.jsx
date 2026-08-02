@@ -413,10 +413,10 @@ function decor(style) {
   }
 }
 
-function Eye({ cx, expr, offset }) {
-  const ix = irisColor(expr.iris);
-  const glowCls = expr.tier === 7 ? 'face-glow-7' : expr.tier === 6 ? 'face-glow-6' : '';
-  const irisCls = expr.tier === 7 ? 'face-iris-7' : '';
+function Eye({ cx, expr, offset, irisOverride }) {
+  const ix = irisOverride || irisColor(expr.iris);
+  const glowCls = irisOverride ? '' : expr.tier === 7 ? 'face-glow-7' : expr.tier === 6 ? 'face-glow-6' : '';
+  const irisCls = irisOverride ? '' : expr.tier === 7 ? 'face-iris-7' : '';
   return (
     <g>
       <circle
@@ -438,31 +438,41 @@ function Eye({ cx, expr, offset }) {
   );
 }
 
-export default function FaceSVG({ wpm = 0, lineProgress = 0.5, faceStyle = 'Man', artStyle = 'Cartoon', size = 130 }) {
-  const expr = faceExpression(wpm);
+export default function FaceSVG({
+  wpm = 0, lineProgress = 0.5, faceStyle = 'Man', artStyle = 'Cartoon', size = 130,
+  activity = null, stage = 'awake', speaking = false, irisOverride = null,
+}) {
+  const baseExpr = faceExpression(wpm);
+  // Drowsy droops the lids well past the pace expression; asleep closes them entirely.
+  const expr = stage === 'asleep' ? { ...baseExpr, lidDroop: 1, glow: 0 }
+    : stage === 'drowsy' ? { ...baseExpr, lidDroop: Math.max(baseExpr.lidDroop, 0.72) }
+      : baseExpr;
   const d = decor(faceStyle);
   const offset = (Math.max(0, Math.min(1, lineProgress)) - 0.5) * 2 * RIG.MaxOffset;
   const scleraFill = d.sclera || '#fafaff';
   const lidFill = d.skin;
   const w = Math.round((size * RIG.W) / RIG.H); // preserve the 130:165 aspect ratio
+  // Activity/stage/speaking become CSS classes — the animations live in App.css (av* keyframes).
+  const cls = [`reader-face art-${artStyle.toLowerCase()}`,
+    activity ? `avf-${activity}` : '', `avf-${stage}`, speaking ? 'avf-speaking' : ''].filter(Boolean).join(' ');
 
   return (
     <svg
-      className={`reader-face art-${artStyle.toLowerCase()}`}
+      className={cls}
       width={w}
       height={size}
       viewBox={`0 0 ${RIG.W} ${RIG.H}`}
       style={{ width: w, height: size }}
       role="img"
-      aria-label={`${faceStyle} reader face`}
+      aria-label={`${faceStyle} reader avatar`}
     >
       {d.bg}
       {/* Sclera */}
       <circle cx={LCx} cy={ECy} r={ScR} fill={scleraFill} stroke={d.stroke} strokeWidth={1.5} />
       <circle cx={RCx} cy={ECy} r={ScR} fill={scleraFill} stroke={d.stroke} strokeWidth={1.5} />
       {/* Animated irises / pupils */}
-      <Eye cx={LCx} expr={expr} offset={offset} />
-      <Eye cx={RCx} expr={expr} offset={offset} />
+      <Eye cx={LCx} expr={expr} offset={offset} irisOverride={irisOverride} />
+      <Eye cx={RCx} expr={expr} offset={offset} irisOverride={irisOverride} />
       {/* Eyelids (droop with low WPM) */}
       <polygon
         className="face-lid"

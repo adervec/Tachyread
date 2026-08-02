@@ -1,12 +1,13 @@
-import Face from './Face.jsx';
+import Avatar from './Avatar.jsx';
 import ReadingStats from './ReadingStats.jsx';
 import { useLineSweep } from './useLineSweep.js';
 import { useApp } from '../state/AppContext.jsx';
 
-// Desktop dock: the animated reader faces and/or the live reading stats, each shown independently
-// (showFaces / showStats). On mobile these both float as separate draggable popups instead — see
-// FloatingFace / FloatingStats.
-export default function DashboardPane({ tab, dock = false, showFaces = true, showStats = true, autoStopAt = 0 }) {
+// Desktop dock: the animated reader AVATARS and/or the live reading stats, each shown
+// independently (showFaces / showStats). On mobile these both float as separate draggable popups
+// instead — see FloatingFace / FloatingStats. `avatar` carries the live theatrics state
+// (activity / drowsiness stage / TTS speaking / Rayman hands).
+export default function DashboardPane({ tab, dock = false, showFaces = true, showStats = true, autoStopAt = 0, avatar = null }) {
   const { state } = useApp();
   const { settings, doc } = tab;
   const idx = settings.wordIndex;
@@ -26,13 +27,17 @@ export default function DashboardPane({ tab, dock = false, showFaces = true, sho
       {showFaces && settings.showEyes && (
         <div className="rsvp-faces">
           {Array.from({ length: count }, (_, i) => (
-            <Face
+            <Avatar
               key={i}
               wpm={wpm}
               lineProgress={lineProgress}
               faceStyle={styles[i] || 'Man'}
               artStyle={settings.artStyle || 'Cartoon'}
               size={dock ? 72 : 120}
+              activity={avatar?.activity}
+              stage={avatar?.stage || 'awake'}
+              speaking={!!avatar?.speaking}
+              hands={!!avatar?.hands}
             />
           ))}
         </div>

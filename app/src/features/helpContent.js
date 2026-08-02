@@ -9,7 +9,7 @@ export const HELP_SECTIONS = [
     say: 'Welcome to Tachyread. Open a book from the File menu, or drop a file onto the window. The Fast Reader flashes one word at a time; the Lines pane shows the text in context. Everything you read is tracked and restored next time.',
     body: [
       'Open a book with File → Open Document (.pdf, .epub, .docx, .txt, .md), paste text from the clipboard (Ctrl+B), or capture it from anything on screen with Grab Text (OCR). You can also drop files onto the window.',
-      'The Fast Reader pane flashes one word at a time at your WPM (Space plays/pauses); the Lines pane shows the text in context. Toggle panes from the bar at the top (ToC, Faces/Stats, Index, Fast Reader, Lines) — on desktop, whatever pane/chips/stats layout you leave is restored on the next launch.',
+      'The Fast Reader pane flashes one word at a time at your WPM (Space plays/pauses); the Lines pane shows the text in context. Toggle panes from the bar at the top (ToC, Avatars/Stats, Index, Fast Reader, Lines) — on desktop, whatever pane/chips/stats layout you leave is restored on the next launch.',
       'Everything you read is tracked per book: position, coverage, pace. Close the app and your session restores.',
       'Bulk-adding a whole shelf? File → Bulk Add from Folder scans a folder, filters by format, and opens every file you haven’t added yet.',
     ],
@@ -38,6 +38,7 @@ export const HELP_SECTIONS = [
       'New words entering the Lines pane can get a distinct style for a few seconds, so your eye catches what just arrived.',
       'Reading cursor & trail (View menu): pick a custom cursor that shows only in the reader areas, from a rich set of premades or your own. It can leave a fading trail — or a seismograph trail that draws as the lines scroll under a still cursor.',
       'Crosshairs (View menu): design a STABLE of overlay markers for the Lines area — combine shape, image and emoji layers with transparency and behind-the-glass distortion (blur, invert, hue, heat-haze warp), then place any of them on a tab and drag them where your eye should anchor. Designs are shared; placement and size are per tab.',
+      'AVATARS (formerly faces, View → Avatar Library): they now act out what you\'re doing — bobbing while you scroll, nodding line-by-line, darting eyes word-by-word, sweeping on paragraph/page hops — mouth the words while the TTS speaks, get visibly drowsy as idle approaches, and SNOOZE with floating zzz and counting sheep once you go idle. Optional 🤚 Rayman hands float beside them and mirror your biometric controls (a detected 👍 flashes on a hand; the scroll joystick raises a gliding palm; claps applaud). On the typing screen the avatar\'s EYE COLOUR grades your live net WPM against consensus standards — gray beginner → green → cyan → blue → purple → gold → fire at 110+.',
       'Full-screen reading fills the screen with just the Lines pane (desktop ⛶ or menu) or the Source pane (⛶🗐), hiding all chrome. On phones the reading area fills edge to edge. Esc or the small ⛶ overlay exits.',
       'Source page looks: the 🎛 button on the Source pane toolbar opens display-flavour filters for the original page — old paper (sepia), noir, faded print, night, blueprint, thermal… or a custom slider mix. Pure paint; the text and OCR underneath are untouched. Per tab.',
       'Blue-light blocker (BLB) warms the whole app for bedtime reading — its own control in the bottom bar, the View menu, or the B key (App Settings has the strength). It’s independent of Focus mode, which fullscreens and (on Chrome/Edge) blacks out your other monitors.',
@@ -67,7 +68,7 @@ export const HELP_SECTIONS = [
       'One BIOMETRIC button in the controls bar unifies it all: its popup toggles voice/clap commands, camera watching (attention & doze) and hand gestures, and links to the full Biometric Controls page and the live feed. While any source is active, a single status-bar badge (📷 🖐 🎤) shows what’s running and opens the feed.',
       'Profiles: save a whole biometric setup as a named profile and switch between them; after updating a profile an Undo is available for two minutes.',
       'Webcam guards (all optional, all on-device): pause when you look away, stop read-aloud when you doze, away alarms, posture nudges, and focus analytics. Frames never leave your device.',
-      '🎥 Camera feed looks (display only): the 👁 eye ROTOSCOPE pins customizable graphics over your detected eyes on the self-view — glow orbs, rings, stars, lasers or a custom emoji, with size/colour/opacity controls and an optional glow that burns brighter the faster you read (like the faces). Plus display filters for the whole feed (noir, thermal, neon, sepia… or your own mix). Detection always sees the raw frames.',
+      '🎥 Camera feed looks (display only): the 👁 eye ROTOSCOPE pins customizable graphics over your detected eyes on the self-view — glow orbs, rings, stars, lasers or a custom emoji, with size/colour/opacity controls and an optional glow that burns brighter the faster you read (like the avatars). Plus display filters for the whole feed (noir, thermal, neon, sepia… or your own mix). Detection always sees the raw frames.',
     ],
   },
   {
@@ -164,7 +165,7 @@ export const HELP_SECTIONS = [
         ['− +', 'Reading speed −/+ 25 WPM'], ['j', 'Jump to the current word'], ['u', 'Jump to the latest unread word'],
       ] },
       { name: 'Toggle panes', keys: [
-        ['1', 'Fast Reader'], ['2', 'Lines'], ['3', 'Table of Contents'], ['4', 'Stats'], ['5', 'Index'], ['6', 'Faces'],
+        ['1', 'Fast Reader'], ['2', 'Lines'], ['3', 'Table of Contents'], ['4', 'Stats'], ['5', 'Index'], ['6', 'Avatars'],
       ] },
       { name: 'Toggle modes', keys: [
         ['a', 'Read-aloud (TTS)'], ['s', 'Scroll-to-read'], ['v', 'Voice commands'], ['f', 'Focus mode'], ['b', 'Blue-light reduction'], ['i', 'Incognito reading'],

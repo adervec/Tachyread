@@ -7,7 +7,7 @@
 
 // [id, label, defaultOn]. Order here is the initial/default order.
 export const FOCUS_WIDGET_ITEMS = [
-  ['faces', 'Reader faces', true],
+  ['faces', 'Avatars', true],
   ['nowWpm', 'Reading now (WPM)', true],
   ['coverage', 'Book read % + active time', true],
   ['eta', 'Time to finish (measured pace)', true],

@@ -71,7 +71,10 @@ function Part({ part, mat, neon }) {
   );
 }
 
-export default function FaceHead({ wpm = 0, lineProgress = 0.5, faceStyle = 'Man', artStyle = 'Cartoon' }) {
+export default function FaceHead({
+  wpm = 0, lineProgress = 0.5, faceStyle = 'Man', artStyle = 'Cartoon',
+  activity = null, stage = 'awake', speaking = false, irisOverride = null,
+}) {
   const d = useMemo(() => decor3d(faceStyle), [faceStyle]);
   const baseMat = useMemo(() => artMaterial(artStyle), [artStyle]);
   const neon = (artStyle || '').toLowerCase() === 'neon';
@@ -81,6 +84,10 @@ export default function FaceHead({ wpm = 0, lineProgress = 0.5, faceStyle = 'Man
   // Live prop mirrors so the persistent render loop always sees the latest values.
   const wpmRef = useRef(wpm); wpmRef.current = wpm;
   const lpRef = useRef(lineProgress); lpRef.current = lineProgress;
+  const actRef = useRef(activity); actRef.current = activity;
+  const stageRef = useRef(stage); stageRef.current = stage;
+  const speakRef = useRef(speaking); speakRef.current = speaking;
+  const irisORef = useRef(irisOverride); irisORef.current = irisOverride;
 
   const headGroup = useRef();
   const gazeL = useRef(); const gazeR = useRef();
@@ -95,23 +102,46 @@ export default function FaceHead({ wpm = 0, lineProgress = 0.5, faceStyle = 'Man
     const expr = faceExpression(wpmRef.current);
     const lp = Math.max(0, Math.min(1, lpRef.current));
     const t = state.clock.elapsedTime;
+    const act = actRef.current;
+    const stg = stageRef.current;
+    const asleep = stg === 'asleep';
+    const drowsy = stg === 'drowsy';
 
-    // Head turn + a slight downward tilt, following the reading position.
-    const yaw = (lp - 0.5) * 2 * RIG3D.maxYaw;
+    // Activity theatrics — small periodic offsets layered onto the base pose. Each activity has
+    // its own signature move: scroll bobs, line-by-line nods, word-by-word saccades, paragraph/
+    // page sweeps, typing hunches. Drowsy adds a slow heavy nod; asleep droops and breathes.
+    let bobY = 0, nodX = 0, sweepYaw = 0, gazeJit = 0, browPop = 0;
+    if (!asleep) {
+      if (act === 'scroll') bobY = Math.sin(t * 2.4) * 0.05;
+      else if (act === 'line') nodX = Math.max(0, Math.sin(t * 3.2)) * 0.09;
+      else if (act === 'word') gazeJit = Math.sin(t * 9) * 0.05;
+      else if (act === 'para' || act === 'page') sweepYaw = Math.sin(t * 1.3) * 0.16;
+      else if (act === 'typing') { nodX = 0.1 + Math.sin(t * 5) * 0.02; bobY = Math.sin(t * 5) * 0.012; }
+      else if (act === 'jump') browPop = Math.max(0, Math.sin(t * 2.2)) * 0.06;
+      if (drowsy) nodX += 0.16 + Math.max(0, Math.sin(t * 0.9)) * 0.12;
+    }
+
+    // Head turn + tilt, following the reading position (drooped and slowly breathing when asleep).
+    const yaw = asleep ? 0 : (lp - 0.5) * 2 * RIG3D.maxYaw + sweepYaw;
+    const tiltX = asleep ? 0.42 : RIG3D.tilt + nodX;
     if (headGroup.current) {
       headGroup.current.rotation.y = damp(headGroup.current.rotation.y, yaw, 6, ddt);
-      headGroup.current.rotation.x = damp(headGroup.current.rotation.x, RIG3D.tilt, 5, ddt);
+      headGroup.current.rotation.x = damp(headGroup.current.rotation.x, tiltX, 5, ddt);
+      const breathe = asleep ? 1 + Math.sin(t * 1.6) * 0.015 : 1;
+      headGroup.current.scale.setScalar(0.8 * breathe);
+      headGroup.current.position.y = damp(headGroup.current.position.y, -0.05 + bobY, 8, ddt);
     }
-    // Gaze — eyes lead the head a touch.
-    const gaze = (lp - 0.5) * 2 * RIG3D.maxGaze;
+    // Gaze — eyes lead the head a touch (with the word-mode saccade jitter).
+    const gaze = (lp - 0.5) * 2 * RIG3D.maxGaze + gazeJit;
     if (gazeL.current) gazeL.current.rotation.y = damp(gazeL.current.rotation.y, gaze, 12, ddt);
     if (gazeR.current) gazeR.current.rotation.y = damp(gazeR.current.rotation.y, gaze, 12, ddt);
-    // Eyelids droop with low WPM.
-    const lidX = THREE.MathUtils.lerp(RIG3D.lidOpen, RIG3D.lidClosed, expr.lidDroop);
+    // Eyelids droop with low WPM; drowsiness droops them further, sleep closes them.
+    const droop = asleep ? 1 : drowsy ? Math.max(expr.lidDroop, 0.72) : expr.lidDroop;
+    const lidX = THREE.MathUtils.lerp(RIG3D.lidOpen, RIG3D.lidClosed, droop);
     if (lidL.current) lidL.current.rotation.x = damp(lidL.current.rotation.x, lidX, 14, ddt);
     if (lidR.current) lidR.current.rotation.x = damp(lidR.current.rotation.x, lidX, 14, ddt);
-    // Brows raise/arch (browOff/Arch are negative when raised).
-    const browY = RIG3D.browY + (-expr.browOff) / 26;
+    // Brows raise/arch (browOff/Arch are negative when raised); 'jump' pops them in surprise.
+    const browY = RIG3D.browY + (-expr.browOff) / 26 + browPop;
     const archZ = (-expr.browArch) / 40;
     if (browL.current) {
       browL.current.position.y = damp(browL.current.position.y, browY, 12, ddt);
@@ -121,14 +151,26 @@ export default function FaceHead({ wpm = 0, lineProgress = 0.5, faceStyle = 'Man
       browR.current.position.y = damp(browR.current.position.y, browY, 12, ddt);
       browR.current.rotation.z = damp(browR.current.rotation.z, -archZ, 12, ddt);
     }
-    // Mouth: negative mouthCtrl = smile. Signed vertical scale bends the arc (DoubleSide
-    // keeps it lit when flipped to a frown); ~0 at neutral reads as a flat line.
+    // Mouth: negative mouthCtrl = smile. While the TTS is SPEAKING the mouth opens and closes
+    // with it (a brisk chatter oscillation); asleep it settles to a soft flat line.
     const smile = THREE.MathUtils.clamp(-expr.mouthCtrl / 12, -1, 1);
-    if (mouth.current) mouth.current.scale.y = damp(mouth.current.scale.y, 0.15 + smile * 0.85, 12, ddt);
-    // Iris color + glow (pulses at the top speed tiers).
-    const [r, g, b] = expr.iris;
-    const pulse = expr.tier >= 6 ? 0.6 + 0.4 * Math.sin(t * (expr.tier === 7 ? 11 : 6)) : 1;
-    const gi = expr.glow > 0 ? (expr.glow / 6) * pulse * 1.6 : 0;
+    const mouthTarget = asleep ? 0.1
+      : speakRef.current ? 0.35 + Math.abs(Math.sin(t * 12)) * 0.75
+        : 0.15 + smile * 0.85;
+    if (mouth.current) mouth.current.scale.y = damp(mouth.current.scale.y, mouthTarget, speakRef.current ? 30 : 12, ddt);
+    // Iris color + glow (pulses at the top speed tiers). An override (the typing screen's
+    // consensus-WPM colour) replaces the pace colour outright.
+    const over = irisORef.current;
+    let r, g, b, gi;
+    if (over) {
+      const c = new THREE.Color(over);
+      r = c.r * 255; g = c.g * 255; b = c.b * 255;
+      gi = 0.9;
+    } else {
+      [r, g, b] = expr.iris;
+      const pulse = expr.tier >= 6 ? 0.6 + 0.4 * Math.sin(t * (expr.tier === 7 ? 11 : 6)) : 1;
+      gi = expr.glow > 0 ? (expr.glow / 6) * pulse * 1.6 : 0;
+    }
     for (const m of [irisMatL.current, irisMatR.current]) {
       if (!m) continue;
       m.color.setRGB(r / 255, g / 255, b / 255);

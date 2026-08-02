@@ -146,11 +146,12 @@ export function defaultFileSettings() {
     // tier. 'auto' = use the current theme's heading-style pack; 'off' = plain; or a pack name
     // (classic | rule | terminal | deco | ornate | engraved | neon | retro) to force one.
     tocHeadingStyle: 'auto',
-    // Animated faces
+    // Animated avatars (né faces)
     showEyes: false,
     faceCount: 1,
     faceStyles: ['Man', 'Owl', 'Robot'],
     artStyle: 'Cartoon',
+    avatarHands: false, // Rayman-style floating hands that mirror the biometric controls + activity
     // Reading pointer
     showPointer: false,
     pointerStyle: 'Arrow',
