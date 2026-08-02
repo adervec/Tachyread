@@ -2,8 +2,9 @@
 // Run: node src/features/crosshairs.test.mjs
 import assert from 'node:assert/strict';
 import {
-  XH_SHAPES, newCrosshair, newShapeLayer, newImageLayer, newEmojiLayer, normalizeCrosshair,
-  backdropFilterOf, placeCrosshair, moveCrosshair, resizeCrosshair, removeCrosshair, starterStable,
+  XH_SHAPES, XH_ANIMS, XH_ANIM_LABELS, newCrosshair, newShapeLayer, newImageLayer, newEmojiLayer,
+  normalizeCrosshair, backdropFilterOf, placeCrosshair, moveCrosshair, resizeCrosshair,
+  removeCrosshair, starterStable, animPeriodSecs,
 } from './crosshairs.js';
 
 // Fresh designs are valid and unique.
@@ -36,6 +37,26 @@ assert.equal(norm.layers[0].thickness, 12, 'thickness clamped');
 assert.equal(norm.layers[1].scale, 0.1, 'scale floor');
 assert.ok(XH_SHAPES.includes('ring') && XH_SHAPES.length >= 10, 'a rich shape set');
 
+// Animations: defaults fill, garbage clamps, every style has a label.
+assert.deepEqual(normalizeCrosshair({ id: 'x' }).anim, { style: 'none', periodMode: 'fixed', secs: 3 }, 'anim defaults');
+const animNorm = normalizeCrosshair({ id: 'x', anim: { style: 'wat', periodMode: 'sometimes', secs: 999 } }).anim;
+assert.equal(animNorm.style, 'none', 'unknown style falls back');
+assert.equal(animNorm.periodMode, 'fixed', 'unknown period mode falls back');
+assert.equal(animNorm.secs, 30, 'secs capped');
+assert.equal(normalizeCrosshair({ id: 'x', anim: { style: 'fractal', periodMode: 'line', secs: 0.01 } }).anim.secs, 0.4, 'secs floor');
+for (const a of XH_ANIMS) assert.ok(XH_ANIM_LABELS[a], `label for ${a}`);
+assert.ok(XH_ANIMS.length >= 9, 'a rich animation set');
+
+// Period resolution: fixed uses secs; 'line' uses the measured display-line time when present,
+// clamps it, and falls back to the fixed secs when unmeasurable (empty pane / editor preview).
+assert.equal(animPeriodSecs({ style: 'breathe', periodMode: 'fixed', secs: 2 }), 2);
+assert.equal(animPeriodSecs({ style: 'breathe', periodMode: 'fixed', secs: 2 }, 9), 2, 'fixed ignores lineSecs');
+assert.equal(animPeriodSecs({ style: 'breathe', periodMode: 'line', secs: 2 }, 7.5), 7.5, 'line mode follows the line');
+assert.equal(animPeriodSecs({ style: 'breathe', periodMode: 'line', secs: 2 }, 0.05), 0.4, 'line period floored');
+assert.equal(animPeriodSecs({ style: 'breathe', periodMode: 'line', secs: 2 }, null), 2, 'no measurement → fixed secs');
+assert.equal(animPeriodSecs({ style: 'breathe', periodMode: 'line', secs: 2 }, NaN), 2, 'NaN measurement → fixed secs');
+assert.equal(animPeriodSecs(undefined), 3, 'no anim at all → sane default');
+
 // Backdrop filter string builder.
 assert.equal(backdropFilterOf({}), '', 'no fx → empty (no fx disc rendered)');
 assert.equal(backdropFilterOf({ blur: 3 }), 'blur(3px)');
@@ -67,5 +88,7 @@ for (const s of starters) {
   assert.ok(n.layers.length >= 1, `${s.name} has layers`);
 }
 assert.ok(starters.some((s) => backdropFilterOf(s.fx, 'w') !== ''), 'a starter shows off the distortion fx');
+assert.ok(starters.some((s) => normalizeCrosshair(s).anim.style !== 'none'), 'a starter shows off animation');
+assert.ok(starters.some((s) => normalizeCrosshair(s).anim.periodMode === 'line'), 'a starter uses the line-paced period');
 
 console.log('crosshairs: all checks passed');

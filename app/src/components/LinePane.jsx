@@ -1152,6 +1152,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       <CrosshairOverlay
         placements={settings.linesCrosshairs}
         stable={gt.crosshairStable}
+        settings={settings}
         onChange={(pl) => patchSettings(tab.id, { linesCrosshairs: pl })}
       />
       <WordMenu menu={menu} onClose={() => setMenu(null)} onJumpWord={onJumpWord} onAddNote={onAddNote} />

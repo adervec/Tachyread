@@ -1666,6 +1666,40 @@
 .xh-item img.xh-layer { object-fit: contain; }
 .xh-item .xh-emoji { display: flex; align-items: center; justify-content: center; line-height: 1; }
 .xh-defs { position: absolute; }
+/* Crosshair animations. The .xh-anim wrapper carries the whole-design moves (breathe/pulse/spin/
+   rock); ornament dots orbit/scan/bounce on top; fractal + kaleido are CSS-spun SVG groups with a
+   slow hue cycle. Period rides --xh-period — fixed seconds, or the measured read time of the
+   current display line at auto pace. */
+.xh-anim { position: absolute; inset: 0; }
+.xh-anim-breathe { animation: xhBreathe var(--xh-period, 3s) ease-in-out infinite; }
+.xh-anim-pulse { animation: xhPulse var(--xh-period, 3s) ease-in-out infinite; }
+.xh-anim-spin { animation: xhSpin var(--xh-period, 3s) linear infinite; }
+.xh-anim-rock { animation: xhRock var(--xh-period, 3s) ease-in-out infinite; }
+.xh-orn { position: absolute; inset: 0; pointer-events: none; display: block; }
+.xh-rotor { animation: xhSpin var(--xh-period, 3s) linear infinite; }
+.xh-rotor i, .xh-scan i, .xh-bounce i {
+  position: absolute; width: 7%; height: 7%; min-width: 5px; min-height: 5px; border-radius: 50%;
+  background: var(--xh-anim-color, #ff5c5c); box-shadow: 0 0 8px var(--xh-anim-color, #ff5c5c);
+  transform: translate(-50%, -50%);
+}
+.xh-rotor i { left: 50%; top: 4%; }
+.xh-scan i { top: 50%; left: 6%; animation: xhScanX calc(var(--xh-period, 3s) / 2) ease-in-out infinite alternate; }
+.xh-bounce i { left: 50%; top: 6%; animation: xhScanY calc(var(--xh-period, 3s) / 2) ease-in-out infinite alternate; }
+.xh-fractal, .xh-kaleido { width: 100%; height: 100%; color: var(--xh-anim-color, #ff5c5c); animation: xhHue calc(var(--xh-period, 3s) * 2) linear infinite; }
+.xh-fr { transform-box: fill-box; transform-origin: center; }
+.xh-fr1 { animation: xhSpin var(--xh-period, 3s) linear infinite; }
+.xh-fr2 { animation: xhSpin calc(var(--xh-period, 3s) / 2) linear infinite reverse; }
+.xh-fr3 { animation: xhSpin calc(var(--xh-period, 3s) / 4) linear infinite; }
+@keyframes xhBreathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.14); } }
+@keyframes xhPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(1.05); } }
+@keyframes xhSpin { to { transform: rotate(360deg); } }
+@keyframes xhRock { 0%, 100% { transform: rotate(-16deg); } 50% { transform: rotate(16deg); } }
+@keyframes xhScanX { from { left: 6%; } to { left: 94%; } }
+@keyframes xhScanY { from { top: 6%; } to { top: 94%; } }
+@keyframes xhHue { to { filter: hue-rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .xh-anim, .xh-rotor, .xh-scan i, .xh-bounce i, .xh-fractal, .xh-kaleido, .xh-fr { animation: none !important; }
+}
 /* Crosshair manager dialog */
 .xh-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; align-items: center; }
 .xh-preview {

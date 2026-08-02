@@ -12,6 +12,34 @@ export const XH_SHAPES = ['cross', 'x', 'circle', 'ring', 'dot', 'square', 'tria
 
 export const XH_DEFAULT_FX = { blur: 0, invert: 0, grayscale: 0, hueRotate: 0, contrast: 1, warp: 0 };
 
+// Animations: the whole design breathes/pulses/spins/rocks, ornament dots orbit/scan/bounce, or
+// trippy fractal layers nest counter-rotating shapes. The period is either fixed seconds or
+// DYNAMIC — the time the current DISPLAY line (the visual wrapped line, not the file line) would
+// take at the auto-mode pace, even when auto play is off.
+export const XH_ANIMS = ['none', 'breathe', 'pulse', 'spin', 'rock', 'orbit', 'scan', 'bounce', 'fractal', 'kaleido'];
+export const XH_ANIM_LABELS = {
+  none: 'none',
+  breathe: 'breathe (swell)',
+  pulse: 'pulse (glow throb)',
+  spin: 'spin (rotate)',
+  rock: 'rock (sway)',
+  orbit: 'cycling dots (orbit)',
+  scan: 'scanning dot (left ↔ right)',
+  bounce: 'oscillating dot (up ↕ down)',
+  fractal: 'trippy fractal (nested spin)',
+  kaleido: 'kaleidoscope (moiré spokes)',
+};
+export const XH_DEFAULT_ANIM = { style: 'none', periodMode: 'fixed', secs: 3 };
+
+// The concrete animation period for a design: fixed seconds, or the measured display-line read
+// time when the design asks for it (falls back to the fixed seconds while no line is measurable
+// — empty pane, editor preview).
+export function animPeriodSecs(anim, lineSecs = null) {
+  const secs = clamp(Number(anim?.secs), 0.4, 30, 3);
+  if (anim?.periodMode === 'line' && Number.isFinite(lineSecs) && lineSecs > 0) return clamp(lineSecs, 0.4, 120, secs);
+  return secs;
+}
+
 let seq = 0;
 export function newCrosshairId(now = 0) {
   seq += 1;
@@ -37,6 +65,11 @@ export function normalizeCrosshair(c) {
   const base = { id: '', name: 'Crosshair', layers: [], opacity: 0.9 };
   const out = { ...base, ...(c || {}) };
   out.opacity = clamp(Number(out.opacity), 0.05, 1, 0.9);
+  out.anim = {
+    style: XH_ANIMS.includes(c?.anim?.style) ? c.anim.style : 'none',
+    periodMode: c?.anim?.periodMode === 'line' ? 'line' : 'fixed',
+    secs: clamp(Number(c?.anim?.secs), 0.4, 30, 3),
+  };
   out.fx = { ...XH_DEFAULT_FX, ...(c?.fx || {}) };
   out.fx.blur = clamp(Number(out.fx.blur), 0, 12, 0);
   out.fx.invert = clamp(Number(out.fx.invert), 0, 1, 0);
@@ -92,7 +125,10 @@ export function removeCrosshair(placements, index) {
 
 // Starter designs, offered when the stable is empty (never auto-injected).
 export function starterStable(now = 0) {
-  const mk = (name, layers, opacity, fx) => ({ id: newCrosshairId(now), name, layers, opacity, fx: { ...XH_DEFAULT_FX, ...fx } });
+  const mk = (name, layers, opacity, fx, anim) => ({
+    id: newCrosshairId(now), name, layers, opacity, fx: { ...XH_DEFAULT_FX, ...fx },
+    ...(anim ? { anim: { ...XH_DEFAULT_ANIM, ...anim } } : {}),
+  });
   return [
     mk('Classic cross', [newShapeLayer('cross')], 0.85, {}),
     mk('Sniper', [
@@ -103,5 +139,13 @@ export function starterStable(now = 0) {
     mk('Focus lens', [{ ...newShapeLayer('ring'), color: '#ffd54f', thickness: 2 }], 0.75, { blur: 2.5 }),
     mk('Ghost X', [{ ...newShapeLayer('x'), color: '#b58cff', thickness: 4 }], 0.35, {}),
     mk('Heat haze', [{ ...newShapeLayer('circle'), color: '#ff7ab0', thickness: 1, opacity: 0.5 }], 0.8, { warp: 22 }),
+    mk('Radar', [
+      { ...newShapeLayer('ring'), color: '#7dffa1', thickness: 2 },
+      { ...newShapeLayer('dot'), color: '#7dffa1', scale: 0.12 },
+    ], 0.85, {}, { style: 'orbit', periodMode: 'fixed', secs: 2.5 }),
+    mk('Line breather', [{ ...newShapeLayer('brackets'), color: '#ffd54f', thickness: 3 }], 0.8, {},
+      { style: 'breathe', periodMode: 'line', secs: 3 }),
+    mk('Trippy portal', [{ ...newShapeLayer('ring'), color: '#b58cff', thickness: 1, opacity: 0.6 }], 0.85,
+      { hueRotate: 40 }, { style: 'fractal', periodMode: 'fixed', secs: 6 }),
   ];
 }
