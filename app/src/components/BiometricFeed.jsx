@@ -1,6 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
 import { GESTURE_INFO } from '../features/handGestures.js';
 import { actionLabel } from '../features/commandRegistry.js';
+import { filterCss } from '../features/displayFilters.js';
+import { normalizeEyeFx, wpmGlowIntensity, eyeShadow, mapEyePoint } from '../features/eyeFx.js';
+
+// Eye rotoscope: graphics pinned over the reader's detected iris centres on the (mirrored,
+// cover-cropped) self-view. Pure flavour — detection reads the raw frames, never this overlay.
+// With wpmGlow on, the glow swells with the live reading pace, like the reader faces.
+function EyeRoto({ eyes, fx, wpm, videoRef }) {
+  const f = normalizeEyeFx(fx);
+  const v = videoRef.current;
+  const W = v?.clientWidth || 272;
+  const H = v?.clientHeight || 150;
+  const box = { vw: v?.videoWidth || 320, vh: v?.videoHeight || 240, W, H, mirrored: true };
+  const i = f.wpmGlow ? wpmGlowIntensity(wpm) : 0.6;
+  const size = Math.round((16 + 26 * f.size) * (0.85 + 0.35 * i));
+  const shadow = eyeShadow(f.color, i);
+  const glyph = f.style === 'emoji' ? (f.emoji || '👁') : f.style === 'star' ? '✦' : f.style === 'heart' ? '♥' : '';
+  return [eyes.l, eyes.r].map((p, k) => {
+    const q = mapEyePoint(p, box);
+    if (!q) return null;
+    const style = {
+      left: q.x, top: q.y, width: size, height: f.style === 'laser' ? Math.max(4, Math.round(size * 0.16)) : size,
+      color: f.color, opacity: f.opacity, fontSize: Math.round(size * 0.9),
+    };
+    if (f.style === 'glow') style.background = `radial-gradient(circle, ${f.color} 0%, transparent 68%)`;
+    if (f.style === 'laser') style.background = f.color;
+    if (f.style === 'ring') style.border = `2.5px solid ${f.color}`;
+    if (glyph) style.textShadow = shadow; else style.boxShadow = shadow;
+    return <span key={k} className={`cam-eye cam-eye-${f.style}`} style={style} aria-hidden="true">{glyph}</span>;
+  });
+}
 
 // The Biometric Control Feed: one draggable, resizable popup that unifies the camera and the
 // voice/clap subsystems. Shows the live self-view (when a camera feature is on), a mic oscilloscope
@@ -24,6 +54,7 @@ const HAND_EVENT = {
 };
 export default function BiometricFeed({
   stream, camState, handState, scope, mode = 'Both', log,
+  camFilter, eyeFx, eyes, wpm = 0,
   feedHeight, onResizeFeed, features, voiceOn, gestureMap, voiceCommands, clapMap,
   pos, onMove, onDrop, canCalibrate, onCalibrate, onCalibrateHand, onMinimize, onClose,
 }) {
@@ -122,7 +153,9 @@ export default function BiometricFeed({
 
       {stream && (
         <div className="cam-video-wrap">
-          <video ref={vref} muted playsInline className="cam-video" />
+          {/* Display-only camera filter — detection analyses its own unfiltered element. */}
+          <video ref={vref} muted playsInline className="cam-video" style={(() => { const c = filterCss(camFilter); return c ? { filter: c, WebkitFilter: c } : undefined; })()} />
+          {eyeFx?.on && eyes && <EyeRoto eyes={eyes} fx={eyeFx} wpm={wpm} videoRef={vref} />}
           <div className="cam-overlay" aria-hidden="true">
             {cam && <span className={`cam-ev cam-ev-${ring}`}>{cam.icon} {cam.text}</span>}
             {hand && <span className="cam-ev cam-ev-hand">{hand.icon} {hand.text}</span>}

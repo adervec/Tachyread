@@ -38,6 +38,7 @@ export const HELP_SECTIONS = [
       'Reading cursor & trail (View menu): pick a custom cursor that shows only in the reader areas, from a rich set of premades or your own. It can leave a fading trail — or a seismograph trail that draws as the lines scroll under a still cursor.',
       'Crosshairs (View menu): design a STABLE of overlay markers for the Lines area — combine shape, image and emoji layers with transparency and behind-the-glass distortion (blur, invert, hue, heat-haze warp), then place any of them on a tab and drag them where your eye should anchor. Designs are shared; placement and size are per tab.',
       'Full-screen reading fills the screen with just the Lines pane (desktop ⛶ or menu) or the Source pane (⛶🗐), hiding all chrome. On phones the reading area fills edge to edge. Esc or the small ⛶ overlay exits.',
+      'Source page looks: the 🎛 button on the Source pane toolbar opens display-flavour filters for the original page — old paper (sepia), noir, faded print, night, blueprint, thermal… or a custom slider mix. Pure paint; the text and OCR underneath are untouched. Per tab.',
       'Blue-light reduction warms the whole app for bedtime reading — its own control in the bottom bar (BLUE LIGHT), the View menu, or the B key (App Settings has the strength). It’s independent of Focus mode, which fullscreens and (on Chrome/Edge) blacks out your other monitors.',
     ],
   },
@@ -65,6 +66,7 @@ export const HELP_SECTIONS = [
       'One BIOMETRIC button in the controls bar unifies it all: its popup toggles voice/clap commands, camera watching (attention & doze) and hand gestures, and links to the full Biometric Controls page and the live feed. While any source is active, a single status-bar badge (📷 🖐 🎤) shows what’s running and opens the feed.',
       'Profiles: save a whole biometric setup as a named profile and switch between them; after updating a profile an Undo is available for two minutes.',
       'Webcam guards (all optional, all on-device): pause when you look away, stop read-aloud when you doze, away alarms, posture nudges, and focus analytics. Frames never leave your device.',
+      '🎥 Camera feed looks (display only): the 👁 eye ROTOSCOPE pins customizable graphics over your detected eyes on the self-view — glow orbs, rings, stars, lasers or a custom emoji, with size/colour/opacity controls and an optional glow that burns brighter the faster you read (like the faces). Plus display filters for the whole feed (noir, thermal, neon, sepia… or your own mix). Detection always sees the raw frames.',
     ],
   },
   {

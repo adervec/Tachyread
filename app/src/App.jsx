@@ -957,6 +957,12 @@ function AppInner() {
   const camOn = (camAllowed && camGuardsOn) || eyeGesturesOn;
   const handGesturesOn = camAllowed && !!state.global.handGestures;
   const audioCtrlOn = !!activeTab?.settings?.audioCtrl;
+  // Eye rotoscope (display-only eye graphics on the self-view): live iris positions + config ref.
+  const eyeFxOn = !!state.global.camEyeFx?.on;
+  const camEyeFxRef = useRef(null);
+  camEyeFxRef.current = state.global.camEyeFx;
+  const [camEyes, setCamEyes] = useState(null);
+  useEffect(() => { if (!eyeFxOn || !camOn) setCamEyes(null); }, [eyeFxOn, camOn]);
   useEffect(() => {
     if (!camOn) {
       webcamRef.current?.stop();
@@ -972,10 +978,15 @@ function AppInner() {
       // (still well inside the doze/away grace windows) to keep the reader responsive. Eye gestures
       // MEASURE durations, so they need a much finer clock: at 250ms a 700ms hold could read as
       // anything from 500 to 1000ms and no window would be hittable.
-      intervalMs: eyeGesturesOn
+      // The eye ROTOSCOPE also wants a fine clock — at 250ms the graphics visibly trail the eyes.
+      intervalMs: (eyeGesturesOn || eyeFxOn)
         ? (deviceKind() === 'Mobile' ? 90 : 60)
         : (deviceKind() === 'Mobile' ? 500 : 250),
-      onSample: (s) => eyeDetectorRef.current?.push(s),
+      onSample: (s) => {
+        eyeDetectorRef.current?.push(s);
+        // Eye-rotoscope overlay: track the detected iris centres while the fx is on.
+        if (camEyeFxRef.current?.on) setCamEyes(s.eyes || null);
+      },
       onStream: (s) => setWebcamStream(s),
       onState: (s) => setWebcamState(s),
       onAttention: (attentive) => {
@@ -1048,7 +1059,7 @@ function AppInner() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camOn, eyeGesturesOn]);
+  }, [camOn, eyeGesturesOn, eyeFxOn]);
 
   // ── Eye gestures ────────────────────────────────────────────────────────────────────────────
   // The camera monitor above pushes every frame into this detector; it decides what was deliberate
@@ -3061,6 +3072,10 @@ function AppInner() {
           stream={webcamStream || gestureStream || null}
           camState={camOn ? webcamShownState(webcamState) : (handGesturesOn ? 'watching' : null)}
           handState={handGesturesOn ? handState : null}
+          camFilter={state.global.camFilter}
+          eyeFx={state.global.camEyeFx}
+          eyes={camEyes}
+          wpm={activeTab?.tracker ? Math.round(activeTab.tracker.recentWpm() || activeTab.tracker.sessionWpm() || 0) : 0}
           scope={micScope}
           mode={state.global.audioCtrlMode || 'Both'}
           voiceOn={audioCtrlOn}
