@@ -558,9 +558,15 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       </Field>
       <Field label="Scroll read point (%)">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input type="range" min={0} max={100} step={5} value={Math.round((s.scrollReadPoint ?? 0) * 100)} onChange={(e) => patch({ scrollReadPoint: Number(e.target.value) / 100 })} />
-          <span style={{ fontSize: 12, color: 'var(--status-fg)' }}>{Math.round((s.scrollReadPoint ?? 0) * 100)}%</span>
+          <input type="range" min={0} max={100} step={5} disabled={!!s.scrollReadCrosshair} value={Math.round((s.scrollReadPoint ?? 0) * 100)} onChange={(e) => patch({ scrollReadPoint: Number(e.target.value) / 100 })} />
+          <span style={{ fontSize: 12, color: 'var(--status-fg)' }}>{s.scrollReadCrosshair ? '🎯 crosshair' : `${Math.round((s.scrollReadPoint ?? 0) * 100)}%`}</span>
         </div>
+      </Field>
+      <Field label="Tie read point to crosshair">
+        <label className="inline-check" title="The scroll-read line sits at your first placed crosshair's height — drag the crosshair in the Lines area to move where scrolled text counts as read (View → Crosshairs to place one)">
+          <input type="checkbox" checked={!!s.scrollReadCrosshair} onChange={(e) => patch({ scrollReadCrosshair: e.target.checked })} />
+          Use the first placed crosshair as the scroll-read line
+        </label>
       </Field>
       <Field label="Click sound on line advance">
         <input

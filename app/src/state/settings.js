@@ -30,6 +30,9 @@ export function defaultFileSettings() {
     blurGradient: 100,   // blur strength (%): ramps to full over the band's first few lines
     currentLineFontSizeBoost: 0,
     scrollReadPoint: 0,  // scroll-to-read "assume read" line, 0 (top of readable band) .. 1 (bottom)
+    // Tie the scroll-read point to the tab's FIRST placed crosshair instead: the read line sits at
+    // the crosshair's height, so dragging the crosshair moves where text counts as read.
+    scrollReadCrosshair: false,
     hideRsvpPane: false,
     contextWordCount: 0,
     contextWordsBefore: 0,

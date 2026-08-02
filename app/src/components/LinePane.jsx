@@ -759,11 +759,18 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   peekActiveRef.current = (peek?.line ?? -1) >= 0;
   const speedWin = useRef([]); // rolling {t, w} of recent frontier advances
   const cmdScrollRef = useRef(false); // a nav-button-commanded scroll is deliberate — exempt from the kill switch
+  // The two credit paths (rows-rendered top-edge + the read-point scroll listener) can both fire in
+  // one frame, BEFORE idxRef refreshes — the later, smaller credit would then overwrite the bigger
+  // one backward through a stale closure. pendingCreditRef keeps the in-flight frontier monotonic;
+  // it follows the index back down after a deliberate external jump.
+  const pendingCreditRef = useRef(-1);
+  useEffect(() => { if (idx < pendingCreditRef.current) pendingCreditRef.current = idx; }, [idx]);
+  useEffect(() => { pendingCreditRef.current = -1; }, [doc, scrollRead]);
   const creditRef = useRef(null);
   creditRef.current = (f) => {
-    if (f == null || f <= idxRef.current) return;
+    if (f == null || f <= Math.max(idxRef.current, pendingCreditRef.current)) return;
     if (peekActiveRef.current) return;
-    if (cmdScrollRef.current) { jumpRef.current(f, { read: true, src: 'scroll' }); return; } // deliberate: credit, don't poison the speed window
+    if (cmdScrollRef.current) { pendingCreditRef.current = f; jumpRef.current(f, { read: true, src: 'scroll' }); return; } // deliberate: credit, don't poison the speed window
     const now = Date.now();
     const win = speedWin.current;
     win.push({ t: now, w: f - idxRef.current });
@@ -779,6 +786,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       setStatus('📜 Scroll-to-read switched itself off — that scroll was faster than any reading. Nothing was marked read.');
       return;
     }
+    pendingCreditRef.current = f;
     jumpRef.current(f, { read: true, src: 'scroll' });
   };
 
@@ -840,6 +848,11 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     const ln = doc.lines[startIndex];
     if (ln && ln.startWordIndex > idxRef.current) creditRef.current(ln.startWordIndex);
   }
+  // Scroll-read point tied to a crosshair: the FIRST placed crosshair whose design still exists
+  // supplies the read line's height (its y is a pane fraction). null = the slider fraction rules.
+  const crossTieY = settings.scrollReadCrosshair
+    ? ((settings.linesCrosshairs || []).find((p) => (gt.crosshairStable || []).some((c) => c.id === p.id))?.y ?? null)
+    : null;
   useEffect(() => {
     if (split || !scrollRead) return undefined;
     const wrap = listWrapRef.current;
@@ -851,6 +864,9 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     // viewport minus any blurred (before/after) or hidden (reveal-mode) rows, since any blur on a line
     // means it isn't yet readable. At 0 this is the classic "read once it leaves the top" behaviour.
     const point = Math.max(0, Math.min(1, settings.scrollReadPoint ?? 0));
+    // Tied to a crosshair instead: the read line sits at the first VISIBLE placed crosshair's
+    // height (pane fraction, clamped into the readable band) — drag the crosshair, move the point.
+    const pane = wrap.closest('.line-pane');
     const frontierWord = () => {
       const rect = wrap.getBoundingClientRect();
       const viewTop = rect.top, viewBottom = rect.bottom;
@@ -872,7 +888,11 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
         if (blurredAfter || hidden) rBottom = Math.min(rBottom, Math.max(viewTop, rr.top));
       }
       if (rBottom < rTop) rBottom = rTop;
-      const readY = rTop + point * (rBottom - rTop);
+      let readY = rTop + point * (rBottom - rTop);
+      if (crossTieY != null && pane) {
+        const pr = pane.getBoundingClientRect();
+        readY = Math.max(rTop, Math.min(rBottom, pr.top + crossTieY * pr.height));
+      }
       // Word at the read line: topmost row whose bottom is past readY, interpolated within it so
       // progress stays word-level even inside one long wrapped paragraph.
       for (const row of rows) {
@@ -907,7 +927,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     };
     scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => { scroller.removeEventListener('scroll', onScroll); if (raf) cancelAnimationFrame(raf); };
-  }, [split, scrollRead, doc, settings.blurLinesBefore, settings.blurLinesAfter, settings.scrollReadPoint, hideMode]);
+  }, [split, scrollRead, doc, settings.blurLinesBefore, settings.blurLinesAfter, settings.scrollReadPoint, crossTieY, hideMode]);
 
   // Peek: scroll the (list-view) viewport to a previewed line without moving the reading position,
   // and scroll back to the current line when the peek clears. (Split view handles peek in its bottom
@@ -1115,7 +1135,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
           headingPack={headingPack}
         />
       ) : (
-        <div className="line-pane-list" ref={listWrapRef} style={{ fontSize: `${baseFont}px`, lineHeight: lineSpacing, ...gridStyle }} onContextMenu={onContextMenu} {...pressHandlers}>
+        <div className="line-pane-list" ref={listWrapRef} data-tie={crossTieY != null ? crossTieY.toFixed(3) : undefined} style={{ fontSize: `${baseFont}px`, lineHeight: lineSpacing, ...gridStyle }} onContextMenu={onContextMenu} {...pressHandlers}>
           <List
             listRef={listRef}
             rowCount={totalLines + (scrollRead ? 1 : 0)}

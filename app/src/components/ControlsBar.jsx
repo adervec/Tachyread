@@ -297,7 +297,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             >
               {state.global.scrollAdvances ? 'On' : 'Off'}
             </button>
-            {state.global.scrollAdvances && (
+            {state.global.scrollAdvances && !settings.scrollReadCrosshair && (
               <input
                 type="range" min={0} max={100} step={5}
                 value={Math.round((settings.scrollReadPoint ?? 0) * 100)}
@@ -305,6 +305,18 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
                 title="Where scrolled text counts as read: 0% = once it leaves the top · 100% = as soon as it enters the clear area"
                 style={{ width: 64 }}
               />
+            )}
+            {state.global.scrollAdvances && (
+              <button
+                className={settings.scrollReadCrosshair ? 'toggle-on' : ''}
+                disabled={!(settings.linesCrosshairs || []).length}
+                onClick={() => patchSettings(tab.id, { scrollReadCrosshair: !settings.scrollReadCrosshair })}
+                title={(settings.linesCrosshairs || []).length
+                  ? 'Tie the read point to your first placed crosshair — drag the crosshair to move where scrolled text counts as read'
+                  : 'Place a crosshair first (View → Crosshairs) to tie the read point to it'}
+              >
+                🎯
+              </button>
             )}
           </div>
           {(() => {

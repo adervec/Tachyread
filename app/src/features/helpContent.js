@@ -20,7 +20,7 @@ export const HELP_SECTIONS = [
     body: [
       'Auto-play (RSVP): press Space. The word pane paces you at the WPM slider; the adaptive pacer (ADAPT) can adjust it from comprehension checks.',
       'Manually: arrow keys step words (←→) and lines (↑↓); Ctrl+↑↓ hops paragraphs; PgUp/PgDn pages by a screenful. After a page jump, the line that was at the edge is highlighted for ten seconds so you don’t lose your place.',
-      'Scroll-to-read: turn on SCROLL in the controls bar, then just scroll the Lines pane like any page — whatever passes the top edge counts as read, and your WPM is measured from your real pace. A brittleness setting controls how easily a fast flick breaks out of scroll mode.',
+      'Scroll-to-read: turn on SCROLL in the controls bar, then just scroll the Lines pane like any page — whatever passes the top edge counts as read, and your WPM is measured from your real pace. A brittleness setting controls how easily a fast flick breaks out of scroll mode. The read point can be a fixed percentage OR tied to a placed crosshair (🎯) — drag the crosshair to move where text counts as read.',
       'Read-aloud (TTS): the voice reads and drives the position. Speaking mode advances when YOU read aloud (speech recognition). Typing mode advances by typing the text.',
       'The mode chip in the progress row shows how the app currently thinks you are reading (auto, line-by-line, scrolling, peeking…).',
     ],
