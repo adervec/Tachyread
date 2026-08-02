@@ -3089,6 +3089,16 @@
 .tp-fingers { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; font-size: 12px; }
 .tp-finger { border: 1px solid var(--divider); border-radius: 10px; padding: 2px 8px; }
 .tp-finger.bad { border-color: #d9534f; color: #d9534f; }
+/* Desktop chip resizing: the ↘ corner grip. The sized stats chip becomes a fixed box whose
+   content clips — the sacrifice logic hides blocks until it fits. */
+.chip-resize {
+  position: absolute; right: 1px; bottom: 0; cursor: nwse-resize; font-size: 10px;
+  opacity: 0.45; padding: 2px 3px; user-select: none; touch-action: none; line-height: 1;
+}
+.chip-resize:hover { opacity: 0.95; }
+.floating-stats.sized { overflow: hidden; }
+.floating-stats.sized .chip-body { overflow: hidden; height: 100%; }
+.floating-stats { position: fixed; }
 /* Each word is an ATOMIC inline-block: nothing inside it (per-char spans, the caret anchor) can
    create a mid-word line break — words wrap only as whole units. white-space:pre keeps the
    trailing space inside the block so inter-word spacing is unchanged. */
@@ -4037,7 +4047,12 @@
 .lj-cover-msg { margin: 4px 0 0; }
 /* Focus panels: reading widgets on the blacked-out other-monitor cover windows. Big + centered for
    across-the-room glancing; non-interactive (covers are display-only). */
-.focus-panels { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+/* The cover document has no .app ancestor, so nothing sets a text colour — without an explicit
+   one the widgets render initial-black on the black cover. Covers are ALWAYS dark (focusDim
+   0.4–1), so force light foregrounds here rather than trusting theme vars. */
+.focus-panels { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; color: #e6e6ec; }
+.focus-panels svg { color: #e6e6ec; }
+.focus-panels .dash-label { color: #b9b9c6; }
 .focus-panels-inner { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: clamp(16px, 4vh, 48px); max-height: 100vh; overflow: hidden; padding: 4vh 4vw; }
 .focus-widget { display: flex; flex-direction: column; align-items: center; text-align: center; }
 .focus-widget .dash-num { font-size: clamp(40px, 10vh, 130px); line-height: 1; font-variant-numeric: tabular-nums; }

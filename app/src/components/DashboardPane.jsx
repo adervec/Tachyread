@@ -6,7 +6,7 @@ import { useApp } from '../state/AppContext.jsx';
 // Desktop dock: the animated reader faces and/or the live reading stats, each shown independently
 // (showFaces / showStats). On mobile these both float as separate draggable popups instead — see
 // FloatingFace / FloatingStats.
-export default function DashboardPane({ tab, dock = false, showFaces = true, showStats = true }) {
+export default function DashboardPane({ tab, dock = false, showFaces = true, showStats = true, autoStopAt = 0 }) {
   const { state } = useApp();
   const { settings, doc } = tab;
   const idx = settings.wordIndex;
@@ -37,7 +37,7 @@ export default function DashboardPane({ tab, dock = false, showFaces = true, sho
           ))}
         </div>
       )}
-      {showStats && <ReadingStats tab={tab} />}
+      {showStats && <ReadingStats tab={tab} autoStopAt={autoStopAt} />}
     </div>
   );
 }

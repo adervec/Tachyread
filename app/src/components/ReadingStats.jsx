@@ -21,8 +21,9 @@ export const STATS_CHIP_ITEMS = [
   ['position', 'Word / line position + session words', true],
   ['set', 'Set speed', true],
   ['spark', 'WPM trendline (sparkline)', true],
+  ['eta', 'Time to finish (measured pace)', true], // the old timer chip lives here now
+  ['autostop', 'Auto-stop countdown (⏳)', true],  // …and its read-aloud countdown
   ['lifetime', 'Lifetime WPM', false],
-  ['eta', 'Time to finish (measured pace)', false],
   ['today', 'Words read today', false],
   ['regressions', 'Regressions this session', false],
   ['steadiness', 'Pace steadiness', false],
@@ -33,6 +34,10 @@ export function statsChipShow(settings) {
   for (const [key, , def] of STATS_CHIP_ITEMS) out[key] = settings?.statsChip?.[key] ?? def;
   return out;
 }
+
+// When the (resizable) stats chip is too small to fit everything, blocks are sacrificed LEAST
+// important first — the hero "reading now" number survives longest.
+export const STATS_SACRIFICE_ORDER = ['pct', 'steadiness', 'regressions', 'today', 'lifetime', 'set', 'spark', 'autostop', 'eta', 'position', 'coverage', 'session'];
 
 // Normalized WPM sparkline: 15s-averaged WPM over the trailing 8 minutes on a fixed 0–1400 scale
 // (samples recorded once a second below). Shown wherever the stats render — docked stats and the
@@ -63,8 +68,10 @@ function steadiness(cv) {
 }
 
 // The live, measured reading-stats block — shared by the desktop dock (DashboardPane) and the
-// mobile floating stats popup (FloatingStats). Ticks once a second so idle readouts stay current.
-export default function ReadingStats({ tab }) {
+// floating stats chip (FloatingStats). Ticks once a second so idle readouts stay current.
+// `autoStopAt` (epoch-ms, 0 = none) is the read-aloud auto-stop — the old timer chip's countdown,
+// merged in here. `omit` lists blocks the resized chip had to sacrifice for space.
+export default function ReadingStats({ tab, autoStopAt = 0, omit = null }) {
   const { settings, doc, tracker } = tab;
   const idx = settings.wordIndex;
   const [, setNow] = useState(0);
@@ -79,6 +86,7 @@ export default function ReadingStats({ tab }) {
   }, [tab]);
 
   const show = statsChipShow(settings);
+  if (omit) for (const k of omit) show[k] = false;
   const recentDetail = tracker?.recentWpmDetail ? tracker.recentWpmDetail() : null;
   const recent = recentDetail ? recentDetail.wpm : (tracker ? tracker.recentWpm() : 0);
   const sessionWpm = tracker ? tracker.sessionWpm() : 0;
@@ -137,6 +145,11 @@ export default function ReadingStats({ tab }) {
         <div className="dash-stat">
           <span className="dash-num">{eta != null ? fmtDuration(eta) : '—'}</span>
           <span className="dash-label">To finish (measured pace)</span>
+        </div>
+      )}
+      {show.autostop && autoStopAt > 0 && autoStopAt > Date.now() && (
+        <div className="dash-stat dash-stat-row">
+          <span className="dash-mini">⏳ {fmtDuration(autoStopAt - Date.now())} → auto-stop</span>
         </div>
       )}
       {show.position && (
