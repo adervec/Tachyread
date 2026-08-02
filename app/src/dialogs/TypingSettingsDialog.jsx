@@ -51,6 +51,14 @@ export default function TypingSettingsDialog({ settings, onPatch, global, onPatc
       <Field label="All lowercase">
         <input type="checkbox" checked={!!t.lowercase} onChange={(e) => patchTyping({ lowercase: e.target.checked })} />
       </Field>
+      {!!t.lowercase && (
+        <Field label="…but show capitals as written">
+          <label className="inline-check" title="Display the original capitalisation while typing lowercase still counts — display only">
+            <input type="checkbox" checked={!!t.showCaps} onChange={(e) => patchTyping({ showCaps: e.target.checked })} />
+            The drill shows “The”, you type “the”
+          </label>
+        </Field>
+      )}
       <Field label="No special characters">
         <input
           type="checkbox"
@@ -58,6 +66,20 @@ export default function TypingSettingsDialog({ settings, onPatch, global, onPatc
           onChange={(e) => patchTyping({ noSpecial: e.target.checked })}
           title="Strip punctuation & symbols — type letters, numbers and spaces only"
         />
+      </Field>
+      {!!t.noSpecial && (
+        <Field label="…but ghost the stripped characters">
+          <label className="inline-check" title="Show the removed punctuation & symbols as dim auto-skipped ghosts in their own colour — you never type them; display only">
+            <input type="checkbox" checked={!!t.ghostSpecials} onChange={(e) => patchTyping({ ghostSpecials: e.target.checked })} />
+            Dim 👻 ghosts sit where the specials were
+          </label>
+        </Field>
+      )}
+      <Field label="Show line breaks (Passage)">
+        <label className="inline-check" title="Show the book's own line and paragraph breaks instead of a flowing wall — visual only, the words you type are identical">
+          <input type="checkbox" checked={!!t.showBreaks} onChange={(e) => patchTyping({ showBreaks: e.target.checked })} />
+          Break the passage where the book does (visual only)
+        </label>
       </Field>
       <Field label="Remove non-typeable characters">
         <input

@@ -51,6 +51,28 @@ export function prepToken(raw) {
   return transformToken(raw, { bypassNonQwerty: true });
 }
 
+// Display cells for a token: align the ORIGINAL characters with the transformed target text, so
+// the drill can render the token "as written" while the REQUIRED typing stays the transformed
+// text — original capitals over a lowercased target, and the characters `noSpecial` stripped
+// shown as dim auto-skipped ghosts. Each cell: { ch: display glyph, t: index into the target
+// text, or null for a ghost }. Reading target[t] across non-ghost cells reproduces
+// transformToken(raw).text exactly (asserted in the tests); renderers should fall back to plain
+// rendering if that invariant ever fails (exotic lowercase expansions with bypass off).
+export function displayCells(raw, { bypassNonQwerty = true, noSpecial = false } = {}) {
+  const cells = [];
+  let t = 0;
+  for (const ch of String(raw ?? '')) {
+    const s = bypassNonQwerty ? toKeyboard(ch) : ch;
+    if (s === '') continue; // bypass-dropped (zero-width junk, leftover exotics) — nothing to show
+    if (noSpecial && /^[^\p{L}\p{N}\s]+$/u.test(s)) { cells.push({ ch, t: null }); continue; } // ghost
+    for (const sub of s) { // rare 1→N expansions ('…' → '...') display the target form per char
+      cells.push({ ch: s.length > 1 ? sub : ch, t });
+      t += 1;
+    }
+  }
+  return cells;
+}
+
 // A target character a US-QWERTY keyboard can't produce (accents, leftover symbols) → auto-accepted
 // when it somehow survives into the passage (e.g. bypass off). With bypass on it's already removed.
 export function isExotic(ch) {

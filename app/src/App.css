@@ -1920,10 +1920,12 @@
    surface stands out; hovering any of them brings it back. The other-monitor blackout is handled by
    cover windows in features/focusMode.js. */
 .app.focus-on .app-chrome,
-.app.focus-on .controls-bar,
+.app.focus-on .controls-bar { opacity: 0.12; transition: opacity 0.25s ease; }
 /* Bedtime "reduce blue light": a warm amber layer multiplied over everything. Multiply pulls the
    blue channel down toward the amber, which is what actually cuts blue emission (not just a tint).
-   Fixed and click-through, above all app chrome AND dialogs. */
+   Fixed and click-through, above all app chrome AND dialogs. (Its own control — BLB — fully
+   independent of focus mode; the selector above must NEVER share this block, or focus mode paints
+   the whole app amber.) */
 .night-shift {
   position: fixed; inset: 0; z-index: 100000; pointer-events: none;
   background: #ff8b1e; mix-blend-mode: multiply;
@@ -3100,6 +3102,10 @@
 .trc.wrong { color: #fff; background: var(--orp-fg); border-radius: 2px; }
 .trc.missed { color: var(--line-number-fg); text-decoration: underline; text-decoration-color: var(--orp-fg); text-underline-offset: 3px; }
 .trc.extra { color: var(--orp-fg); opacity: .75; }
+/* Display-only ghosts: characters stripped by no-special (and fully-decorative tokens) shown dim
+   in their own colour — auto-skipped, never typed. Blind mode keeps them (they're not verdicts). */
+.trc.ghost { color: var(--typing-ghost, #b58cff); opacity: 0.45; }
+.trw.ghostw { color: var(--typing-ghost, #b58cff); opacity: 0.4; }
 /* Zero-WIDTH anchor the floating cursor glides to — never shifts layout horizontally, but has a
    real text-height box (dipping slightly below the baseline) so the cursor's measured
    offsetTop/offsetHeight land on the glyphs instead of hanging from the baseline. */
