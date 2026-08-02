@@ -1170,6 +1170,12 @@ function AppInner() {
     return { title: `${pct}% · ${chapter || book}`, artist: book, album: 'Tachyread — read-aloud', pct };
   }
 
+  // Typing practice pauses ALL biometric control: gestures/wave, the scroll joystick and
+  // hold-to-scroll, hold-to-pause, voice commands, claps and trigger sequences are ignored while
+  // the typing overlay is up — the camera/mic stay warm so nothing re-initializes afterwards.
+  const typingOnRef = useRef(false);
+  typingOnRef.current = !!activeTab?.settings.typing?.enabled;
+
   // Small action bag the command registry runs against (shared by gestures, voice, and claps).
   // Everything here goes through call-time closures, so triggers always see the live handlers.
   const cmdCtx = () => ({
@@ -1206,6 +1212,7 @@ function AppInner() {
   triggerSeqsRef.current = state.global.triggerSeqs || [];
   const seqFeedRef = useRef(null);
   seqFeedRef.current = (eventKey) => {
+    if (typingOnRef.current) return;
     const cmdId = seqMatcherRef.current.feed(eventKey, Date.now(), triggerSeqsRef.current);
     if (cmdId) {
       runCommand(cmdId, cmdCtx());
@@ -1219,7 +1226,7 @@ function AppInner() {
   // A per-hand override (`kind:L` / `kind:R` in the map) wins over the any-hand mapping when set.
   const handleGestureRef = useRef(null);
   handleGestureRef.current = (kind, hand) => {
-    if (!activeTab) return;
+    if (!activeTab || typingOnRef.current) return;
     // A gesture used by hold-to-scroll is OWNED by it: its one-shot mapping (and sequence feed)
     // must not fire mid-hold, or every hold would also run the mapped command. The profile
     // checker on the Biometric Controls page flags this ownership on the mapping.
@@ -1246,6 +1253,7 @@ function AppInner() {
   if (!holdPauseCtl.current) holdPauseCtl.current = createHoldPause();
   const holdPauseRef = useRef(null);
   holdPauseRef.current = (rawGesture) => {
+    if (typingOnRef.current) return;
     const action = holdPauseCtl.current.feed({
       want: state.global.holdPauseGesture, raw: rawGesture, playing: playingRef.current, now: Date.now(),
     });
@@ -1315,7 +1323,7 @@ function AppInner() {
     let raf;
     const pump = () => {
       raf = requestAnimationFrame(pump);
-      const v = handVelRef.current || holdScrollVelRef.current;
+      const v = typingOnRef.current ? 0 : (handVelRef.current || holdScrollVelRef.current);
       if (!v) return;
       if (!scroller || !scroller.isConnected) {
         const wrap = document.querySelector('.line-pane-list');
@@ -1579,6 +1587,7 @@ function AppInner() {
 
       // ── Reading surface (only while actually reading — no dialog tab, focus not on a control) ─────
       if (inDialog) return;
+      if (typingOnRef.current) return; // typing overlay owns the keys — no reading nav underneath
       const onControl = !!(t.closest && t.closest('button, a[href], [role="button"]'));
       if (e.key === ' ' || e.code === 'Space') { if (onControl) return; e.preventDefault(); k.playPause(); return; }
       if (onControl) return; // let a focused control keep its own keys
@@ -1750,7 +1759,7 @@ function AppInner() {
           if (command) publishHandPose({ emoji: '🎤', ts: Date.now() }); // avatars cup a mic on a voice command
           pushBioLog({ source: 'voice', text: transcript, action: command ? actionLabel(command) : null, tone: command ? 'valid' : 'noop' });
         },
-        onCommand: (cmd) => { runCommand(cmd, cmdCtx()); },
+        onCommand: (cmd) => { if (!typingOnRef.current) runCommand(cmd, cmdCtx()); },
       });
       audioCtrlRef.current = r;
     }
@@ -1759,7 +1768,7 @@ function AppInner() {
         // A disabled clap mapping (clapOff) is preserved but doesn't fire directly — it can still
         // be a sequence step.
         const cmdId = clapCfgRef.current.off[claps] ? null : clapCfgRef.current.map[claps];
-        if (cmdId) runCommand(cmdId, cmdCtx());
+        if (cmdId && !typingOnRef.current) runCommand(cmdId, cmdCtx());
         publishHandPose({ emoji: '👏', ts: Date.now() }); // the avatars applaud along
         pushBioLog({ source: 'voice', text: `👏 × ${claps}`, action: cmdId ? actionLabel(cmdId) : null, tone: cmdId ? 'valid' : 'noop' });
         seqFeedRef.current?.(`c:${claps}`);
@@ -2734,7 +2743,13 @@ function AppInner() {
             <DashboardPane tab={activeTab} dock showFaces={!!activeTab.settings.showEyes} showStats={state.showStats} autoStopAt={autoStopAt} avatar={avatarState} />
           </div>
         )}
-        {activeTab ? (
+        {activeTab && activeTab.settings.typing?.enabled ? (
+          // Typing practice owns the tab: the reading controls hide and every biometric input
+          // (gestures, joystick, voice, claps) is paused until the overlay closes.
+          <div className="controls-bar typing-paused-bar">
+            ⌨ Typing practice — reading controls and biometric inputs are paused for this tab
+          </div>
+        ) : activeTab ? (
           <ControlsBar
             tab={activeTab}
             playing={playing}
