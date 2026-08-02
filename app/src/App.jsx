@@ -68,6 +68,7 @@ import VocabDialog from './dialogs/VocabDialog.jsx';
 import RegressionDialog from './dialogs/RegressionDialog.jsx';
 import ProgressDetailDialog from './dialogs/ProgressDetailDialog.jsx';
 import { fmtTime, fmtDateTime } from './features/dateFmt.js';
+import { startCoworkScheduler } from './features/coworkScheduler.js';
 import DictationDialog from './dialogs/DictationDialog.jsx';
 import AttentionDialog from './dialogs/AttentionDialog.jsx';
 import AmbientDialog from './dialogs/AmbientDialog.jsx';
@@ -1944,6 +1945,17 @@ function AppInner() {
     return () => clearTimeout(pushTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.tabs, state.global.settingsUpdatedAt, state.global.sync?.auto, state.global.sync?.provider]);
+
+  // Cowork Sync scheduler: auto-runs per-action schedules from the AI/Cowork page — but only when
+  // THIS device is the designated sync machine (ai.syncMachine). Viewers and undesignated devices
+  // never fire. Runs are silent and land in the page's sync history.
+  const globalSnapRef = useRef(state.global);
+  globalSnapRef.current = state.global;
+  useEffect(() => startCoworkScheduler({
+    getGlobal: () => globalSnapRef.current,
+    onRan: (ids) => setStatus(`🗓 Cowork schedule ran: ${ids.join(', ')}`),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []);
 
   // Save a copy of the active tab's text to an external file (native Save dialog where supported).
   function doSaveTab() {

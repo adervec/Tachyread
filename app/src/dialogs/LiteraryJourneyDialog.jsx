@@ -17,7 +17,7 @@ import { createReadingTracker } from '../engine/readingTracker.js';
 import { sectionSpan } from '../document/toc.js';
 import { askClaude, anthropicConfigured } from '../features/anthropic.js';
 import {
-  getInstruction, LIGHT_INSTRUCTION, HEAVY_PLACEHOLDER, KNOWLEDGE_GRAPH_INSTRUCTION, CLASSIFY_INSTRUCTION, buildDataset, buildDigest, buildProgress, AI_NOTE_TYPES,
+  getInstruction, LIGHT_INSTRUCTION, buildDataset, buildDigest, buildProgress, AI_NOTE_TYPES,
   buildCoworkRequest, buildCoworkManifest, buildApiMessages, parseAiOutput, applyAiOutput, contentHash,
 } from '../features/journeyAi.js';
 import {
@@ -39,7 +39,13 @@ import { HistoryView } from './HistoryDialog.jsx';
 import AllNotesView from './AllNotesView.jsx';
 import ProgressDetailDialog from './ProgressDetailDialog.jsx';
 import { getSyncProvider } from '../features/sync/syncProviders.js';
-import { syncLibraryWithProvider } from '../features/sync/syncManager.js';
+import { syncLibraryWithProvider, syncWithProvider } from '../features/sync/syncManager.js';
+import {
+  SYNC_ACTION_GROUPS, actionById, combineCoworkInstruction, SCHEDULE_OPTS,
+  syncRole, recordRun, mergedHistory, calendarCells, fmtAgo, dayKey,
+} from '../features/coworkActions.js';
+import { getDeviceId } from '../state/storage.js';
+import { deviceKind } from '../state/device.js';
 import { AXES, READER_ARCHETYPES, readerProfile, matchArchetype, currentArchetype, archetypeTrend, archetypeAxes } from '../features/readerArchetype.js';
 import { constellationLayout, CONSTELLATION_R } from '../features/bookConstellation.js';
 
@@ -2606,35 +2612,44 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
     progress.weeklySummaries = weeklySummaries(progress.days, books, { weeks: 8 });
     return buildDataset(books, { light, progress });
   };
-  const instr = getInstruction(ai);
-  const [mode, setMode] = useState(instr.mode);
-  const [text, setText] = useState(instr.text);
+  // Request builder: a checkbox TREE of every sync action (cowork folder / direct API / cloud),
+  // each row carrying its last-run info and its own schedule. Selection is session-local.
+  const [sel, setSel] = useState(() => new Set(['cw-light']));
+  const [customText, setCustomText] = useState(ai?.customText ?? '');
   const [dir, setDir] = useState(null);
+  const [dirPath, setDirPath] = useState(ai?.coworkDirPath || '');
   const [pasted, setPasted] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [histView, setHistView] = useState('list');
+  const [calCursor, setCalCursor] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const [dayFilter, setDayFilter] = useState(null);
   const keyOk = anthropicConfigured(global?.anthropicKey);
   const model = global?.anthropicModel || 'claude-sonnet-5';
   const booksById = useMemo(() => Object.fromEntries(books.map((b) => [b.id, b])), [books]);
+  // Device role: once a sync machine is designated, every other device drops to view-only status.
+  const deviceId = getDeviceId();
+  const { role, machine } = syncRole(ai, deviceId);
+  const viewer = role === 'viewer';
+  const schedules = ai?.schedules || {};
+  const actionRuns = ai?.actionRuns || {};
+  const history = useMemo(() => mergedHistory(ai), [ai]);
+  const coworkTarget = (dirPath || '').trim() || dir?.name || '';
 
   useEffect(() => { getFsHandle('journeyCoworkDir').then(setDir).catch(() => {}); }, []);
 
-  // Related-activity feed: every cowork-ish event (requests written, responses applied, API runs)
-  // appends a line to ai.activity, shown at the bottom of this tab. Capped, newest last in storage.
+  // Related-activity feed entries (kept for compatibility — the merged history displays them).
   const actEntry = (kind, text) => ({ at: Date.now(), kind, text });
   async function logActivity(kind, text) {
     await saveJourneyAi({ ...(ai || {}), activity: [...(ai?.activity || []), actEntry(kind, text)].slice(-40) });
     onReload();
   }
 
-  async function saveInstruction(m, t) {
-    await saveJourneyAi({ ...(ai || {}), instruction: { mode: m, text: t, updatedAt: Date.now() } });
-    onReload();
-  }
-  function onModeChange(m) {
-    const t = m === 'heavy' ? (mode === 'heavy' ? text : HEAVY_PLACEHOLDER) : LIGHT_INSTRUCTION;
-    setMode(m); setText(t); saveInstruction(m, t);
-  }
+  const persistAi = async (patch) => { await saveJourneyAi({ ...(ai || {}), ...patch }); onReload(); };
+  const toggleSel = (id) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const setSched = (id, v) => persistAi({ schedules: { ...schedules, [id]: v } });
+  const designate = () => persistAi({ syncMachine: { deviceId, name: (global?.deviceName || '').trim() || deviceKind(), at: Date.now() } });
+  const releaseRole = () => persistAi({ syncMachine: null });
 
   // Persist an AI output: apply whitelisted book patches + the ai patch, dedupe via the ledger, and —
   // per the user's design — reset a HEAVY instruction back to light once its result has been applied.
@@ -2663,38 +2678,75 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
     const summary = `Applied — ${bookUpdates.length} book patch(es)${crossAdded ? `, ${crossAdded} shared note(s)` : ''}${bindingAdds?.length ? `, ${bindingAdds.length} file link(s)` : ''}${weeklyAdds?.length ? `, ${weeklyAdds.length} weekly summar${weeklyAdds.length === 1 ? 'y' : 'ies'}` : ''}${aiPatch.analysis ? ', analysis' : ''}${aiPatch.recommendations ? ', recommendations' : ''}${aiPatch.treeMeta ? ', tech tree' : ''}.`;
     nextAi.activity = [...(ai?.activity || []), actEntry('apply', summary)].slice(-40);
     await saveJourneyAi(nextAi);
-    if (wasHeavy) { setMode('light'); setText(LIGHT_INSTRUCTION); }
     setMsg(`${summary}${wasHeavy ? ' Instruction reset to light.' : ''}`);
     onReload();
-  }
-
-  async function runApi() {
-    setBusy(true); setMsg('Asking Claude…');
-    try {
-      const dataset = await datasetWithProgress(true); // API path is always the compact subset
-      const { system, messages } = buildApiMessages(dataset, { mode, text });
-      const reply = await askClaude(messages, { key: global.anthropicKey, model, system, maxTokens: 2048, source: 'trackyread-ai' });
-      await applyOutput(parseAiOutput(reply), reply);
-    } catch (e) { setMsg('API failed: ' + (e?.message || e)); }
-    setBusy(false);
   }
 
   async function chooseFolder() {
     try { const h = await window.showDirectoryPicker({ id: 'tachyread-journey-cowork', mode: 'readwrite' }); await setFsHandle('journeyCoworkDir', h); setDir(h); }
     catch { /* cancelled */ }
   }
-  async function writeRequest() {
-    if (!dir) return; setBusy(true); setMsg('Writing request…');
-    try {
-      const dataset = await datasetWithProgress(mode === 'light');
-      await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(buildCoworkRequest(dataset, { mode, text }), null, 2));
-      await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, { mode, text }));
-      await writeToDir(dir, 'cowork.json', JSON.stringify(buildCoworkManifest(), null, 2)); // discovery manifest for hubs
-      await logActivity('request', `Wrote cowork request (${mode}) to “${dir.name}”`);
-      setMsg('Wrote journey-cowork-request.json + journey-instructions.md. Drop the reply as journey-cowork-response.json, then Read response.');
-    } catch (e) { setMsg('Write failed: ' + (e?.message || e)); }
+
+  // Run everything checked in the tree, in transport order: API first (its apply saves the ai
+  // record), then re-read the record and fold in the cowork write + cloud syncs + run stamps.
+  async function runSelected() {
+    const ids = [...sel].filter((id) => actionById(id));
+    if (!ids.length) { setMsg('Nothing checked — tick at least one action in the tree.'); return; }
+    setBusy(true); setMsg('Running selected actions…');
+    const now = Date.now();
+    const parts = [];
+    let apiTried = false; let apiOk = true; let apiNote = '';
+    if (ids.includes('api-light')) {
+      apiTried = true;
+      if (!keyOk) { apiOk = false; apiNote = 'skipped — no Anthropic API key'; }
+      else {
+        try {
+          const dataset = await datasetWithProgress(true); // API path is always the compact subset
+          const { system, messages } = buildApiMessages(dataset, { mode: 'light', text: LIGHT_INSTRUCTION });
+          const reply = await askClaude(messages, { key: global.anthropicKey, model, system, maxTokens: 2048, source: 'trackyread-ai' });
+          await applyOutput(parseAiOutput(reply), reply);
+          apiNote = 'ran + applied'; parts.push('API refresh applied');
+        } catch (e) { apiOk = false; apiNote = String(e?.message || e); parts.push('API failed'); }
+      }
+    }
+    let cur = (await getJourneyAi().catch(() => null)) || ai || {};
+    const coworkIds = ids.filter((id) => id.startsWith('cw-'));
+    if (coworkIds.length) {
+      let ok = true; let note;
+      if (!dir) { ok = false; note = 'no cowork folder chosen'; parts.push('cowork skipped (no folder)'); }
+      else {
+        try {
+          const ci = combineCoworkInstruction(coworkIds, customText);
+          const dataset = await datasetWithProgress(ci.mode === 'light');
+          await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(buildCoworkRequest(dataset, ci), null, 2));
+          await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, ci));
+          await writeToDir(dir, 'cowork.json', JSON.stringify(buildCoworkManifest(), null, 2)); // discovery manifest for hubs
+          cur = { ...cur, instruction: { ...ci, updatedAt: now }, customText };
+          note = `wrote request (${ci.mode})`; parts.push(`cowork request written (${ci.mode})`);
+        } catch (e) { ok = false; note = String(e?.message || e); parts.push('cowork write failed'); }
+      }
+      cur = recordRun(cur, coworkIds, { at: now, kind: 'cowork', target: coworkTarget, ok, note });
+    }
+    for (const id of ids.filter((d) => d.startsWith('cloud-'))) {
+      let ok = true; let note;
+      const cfg = global?.sync || {};
+      const p = getSyncProvider(cfg.provider);
+      const target = p?.label || cfg.provider || 'no provider';
+      try {
+        if (!p || !p.supported()) { ok = false; note = 'no sync provider configured (Data → Cloud sync)'; }
+        else if (id === 'cloud-progress') { const r = await syncWithProvider(cfg.provider, cfg); note = `progress synced (${Math.round((r.bytes || 0) / 1024)} KB)`; }
+        else { const r = await syncLibraryWithProvider(cfg.provider, cfg); note = r.skipped ? 'library already in sync' : `library synced (${r.books ?? '?'} books)`; }
+      } catch (e) { ok = false; note = String(e?.message || e); }
+      parts.push(`${id === 'cloud-progress' ? 'progress' : 'library'}: ${note}`);
+      cur = recordRun(cur, [id], { at: now, kind: 'cloud', target, ok, note });
+    }
+    if (apiTried) cur = recordRun(cur, ['api-light'], { at: now, kind: 'api', target: model, ok: apiOk, note: apiNote });
+    await saveJourneyAi(cur);
+    onReload();
+    setMsg(parts.length ? parts.join(' · ') : 'Done.');
     setBusy(false);
   }
+
   async function readResponse() {
     if (!dir) return; setBusy(true); setMsg('Reading response…');
     try {
@@ -2706,8 +2758,9 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
   }
   async function copyDigest() {
     try {
-      await navigator.clipboard.writeText(buildDigest(await datasetWithProgress(mode === 'light'), { mode, text }));
-      await logActivity('digest', `Copied ${mode} digest to clipboard`);
+      const ci = combineCoworkInstruction([...sel], customText) || { mode: 'light', text: LIGHT_INSTRUCTION };
+      await navigator.clipboard.writeText(buildDigest(await datasetWithProgress(ci.mode === 'light'), ci));
+      await logActivity('digest', `Copied ${ci.mode} digest to clipboard`);
       setMsg('Digest copied — paste it into a Claude chat, then paste the JSON reply below.');
     } catch { setMsg('Clipboard blocked — use the cowork folder instead.'); }
   }
@@ -2718,43 +2771,152 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
     setBusy(false);
   }
 
+  const targetOf = (g) => (g.kind === 'cowork' ? (coworkTarget || 'no folder chosen')
+    : g.kind === 'api' ? model
+      : (getSyncProvider(global?.sync?.provider)?.label || global?.sync?.provider || 'no provider'));
+  const filteredHistory = dayFilter ? history.filter((h) => dayKey(h.at) === dayFilter) : history;
+
   return (
     <div className="lj-ai">
-      <div className="rh-section-h">Update task</div>
-      <div className="lj-inline">
-        <label><input type="radio" checked={mode === 'light'} onChange={() => onModeChange('light')} /> Light (default — refresh recs + analysis)</label>
-        <label><input type="radio" checked={mode === 'heavy'} onChange={() => onModeChange('heavy')} /> Heavy (custom — e.g. rebuild tech tree)</label>
+      {/* Sync-machine role: once designated, only that device builds/runs — the rest watch. */}
+      <div className={`cw-role cw-role-${role}`}>
+        {role === 'machine' && (
+          <><span>🖥 <b>This device is the sync machine</b> — requests and schedules run here; other devices are view-only.</span>
+            <button onClick={releaseRole}>Release role</button></>
+        )}
+        {role === 'viewer' && (
+          <><span>👁 <b>View-only.</b> <b>{machine.name || 'Another device'}</b> is the sync machine (designated {fmtDateTime(machine.at)}). Status and history stay live via tracker sync.</span>
+            <button onClick={designate}>Take over as sync machine</button></>
+        )}
+        {role === 'open' && (
+          <><span>No sync machine designated — every device currently has full sync controls.</span>
+            <button onClick={designate}>🖥 Make this device the sync machine</button>
+            <span className="settings-note">Typically the desktop; other devices then become view-only status monitors.</span></>
+        )}
       </div>
-      {mode === 'heavy' ? (
-        <>
-          <div className="lj-inline">
-            <span className="settings-note">Presets:</span>
-            <button onClick={() => { setText(HEAVY_PLACEHOLDER); saveInstruction('heavy', HEAVY_PLACEHOLDER); }}>🌳 Tech tree</button>
-            <button onClick={() => { setText(KNOWLEDGE_GRAPH_INSTRUCTION); saveInstruction('heavy', KNOWLEDGE_GRAPH_INSTRUCTION); }}>🕸 Knowledge graph</button>
-            <button title="Audit every book's content-type (long-form / short-form / article / AI-generated / poetry / reference) and fix wrong or missing classifications" onClick={() => { setText(CLASSIFY_INSTRUCTION); saveInstruction('heavy', CLASSIFY_INSTRUCTION); }}>🗂 Classify content types</button>
+
+      <div className="rh-section-h">{viewer ? 'Sync status (view-only)' : 'Request builder'}</div>
+      {SYNC_ACTION_GROUPS.map((g) => {
+        if (g.needsKey && !keyOk) return null; // no key → the whole group vanishes, no nagging note
+        const onCount = g.actions.filter((a) => sel.has(a.id)).length;
+        const allOn = onCount === g.actions.length;
+        return (
+          <div key={g.id} className="cwt-group">
+            <label className="cwt-ghead">
+              <input
+                type="checkbox" disabled={viewer} checked={allOn}
+                ref={(el) => { if (el) el.indeterminate = onCount > 0 && !allOn; }}
+                onChange={() => setSel((s) => { const n = new Set(s); for (const a of g.actions) { if (allOn) n.delete(a.id); else n.add(a.id); } return n; })}
+              />
+              <span className="cwt-gico">{g.icon}</span><b>{g.label}</b>
+              <span className="cwt-target" title="Where this group's actions land">→ {targetOf(g)}</span>
+            </label>
+            {g.actions.map((a) => {
+              const run = actionRuns[a.id];
+              return (
+                <div key={a.id} className="cwt-row">
+                  <label className="cwt-main">
+                    <input type="checkbox" disabled={viewer} checked={sel.has(a.id)} onChange={() => toggleSel(a.id)} />
+                    <span className="cwt-ico" aria-hidden="true">{a.icon}</span>
+                    <span className="cwt-txt"><span className="cwt-lbl">{a.label}</span><span className="cwt-desc">{a.desc}</span></span>
+                  </label>
+                  <span
+                    className={`cwt-last${run && !run.ok ? ' err' : ''}`}
+                    title={run ? `${run.ok ? 'OK' : 'Failed'} — ${fmtDateTime(run.at)}${run.target ? ` → ${run.target}` : ''}${run.note ? ` · ${run.note}` : ''}` : 'Never run'}
+                  >
+                    {run ? `${run.ok ? '✓' : '⚠'} ${fmtAgo(run.at)}${run.auto ? ' · auto' : ''}` : '· never run'}
+                  </span>
+                  <select
+                    className="cwt-sched" disabled={viewer} value={schedules[a.id] || 'off'}
+                    title="Schedule this action — it then runs automatically on the sync machine"
+                    onChange={(e) => setSched(a.id, e.target.value)}
+                  >
+                    {SCHEDULE_OPTS.map((o) => <option key={o.id} value={o.id}>{o.id === 'off' ? '⏰ manual' : `⏰ ${o.label}`}</option>)}
+                  </select>
+                </div>
+              );
+            })}
+            {g.id === 'cowork' && sel.has('cw-custom') && !viewer && (
+              <textarea
+                className="lj-instr" rows={4} placeholder="Custom heavy task for the cowork agent…"
+                value={customText} onChange={(e) => setCustomText(e.target.value)} onBlur={() => persistAi({ customText })}
+              />
+            )}
+            {g.id === 'cowork' && (
+              <div className="lj-inline cwt-foot">
+                <button onClick={chooseFolder} disabled={viewer}>{dir ? `📁 ${dir.name}` : '📁 Choose cowork folder…'}</button>
+                <input
+                  className="cwt-path" type="text" disabled={viewer}
+                  placeholder="Full folder path (annotation — shown in history; browsers can't read real paths)"
+                  value={dirPath} onChange={(e) => setDirPath(e.target.value)} onBlur={() => persistAi({ coworkDirPath: dirPath })}
+                />
+              </div>
+            )}
           </div>
-          <textarea className="lj-instr" rows={5} value={text} onChange={(e) => setText(e.target.value)} />
-          <div className="lj-inline"><button onClick={() => saveInstruction('heavy', text)}>Save instruction</button><span className="settings-note">Full tech-tree / knowledge-graph rebuilds go through the cowork folder (the whole library). Resets to Light once applied.</span></div>
-        </>
-      ) : <p className="settings-note">{LIGHT_INSTRUCTION}</p>}
+        );
+      })}
+      {!viewer && (
+        <div className="lj-inline">
+          <button className="toggle-on" disabled={busy || sel.size === 0} onClick={runSelected}>▶ Run selected ({[...sel].filter((id) => actionById(id)).length})</button>
+          {dir && <button disabled={busy} onClick={readResponse}>📥 Read response</button>}
+          <span className="settings-note">Scheduled actions run automatically — on the sync machine only.</span>
+        </div>
+      )}
 
-      <div className="rh-section-h">Direct API (Anthropic key)</div>
-      {keyOk ? (
-        <div className="lj-inline"><button disabled={busy} onClick={runApi}>Run {mode} update via API ({model})</button>
-          {mode === 'heavy' && <span className="settings-note">API sees a compact subset — full tech-tree rebuilds go through the cowork folder.</span>}</div>
-      ) : <p className="settings-note">Add an Anthropic API key in <b>Settings → Application Settings</b> to enable this. (The cowork folder below needs no key.)</p>}
-
-      <div className="rh-section-h">Cowork folder</div>
-      <div className="lj-inline">
-        <button onClick={chooseFolder}>{dir ? `Folder: ${dir.name}` : 'Choose cowork folder…'}</button>
-        {dir && <><button disabled={busy} onClick={writeRequest}>Write request</button><button disabled={busy} onClick={readResponse}>Read response</button></>}
+      <div className="rh-section-h cw-hist-h">
+        <span>Sync history ({history.length})</span>
+        <span className="cw-hist-toggle">
+          <button className={histView === 'list' ? 'toggle-on' : ''} onClick={() => { setHistView('list'); setDayFilter(null); }}>☰ List</button>
+          <button className={histView === 'cal' ? 'toggle-on' : ''} onClick={() => setHistView('cal')}>📅 Calendar</button>
+        </span>
       </div>
-      <p className="settings-note">Writes the dataset + instruction into a folder a Claude cowork agent watches; it drops <code>journey-cowork-response.json</code> back for you to apply.</p>
+      {histView === 'cal' && (
+        <div className="cwcal">
+          <div className="cwcal-nav">
+            <button onClick={() => setCalCursor((c) => (c.m ? { y: c.y, m: c.m - 1 } : { y: c.y - 1, m: 11 }))}>‹</button>
+            <b>{new Date(calCursor.y, calCursor.m, 1).toLocaleString(undefined, { month: 'long', year: 'numeric' })}</b>
+            <button onClick={() => setCalCursor((c) => (c.m === 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m: c.m + 1 }))}>›</button>
+          </div>
+          <div className="cwcal-grid">
+            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d) => <span key={d} className="cwcal-dow">{d}</span>)}
+            {calendarCells(calCursor.y, calCursor.m, history).map((c) => (
+              <button
+                key={c.key}
+                className={`cwcal-cell${c.inMonth ? '' : ' out'}${c.count ? ' has' : ''}${c.errs ? ' err' : ''}${dayFilter === c.key ? ' sel' : ''}`}
+                title={c.count ? `${c.count} run(s)${c.errs ? `, ${c.errs} failed` : ''} — click to see them` : undefined}
+                onClick={() => setDayFilter(dayFilter === c.key ? null : (c.count ? c.key : dayFilter))}
+              >
+                <span>{c.day}</span>{c.count > 0 && <em>{c.count}</em>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {(histView === 'list' || dayFilter) && (
+        <div className="cw-histlist">
+          {filteredHistory.length === 0 && <p className="settings-note">No sync runs yet{dayFilter ? ' on that day' : ''}.</p>}
+          {filteredHistory.slice(0, 80).map((h, i) => (
+            <div key={`${h.at}-${i}`} className={`cw-histrow${h.ok ? '' : ' err'}`}>
+              <span className="cw-hkind" aria-hidden="true">{{ cowork: '🤝', api: '🤖', cloud: '☁️', request: '📤', apply: '✅', digest: '📋' }[h.kind] || '·'}</span>
+              <span className="cw-hids">{h.ids?.length ? h.ids.map((id) => actionById(id)?.label || id).join(', ') : (h.note || '—')}</span>
+              {h.ids?.length > 0 && h.note ? <span className="cw-hnote">{h.note}</span> : null}
+              {h.target ? <span className="cw-htarget" title="Target">→ {h.target}</span> : null}
+              {h.auto && <span className="cw-hauto">auto</span>}
+              {!h.ok && <span className="cw-herr">failed</span>}
+              <em>{fmtDateTime(h.at)}</em>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <div className="rh-section-h">Copy / paste</div>
-      <div className="lj-inline"><button onClick={copyDigest}>Copy digest to clipboard</button></div>
-      <textarea className="lj-instr" rows={3} placeholder="Paste Claude's JSON reply here…" value={pasted} onChange={(e) => setPasted(e.target.value)} />
-      <div className="lj-inline"><button disabled={busy || !pasted.trim()} onClick={applyPasted}>Apply pasted output</button></div>
+      {!viewer && (
+        <details className="lj-fold">
+          <summary>Copy / paste (manual chat fallback)</summary>
+          <div className="lj-inline"><button onClick={copyDigest}>Copy digest to clipboard</button></div>
+          <textarea className="lj-instr" rows={3} placeholder="Paste Claude's JSON reply here…" value={pasted} onChange={(e) => setPasted(e.target.value)} />
+          <div className="lj-inline"><button disabled={busy || !pasted.trim()} onClick={applyPasted}>Apply pasted output</button></div>
+        </details>
+      )}
 
       {(ai?.analysisHistory || []).length > 0 && (
         <>
@@ -2769,21 +2931,6 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
               <p className="lj-analysis">{h.text}</p>
             </details>
           ))}
-        </>
-      )}
-
-      {(ai?.activity || []).length > 0 && (
-        <>
-          <div className="rh-section-h">Activity</div>
-          <div className="lj-actfeed">
-            {[...ai.activity].reverse().map((a, i) => (
-              <div key={`${a.at}-${i}`} className="lj-actrow">
-                <span className={`lj-actkind lj-act-${a.kind || 'other'}`}>{{ apply: '✅', request: '📤', digest: '📋' }[a.kind] || '·'}</span>
-                <span className="lj-acttext">{a.text}</span>
-                <em>{fmtDateTime(a.at)}</em>
-              </div>
-            ))}
-          </div>
         </>
       )}
 
