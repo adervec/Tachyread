@@ -45,7 +45,7 @@ const MENUS = {
     { label: 'Reduce Blue Light (bedtime)', shortcut: 'B', action: 'toggle-bluelight' },
     { label: 'Reading Cursor & Trail...', action: 'cursor-manager' },
     { label: 'Crosshairs (Lines overlays)...', action: 'crosshairs' },
-    { label: 'Face Library...', action: 'face-library' },
+    { label: 'Avatar Library...', action: 'face-library' },
   ],
   // Drills & practice.
   train: [
@@ -418,9 +418,9 @@ export default function MenuBar({ onFileOpen, onAction }) {
       <div
         className={`menu-item ${activeTab?.settings?.showEyes ? 'open' : ''}`}
         onClick={() => activeTab && patchSettings(activeTab.id, { showEyes: !activeTab.settings.showEyes })}
-        title="Toggle the animated reader faces"
+        title="Toggle the animated reader avatars"
       >
-        {activeTab?.settings?.showEyes ? '☑ ' : '☐ '}Faces<kbd className="key-hint">6</kbd>
+        {activeTab?.settings?.showEyes ? '☑ ' : '☐ '}Avatars<kbd className="key-hint">6</kbd>
       </div>
       <div
         className={`menu-item ${state.showStats ? 'open' : ''}`}
@@ -432,7 +432,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
       <div
         className={`menu-item ${state.global.chipMode ? 'open' : ''}`}
         onClick={() => updateGlobal({ chipMode: !state.global.chipMode })}
-        title="Chip mode: float the face, stats, goal and timer as transparent draggable chips instead of docking them"
+        title="Chip mode: float the avatar, stats and goal as transparent draggable chips instead of docking them"
       >
         {state.global.chipMode ? '☑ ' : '☐ '}Chips
       </div>

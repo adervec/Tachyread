@@ -91,7 +91,7 @@ const HINTS = {
   'Current-word highlight (combine any)': 'How the word you are on is marked in the Lines pane — combine any of underline, bold, background, colour, box.',
   'Completed words in current line (combine any)': 'Style the words you have already read within the current line — dim, strike through, tint… Handy when lines are paragraph-sized (wall of text), so you can see at a glance where you are inside the block. Empty = off.',
   'Auto-collapse completed sections': 'Fold away ToC sections once you have finished reading them.',
-  'Show faces': 'Animated reader faces whose expression tracks your pace and progress.',
+  'Show avatars': 'Animated reader faces whose expression tracks your pace and progress.',
   'Paragraph break (sec)': 'Extra pause the auto-player takes at the end of a paragraph.',
   'Line break pause (ms)': 'Extra pause the auto-player takes at the end of each line.',
   'Detect proper names (heavy on large docs)': 'Find names/entities so they can be indexed and optionally dwelt on longer — slower on big books.',
@@ -699,11 +699,17 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
         capture group is the numeral. Leave blank to auto-detect a roman or arabic number.
       </p>
 
-      <Section>Animated faces</Section>
-      <Field label="Show faces">
+      <Section>Avatars</Section>
+      <Field label="Show avatars">
         <input type="checkbox" checked={!!s.showEyes} onChange={(e) => patch({ showEyes: e.target.checked })} />
       </Field>
-      <Field label="Face count (1–3)">
+      <Field label="Rayman hands">
+        <label className="inline-check" title="Floating hands beside each avatar that mirror your biometric controls (gestures, scroll joystick, claps, voice commands) and move with the current activity">
+          <input type="checkbox" checked={!!s.avatarHands} onChange={(e) => patch({ avatarHands: e.target.checked })} />
+          Floating hands that mimic the biometric controls
+        </label>
+      </Field>
+      <Field label="Avatar count (1–3)">
         <input
           type="number"
           min={1}
@@ -713,7 +719,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
         />
       </Field>
       {[0, 1, 2].slice(0, s.faceCount || 1).map((slot) => (
-        <Field key={slot} label={`Face ${slot + 1} style`}>
+        <Field key={slot} label={`Avatar ${slot + 1} style`}>
           <select
             value={(s.faceStyles && s.faceStyles[slot]) || FACE_STYLES[slot] || 'Man'}
             onChange={(e) => {
@@ -736,7 +742,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           ))}
         </select>
       </Field>
-      <Field label="Mobile face transparency">
+      <Field label="Mobile avatar transparency">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
             type="range"
@@ -763,9 +769,9 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
         </div>
       </Field>
       <p className="settings-note" style={{ margin: '2px 0 0' }}>
-        On phones the face and the reading stats each float as separate draggable popups — drag
+        On phones the avatar and the reading stats each float as separate draggable popups — drag
         them anywhere over the page; these set how see-through each is. Toggle them from the menu’s
-        Faces / Stats panel chips.
+        Avatars / Stats panel chips.
       </p>
 
       <Section>Stats chip</Section>

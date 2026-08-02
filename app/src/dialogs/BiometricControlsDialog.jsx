@@ -225,7 +225,7 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
       <p className="settings-note" style={{ marginTop: 0 }}>
         Pure flavour for the self-view popup — detection always reads the raw frames. The eye
         rotoscope pins graphics over your detected eyes; with the WPM glow on they burn brighter the
-        faster you read, like the reader faces.
+        faster you read, like the reader avatars.
       </p>
       {(() => {
         const fx = { ...DEFAULT_EYE_FX, ...(g.camEyeFx || {}) };

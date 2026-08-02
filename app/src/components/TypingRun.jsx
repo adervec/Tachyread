@@ -10,6 +10,8 @@ import { rateFromIndex } from '../features/tts.js';
 import { fmtTime } from '../features/dateFmt.js';
 import { allTypingRuns } from '../state/storage.js';
 import { consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex } from '../features/typingUpgrades.js';
+import { typingEyeColor } from '../features/avatarMood.js';
+import Avatar from './Avatar.jsx';
 
 const DEFAULT_SOUNDS = {
   charCorrect: 'off', charWrong: 'off', wordPerfect: 'click', wordError: 'hiss',
@@ -720,6 +722,27 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
       <div className="tr-bar">
         <div className="tr-stats">
+          {settings.showEyes && (() => {
+            // The avatar joins the typing screen (SVG renderer — this overlay sits above the shared
+            // WebGL canvas). Its EYES grade the live net WPM against consensus typing standards:
+            // gray beginner → green → cyan → blue → purple → gold → fire at 110+.
+            const eye = typingEyeColor(live.net);
+            return (
+              <div className="tr-avatar" title={`Eye colour = how impressive the pace is (consensus WPM tiers) — currently ${eye.tier}`}>
+                <Avatar
+                  forceSvg size={52}
+                  wpm={Math.max(200, live.net * 4)}
+                  lineProgress={0.5}
+                  faceStyle={(settings.faceStyles || [])[0] || 'Man'}
+                  artStyle={settings.artStyle || 'Cartoon'}
+                  activity="typing"
+                  stage={phase === 'idle' ? 'drowsy' : 'awake'}
+                  irisOverride={eye.color}
+                  hands={!!settings.avatarHands}
+                />
+              </div>
+            );
+          })()}
           <Stat v={live.net} l="net wpm" hero />
           <Stat v={live.gross} l="gross wpm" />
           <Stat v={`${live.acc}%`} l="accuracy" />

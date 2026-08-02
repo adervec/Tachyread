@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import Face from './Face.jsx';
+import Avatar from './Avatar.jsx';
 import { useLineSweep } from './useLineSweep.js';
 import { useApp } from '../state/AppContext.jsx';
 
@@ -7,7 +7,7 @@ import { useApp } from '../state/AppContext.jsx';
 // so it can sit anywhere over the reading area instead of taking a slice of a small screen. The
 // stats stay in the dock; only the face floats. Position is passed in (persisted by App), opacity
 // is a per-tab face setting (Tab Settings → Animated faces).
-export default function FloatingFace({ tab, pos, onMove, onDrop, scale = 1, onScale }) {
+export default function FloatingFace({ tab, pos, onMove, onDrop, scale = 1, onScale, avatar = null }) {
   const { state } = useApp();
   const { settings, doc, tracker } = tab;
   const idx = settings.wordIndex;
@@ -78,7 +78,7 @@ export default function FloatingFace({ tab, pos, onMove, onDrop, scale = 1, onSc
       onPointerMove={onPointerMove}
       onPointerUp={onUp}
       onPointerCancel={onUp}
-      title="Drag to move · transparency in Tab Settings → Animated faces"
+      title="Drag to move · transparency in Tab Settings → Avatars"
     >
       {min ? (
         <>
@@ -90,7 +90,8 @@ export default function FloatingFace({ tab, pos, onMove, onDrop, scale = 1, onSc
           <button className="chip-mini-btn" title="Minimize" onClick={() => setMin(true)}>–</button>
           <div className="rsvp-faces">
             {Array.from({ length: count }, (_, i) => (
-              <Face key={i} wpm={wpm} lineProgress={lineProgress} faceStyle={styles[i] || 'Man'} artStyle={settings.artStyle || 'Cartoon'} size={Math.round(62 * k)} />
+              <Avatar key={i} wpm={wpm} lineProgress={lineProgress} faceStyle={styles[i] || 'Man'} artStyle={settings.artStyle || 'Cartoon'} size={Math.round(62 * k)}
+                activity={avatar?.activity} stage={avatar?.stage || 'awake'} speaking={!!avatar?.speaking} hands={!!avatar?.hands} />
             ))}
           </div>
           {onScale && (

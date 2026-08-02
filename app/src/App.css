@@ -3089,6 +3089,63 @@
 .tp-fingers { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; font-size: 12px; }
 .tp-finger { border: 1px solid var(--divider); border-radius: 10px; padding: 2px 8px; }
 .tp-finger.bad { border-color: #d9534f; color: #d9534f; }
+/* Typing-screen avatar: sits in the stats bar; its eye colour grades the live WPM. */
+.tr-avatar { display: flex; align-items: center; margin-right: 4px; }
+
+/* ── Avatars: activity animations (SVG renderer), Rayman hands, and the sleep act ────────────
+   The avf-* classes come from FaceSVG (activity / stage / speaking); the WebGL head does the
+   same moves in its frame loop. All transform-only — cheap, and they compose with art styles. */
+.reader-face.avf-scroll { animation: avBob 1.4s ease-in-out infinite; }
+.reader-face.avf-line { animation: avNod 1.9s ease-in-out infinite; }
+.reader-face.avf-word .face-iris { animation: avSaccade 0.7s steps(2, jump-none) infinite; }
+.reader-face.avf-para, .reader-face.avf-page { animation: avSweep 4.6s ease-in-out infinite; }
+.reader-face.avf-jump .face-brow { animation: avBrowPop 1.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.reader-face.avf-typing { animation: avType 0.8s ease-in-out infinite; }
+.reader-face.avf-peek { transform: rotate(7deg); }
+.reader-face.avf-drowsy { animation: avDrowse 3.2s ease-in-out infinite; }
+.reader-face.avf-asleep { animation: avBreathe 3.6s ease-in-out infinite; }
+.reader-face.avf-speaking .face-mouth { animation: avTalk 0.34s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes avBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes avNod { 0%, 100% { transform: rotate(0deg); } 30% { transform: rotate(5deg); } 55% { transform: rotate(-1.5deg); } }
+@keyframes avSaccade { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(1.6px); } }
+@keyframes avSweep { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+@keyframes avBrowPop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-3px); } }
+@keyframes avType { 0%, 100% { transform: translateY(0) rotate(1deg); } 50% { transform: translateY(1.6px) rotate(-1deg); } }
+@keyframes avDrowse { 0%, 100% { transform: rotate(0deg) translateY(0); } 60% { transform: rotate(7deg) translateY(2.5px); } }
+@keyframes avBreathe { 0%, 100% { transform: scale(1) rotate(4deg); } 50% { transform: scale(1.03) rotate(4deg); } }
+@keyframes avTalk { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1.5); } }
+/* Rayman hands: disembodied floating mitts beside the face — they idle-float, and flash the
+   matching pose the instant a biometric control fires (via the avatar bus). */
+.avatar { display: inline-flex; }
+.av-hand { position: absolute; bottom: 6%; pointer-events: none; line-height: 1; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.35)); }
+.av-hand-l { left: -14%; animation: avHandFloatL 2.6s ease-in-out infinite; transform: scaleX(-1); }
+.av-hand-r { right: -14%; animation: avHandFloatR 2.9s ease-in-out infinite; }
+.av-hand-pose { animation: avHandPose 0.5s ease-out; font-size: 1.3em !important; }
+@keyframes avHandFloatL { 0%, 100% { transform: scaleX(-1) translateY(0); } 50% { transform: scaleX(-1) translateY(-4px); } }
+@keyframes avHandFloatR { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes avHandPose { 0% { transform: scale(0.4) rotate(-25deg); } 60% { transform: scale(1.25) rotate(8deg); } 100% { transform: scale(1); } }
+/* The sleep act: floating zzz + a sheep hopping by, with a running count. */
+.av-sleep { position: absolute; inset: 0; pointer-events: none; }
+.av-zzz { position: absolute; top: -6%; right: -8%; font-weight: 700; color: #8ea2ff; text-shadow: 0 1px 2px rgba(0,0,0,0.3); animation: avZzz 2.6s ease-in-out infinite; font-size: 0.9em; }
+.av-zzz span { display: inline-block; animation: avZzz 2.6s ease-in-out infinite; }
+.av-zzz span:nth-child(1) { animation-delay: 0.5s; font-size: 1.2em; }
+.av-zzz span:nth-child(2) { animation-delay: 1s; font-size: 1.45em; }
+@keyframes avZzz { 0% { opacity: 0; transform: translate(0, 4px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translate(7px, -10px); } }
+.av-sheep { position: absolute; bottom: 4%; left: -12%; animation: avSheepHop 3.4s ease-in-out 1; opacity: 0; }
+.av-sheep-count { position: absolute; bottom: -4%; right: -6%; font-size: 10px; opacity: 0.75; font-variant-numeric: tabular-nums; }
+@keyframes avSheepHop {
+  0% { opacity: 0; transform: translate(0, 0); }
+  15% { opacity: 1; }
+  25% { transform: translate(28%, -14px); }
+  50% { transform: translate(60%, 0); }
+  75% { transform: translate(92%, -14px); }
+  95% { opacity: 1; }
+  100% { opacity: 0; transform: translate(124%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reader-face[class*='avf-'], .av-hand, .av-zzz, .av-zzz span, .av-sheep { animation: none; }
+}
+
 /* Desktop chip resizing: the ↘ corner grip. The sized stats chip becomes a fixed box whose
    content clips — the sacrifice logic hides blocks until it fits. */
 .chip-resize {

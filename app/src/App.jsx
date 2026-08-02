@@ -104,6 +104,8 @@ import { createAttentionMonitor } from './features/webcamAttention.js';
 import { createEyeGestureDetector, eyeMappingsUsable, ALL_KINDS } from './features/eyeGestures.js';
 import { createHoldPause } from './features/holdPause.js';
 import { createHoldScroll, holdScrollOwns } from './features/holdScroll.js';
+import { idleStage } from './features/avatarMood.js';
+import { publishHandPose } from './features/avatarBus.js';
 import { createEyeCue } from './features/eyeCue.js';
 import { createGestureMonitor, DEFAULT_HAND_CALIB, DEFAULT_GESTURES, GESTURE_INFO } from './features/handGestures.js';
 import { runCommand, actionLabel, matchVoice, matchVoiceRow, COMMANDS, DEFAULT_GESTURE_MAP, DEFAULT_VOICE_COMMANDS, DEFAULT_CLAP_MAP } from './features/commandRegistry.js';
@@ -1228,6 +1230,7 @@ function AppInner() {
     const gmap = { ...DEFAULT_GESTURE_MAP, ...(state.global.gestureMap || {}) };
     const cmdId = (hand && gmap[`${kind}:${hand}`]) || gmap[kind];
     const info = GESTURE_INFO[kind];
+    publishHandPose({ emoji: info?.icon || '🖐', ts: Date.now() }); // the avatars' Rayman hands mirror it
     if (cmdId) {
       runCommand(cmdId, cmdCtx());
       setStatus(`${info?.icon || '🖐'} ${actionLabel(cmdId)}`);
@@ -1297,7 +1300,11 @@ function AppInner() {
         setHandState(!present ? 'watching' : ev < 0 ? 'scroll-up' : ev > 0 ? 'scroll-down' : 'hand');
         holdPauseRef.current?.(present ? gesture : null);
       },
-      onScroll: (v) => { handVelRef.current = v; },
+      onScroll: (v) => {
+        // Joystick engaging (0 → moving) flashes a gliding palm on the avatars' Rayman hands.
+        if (v && !handVelRef.current) publishHandPose({ emoji: v < 0 ? '🤚' : '🖐', ts: Date.now() });
+        handVelRef.current = v;
+      },
       onWave: (hand) => handleGestureRef.current?.('wave', hand),
     });
     handRef.current = mon;
@@ -1740,6 +1747,7 @@ function AppInner() {
         },
         onHeard: ({ transcript, isFinal, command }) => {
           if (!isFinal) return;
+          if (command) publishHandPose({ emoji: '🎤', ts: Date.now() }); // avatars cup a mic on a voice command
           pushBioLog({ source: 'voice', text: transcript, action: command ? actionLabel(command) : null, tone: command ? 'valid' : 'noop' });
         },
         onCommand: (cmd) => { runCommand(cmd, cmdCtx()); },
@@ -1752,6 +1760,7 @@ function AppInner() {
         // be a sequence step.
         const cmdId = clapCfgRef.current.off[claps] ? null : clapCfgRef.current.map[claps];
         if (cmdId) runCommand(cmdId, cmdCtx());
+        publishHandPose({ emoji: '👏', ts: Date.now() }); // the avatars applaud along
         pushBioLog({ source: 'voice', text: `👏 × ${claps}`, action: cmdId ? actionLabel(cmdId) : null, tone: cmdId ? 'valid' : 'noop' });
         seqFeedRef.current?.(`c:${claps}`);
       }).then((cd) => (clapRef.current = cd)).catch(() => {});
@@ -2174,6 +2183,16 @@ function AppInner() {
   // and pauses playback — there's no room to do both, and you're not reading the text then.
   const auxOpen = isCompact && (state.showToc || (state.showSource && !!activeTab?.doc?.source) || state.showIndex);
   const panesFull = linesLocked || auxOpen;
+  // What the AVATARS are doing right now: the live activity (reading mode), the drowsiness stage
+  // (awake → drowsy as idle approaches → asleep, with zzz + sheep), whether the TTS is speaking
+  // (mouths move with it), and whether the Rayman hands are on. One object, every avatar surface.
+  const avatarState = {
+    activity: readingMode,
+    stage: idleStage(modeIdleFrac, readingMode === 'idle'),
+    speaking: playing && !!activeTab?.settings.readAloud,
+    hands: !!activeTab?.settings.avatarHands,
+  };
+
   // Per-tab reading cursor + trail (only over the reader panes). resolveCursorCss falls back to '' —
   // no override — for the system cursor or a missing custom, so the reader is never left blank.
   const readerCursor = activeTab ? resolveCursorCss(activeTab.settings.cursorId, state.global.customCursors) : '';
@@ -2533,7 +2552,7 @@ function AppInner() {
                       bar with the rotate/lock buttons — not buried in the menu drawer. */}
                   <button
                     className={`rv-rotate${activeTab?.settings?.showEyes ? ' on' : ''}`}
-                    title="Toggle the animated reader faces"
+                    title="Toggle the animated reader avatars"
                     aria-pressed={!!activeTab?.settings?.showEyes}
                     onClick={() => activeTab && patchSettings(activeTab.id, { showEyes: !activeTab.settings.showEyes })}
                   >
@@ -2712,7 +2731,7 @@ function AppInner() {
             float as draggable transparent chips instead so the dock stays out of the way. */}
         {!chips && activeTab && (activeTab.settings.showEyes || state.showStats) && (
           <div className="dock-dash">
-            <DashboardPane tab={activeTab} dock showFaces={!!activeTab.settings.showEyes} showStats={state.showStats} autoStopAt={autoStopAt} />
+            <DashboardPane tab={activeTab} dock showFaces={!!activeTab.settings.showEyes} showStats={state.showStats} autoStopAt={autoStopAt} avatar={avatarState} />
           </div>
         )}
         {activeTab ? (
@@ -3153,6 +3172,7 @@ function AppInner() {
           onDrop={(p) => p && updateGlobal({ mobileFacePos: p })}
           scale={state.global.chipSizes?.face ?? 1}
           onScale={(k) => updateGlobal({ chipSizes: { ...(state.global.chipSizes || {}), face: k } })}
+          avatar={avatarState}
         />
       )}
       {chips && activeTab && state.showStats && (

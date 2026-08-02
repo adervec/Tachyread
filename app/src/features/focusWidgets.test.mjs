@@ -8,7 +8,7 @@ const ids = FOCUS_WIDGET_ITEMS.map((w) => w[0]);
 assert.equal(new Set(ids).size, ids.length, 'widget ids are unique');
 assert.ok(FOCUS_WIDGET_ITEMS.every(([, label]) => label && typeof label === 'string'), 'every widget has a label');
 assert.ok(ids.includes('faces') && ids.includes('nowWpm') && ids.includes('goal'), 'core widgets present');
-assert.equal(FOCUS_WIDGET_LABEL.faces, 'Reader faces', 'label lookup works');
+assert.equal(FOCUS_WIDGET_LABEL.faces, 'Avatars', 'label lookup works');
 
 // focusPanelList([]) → full catalog in catalog order with default on-flags
 const full = focusPanelList([]);
