@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { filterCss } from '../features/displayFilters.js';
+import FilterControls from './FilterControls.jsx';
 
 // Renders the original document page/section beside the reader, synced to the reading
 // position via doc.wordToSegment. PDF pages are rasterized with pdf.js; EPUB sections show
@@ -280,6 +282,10 @@ export default function SourcePane({ tab, onPatch, onSourcePage }) {
   const { doc, settings } = tab;
   const idx = settings.wordIndex;
   const src = doc.source;
+  // Display-flavour filter over the rendered page (sepia old-paper, noir, thermal… or a custom
+  // mix) — pure paint on the source view; the underlying render/OCR text is untouched.
+  const [showFx, setShowFx] = useState(false);
+  const srcFxCss = filterCss(settings.sourceFilter);
   // Persisted checkbox ticks for html/markdown sources: { [sectionIndex]: [checkboxIndex...] }.
   const checks = settings.sourceChecks || {};
   const onCheck = (section, box, on) => {
@@ -352,10 +358,20 @@ export default function SourcePane({ tab, onPatch, onSourcePage }) {
               <button className="src-tool" title="More page padding" onClick={() => onPatch?.({ sourcePad: Math.min(48, pad + 4) })}>+</button>
             </>
           )}
+          <button
+            className={`src-tool${srcFxCss || showFx ? ' on' : ''}`}
+            title="Page look — display-flavour filters (old paper, noir, thermal… or your own mix)"
+            onClick={() => setShowFx((v) => !v)}
+          >🎛</button>
           <span className="source-sync" title="Follows your reading position">⟳ synced</span>
         </span>
       </div>
-      <div className="source-body">
+      {showFx && (
+        <div className="source-fx-panel">
+          <FilterControls value={settings.sourceFilter} onChange={(v) => onPatch?.({ sourceFilter: v })} />
+        </div>
+      )}
+      <div className="source-body" style={srcFxCss ? { filter: srcFxCss, WebkitFilter: srcFxCss } : undefined}>
         {src.kind === 'pdf' && <PdfSource doc={doc} page={seg} curOff={curOff} curStyle={curStyle} curColor={curColor} />}
         {src.kind === 'epub' && <EpubSource doc={doc} section={seg} curOff={curOff} pad={pad} curStyle={curStyle} curColor={curColor} />}
         {src.kind === 'html' && <HtmlSource doc={doc} section={seg} checks={checks} onCheck={onCheck} curOff={curOff} pad={pad} curStyle={curStyle} curColor={curColor} />}

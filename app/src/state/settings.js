@@ -69,6 +69,7 @@ export function defaultFileSettings() {
     sourceCursorStyle: 'vortex', // marker look: vortex (invert) | box | underline | highlight
     sourceCursorColor: '', // marker colour for box/underline/highlight ('' = default amber)
     sourcePad: 12, // inner padding (px) of the Source page so text doesn't touch the edge
+    sourceFilter: null, // display-flavour filter over the Source page view (features/displayFilters.js)
     faceOpacity: 0.9, // transparency of the floating reader face on mobile (0.15–1)
     statsOpacity: 0.92, // transparency of the floating stats popup on mobile (0.2–1)
     bionicFont: false,
@@ -421,6 +422,12 @@ export function defaultGlobalSettings() {
     webcamPreview: true,
     // Calibrated eye-blink threshold from the calibration step ({ open, closed, threshold }).
     webcamCalib: {},
+    // Camera self-view looks (DISPLAY ONLY — detection sees the raw frames):
+    //   camEyeFx: the eye rotoscope — graphics drawn over your detected eyes (glow orbs, rings,
+    //     stars, lasers, emoji), optionally glowing with your live WPM. See features/eyeFx.js.
+    //   camFilter: a display filter over the self-view video. See features/displayFilters.js.
+    camEyeFx: null,
+    camFilter: null,
     // Mobile-only quarter-turn (0 | 90 | 180 | 270) applied to JUST the reader box (Fast Reader /
     // Lines), leaving the menus, tabs and controls upright. Not a full device landscape mode.
     readerRotation: 0,

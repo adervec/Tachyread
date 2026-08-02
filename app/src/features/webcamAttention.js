@@ -80,7 +80,9 @@ async function createLandmarkBackend() {
       }
       // face width as a fraction of the frame (left/right face-contour landmarks) — a distance proxy.
       const faceSpan = lm[234] && lm[454] ? Math.abs(lm[454].x - lm[234].x) : null;
-      return { present: true, facing, blinkScore, blinkL, blinkR, shapes, irisX: gf ? gf[0] : null, irisY: gf ? gf[1] : null, faceSpan };
+      // Iris CENTRES in normalized video coords — the eye-rotoscope overlay aims its graphics here.
+      const eyes = lm[468] && lm[473] ? { l: { x: lm[473].x, y: lm[473].y }, r: { x: lm[468].x, y: lm[468].y } } : null;
+      return { present: true, facing, blinkScore, blinkL, blinkR, shapes, irisX: gf ? gf[0] : null, irisY: gf ? gf[1] : null, faceSpan, eyes };
     },
     close() { try { landmarker.close(); } catch { /* ignore */ } },
   };
@@ -180,7 +182,7 @@ export function createAttentionMonitor({
     if (!r) return;
     const now = Date.now();
     // Raw frame out to whoever wants finer signals than attention/doze (eye gestures).
-    if (r.present) onSample?.({ t: now, blinkL: r.blinkL, blinkR: r.blinkR, shapes: r.shapes, irisX: r.irisX, irisY: r.irisY });
+    if (r.present) onSample?.({ t: now, blinkL: r.blinkL, blinkR: r.blinkR, shapes: r.shapes, irisX: r.irisX, irisY: r.irisY, eyes: r.eyes || null });
     const score = typeof r.blinkScore === 'number' ? r.blinkScore : null;
     lastBlinkScore = score;
     const eyesOpen = score != null ? score < threshold : null; // null = no eye data (presence-only)

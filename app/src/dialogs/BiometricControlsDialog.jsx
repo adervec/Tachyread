@@ -6,6 +6,8 @@ import { stepLabel } from '../features/triggerSequences.js';
 import { EYE_KINDS, GAZE_KINDS, FACE_KINDS, ALL_KINDS, validateEyeMappings, kindFloorMs, DELIBERATE_MS, MAX_HOLD_MS } from '../features/eyeGestures.js';
 import { holdScrollRows, clampHoldSecs, HOLD_SCROLL_MIN_SECS, HOLD_SCROLL_MAX_SECS } from '../features/holdScroll.js';
 import { checkBioProfile } from '../features/bioProfileCheck.js';
+import { EYE_FX_STYLES, DEFAULT_EYE_FX } from '../features/eyeFx.js';
+import FilterControls from '../components/FilterControls.jsx';
 import { createEyeCue } from '../features/eyeCue.js';
 import ProfilesBar from '../components/ProfilesBar.jsx';
 import DeviceInfo from '../components/DeviceInfo.jsx';
@@ -19,6 +21,7 @@ const BIO_PROFILE_KEYS = [
   'webcamDistanceNudge', 'webcamFocusStats', 'webcamPreview', 'webcamCalib', 'mobileCamera',
   'handGestures', 'handGestureSet', 'handCalib', 'gestureMap', 'gestureHands', 'handHoldMs', 'holdPauseGesture',
   'holdScroll', 'voiceCommands', 'clapMap', 'clapOff', 'audioCtrlMode', 'triggerSeqs', 'eyeGestures',
+  'camEyeFx', 'camFilter',
 ];
 function captureBioProfile(g) {
   const out = {};
@@ -216,6 +219,60 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
       </Field>
       <Field label="Eye calibration">
         <button onClick={onCalibrate} disabled={!onCalibrate}>⚙ Calibrate eye detection…</button>
+      </Field>
+
+      <div className="field-section">🎥 Camera feed looks (display only)</div>
+      <p className="settings-note" style={{ marginTop: 0 }}>
+        Pure flavour for the self-view popup — detection always reads the raw frames. The eye
+        rotoscope pins graphics over your detected eyes; with the WPM glow on they burn brighter the
+        faster you read, like the reader faces.
+      </p>
+      {(() => {
+        const fx = { ...DEFAULT_EYE_FX, ...(g.camEyeFx || {}) };
+        const patchFx = (p) => patch({ camEyeFx: { ...fx, ...p } });
+        return (
+          <>
+            <Field label="👁 Eye rotoscope">
+              <label className="inline-check">
+                <input type="checkbox" checked={!!fx.on} onChange={(e) => patchFx({ on: e.target.checked })} />
+                Draw eye graphics over your eyes on the self-view (needs a camera feature running)
+              </label>
+            </Field>
+            {fx.on && (
+              <>
+                <Field label="Eye style">
+                  <div className="bio-gesture-maps">
+                    <select value={fx.style} onChange={(e) => patchFx({ style: e.target.value })}>
+                      {EYE_FX_STYLES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                    </select>
+                    {fx.style === 'emoji' && (
+                      <input type="text" maxLength={4} value={fx.emoji} style={{ width: 52, textAlign: 'center', fontSize: 16 }}
+                        onChange={(e) => patchFx({ emoji: e.target.value })} title="The emoji drawn over each eye" />
+                    )}
+                    <input type="color" value={fx.color} onChange={(e) => patchFx({ color: e.target.value })} title="Eye colour / glow colour" />
+                  </div>
+                </Field>
+                <Field label="Eye size">
+                  <input type="range" min={0.3} max={2.2} step={0.1} value={fx.size} onChange={(e) => patchFx({ size: Number(e.target.value) })} />
+                  <span className="range-val">{fx.size}×</span>
+                </Field>
+                <Field label="Eye opacity">
+                  <input type="range" min={0.1} max={1} step={0.05} value={fx.opacity} onChange={(e) => patchFx({ opacity: Number(e.target.value) })} />
+                  <span className="range-val">{Math.round(fx.opacity * 100)}%</span>
+                </Field>
+                <Field label="🔥 Glow with WPM">
+                  <label className="inline-check">
+                    <input type="checkbox" checked={!!fx.wpmGlow} onChange={(e) => patchFx({ wpmGlow: e.target.checked })} />
+                    The glow swells with your live reading speed
+                  </label>
+                </Field>
+              </>
+            )}
+          </>
+        );
+      })()}
+      <Field label="Camera filter">
+        <FilterControls value={g.camFilter} onChange={(v) => patch({ camFilter: v })} />
       </Field>
 
       <div className="field-section">Hand gestures (experimental)</div>

@@ -3308,7 +3308,27 @@
 .bio-feed-head button:hover, .bio-feed-head button.on { color: var(--menu-fg); }
 
 /* Camera self-view + overlay (reused by the feed). */
-.cam-video-wrap { position: relative; background: #000; }
+.cam-video-wrap { position: relative; background: #000; overflow: hidden; }
+/* Eye rotoscope: graphics pinned over the detected iris centres (display only). Smoothed between
+   detector samples so the graphics glide with the eyes instead of stepping. */
+.cam-eye {
+  position: absolute; transform: translate(-50%, -50%); pointer-events: none; z-index: 2;
+  display: inline-flex; align-items: center; justify-content: center; line-height: 1;
+  border-radius: 50%;
+  transition: left 130ms linear, top 130ms linear, width 250ms ease, height 250ms ease,
+    box-shadow 400ms ease, text-shadow 400ms ease, font-size 250ms ease;
+}
+.cam-eye-laser { border-radius: 2px; }
+/* Shared display-filter editor (camera feed + source page looks). */
+.fxc { display: flex; flex-direction: column; gap: 5px; max-width: 100%; }
+.fxc-row { display: flex; gap: 6px; align-items: center; }
+.fxc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 12px; }
+.fxc-slider { display: flex; align-items: center; gap: 5px; font-size: 11px; }
+.fxc-slider .fxc-l { width: 62px; flex: none; opacity: 0.8; }
+.fxc-slider input[type='range'] { flex: 1; min-width: 60px; }
+.fxc-slider .fxc-v { width: 38px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+/* Source page-look panel (the 🎛 toolbar toggle). */
+.source-fx-panel { padding: 6px 10px; border-bottom: 1px solid var(--divider); background: var(--menu-bg); }
 .cam-video { display: block; width: 100%; height: 150px; object-fit: cover; transform: scaleX(-1); }
 .cam-overlay { position: absolute; left: 6px; top: 6px; right: 6px; display: flex; flex-wrap: wrap; gap: 4px; pointer-events: none; }
 .cam-overlay .cam-ev { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 999px; background: rgba(0, 0, 0, 0.6); color: #fff; }
