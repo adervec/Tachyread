@@ -25,6 +25,8 @@ export const FACE_STYLES = [
   'Vampire', 'Viking', 'Clown', 'Bunny', 'Dragon', 'Ninja',
   'Devil', 'Goblin', 'Pirate', 'Zombie', 'Pig', 'Bear', 'Fox', 'Mouse', 'Penguin', 'Astronaut',
   'Unicorn', 'Santa', 'Knight', 'Witch',
+  'Frog', 'Lion', 'Koala', 'Tiger', 'Ghost', 'Elf', 'Chef', 'Cowboy', 'Professor', 'Grandma',
+  'Pumpkin', 'Snowman',
 ];
 
 // Material surface qualities per art style (color is applied per-part). Neon emissive is
@@ -393,6 +395,161 @@ export function decor3d(style) {
           p('cyl', { args: [1.25, 1.25, 0.1, 28], pos: [0, 0.78, -0.02], color: '#1a1430' }), // brim
           p('torus', { args: [0.42, 0.06, 8, 20], pos: [0, 0.84, 0.0], rot: [Math.PI / 2, 0, 0], color: '#7a30c0' }), // hat band
           sphere(0.07, { pos: [0.32, -0.5, 0.84], color: '#6a8a36' }), // wart
+        ],
+      };
+    case 'Frog':
+      return {
+        skin: '#7ec850', stroke: '#3f7a28', brow: '#2c5a18',
+        hideNose: true,
+        head: { kind: 'sphere', args: [1, 32, 28], scale: [1.06, 0.92, 0.96], color: '#7ec850' },
+        extras: [
+          sphere(0.3, { pos: [-0.45, 0.88, 0.1], color: '#7ec850' }), // eye bumps on top
+          sphere(0.3, { pos: [0.45, 0.88, 0.1], color: '#7ec850' }),
+          sphere(0.05, { pos: [-0.14, -0.18, 0.95], color: '#2c5a18' }), // nostrils
+          sphere(0.05, { pos: [0.14, -0.18, 0.95], color: '#2c5a18' }),
+          sphere(0.2, { pos: [-0.55, -0.55, 0.6], scale: [1, 0.7, 0.6], color: '#a8dc80' }), // throat cheeks
+          sphere(0.2, { pos: [0.55, -0.55, 0.6], scale: [1, 0.7, 0.6], color: '#a8dc80' }),
+        ],
+      };
+    case 'Lion':
+      return {
+        skin: '#e8a33c', stroke: '#9a6316', brow: '#6a4410',
+        hideNose: true,
+        head: { kind: 'sphere', args: [1, 32, 28], scale: [1.0, 0.98, 0.95], color: '#e8a33c' },
+        extras: [
+          p('torus', { args: [1.02, 0.34, 14, 30], pos: [0, 0.02, -0.25], color: '#b06a1a' }), // mane
+          sphere(0.22, { pos: [-0.62, 0.88, -0.05], color: '#e8a33c' }), // ears above the mane
+          sphere(0.22, { pos: [0.62, 0.88, -0.05], color: '#e8a33c' }),
+          sphere(0.34, { pos: [0, -0.38, 0.8], scale: [1.0, 0.8, 0.7], color: '#f4c88a' }), // muzzle
+          sphere(0.11, { pos: [0, -0.2, 1.04], scale: [1.25, 0.85, 0.8], color: '#6a3a1a' }), // nose
+        ],
+      };
+    case 'Koala':
+      return {
+        skin: '#b0b4bc', stroke: '#767a84', brow: '#4a4e58',
+        hideNose: true,
+        head: { kind: 'sphere', args: [1, 32, 28], scale: [1.04, 0.98, 0.95], color: '#b0b4bc' },
+        extras: [
+          sphere(0.42, { pos: [-0.85, 0.6, -0.12], color: '#b0b4bc' }), // big fuzzy ears
+          sphere(0.42, { pos: [0.85, 0.6, -0.12], color: '#b0b4bc' }),
+          sphere(0.26, { pos: [-0.85, 0.6, 0.08], scale: [1, 1, 0.5], color: '#e8c8d0' }), // inner ear
+          sphere(0.26, { pos: [0.85, 0.6, 0.08], scale: [1, 1, 0.5], color: '#e8c8d0' }),
+          sphere(0.2, { pos: [0, -0.22, 0.92], scale: [0.85, 1.45, 0.6], color: '#2a2a2e' }), // big oval nose
+        ],
+      };
+    case 'Tiger':
+      return {
+        skin: '#f08a2e', stroke: '#a85a14', brow: '#1a1a1a',
+        hideNose: true,
+        head: { kind: 'sphere', args: [1, 32, 28], scale: [1.02, 0.98, 0.96], color: '#f08a2e' },
+        extras: [
+          p('cone', { args: [0.22, 0.38, 16], pos: [-0.52, 0.92, 0], rot: [0, 0, 14 * DEG], color: '#f08a2e' }), // ears
+          p('cone', { args: [0.22, 0.38, 16], pos: [0.52, 0.92, 0], rot: [0, 0, -14 * DEG], color: '#f08a2e' }),
+          p('box', { args: [0.09, 0.34, 0.06], pos: [0, 0.72, 0.72], color: '#1a1a1a' }), // forehead stripes
+          p('box', { args: [0.08, 0.3, 0.06], pos: [-0.26, 0.7, 0.68], rot: [0, 0, 18 * DEG], color: '#1a1a1a' }),
+          p('box', { args: [0.08, 0.3, 0.06], pos: [0.26, 0.7, 0.68], rot: [0, 0, -18 * DEG], color: '#1a1a1a' }),
+          p('box', { args: [0.3, 0.07, 0.06], pos: [-0.88, 0.05, 0.42], rot: [0, 35 * DEG, 0], color: '#1a1a1a' }), // cheek stripes
+          p('box', { args: [0.3, 0.07, 0.06], pos: [0.88, 0.05, 0.42], rot: [0, -35 * DEG, 0], color: '#1a1a1a' }),
+          sphere(0.3, { pos: [0, -0.42, 0.8], scale: [0.95, 0.8, 0.75], color: '#fff4ee' }), // white muzzle
+          sphere(0.09, { pos: [0, -0.26, 1.05], scale: [1.2, 0.85, 0.8], color: '#e87090' }), // pink nose
+        ],
+      };
+    case 'Ghost':
+      return {
+        skin: '#f4f4fb', stroke: '#a8a8c8', brow: '#8888aa',
+        hideNose: true,
+        head: { kind: 'sphere', args: [1, 32, 28], scale: [0.95, 1.12, 0.9], color: '#f4f4fb', opacity: 0.92 },
+        extras: [
+          p('cone', { args: [0.22, 0.45, 12], pos: [-0.55, -0.95, 0.1], rot: [Math.PI, 0, 0], color: '#f4f4fb', opacity: 0.92 }), // drippy tail
+          p('cone', { args: [0.22, 0.5, 12], pos: [0, -1.05, 0.1], rot: [Math.PI, 0, 0], color: '#f4f4fb', opacity: 0.92 }),
+          p('cone', { args: [0.22, 0.45, 12], pos: [0.55, -0.95, 0.1], rot: [Math.PI, 0, 0], color: '#f4f4fb', opacity: 0.92 }),
+        ],
+      };
+    case 'Elf':
+      return {
+        skin: '#ffd9b5', stroke: '#c08a5a', brow: '#8a5a28',
+        head: { kind: 'sphere', args: [1, 32, 28], scale: [0.95, 1.02, 0.92], color: '#ffd9b5' },
+        extras: [
+          p('cone', { args: [0.85, 1.4, 24], pos: [0.15, 1.35, -0.05], rot: [0, 0, -14 * DEG], color: '#2e8b46' }), // pointy hat
+          p('cyl', { args: [0.95, 0.95, 0.14, 26], pos: [0, 0.7, -0.02], color: '#1f6a32' }), // brim
+          sphere(0.1, { pos: [0.58, 1.98, -0.05], color: '#ffd24a', emissive: '#ffd24a', emissiveIntensity: 0.4 }), // bell
+          p('cone', { args: [0.14, 0.6, 12], pos: [-0.98, 0.25, 0], rot: [0, 0, 100 * DEG], color: '#ffd9b5' }), // pointed ears
+          p('cone', { args: [0.14, 0.6, 12], pos: [0.98, 0.25, 0], rot: [0, 0, -100 * DEG], color: '#ffd9b5' }),
+        ],
+      };
+    case 'Chef':
+      return {
+        skin: '#ffd5aa', stroke: '#9b643c', brow: '#3a2a1a',
+        head: { kind: 'sphere', args: [1, 32, 28], scale: [0.95, 1.02, 0.92], color: '#ffd5aa' },
+        extras: [
+          p('cyl', { args: [0.92, 0.92, 0.35, 26], pos: [0, 0.92, 0], color: '#fafafa' }), // toque band
+          sphere(0.42, { pos: [-0.42, 1.35, 0], color: '#fafafa' }), // toque puffs
+          sphere(0.48, { pos: [0, 1.48, 0], color: '#fafafa' }),
+          sphere(0.42, { pos: [0.42, 1.35, 0], color: '#fafafa' }),
+          p('capsule', { args: [0.09, 0.3, 6, 10], pos: [-0.22, -0.42, 0.88], rot: [0, 0, 75 * DEG], color: '#4a2a12' }), // mustache
+          p('capsule', { args: [0.09, 0.3, 6, 10], pos: [0.22, -0.42, 0.88], rot: [0, 0, -75 * DEG], color: '#4a2a12' }),
+        ],
+      };
+    case 'Cowboy':
+      return {
+        skin: '#eab884', stroke: '#a8743a', brow: '#5a3a1a',
+        head: { kind: 'sphere', args: [1, 32, 28], scale: [0.95, 1.02, 0.92], color: '#eab884' },
+        extras: [
+          p('cyl', { args: [1.4, 1.4, 0.08, 28], pos: [0, 0.62, 0], color: '#8a5a2a' }), // wide brim
+          p('cyl', { args: [0.62, 0.72, 0.62, 24], pos: [0, 0.95, 0], color: '#8a5a2a' }), // crown
+          p('torus', { args: [0.68, 0.05, 10, 24], pos: [0, 0.68, 0], rot: [Math.PI / 2, 0, 0], color: '#4a2a12' }), // hat band
+          p('capsule', { args: [0.05, 0.5, 6, 10], pos: [0, -0.98, 0.55], rot: [0, 0, 90 * DEG], color: '#c0392b' }), // bandana knot
+        ],
+      };
+    case 'Professor':
+      return {
+        skin: '#f0d2b0', stroke: '#9a6a44', brow: '#9a9a9a',
+        head: { kind: 'sphere', args: [1, 32, 28], scale: [0.95, 1.05, 0.92], color: '#f0d2b0' },
+        extras: [
+          p('torus', { args: [0.3, 0.03, 10, 24], pos: [-0.4, 0.12, 0.88], color: '#3a3a42' }), // spectacles
+          p('torus', { args: [0.3, 0.03, 10, 24], pos: [0.4, 0.12, 0.88], color: '#3a3a42' }),
+          p('box', { args: [0.22, 0.04, 0.04], pos: [0, 0.12, 0.92], color: '#3a3a42' }), // bridge
+          sphere(0.24, { pos: [-0.82, 0.35, -0.15], scale: [0.8, 1, 1], color: '#c8c8cc' }), // side tufts (bald top)
+          sphere(0.24, { pos: [0.82, 0.35, -0.15], scale: [0.8, 1, 1], color: '#c8c8cc' }),
+          p('capsule', { args: [0.08, 0.34, 6, 10], pos: [0, -0.44, 0.88], rot: [0, 0, 90 * DEG], color: '#b8b8bc' }), // gray mustache
+        ],
+      };
+    case 'Grandma':
+      return {
+        skin: '#ffd9c0', stroke: '#c89a78', brow: '#b8b8bc',
+        head: { kind: 'sphere', args: [1, 32, 28], scale: [0.95, 1.02, 0.92], color: '#ffd9c0' },
+        extras: [
+          cap(1.0, 0.7, { scale: [1.0, 1.06, 0.95], pos: [0, 0.05, -0.02], color: '#d8d8dc' }), // silver hair
+          sphere(0.34, { pos: [0, 1.15, -0.35], color: '#d8d8dc' }), // bun
+          p('torus', { args: [0.29, 0.03, 10, 24], pos: [-0.4, 0.12, 0.88], color: '#8a6a4a' }), // spectacles
+          p('torus', { args: [0.29, 0.03, 10, 24], pos: [0.4, 0.12, 0.88], color: '#8a6a4a' }),
+          p('box', { args: [0.22, 0.04, 0.04], pos: [0, 0.12, 0.92], color: '#8a6a4a' }),
+          sphere(0.14, { pos: [-0.5, -0.3, 0.74], scale: [1, 0.7, 0.5], color: '#ffb0a0' }), // rosy cheeks
+          sphere(0.14, { pos: [0.5, -0.3, 0.74], scale: [1, 0.7, 0.5], color: '#ffb0a0' }),
+        ],
+      };
+    case 'Pumpkin':
+      return {
+        skin: '#f28c28', stroke: '#b05a10', brow: '#7a3a08',
+        hideNose: true,
+        head: { kind: 'sphere', args: [1, 32, 28], scale: [1.1, 0.95, 1.0], color: '#f28c28' },
+        extras: [
+          sphere(0.98, { pos: [-0.3, 0, -0.08], scale: [0.75, 0.93, 0.95], color: '#e07a1a' }), // lobes
+          sphere(0.98, { pos: [0.3, 0, -0.08], scale: [0.75, 0.93, 0.95], color: '#e07a1a' }),
+          p('cyl', { args: [0.1, 0.16, 0.4, 10], pos: [0, 1.05, 0], rot: [0, 0, 8 * DEG], color: '#3f7a28' }), // stem
+          p('cone', { args: [0.14, 0.24, 4], pos: [0, -0.2, 0.95], rot: [0, 45 * DEG, 0], color: '#1a1a1a' }), // triangle nose
+        ],
+      };
+    case 'Snowman':
+      return {
+        skin: '#ffffff', stroke: '#a8b4c0', brow: '#4a4e58',
+        hideNose: true,
+        head: { kind: 'sphere', args: [1, 32, 28], scale: [1.0, 1.0, 0.95], color: '#ffffff' },
+        extras: [
+          p('cyl', { args: [1.15, 1.15, 0.08, 26], pos: [0, 0.78, 0], color: '#1a1a1a' }), // hat brim
+          p('cyl', { args: [0.66, 0.66, 0.85, 24], pos: [0, 1.2, 0], color: '#1a1a1a' }), // top hat
+          p('torus', { args: [0.66, 0.05, 10, 24], pos: [0, 0.86, 0], rot: [Math.PI / 2, 0, 0], color: '#c0392b' }), // ribbon
+          p('cone', { args: [0.11, 0.55, 14], pos: [0, -0.16, 1.1], rot: [90 * DEG, 0, 0], color: '#f08030' }), // carrot nose
         ],
       };
     case 'Man':
