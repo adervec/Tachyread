@@ -820,6 +820,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                   onChange={(e) => onPatch?.({ typing: { ...cfg, confidence: e.target.checked } })} />
                 <span>🚫⌫</span>
               </label>
+              <label className="tr-oneword" title="Error log — a separate area listing every error entry as it happens: the target word vs what you actually typed (corrected words included)">
+                <input type="checkbox" checked={!!cfg.errorLog}
+                  onChange={(e) => onPatch?.({ typing: { ...cfg, errorLog: e.target.checked } })} />
+                <span>📋 errors</span>
+              </label>
               <label className="tr-oneword" title="Blind mode — no per-character verdicts while you type; trust your fingers and let the numbers tell the tale at the end">
                 <input type="checkbox" checked={blind}
                   onChange={(e) => onPatch?.({ typing: { ...cfg, blind: e.target.checked } })} />
@@ -940,6 +945,41 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       </div>
 
       {phase === 'idle' && <div className="tr-hint">Just start typing — the run begins on your first letter (or press ▶ Start for a Ready·Set·Go). It ends at your limit, on “End run”, or after 5s idle. Esc discards.</div>}
+
+      {/* Error log: every imperfect commit as target → typed, wrong/missed chars marked. Live while
+          running (hidden in blind mode until the end), and kept on the done screen for review. */}
+      {cfg.errorLog && phase !== 'idle' && phase !== 'countdown' && (!blind || phase === 'done') && (() => {
+        const entries = results
+          .map((r, i) => ({ i, target: passage[i] || '', typed: r?.typed ?? '', perfect: !r || !!r.perfect }))
+          .filter((e) => !e.perfect);
+        return (
+          <div className="tr-errlog">
+            <div className="tr-errlog-head">📋 Errors · {entries.length}</div>
+            {entries.length === 0
+              ? <div className="tr-errlog-empty">none yet — clean so far</div>
+              : (
+                <div className="tr-errlog-list">
+                  {entries.map((e) => {
+                    const fixed = e.typed.length === e.target.length && [...e.typed].every((c, j) => charOk(c, e.target[j]));
+                    return (
+                      <div key={e.i} className="tr-err-row">
+                        <span className="tr-err-target">{e.target}</span>
+                        <span className="tr-err-arrow">→</span>
+                        <span className="tr-err-typed">
+                          {[...e.typed].map((ch, j) => (
+                            <span key={j} className={j < e.target.length && charOk(ch, e.target[j]) ? 'trc correct' : 'trc wrong'}>{ch}</span>
+                          ))}
+                          {e.typed.length < e.target.length && <span className="trc missed">{e.target.slice(e.typed.length)}</span>}
+                          {fixed && <span className="tr-err-fixed">(corrected)</span>}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+          </div>
+        );
+      })()}
 
       {phase === 'done' && summary && (
         <div className="tr-results">
