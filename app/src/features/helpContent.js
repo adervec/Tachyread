@@ -72,7 +72,7 @@ export const HELP_SECTIONS = [
     say: 'Typing practice types your book forward from where you are, with the best ideas from the classic trainers built in: a pace ghost to race, stop-on-error and no-backspace discipline modes, blind mode, a consistency score, personal bests, daily streaks, a one-click drill of the words you missed, and a per-key error heatmap.',
     body: [
       'Typing menu → Typing Practice types your book forward from the reading position; finish a run and Continue to count it as read, or Discard to return.',
-      'A run starts on your first keystroke (or ▶ Start for a Ready·Set·Go). It ends at the limit, on End run, or after 5s idle.',
+      'A run starts on your first keystroke (or ▶ Start for a Ready·Set·Go — typing mid-countdown skips the rest of it). On the results screen, just typing stages the next run too. It ends at the limit, on End run, or after 5s idle.',
       'Per-character feedback stays on completed words: green = correct, red = wrong, underlined = never typed, dim red = extra characters.',
       '👻 Pace ghost: a marker moves through the passage at a steady speed — your last run, your personal best, or a custom WPM — so every run is a quiet race (Monkeytype\'s pace caret, TypeRacer\'s ghost).',
       'Discipline modes: 🛑 stop-on-error refuses wrong keys (they still cost an error) and only commits complete words; 🚫⌫ confidence mode disables backspace entirely; 🙈 blind mode hides the per-character verdicts while you type — the numbers tell the tale at the end.',

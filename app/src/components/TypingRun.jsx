@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { playLineSound, playTick, TYPING_SOUNDS } from '../features/clickSound.js';
 import { getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import { deviceKind } from '../state/device.js';
@@ -46,6 +46,31 @@ const ENDLESS_SECS = 99999;
 const OVERTYPE_MAX = 4;
 
 const freshStats = () => ({ start: 0, chars: 0, correct: 0, errors: 0, words: 0, perfect: 0, errorKeys: {}, keys: {} });
+
+// Pending words further ahead than this aren't rendered — they're below the viewport fold anyway,
+// and skipping their DOM is what keeps long timed/endless passages (up to 600 words) light.
+const PENDING_WINDOW = 160;
+
+const charOkWith = (typedCh, targetCh, caseSensitive, bypassSym) =>
+  (bypassSym && isExotic(targetCh)) || sameChar(typedCh, targetCh, caseSensitive);
+
+// Committed and pending words only change when a word commits (or a voice/pace marker crosses
+// them) — memo() lets every keystroke re-render JUST the active word instead of reconciling
+// thousands of per-char spans across the whole passage. This is the typing-lag fix.
+const CommittedWord = memo(function CommittedWord({ w, typed, perfect, vc, caseSensitive, bypassSym }) {
+  const len = Math.max(w.length, Math.min(typed.length, w.length + OVERTYPE_MAX));
+  const chars = [];
+  for (let j = 0; j < len; j++) {
+    const cls = j >= w.length ? 'trc extra'
+      : j >= typed.length ? 'trc missed'
+        : charOkWith(typed[j], w[j], caseSensitive, bypassSym) ? 'trc correct' : 'trc wrong';
+    chars.push(<span key={j} className={cls}>{j >= w.length ? typed[j] : w[j]}</span>);
+  }
+  return <span className={`trw ${perfect ? 'done' : 'imperfect'}${vc}`}>{chars} </span>;
+});
+const PendingWord = memo(function PendingWord({ w, vc }) {
+  return <span className={`trw pending${vc}`}>{w} </span>;
+});
 
 export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns, endFanfare = true, plan = null, onPlanNext, onPlanExit }) {
   const { doc, settings } = tab;
@@ -540,11 +565,17 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   function onChange(e) {
     let val = e.target.value;
     if (phase !== 'running') {
-      // Typing the first letter starts the run from idle (monkeytype-style) — no Ready·Set·Go
-      // needed. Countdown/done screens still ignore keys (they have their own controls).
-      if (phase === 'idle' && val.trim()) {
+      // Typing the first letter starts the run from idle (monkeytype-style), and mid-countdown it
+      // skips the rest of the Ready·Set·Go — the ▶ Start button and just-typing both always work.
+      if ((phase === 'idle' || phase === 'countdown') && val.trim()) {
+        if (phase === 'countdown') { clearCount(); setCount(null); }
         val = val.trim();
         start();
+      } else if (phase === 'done' && val.trim()) {
+        // Typing on the results screen stages the next run (onward through the book when there's
+        // more ahead, else the same passage) — then keep typing to begin it.
+        if (moreAhead) nextRun(); else stageRun();
+        return;
       } else {
         if (buf) setBuf('');
         return;
@@ -761,10 +792,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           otherwise they overflow beneath the bottom dock, which also swallows chart hovers. */}
       <div className="tr-viewport" style={{ display: phase === 'done' ? 'none' : undefined, ...(settings.fontFamily ? { fontFamily: settings.fontFamily } : null) }}>
         {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{count}</div>}
-        <div className="tr-cursor" ref={caretRef} style={{ opacity: phase === 'running' ? 1 : 0 }} />
+        <div className={`tr-cursor${phase === 'running' ? '' : ' waiting'}`} ref={caretRef} style={{ opacity: phase === 'done' ? 0 : 1 }} />
         <div className={`tr-lines${oneWord ? ' one-word' : ''}${blind ? ' blind' : ''}`} ref={linesRef}>
           {passage.map((w, i) => {
             if (oneWord && i !== pos) return null; // one-word mode shows only the current word
+            if (i > pos + PENDING_WINDOW) return null; // far tail is below the fold — skip its DOM
             const vc = (i === voicePos ? ' voice' : '') // word the racing voice is speaking…
               + (i === pacePos && phase === 'running' && paceWpmVal > 0 ? ' pace' : ''); // …and the 👻 ghost's word
             if (i < pos) {
@@ -772,18 +804,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               // actually typed stays visible — wrong chars, chars you never typed, and (capped)
               // extra chars beyond the word.
               const r = results[i];
-              const typed = r?.typed ?? w;
-              const len = Math.max(w.length, Math.min(typed.length, w.length + OVERTYPE_MAX));
-              const chars = [];
-              for (let j = 0; j < len; j++) {
-                const cls = j >= w.length ? 'trc extra'
-                  : j >= typed.length ? 'trc missed'
-                    : charOk(typed[j], w[j]) ? 'trc correct' : 'trc wrong';
-                chars.push(<span key={j} className={cls}>{j >= w.length ? typed[j] : w[j]}</span>);
-              }
-              return <span key={i} className={`trw ${r && !r.perfect ? 'imperfect' : 'done'}${vc}`}>{chars} </span>;
+              return <CommittedWord key={i} w={w} typed={r?.typed ?? w} perfect={!r || !!r.perfect} vc={vc} caseSensitive={caseSensitive} bypassSym={bypassSym} />;
             }
-            if (i > pos) return <span key={i} className={`trw pending${vc}`}>{w} </span>;
+            if (i > pos) return <PendingWord key={i} w={w} vc={vc} />;
             // Active word — per-char colouring + a zero-width caret anchor the floating cursor
             // tracks. Overtyped chars render capped so the word can't balloon past the line slack.
             const shownBuf = buf.length > w.length + OVERTYPE_MAX ? buf.slice(0, w.length + OVERTYPE_MAX) : buf;

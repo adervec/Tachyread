@@ -3104,13 +3104,15 @@
    real text-height box (dipping slightly below the baseline) so the cursor's measured
    offsetTop/offsetHeight land on the glyphs instead of hanging from the baseline. */
 .trc.caret-anchor { display: inline-block; width: 0; height: 1.12em; vertical-align: -0.14em; }
-/* The floating cursor itself: one absolutely-positioned bar that eases between positions. */
+/* The floating cursor itself: one absolutely-positioned bar that eases between positions
+   (monkeytype-style). It only BLINKS while waiting — mid-typing it stays solid, so the glide
+   between letters is never interrupted by a blink-off frame. */
 .tr-cursor {
   position: absolute; left: 0; top: 0; width: 2.5px; border-radius: 2px;
   background: var(--toggle-active-bg); z-index: 1; pointer-events: none;
   transition: transform 85ms cubic-bezier(.2, .7, .3, 1), opacity 200ms ease, height 120ms ease;
-  animation: caretBlink 1.1s steps(1) infinite;
 }
+.tr-cursor.waiting { animation: caretBlink 1.1s steps(1) infinite; }
 
 /* On-screen typing sound tuner (toggled by the 🎚 Sounds button) */
 .tr-sounds {
