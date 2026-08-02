@@ -262,6 +262,27 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
   const focus = () => inputRef.current?.focus();
   useEffect(() => { focus(); }, [phase]);
+  // "Just start typing" must work no matter where focus wandered — opening via the menu leaves it
+  // on the menu button, toggling a tile leaves it on the tile. A capture-phase grab redirects any
+  // printable key to the sink BEFORE the browser delivers the text, so the very first letter both
+  // starts the run and counts. Real text fields (run limit, pace WPM) and dialogs keep their keys.
+  useEffect(() => {
+    const grab = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key.length !== 1 && e.key !== 'Backspace') return;
+      const el = inputRef.current;
+      if (!el || document.activeElement === el) return;
+      const t = e.target;
+      if (t?.closest?.('.dialog')) return;
+      const tag = t?.tagName;
+      if (tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) return;
+      if (tag === 'INPUT' && !['checkbox', 'radio', 'range', 'color', 'button'].includes(t.type)) return;
+      if (tag === 'BUTTON' && (e.key === ' ' || e.key === 'Enter')) return; // keyboard button activation stays
+      el.focus();
+    };
+    document.addEventListener('keydown', grab, true);
+    return () => document.removeEventListener('keydown', grab, true);
+  }, []);
 
   // ── live metrics ──
   const metrics = useCallback(() => {
@@ -697,6 +718,22 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       : mode === 'endless' ? `${live.secs.toFixed(0)}s · endless`
         : `${live.secs.toFixed(0)} / ${limit}s`;
 
+  // ── Options sidebar: toggle tiles (idle/done only — config never shifts mid-run) ──
+  const patchCfg = (p) => onPatch?.({ typing: { ...cfg, ...p } });
+  const sideVisible = phase !== 'running' && phase !== 'countdown' && !plan;
+  // Tri-state cycles: punctuation shown → hidden → dim auto-skipped ghosts; case as-written →
+  // all-lowercase → lowercase-but-capitals-shown. Required typing is identical for the display-only states.
+  const punctState = !noSpecial ? 'shown' : wantGhosts ? 'ghosts 👻' : 'hidden';
+  const cyclePunct = () => patchCfg(!noSpecial
+    ? { noSpecial: true, ghostSpecials: false }
+    : !wantGhosts ? { noSpecial: true, ghostSpecials: true } : { noSpecial: false });
+  const caseState = !lowercase ? 'as written' : wantCaps ? 'lower · Aa shown' : 'lowercase';
+  const cycleCase = () => patchCfg(!lowercase
+    ? { lowercase: true, showCaps: false }
+    : !wantCaps ? { lowercase: true, showCaps: true } : { lowercase: false });
+  const paceState = paceMode === 'off' ? 'off' : paceMode === 'last' ? 'last run' : paceMode === 'pb' ? 'personal best' : `custom · ${cfg.paceWpm ?? 60} wpm`;
+  const cyclePace = () => patchCfg({ pace: { off: 'last', last: 'pb', pb: 'custom', custom: 'off' }[paceMode] || 'off' });
+
   return (
     <div className="type-run" onPointerDown={focus}>
       <input
@@ -769,82 +806,6 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                   onChange={(e) => { const v = Math.max(1, Number(e.target.value) || 1); setLimit(v); onPatch?.({ typing: { ...cfg, runLimit: v } }); }}
                   style={{ width: 64 }} />
               )}
-              <label className="tr-oneword" title="One word at a time — each word must be typed perfectly to advance">
-                <input type="checkbox" checked={oneWord}
-                  onChange={(e) => onPatch?.({ typing: { ...cfg, oneWord: e.target.checked } })} />
-                <span>1-word</span>
-              </label>
-              <label className="tr-oneword" title="Race the TTS voice — it reads the passage aloud; if it passes the word you're typing, you're caught. Lower the read-aloud rate in Settings to make it easier.">
-                <input type="checkbox" checked={raceVoice}
-                  onChange={(e) => onPatch?.({ typing: { ...cfg, raceVoice: e.target.checked } })} />
-                <span>🏁 Race voice</span>
-              </label>
-              <label className="tr-oneword" title="Type everything in lowercase">
-                <input type="checkbox" checked={lowercase}
-                  onChange={(e) => onPatch?.({ typing: { ...cfg, lowercase: e.target.checked } })} />
-                <span>aa</span>
-              </label>
-              {lowercase && (
-                <label className="tr-oneword" title="Show the capitals AS WRITTEN — typing lowercase still counts (display only)">
-                  <input type="checkbox" checked={wantCaps}
-                    onChange={(e) => onPatch?.({ typing: { ...cfg, showCaps: e.target.checked } })} />
-                  <span>Aa👁</span>
-                </label>
-              )}
-              <label className="tr-oneword" title="No special characters — type letters, numbers and spaces only (punctuation & symbols removed)">
-                <input type="checkbox" checked={noSpecial}
-                  onChange={(e) => onPatch?.({ typing: { ...cfg, noSpecial: e.target.checked } })} />
-                <span>no&nbsp;#</span>
-              </label>
-              {noSpecial && (
-                <label className="tr-oneword" title="Show the stripped punctuation & symbols as dim auto-skipped ghosts in their own colour — you never type them (display only)">
-                  <input type="checkbox" checked={wantGhosts}
-                    onChange={(e) => onPatch?.({ typing: { ...cfg, ghostSpecials: e.target.checked } })} />
-                  <span>👻#</span>
-                </label>
-              )}
-              {isDocMode && (
-                <label className="tr-oneword" title="Show the book's own line breaks instead of a flowing wall — visual only, the words you type are identical">
-                  <input type="checkbox" checked={!!cfg.showBreaks}
-                    onChange={(e) => onPatch?.({ typing: { ...cfg, showBreaks: e.target.checked } })} />
-                  <span>¶⏎</span>
-                </label>
-              )}
-              <label className="tr-oneword" title="Stop on error — a wrong key is refused (it still costs an error), and space only commits a complete word. The classic accuracy-discipline mode.">
-                <input type="checkbox" checked={stopOnError}
-                  onChange={(e) => onPatch?.({ typing: { ...cfg, stopOnError: e.target.checked } })} />
-                <span>🛑 stop-on-err</span>
-              </label>
-              <label className="tr-oneword" title="Confidence mode — backspace is disabled entirely; errors cost accuracy, not time">
-                <input type="checkbox" checked={confidence}
-                  onChange={(e) => onPatch?.({ typing: { ...cfg, confidence: e.target.checked } })} />
-                <span>🚫⌫</span>
-              </label>
-              <label className="tr-oneword" title="Error log — a separate area listing every error entry as it happens: the target word vs what you actually typed (corrected words included)">
-                <input type="checkbox" checked={!!cfg.errorLog}
-                  onChange={(e) => onPatch?.({ typing: { ...cfg, errorLog: e.target.checked } })} />
-                <span>📋 errors</span>
-              </label>
-              <label className="tr-oneword" title="Blind mode — no per-character verdicts while you type; trust your fingers and let the numbers tell the tale at the end">
-                <input type="checkbox" checked={blind}
-                  onChange={(e) => onPatch?.({ typing: { ...cfg, blind: e.target.checked } })} />
-                <span>🙈 blind</span>
-              </label>
-              <select
-                value={paceMode}
-                title="👻 Pace ghost — a marker moves through the passage at a steady speed (your last run, your best, or a custom WPM); try to stay ahead of it"
-                onChange={(e) => onPatch?.({ typing: { ...cfg, pace: e.target.value } })}
-              >
-                <option value="off">👻 off</option>
-                <option value="last">👻 last run</option>
-                <option value="pb">👻 best</option>
-                <option value="custom">👻 custom</option>
-              </select>
-              {paceMode === 'custom' && (
-                <input type="number" min={10} max={400} value={cfg.paceWpm ?? 60}
-                  onChange={(e) => onPatch?.({ typing: { ...cfg, paceWpm: Math.max(10, Math.min(400, Number(e.target.value) || 60)) } })}
-                  style={{ width: 56 }} title="Pace ghost speed (WPM)" />
-              )}
             </>
           )}
           <label className="tr-vol" title="Sound volume">🔊
@@ -879,6 +840,49 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         </div>
       )}
 
+      <div className="tr-body">
+        {sideVisible && (
+          <aside className="tr-side" aria-label="Typing options">
+            <div className="tt-group">Text</div>
+            <Tile icon="#" label="Punctuation" state={punctState} on={noSpecial} onClick={cyclePunct}
+              title="Cycle: shown → hidden → dim auto-skipped ghosts. Hidden and ghosts never ask you to type punctuation or symbols." />
+            <Tile icon="Aa" label="Case" state={caseState} on={lowercase} onClick={cycleCase}
+              title="Cycle: as written → all lowercase → lowercase but capitals SHOWN (typing lowercase still counts)" />
+            {isDocMode && (
+              <Tile icon="¶" label="Line breaks" state={cfg.showBreaks ? 'book layout' : 'flowing wall'} on={!!cfg.showBreaks}
+                onClick={() => patchCfg({ showBreaks: !cfg.showBreaks })} disabled={oneWord}
+                title="Show the book's own line and paragraph breaks — visual only, the words you type are identical" />
+            )}
+            <div className="tt-group">Discipline</div>
+            <Tile icon="①" label="One word" state={oneWord ? 'on' : 'off'} on={oneWord}
+              onClick={() => patchCfg({ oneWord: !oneWord })}
+              title="One word at a time — each word must be typed perfectly to advance" />
+            <Tile icon="🛑" label="Stop on error" state={stopOnError ? 'on' : 'off'} on={stopOnError}
+              onClick={() => patchCfg({ stopOnError: !stopOnError })}
+              title="A wrong key is refused (it still costs an error), and space only commits a complete word — the classic accuracy-discipline mode" />
+            <Tile icon="⌫" label="No backspace" state={confidence ? 'on' : 'off'} on={confidence}
+              onClick={() => patchCfg({ confidence: !confidence })}
+              title="Confidence mode — backspace is disabled entirely; errors cost accuracy, not time" />
+            <Tile icon="🙈" label="Blind" state={blind ? 'on' : 'off'} on={blind}
+              onClick={() => patchCfg({ blind: !blind })}
+              title="No per-character verdicts while you type — trust your fingers and let the numbers tell the tale at the end" />
+            <div className="tt-group">Extras</div>
+            <Tile icon="🏁" label="Race voice" state={raceVoice ? 'on' : 'off'} on={raceVoice}
+              onClick={() => patchCfg({ raceVoice: !raceVoice })}
+              title="The TTS voice reads the passage aloud; if it passes the word you're typing, you're caught. Lower the read-aloud rate in Settings to make it easier." />
+            <Tile icon="👻" label="Pace ghost" state={paceState} on={paceMode !== 'off'} onClick={cyclePace}
+              title="A marker moves through the passage at a steady speed (your last run, your best, or a custom WPM) — try to stay ahead of it. Click to cycle." />
+            {paceMode === 'custom' && (
+              <input className="tt-wpm" type="number" min={10} max={400} value={cfg.paceWpm ?? 60}
+                onChange={(e) => patchCfg({ paceWpm: Math.max(10, Math.min(400, Number(e.target.value) || 60)) })}
+                title="Pace ghost speed (WPM)" aria-label="Pace ghost speed (WPM)" />
+            )}
+            <Tile icon="📋" label="Error log" state={cfg.errorLog ? 'on' : 'off'} on={!!cfg.errorLog}
+              onClick={() => patchCfg({ errorLog: !cfg.errorLog })}
+              title="A separate area listing every error entry as it happens — the target word vs what you actually typed" />
+          </aside>
+        )}
+        <div className="tr-main">
       <Trend trend={trend} />
 
       {/* The passage hides on the done screen so the results (chart included) get the room —
@@ -1051,7 +1055,24 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           ))}
         </div>
       )}
+        </div>
+      </div>
     </div>
+  );
+}
+
+// One option tile in the typing sidebar: icon, label, and a small caption naming the current
+// state — a plain on/off for toggles, the active mode for tri-state cycle tiles.
+function Tile({ icon, label, state, on, onClick, title, disabled }) {
+  return (
+    <button type="button" className={`tt-tile${on ? ' on' : ''}`} title={title} aria-pressed={!!on}
+      onClick={onClick} disabled={disabled}>
+      <span className="tt-ico" aria-hidden="true">{icon}</span>
+      <span className="tt-txt">
+        <span className="tt-lbl">{label}</span>
+        <span className="tt-state">{state}</span>
+      </span>
+    </button>
   );
 }
 
