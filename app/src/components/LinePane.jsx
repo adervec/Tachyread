@@ -82,9 +82,9 @@ function renderWords(line, opts) {
     const isDone = opts.isCurrent && opts.doneStyles && opts.doneStyles.length > 0 && wordIdx < opts.currentWordIndex;
     const isProperName = opts.properNamesSet && opts.properNamesSet.has(stripPunct(tok).toLowerCase());
     let inner;
-    // Apply bionic / ORP marks to every word EXCEPT the current word itself (it has its own
-    // current-word styling). Previously the whole current LINE was excluded, so the ORP highlight —
-    // most useful right where you're reading — vanished on the current line.
+    // Bionic bolding skips the current word (its own styling owns the emphasis there), but the
+    // ORP mark applies to EVERY word — the current one included: the pivot letter matters most on
+    // exactly the word you're reading, and it composes fine with the current-word highlight.
     if (opts.bionic && !isCurrentWord) {
       const split = Math.ceil(tok.length / 2);
       inner = (
@@ -93,7 +93,7 @@ function renderWords(line, opts) {
           {tok.slice(split)}
         </>
       );
-    } else if (opts.highlightORP && !isCurrentWord && tok.length >= 2) {
+    } else if (opts.highlightORP && tok.length >= 2) {
       const o = orpIndex(tok.length);
       inner = (
         <>
