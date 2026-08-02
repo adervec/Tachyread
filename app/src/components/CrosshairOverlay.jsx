@@ -1,5 +1,6 @@
-import { useRef } from 'react';
-import { normalizeCrosshair, backdropFilterOf, moveCrosshair } from '../features/crosshairs.js';
+import { useEffect, useRef, useState } from 'react';
+import { normalizeCrosshair, backdropFilterOf, moveCrosshair, animPeriodSecs } from '../features/crosshairs.js';
+import { wordDurationMs } from '../engine/rsvpEngine.js';
 
 // The placed crosshairs floating over the Lines area. Each is draggable in place (grab it, drop it
 // where your eye should anchor); position persists per tab as pane fractions, so it stays put
@@ -26,11 +27,42 @@ function ShapeBits({ shape, thickness }) {
   }
 }
 
+// Trippy fractal ornaments: nested counter-rotating outline shapes (fractal) and two moiré
+// spoke wheels spinning against each other (kaleido). Pure SVG, animated by CSS on the groups.
+function FractalOrn() {
+  return (
+    <svg className="xh-orn xh-fractal" viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <g className="xh-fr xh-fr1"><polygon points="50,10 85,70 15,70" /><polygon points="50,90 15,30 85,30" opacity="0.6" /></g>
+      <g className="xh-fr xh-fr2"><rect x="26" y="26" width="48" height="48" /><rect x="34" y="34" width="32" height="32" opacity="0.6" /></g>
+      <g className="xh-fr xh-fr3"><circle cx="50" cy="50" r="14" /><circle cx="50" cy="50" r="7" opacity="0.6" /></g>
+    </svg>
+  );
+}
+function spokes(offsetDeg) {
+  return Array.from({ length: 8 }, (_, k) => {
+    const a = ((k * 45 + offsetDeg) * Math.PI) / 180;
+    const r = (v) => Math.round(v * 10) / 10;
+    return <line key={k} x1={r(50 + 12 * Math.cos(a))} y1={r(50 + 12 * Math.sin(a))} x2={r(50 + 46 * Math.cos(a))} y2={r(50 + 46 * Math.sin(a))} />;
+  });
+}
+function KaleidoOrn() {
+  return (
+    <svg className="xh-orn xh-kaleido" viewBox="0 0 100 100" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
+      <g className="xh-fr xh-fr1">{spokes(0)}</g>
+      <g className="xh-fr xh-fr2" opacity="0.55">{spokes(22.5)}</g>
+    </svg>
+  );
+}
+
 // A single rendered crosshair (also reused by the editor's live preview via interactive={false}).
-export function Crosshair({ design, size = 90, interactive = false, onDrag, onDragEnd, style }) {
+// lineSecs: measured read time of the current display line — drives dynamic animation periods.
+export function Crosshair({ design, size = 90, interactive = false, onDrag, onDragEnd, style, lineSecs = null }) {
   const d = normalizeCrosshair(design);
   const warpId = `xh-warp-${d.id}`;
   const backdrop = backdropFilterOf(d.fx, d.fx.warp > 0 ? warpId : '');
+  const anim = d.anim.style;
+  const period = animPeriodSecs(d.anim, lineSecs);
+  const animColor = d.layers.find((l) => l.kind === 'shape')?.color || '#ff5c5c';
   const drag = useRef(null);
   function onPointerDown(e) {
     if (!interactive) return;
@@ -66,37 +98,85 @@ export function Crosshair({ design, size = 90, interactive = false, onDrag, onDr
           </defs>
         </svg>
       )}
-      {backdrop && <div className="xh-fx" style={{ backdropFilter: backdrop, WebkitBackdropFilter: backdrop }} />}
-      {d.layers.map((l, i) => {
-        const wrap = {
-          transform: `translate(-50%, -50%) rotate(${l.rotate}deg) scale(${l.scale})`,
-          opacity: l.opacity,
-        };
-        if (l.kind === 'image' && l.src) {
-          return <img key={i} className="xh-layer" style={wrap} src={l.src} alt="" draggable={false} />;
-        }
-        if (l.kind === 'emoji') {
-          return <span key={i} className="xh-layer xh-emoji" style={{ ...wrap, fontSize: size * 0.7 }}>{l.char || '🎯'}</span>;
-        }
-        if (l.kind === 'shape') {
-          return (
-            <svg key={i} className="xh-layer" style={{ ...wrap, color: l.color }} viewBox="0 0 100 100"
-              stroke="currentColor" strokeWidth={l.thickness * 1.6} strokeLinecap="round" strokeLinejoin="round">
-              <ShapeBits shape={l.shape} thickness={l.thickness} />
-            </svg>
-          );
-        }
-        return null;
-      })}
+      <div
+        className={`xh-anim${['breathe', 'pulse', 'spin', 'rock'].includes(anim) ? ` xh-anim-${anim}` : ''}`}
+        style={{ '--xh-period': `${period}s`, '--xh-anim-color': animColor }}
+      >
+        {backdrop && <div className="xh-fx" style={{ backdropFilter: backdrop, WebkitBackdropFilter: backdrop }} />}
+        {d.layers.map((l, i) => {
+          const wrap = {
+            transform: `translate(-50%, -50%) rotate(${l.rotate}deg) scale(${l.scale})`,
+            opacity: l.opacity,
+          };
+          if (l.kind === 'image' && l.src) {
+            return <img key={i} className="xh-layer" style={wrap} src={l.src} alt="" draggable={false} />;
+          }
+          if (l.kind === 'emoji') {
+            return <span key={i} className="xh-layer xh-emoji" style={{ ...wrap, fontSize: size * 0.7 }}>{l.char || '🎯'}</span>;
+          }
+          if (l.kind === 'shape') {
+            return (
+              <svg key={i} className="xh-layer" style={{ ...wrap, color: l.color }} viewBox="0 0 100 100"
+                stroke="currentColor" strokeWidth={l.thickness * 1.6} strokeLinecap="round" strokeLinejoin="round">
+                <ShapeBits shape={l.shape} thickness={l.thickness} />
+              </svg>
+            );
+          }
+          return null;
+        })}
+        {anim === 'orbit' && [0, 1, 2].map((k) => (
+          <span key={k} className="xh-orn xh-rotor" style={{ animationDelay: `${-(period * k) / 3}s` }}><i /></span>
+        ))}
+        {anim === 'scan' && <span className="xh-orn xh-scan"><i /></span>}
+        {anim === 'bounce' && <span className="xh-orn xh-bounce"><i /></span>}
+        {anim === 'fractal' && <FractalOrn />}
+        {anim === 'kaleido' && <KaleidoOrn />}
+      </div>
     </div>
   );
+}
+
+// How long the CURRENT DISPLAY LINE takes at the auto-mode pace (even when auto play is off):
+// find the current word's visual row (same rendered top — this is the wrapped display line, not
+// the file line, so wall-of-text paragraphs measure just the line under the eye) and sum the
+// engine's own per-word durations (WPM, speed unit, long-word/digit multipliers, comma pauses).
+function measureDisplayLineSecs(pane, settings) {
+  const cur = pane?.querySelector('.word.current');
+  if (!cur) return null;
+  const cr = cur.getBoundingClientRect();
+  if (!cr.height) return null;
+  const scope = cur.closest('.line-row') || cur.parentElement || pane;
+  let ms = 0;
+  for (const w of scope.querySelectorAll('.word')) {
+    if (Math.abs(w.getBoundingClientRect().top - cr.top) < cr.height * 0.5) ms += wordDurationMs(w.textContent || '', settings);
+  }
+  return ms > 0 ? ms / 1000 : null;
 }
 
 // The per-tab overlay: reads placements from tab settings + designs from the global stable,
 // drags update the placement fractions. Missing designs (deleted from the stable, or synced from
 // another device) are skipped silently.
-export default function CrosshairOverlay({ placements, stable, onChange }) {
+export default function CrosshairOverlay({ placements, stable, onChange, settings }) {
   const boxRef = useRef(null);
+  // Dynamic-period animations need the current display line's read time; only measure (1 Hz)
+  // while a placed design actually asks for it. Small changes are ignored so periods don't jitter.
+  const needLine = (placements || []).some((p) => {
+    const d = (stable || []).find((c) => c.id === p.id);
+    if (!d) return false;
+    const a = normalizeCrosshair(d).anim;
+    return a.style !== 'none' && a.periodMode === 'line';
+  });
+  const [lineSecs, setLineSecs] = useState(null);
+  useEffect(() => {
+    if (!needLine || !settings) return undefined;
+    const tick = () => {
+      const s = measureDisplayLineSecs(boxRef.current?.closest('.line-pane'), settings);
+      if (s != null) setLineSecs((prev) => (prev == null || Math.abs(s - prev) > 0.15 ? s : prev));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [needLine, settings]);
   if (!placements?.length || !stable?.length) return null;
   const dragTo = (index, cx, cy) => {
     const r = boxRef.current?.getBoundingClientRect();
@@ -114,6 +194,7 @@ export default function CrosshairOverlay({ placements, stable, onChange }) {
             design={d}
             size={p.size || 90}
             interactive
+            lineSecs={lineSecs}
             onDrag={(cx, cy) => dragTo(i, cx, cy)}
             style={{ left: `${(p.x ?? 0.5) * 100}%`, top: `${(p.y ?? 0.5) * 100}%`, position: 'absolute', transform: 'translate(-50%, -50%)' }}
           />

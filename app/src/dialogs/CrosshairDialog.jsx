@@ -2,8 +2,8 @@ import { useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { Crosshair } from '../components/CrosshairOverlay.jsx';
 import {
-  XH_SHAPES, newCrosshair, newShapeLayer, newImageLayer, newEmojiLayer, newCrosshairId,
-  starterStable, placeCrosshair, removeCrosshair, resizeCrosshair,
+  XH_SHAPES, XH_ANIMS, XH_ANIM_LABELS, XH_DEFAULT_ANIM, newCrosshair, newShapeLayer, newImageLayer,
+  newEmojiLayer, newCrosshairId, starterStable, placeCrosshair, removeCrosshair, resizeCrosshair,
 } from '../features/crosshairs.js';
 
 // The crosshair STABLE manager: design overlay markers for the Lines area by combining shape,
@@ -32,6 +32,7 @@ export default function CrosshairDialog({ global, onPatchGlobal, settings, onPat
   const setStable = (list) => onPatchGlobal({ crosshairStable: list });
   const patchSel = (p) => setStable(stable.map((c) => (c.id === selId ? { ...c, ...p } : c)));
   const patchFx = (p) => patchSel({ fx: { ...(sel?.fx || {}), ...p } });
+  const patchAnim = (p) => patchSel({ anim: { ...XH_DEFAULT_ANIM, ...(sel?.anim || {}), ...p } });
   const patchLayer = (i, p) => patchSel({ layers: sel.layers.map((l, j) => (j === i ? { ...l, ...p } : l)) });
   const addLayer = (layer) => patchSel({ layers: [...(sel?.layers || []), layer] });
   const dropLayer = (i) => patchSel({ layers: sel.layers.filter((_, j) => j !== i) });
@@ -90,10 +91,12 @@ export default function CrosshairDialog({ global, onPatchGlobal, settings, onPat
   return (
     <Dialog title="Crosshairs (Lines overlays)" onClose={onClose} width={640} buttons={<button onClick={onClose}>Close</button>}>
       <p className="settings-note">
-        Design reading crosshairs — combine <b>shapes, images and emoji</b> with transparency and
-        <b> distortion of the text behind them</b> (blur, invert, hue, heat-haze warp) — then place
-        any of them on this tab’s Lines area and <b>drag them</b> where your eye should anchor.
-        The stable is shared by all tabs; placements are per tab.
+        Design reading crosshairs — combine <b>shapes, images and emoji</b> with transparency,
+        <b> distortion of the text behind them</b> (blur, invert, hue, heat-haze warp) and
+        <b> animation</b> (breathe, pulse, spin, orbiting/scanning dots, trippy fractals — on a fixed
+        period or paced to the current line) — then place any of them on this tab’s Lines area and
+        <b> drag them</b> where your eye should anchor. The stable is shared by all tabs; placements
+        are per tab.
       </p>
 
       <div className="xh-bar">
@@ -102,7 +105,7 @@ export default function CrosshairDialog({ global, onPatchGlobal, settings, onPat
           {stable.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <button onClick={create}>+ New</button>
-        <button onClick={addStarters} title="Add five ready-made designs to play with">✨ Starter pack</button>
+        <button onClick={addStarters} title="Add eight ready-made designs to play with — including animated ones">✨ Starter pack</button>
         <button disabled={!sel} onClick={duplicate}>Duplicate</button>
         <button disabled={!sel} onClick={rename}>Rename</button>
         <button disabled={!sel} className="grab-trash" onClick={remove}>🗑</button>
@@ -177,6 +180,39 @@ export default function CrosshairDialog({ global, onPatchGlobal, settings, onPat
             <span className="range-val">{sel.fx?.warp ?? 0}</span>
           </Field>
 
+          <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>Animation</div>
+          <Field label="Style">
+            <select value={sel.anim?.style || 'none'} onChange={(e) => patchAnim({ style: e.target.value })}>
+              {XH_ANIMS.map((a) => <option key={a} value={a}>{XH_ANIM_LABELS[a]}</option>)}
+            </select>
+          </Field>
+          {(sel.anim?.style || 'none') !== 'none' && (
+            <>
+              <Field label="Period">
+                <select
+                  value={sel.anim?.periodMode === 'line' ? 'line' : 'fixed'}
+                  onChange={(e) => patchAnim({ periodMode: e.target.value })}
+                >
+                  <option value="fixed">fixed seconds</option>
+                  <option value="line">current line read time</option>
+                </select>
+                {(sel.anim?.periodMode ?? 'fixed') === 'fixed' && (
+                  <>
+                    {' '}<input type="range" min={0.5} max={15} step={0.5} value={sel.anim?.secs ?? 3} onChange={(e) => patchAnim({ secs: Number(e.target.value) })} />
+                    <span className="range-val">{num(sel.anim?.secs ?? 3)}s</span>
+                  </>
+                )}
+              </Field>
+              {sel.anim?.periodMode === 'line' && (
+                <p className="settings-note" style={{ margin: '2px 0 0' }}>
+                  One cycle = how long the <b>current display line</b> (the visual line under your eye,
+                  not the file line) would take at your auto pace — WPM, speed unit and word
+                  multipliers included — even when auto play is off. The preview above uses a 3s stand-in.
+                </p>
+              )}
+            </>
+          )}
+
           {settings && onPatch && (
             <>
               <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>On this tab</div>
@@ -209,7 +245,7 @@ export default function CrosshairDialog({ global, onPatchGlobal, settings, onPat
       )}
 
       {!stable.length && (
-        <p className="settings-note">The stable is empty — hit <b>✨ Starter pack</b> for five ready-made designs, or <b>+ New</b> to build your own.</p>
+        <p className="settings-note">The stable is empty — hit <b>✨ Starter pack</b> for eight ready-made designs (including animated ones), or <b>+ New</b> to build your own.</p>
       )}
     </Dialog>
   );
