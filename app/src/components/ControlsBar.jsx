@@ -265,7 +265,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             )}
           </div>
           <div className="mode-pair">
-            <span title="Blue-light reduction: warm the whole app to cut blue light for evening/bedtime reading. Independent of focus mode.">BLUE LIGHT{!isCompact && <kbd className="key-hint">B</kbd>}</span>
+            <span title="BLB — blue-light blocker: warm the whole app to cut blue light for evening/bedtime reading. Independent of focus mode.">BLB{!isCompact && <kbd className="key-hint">B</kbd>}</span>
             <button
               className={state.global.nightShift ? 'toggle-on' : ''}
               onClick={() => updateGlobal({ nightShift: !state.global.nightShift })}

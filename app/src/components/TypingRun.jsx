@@ -1,9 +1,9 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { playLineSound, playTick, TYPING_SOUNDS } from '../features/clickSound.js';
 import { getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import { deviceKind } from '../state/device.js';
 import { buildPassage, TYPING_MODES, TYPING_MODE_BY_ID } from '../engine/typingModes.js';
-import { transformToken, isExotic } from '../engine/typingText.js';
+import { transformToken, displayCells, isExotic } from '../engine/typingText.js';
 import { letterGrade, playGradeSound, GRADE_STATEMENTS } from '../features/gradeChime.js';
 import { createReadAloud } from '../features/readAloud.js';
 import { rateFromIndex } from '../features/tts.js';
@@ -54,22 +54,57 @@ const PENDING_WINDOW = 160;
 const charOkWith = (typedCh, targetCh, caseSensitive, bypassSym) =>
   (bypassSym && isExotic(targetCh)) || sameChar(typedCh, targetCh, caseSensitive);
 
+// Display cells when a word should RENDER differently from the typed target — "as written"
+// capitals over a lowercased target, and/or the noSpecial-stripped characters as dim auto-skipped
+// ghosts. null = plain rendering (options off, or the alignment invariant failed on an exotic
+// token). The REQUIRED typing is identical either way.
+function cellsFor(orig, w, { bypassSym, noSpecial, wantCaps, wantGhosts }) {
+  if ((!wantCaps && !wantGhosts) || !orig) return null;
+  const all = displayCells(orig, { bypassNonQwerty: bypassSym, noSpecial });
+  const kept = all.filter((c) => c.t != null);
+  if (kept.length !== w.length) return null;
+  return wantGhosts ? all : kept;
+}
+
 // Committed and pending words only change when a word commits (or a voice/pace marker crosses
 // them) — memo() lets every keystroke re-render JUST the active word instead of reconciling
 // thousands of per-char spans across the whole passage. This is the typing-lag fix.
-const CommittedWord = memo(function CommittedWord({ w, typed, perfect, vc, caseSensitive, bypassSym }) {
-  const len = Math.max(w.length, Math.min(typed.length, w.length + OVERTYPE_MAX));
+const CommittedWord = memo(function CommittedWord({ w, orig, typed, perfect, vc, caseSensitive, bypassSym, noSpecial, wantCaps, wantGhosts }) {
+  const cells = cellsFor(orig, w, { bypassSym, noSpecial, wantCaps, wantGhosts });
   const chars = [];
-  for (let j = 0; j < len; j++) {
-    const cls = j >= w.length ? 'trc extra'
-      : j >= typed.length ? 'trc missed'
+  if (cells) {
+    cells.forEach((c, ci) => {
+      if (c.t == null) { chars.push(<span key={`g${ci}`} className="trc ghost">{c.ch}</span>); return; }
+      const j = c.t;
+      const cls = j >= typed.length ? 'trc missed'
         : charOkWith(typed[j], w[j], caseSensitive, bypassSym) ? 'trc correct' : 'trc wrong';
-    chars.push(<span key={j} className={cls}>{j >= w.length ? typed[j] : w[j]}</span>);
+      chars.push(<span key={ci} className={cls}>{wantCaps ? c.ch : w[j]}</span>);
+    });
+    const extra = Math.min(typed.length, w.length + OVERTYPE_MAX);
+    for (let j = w.length; j < extra; j++) chars.push(<span key={`x${j}`} className="trc extra">{typed[j]}</span>);
+  } else {
+    const len = Math.max(w.length, Math.min(typed.length, w.length + OVERTYPE_MAX));
+    for (let j = 0; j < len; j++) {
+      const cls = j >= w.length ? 'trc extra'
+        : j >= typed.length ? 'trc missed'
+          : charOkWith(typed[j], w[j], caseSensitive, bypassSym) ? 'trc correct' : 'trc wrong';
+      chars.push(<span key={j} className={cls}>{j >= w.length ? typed[j] : w[j]}</span>);
+    }
   }
   return <span className={`trw ${perfect ? 'done' : 'imperfect'}${vc}`}>{chars} </span>;
 });
-const PendingWord = memo(function PendingWord({ w, vc }) {
-  return <span className={`trw pending${vc}`}>{w} </span>;
+const PendingWord = memo(function PendingWord({ w, orig, vc, bypassSym, noSpecial, wantCaps, wantGhosts }) {
+  const cells = cellsFor(orig, w, { bypassSym, noSpecial, wantCaps, wantGhosts });
+  return (
+    <span className={`trw pending${vc}`}>
+      {cells
+        ? cells.map((c, ci) => (c.t == null
+          ? <span key={ci} className="trc ghost">{c.ch}</span>
+          : <span key={ci}>{wantCaps ? c.ch : w[c.t]}</span>))
+        : w}
+      {' '}
+    </span>
+  );
 });
 
 export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns, endFanfare = true, plan = null, onPlanNext, onPlanExit }) {
@@ -81,6 +116,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const stopOnError = !!cfg.stopOnError; // a wrong key is refused (still costs an error) — accuracy discipline
   const confidence = !!cfg.confidence;   // no backspace — errors cost accuracy, not time
   const blind = !!cfg.blind;             // hide per-char verdicts while running; the numbers tell the tale at the end
+  // Display-only variants of the transforms (the REQUIRED typing is identical either way):
+  const wantCaps = !!cfg.showCaps;         // under lowercase: show the capitals as written
+  const wantGhosts = !!cfg.ghostSpecials;  // under no-special: show the stripped chars as dim auto-skipped ghosts
   const volume = cfg.soundVolume ?? 0.4;
   const sounds = { ...DEFAULT_SOUNDS, ...(cfg.sounds || {}) };
   const tickClock = !!cfg.tickClock;
@@ -116,6 +154,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const pastRunsRef = useRef(null);
   useEffect(() => { allTypingRuns().then((r) => { pastRunsRef.current = r || []; }).catch(() => { pastRunsRef.current = []; }); }, []);
   const isDocMode = (TYPING_MODE_BY_ID[gameMode]?.kind || 'doc') === 'doc';
+  // Show the book's own line/paragraph breaks instead of a flowing wall — visual only.
+  const showBreaks = !!cfg.showBreaks && isDocMode && !oneWord;
   // Auto-bypass characters a QWERTY keyboard can't make (default on): normalize typographic look-
   // alikes and drop purely-decorative tokens so the drill never asks you to type a "•" or a "¶".
   const bypassSym = cfg.bypassNonQwerty !== false;
@@ -130,9 +170,13 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     const raw = buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: PASSAGE_MAX, seed, reviewWords: reviewRef.current });
     const base = isDocMode ? startIndex.current : 0;
     const prep = [];
+    let pre = null; // fully-skipped decorative tokens ahead of the next kept word (ghost display)
     for (let i = 0; i < raw.length; i++) {
+      const orig = String(raw[i] ?? '');
       const { text, skip } = transformToken(raw[i], { bypassNonQwerty: bypassSym, lowercase, noSpecial });
-      if (!skip) prep.push({ text, gi: base + i });
+      if (skip) { (pre ||= []).push(orig); continue; }
+      prep.push({ text, gi: base + i, orig, pre });
+      pre = null;
     }
     return { prepared: prep, passage: prep.map((p) => p.text) };
   }, [doc, gameMode, seed, bypassSym, lowercase, noSpecial, isDocMode]);
@@ -717,11 +761,32 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                   onChange={(e) => onPatch?.({ typing: { ...cfg, lowercase: e.target.checked } })} />
                 <span>aa</span>
               </label>
+              {lowercase && (
+                <label className="tr-oneword" title="Show the capitals AS WRITTEN — typing lowercase still counts (display only)">
+                  <input type="checkbox" checked={wantCaps}
+                    onChange={(e) => onPatch?.({ typing: { ...cfg, showCaps: e.target.checked } })} />
+                  <span>Aa👁</span>
+                </label>
+              )}
               <label className="tr-oneword" title="No special characters — type letters, numbers and spaces only (punctuation & symbols removed)">
                 <input type="checkbox" checked={noSpecial}
                   onChange={(e) => onPatch?.({ typing: { ...cfg, noSpecial: e.target.checked } })} />
                 <span>no&nbsp;#</span>
               </label>
+              {noSpecial && (
+                <label className="tr-oneword" title="Show the stripped punctuation & symbols as dim auto-skipped ghosts in their own colour — you never type them (display only)">
+                  <input type="checkbox" checked={wantGhosts}
+                    onChange={(e) => onPatch?.({ typing: { ...cfg, ghostSpecials: e.target.checked } })} />
+                  <span>👻#</span>
+                </label>
+              )}
+              {isDocMode && (
+                <label className="tr-oneword" title="Show the book's own line breaks instead of a flowing wall — visual only, the words you type are identical">
+                  <input type="checkbox" checked={!!cfg.showBreaks}
+                    onChange={(e) => onPatch?.({ typing: { ...cfg, showBreaks: e.target.checked } })} />
+                  <span>¶⏎</span>
+                </label>
+              )}
               <label className="tr-oneword" title="Stop on error — a wrong key is refused (it still costs an error), and space only commits a complete word. The classic accuracy-discipline mode.">
                 <input type="checkbox" checked={stopOnError}
                   onChange={(e) => onPatch?.({ typing: { ...cfg, stopOnError: e.target.checked } })} />
@@ -799,29 +864,54 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             if (i > pos + PENDING_WINDOW) return null; // far tail is below the fold — skip its DOM
             const vc = (i === voicePos ? ' voice' : '') // word the racing voice is speaking…
               + (i === pacePos && phase === 'running' && paceWpmVal > 0 ? ' pace' : ''); // …and the 👻 ghost's word
+            // Display-only extras: fully-skipped decorative tokens ahead of this word render as
+            // ghost words, and the book's own line breaks can show — the typed words are identical.
+            const preEl = wantGhosts && !oneWord && prepared[i]?.pre
+              ? <span className="trw ghostw">{prepared[i].pre.join(' ')} </span> : null;
+            const brkEl = showBreaks && segEnds
+              ? (segEnds.para[i] ? <><br /><br /></> : segEnds.line[i] ? <br /> : null) : null;
+            let wordEl;
             if (i < pos) {
               // Committed words keep their per-character verdict (monkeytype-style): what you
               // actually typed stays visible — wrong chars, chars you never typed, and (capped)
               // extra chars beyond the word.
               const r = results[i];
-              return <CommittedWord key={i} w={w} typed={r?.typed ?? w} perfect={!r || !!r.perfect} vc={vc} caseSensitive={caseSensitive} bypassSym={bypassSym} />;
+              wordEl = <CommittedWord w={w} orig={prepared[i]?.orig} typed={r?.typed ?? w} perfect={!r || !!r.perfect} vc={vc} caseSensitive={caseSensitive} bypassSym={bypassSym} noSpecial={noSpecial} wantCaps={wantCaps} wantGhosts={wantGhosts} />;
+            } else if (i > pos) {
+              wordEl = <PendingWord w={w} orig={prepared[i]?.orig} vc={vc} bypassSym={bypassSym} noSpecial={noSpecial} wantCaps={wantCaps} wantGhosts={wantGhosts} />;
+            } else {
+              // Active word — per-char colouring + a zero-width caret anchor the floating cursor
+              // tracks. Overtyped chars render capped so the word can't balloon past the line slack.
+              const shownBuf = buf.length > w.length + OVERTYPE_MAX ? buf.slice(0, w.length + OVERTYPE_MAX) : buf;
+              const chars = [];
+              const cells = cellsFor(prepared[i]?.orig, w, { bypassSym, noSpecial, wantCaps, wantGhosts });
+              if (cells) {
+                let anchored = false;
+                cells.forEach((c, ci) => {
+                  if (c.t == null) { chars.push(<span key={`g${ci}`} className="trc ghost">{c.ch}</span>); return; }
+                  if (c.t === shownBuf.length) { chars.push(<span key={`k${ci}`} className="trc caret-anchor" />); anchored = true; }
+                  const typedHere = c.t < shownBuf.length;
+                  const cls = !typedHere ? 'trc pending'
+                    : charOk(shownBuf[c.t], w[c.t]) ? 'trc correct' : 'trc wrong';
+                  chars.push(<span key={ci} className={cls}>{wantCaps ? c.ch : w[c.t]}</span>);
+                });
+                for (let j = w.length; j < shownBuf.length; j++) chars.push(<span key={`x${j}`} className="trc extra">{shownBuf[j]}</span>);
+                if (!anchored) chars.push(<span key="ce" className="trc caret-anchor" />);
+              } else {
+                const len = Math.max(w.length, shownBuf.length);
+                for (let j = 0; j < len; j++) {
+                  if (j === shownBuf.length) chars.push(<span key={`k${j}`} className="trc caret-anchor" />);
+                  const typed = j < shownBuf.length;
+                  const cls = !typed ? 'trc pending'
+                    : j >= w.length ? 'trc extra'
+                      : charOk(shownBuf[j], w[j]) ? 'trc correct' : 'trc wrong';
+                  chars.push(<span key={j} className={cls}>{j >= w.length ? shownBuf[j] : w[j]}</span>);
+                }
+                if (shownBuf.length >= len) chars.push(<span key="ce" className="trc caret-anchor" />);
+              }
+              wordEl = <span className={`trw active${vc}`} ref={activeRef}>{chars}{' '}</span>;
             }
-            if (i > pos) return <PendingWord key={i} w={w} vc={vc} />;
-            // Active word — per-char colouring + a zero-width caret anchor the floating cursor
-            // tracks. Overtyped chars render capped so the word can't balloon past the line slack.
-            const shownBuf = buf.length > w.length + OVERTYPE_MAX ? buf.slice(0, w.length + OVERTYPE_MAX) : buf;
-            const len = Math.max(w.length, shownBuf.length);
-            const chars = [];
-            for (let j = 0; j < len; j++) {
-              if (j === shownBuf.length) chars.push(<span key={`k${j}`} className="trc caret-anchor" />);
-              const typed = j < shownBuf.length;
-              const cls = !typed ? 'trc pending'
-                : j >= w.length ? 'trc extra'
-                  : charOk(shownBuf[j], w[j]) ? 'trc correct' : 'trc wrong';
-              chars.push(<span key={j} className={cls}>{j >= w.length ? shownBuf[j] : w[j]}</span>);
-            }
-            if (shownBuf.length >= len) chars.push(<span key="ce" className="trc caret-anchor" />);
-            return <span key={i} className={`trw active${vc}`} ref={activeRef}>{chars}{' '}</span>;
+            return <Fragment key={i}>{preEl}{wordEl}{brkEl}</Fragment>;
           })}
         </div>
       </div>

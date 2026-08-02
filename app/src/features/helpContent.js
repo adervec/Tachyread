@@ -39,7 +39,7 @@ export const HELP_SECTIONS = [
       'Crosshairs (View menu): design a STABLE of overlay markers for the Lines area — combine shape, image and emoji layers with transparency and behind-the-glass distortion (blur, invert, hue, heat-haze warp), then place any of them on a tab and drag them where your eye should anchor. Designs are shared; placement and size are per tab.',
       'Full-screen reading fills the screen with just the Lines pane (desktop ⛶ or menu) or the Source pane (⛶🗐), hiding all chrome. On phones the reading area fills edge to edge. Esc or the small ⛶ overlay exits.',
       'Source page looks: the 🎛 button on the Source pane toolbar opens display-flavour filters for the original page — old paper (sepia), noir, faded print, night, blueprint, thermal… or a custom slider mix. Pure paint; the text and OCR underneath are untouched. Per tab.',
-      'Blue-light reduction warms the whole app for bedtime reading — its own control in the bottom bar (BLUE LIGHT), the View menu, or the B key (App Settings has the strength). It’s independent of Focus mode, which fullscreens and (on Chrome/Edge) blacks out your other monitors.',
+      'Blue-light blocker (BLB) warms the whole app for bedtime reading — its own control in the bottom bar, the View menu, or the B key (App Settings has the strength). It’s independent of Focus mode, which fullscreens and (on Chrome/Edge) blacks out your other monitors.',
     ],
   },
   {
@@ -76,6 +76,7 @@ export const HELP_SECTIONS = [
       'Typing menu → Typing Practice types your book forward from the reading position; finish a run and Continue to count it as read, or Discard to return.',
       'A run starts on your first keystroke (or ▶ Start for a Ready·Set·Go — typing mid-countdown skips the rest of it). On the results screen, just typing stages the next run too. It ends at the limit, on End run, or after 5s idle.',
       'Per-character feedback stays on completed words: green = correct, red = wrong, underlined = never typed, dim red = extra characters.',
+      'Display-only variants of the transforms: with lowercase on, optionally show the capitals AS WRITTEN (typing lowercase still counts); with no-special on, optionally show the stripped characters as dim auto-skipped 👻 ghosts; and the passage can show the book\'s own line breaks (¶⏎) instead of a flowing wall — in every case the required typing is identical.',
       '👻 Pace ghost: a marker moves through the passage at a steady speed — your last run, your personal best, or a custom WPM — so every run is a quiet race (Monkeytype\'s pace caret, TypeRacer\'s ghost).',
       'Discipline modes: 🛑 stop-on-error refuses wrong keys (they still cost an error) and only commits complete words; 🚫⌫ confidence mode disables backspace entirely; 🙈 blind mode hides the per-character verdicts while you type — the numbers tell the tale at the end.',
       'The results screen shows an examinable chart of raw, effective and burst WPM plus accuracy AND a consistency % (keystroke-rhythm steadiness), 🏆 personal-best banners (all-time and per mode), and your 🔥 daily typing streak.',
