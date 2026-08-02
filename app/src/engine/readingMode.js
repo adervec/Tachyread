@@ -23,10 +23,18 @@ export const MODES = {
 
 export function createModeDetector(getWindowMs = () => WINDOW_MS) {
   const events = []; // {kind, ts}
+  let lastTouch = 0; // last generic in-tab activity (clicks/keys/scroll) — holds off idle, votes for nothing
 
   function note(kind, now = Date.now()) {
     events.push({ kind: MODES[kind] ? kind : 'jump', ts: now });
     if (events.length > CAP) events.shift();
+  }
+
+  // Generic activity keep-alive: ANY in-tab interaction (a click, a keypress, a wheel tick, a pane
+  // toggle) resets the idle clock without entering the mode vote — you're clearly THERE, even if
+  // no reading position moved. The label keeps whatever you were last doing.
+  function touch(now = Date.now()) {
+    lastTouch = now;
   }
 
   function current({ playing = false, listening = false, peeking = false, now = Date.now() } = {}) {
@@ -36,7 +44,15 @@ export function createModeDetector(getWindowMs = () => WINDOW_MS) {
     // Not playing → stale 'auto' ticks describe the player that just stopped, not the user.
     const cutoff = now - getWindowMs();
     const win = events.filter((e) => e.ts >= cutoff && e.kind !== 'auto');
-    if (!win.length) return 'idle';
+    if (!win.length) {
+      // No advancement events in the window — but recent generic activity still holds off idle,
+      // carrying the last known mode label (or plain navigation when there's no history at all).
+      if (lastTouch >= cutoff) {
+        for (let i = events.length - 1; i >= 0; i--) if (events[i].kind !== 'auto') return events[i].kind;
+        return 'jump';
+      }
+      return 'idle';
+    }
     const counts = new Map();
     for (const e of win) counts.set(e.kind, (counts.get(e.kind) || 0) + 1);
     let best = win[win.length - 1].kind;
@@ -48,17 +64,19 @@ export function createModeDetector(getWindowMs = () => WINDOW_MS) {
     return best;
   }
 
-  // Epoch-ms when the current event window drains to idle (newest non-auto event + WINDOW_MS),
-  // or null when there's nothing live — drives the time-until-idle underline on the mode chip.
+  // Epoch-ms when the current activity drains to idle (newest non-auto event OR generic touch,
+  // + WINDOW_MS), or null when there's nothing live — drives the mode chip's draining underline.
   function idleAt(now = Date.now()) {
     const win = getWindowMs();
     const cutoff = now - win;
+    let ref = lastTouch >= cutoff ? lastTouch : null;
     for (let i = events.length - 1; i >= 0; i--) {
       if (events[i].kind === 'auto') continue;
-      return events[i].ts >= cutoff ? events[i].ts + win : null;
+      if (events[i].ts >= cutoff) ref = Math.max(ref ?? 0, events[i].ts);
+      break;
     }
-    return null;
+    return ref != null ? ref + win : null;
   }
 
-  return { note, current, idleAt };
+  return { note, touch, current, idleAt };
 }

@@ -7,13 +7,16 @@ import { useApp } from '../state/AppContext.jsx';
 // so it can sit anywhere over the reading area instead of taking a slice of a small screen. The
 // stats stay in the dock; only the face floats. Position is passed in (persisted by App), opacity
 // is a per-tab face setting (Tab Settings → Animated faces).
-export default function FloatingFace({ tab, pos, onMove, onDrop }) {
+export default function FloatingFace({ tab, pos, onMove, onDrop, scale = 1, onScale }) {
   const { state } = useApp();
   const { settings, doc, tracker } = tab;
   const idx = settings.wordIndex;
   const count = Math.max(1, Math.min(3, settings.faceCount || 1));
   const styles = settings.faceStyles || ['Man', 'Owl', 'Robot'];
   const opacity = Math.max(0.15, Math.min(1, settings.faceOpacity ?? 0.9));
+  const [liveScale, setLiveScale] = useState(null);
+  const k = Math.max(0.6, Math.min(2.5, liveScale ?? scale ?? 1));
+  const resize = useRef(null);
 
   const wpm = (tracker && tracker.recentWpm()) || settings.wpm;
   // Sweeps the eyes along the line in line-at-a-time modes (line/page) instead of snapping; in
@@ -28,12 +31,18 @@ export default function FloatingFace({ tab, pos, onMove, onDrop }) {
   const [min, setMin] = useState(false);
 
   function onDown(e) {
-    if (e.target.closest('button')) return; // minimize/expand button — not a drag
+    if (e.target.closest('button') || e.target.closest('.chip-resize')) return;
     const r = elRef.current.getBoundingClientRect();
     drag.current = { dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, h: r.height };
     elRef.current.setPointerCapture?.(e.pointerId);
   }
   function onPointerMove(e) {
+    if (resize.current) {
+      const s = resize.current;
+      const d = Math.max(24, Math.hypot(e.clientX - s.cx, e.clientY - s.cy));
+      setLiveScale(Math.max(0.6, Math.min(2.5, s.k * (d / s.d0))));
+      return;
+    }
     const d = drag.current;
     if (!d) return;
     const x = Math.max(4, Math.min(window.innerWidth - d.w - 4, e.clientX - d.dx));
@@ -41,7 +50,19 @@ export default function FloatingFace({ tab, pos, onMove, onDrop }) {
     onMove({ x, y });
   }
   function onUp(e) {
+    if (resize.current) {
+      resize.current = null;
+      elRef.current?.releasePointerCapture?.(e.pointerId);
+      if (liveScale != null) { onScale?.(Math.round(liveScale * 100) / 100); setLiveScale(null); }
+      return;
+    }
     if (drag.current) { drag.current = null; elRef.current?.releasePointerCapture?.(e.pointerId); onDrop?.(pos); }
+  }
+  function onResizeDown(e) {
+    e.stopPropagation();
+    const r = elRef.current.getBoundingClientRect();
+    resize.current = { cx: r.left, cy: r.top, d0: Math.max(24, Math.hypot(e.clientX - r.left, e.clientY - r.top)), k };
+    e.currentTarget.setPointerCapture?.(e.pointerId); // on the grip — capturing the root would eat its dblclick
   }
 
   // Default corner: top-right, below the chrome, until the user drags it somewhere.
@@ -69,9 +90,12 @@ export default function FloatingFace({ tab, pos, onMove, onDrop }) {
           <button className="chip-mini-btn" title="Minimize" onClick={() => setMin(true)}>–</button>
           <div className="rsvp-faces">
             {Array.from({ length: count }, (_, i) => (
-              <Face key={i} wpm={wpm} lineProgress={lineProgress} faceStyle={styles[i] || 'Man'} artStyle={settings.artStyle || 'Cartoon'} size={62} />
+              <Face key={i} wpm={wpm} lineProgress={lineProgress} faceStyle={styles[i] || 'Man'} artStyle={settings.artStyle || 'Cartoon'} size={Math.round(62 * k)} />
             ))}
           </div>
+          {onScale && (
+            <span className="chip-resize" title="Drag to resize (double-click to reset)" onPointerDown={onResizeDown} onDoubleClick={() => { setLiveScale(null); onScale(1); }}>◢</span>
+          )}
         </>
       )}
     </div>

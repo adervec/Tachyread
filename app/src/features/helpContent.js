@@ -22,7 +22,8 @@ export const HELP_SECTIONS = [
       'Manually: arrow keys step words (←→) and lines (↑↓); Ctrl+↑↓ hops paragraphs; PgUp/PgDn pages by a screenful. After a page jump, the line that was at the edge is highlighted for ten seconds so you don’t lose your place.',
       'Scroll-to-read: turn on SCROLL in the controls bar, then just scroll the Lines pane like any page — whatever passes the top edge counts as read, and your WPM is measured from your real pace. A brittleness setting controls how easily a fast flick breaks out of scroll mode. The read point can be a fixed percentage OR tied to a placed crosshair (🎯) — drag the crosshair to move where text counts as read.',
       'Read-aloud (TTS): the voice reads and drives the position. Speaking mode advances when YOU read aloud (speech recognition). Typing mode advances by typing the text.',
-      'The mode chip in the progress row shows how the app currently thinks you are reading (auto, line-by-line, scrolling, peeking…).',
+      'The mode chip in the progress row shows how the app currently thinks you are reading (auto, line-by-line, scrolling, peeking…). ANY activity in the tab — clicks, keys, scrolling — holds off "idle", not just advancing a word.',
+      'Chips (floating face/stats/goal) are resizable on desktop: drag the ◢ bottom corner (double-click it to reset). The timer chip is merged into the stats chip (finish-at-pace + auto-stop countdown blocks); shrink the stats chip and the least important stats bow out first — the live WPM survives longest.',
     ],
   },
   {

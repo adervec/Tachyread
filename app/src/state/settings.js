@@ -375,10 +375,13 @@ export function defaultGlobalSettings() {
     mobileTimerPos: null, // {x,y} of the draggable floating timer chip
     bioFeedPos: null, // {x,y} of the draggable Biometric Control Feed popup (null = default corner)
     bioFeedHeight: null, // px height of the feed's event list, set by dragging its resize grip (null = default)
-    // Chip mode: on phones the face/stats/goal/timer always float as transparent draggable chips.
+    // Chip mode: on phones the face/stats/goal always float as transparent draggable chips.
     // This turns that same floating-chip layout on for desktop too (the dock face/stats move out to
     // float), so the reading area stays clear.
     chipMode: false,
+    // Per-chip sizes from the desktop ↘ corner drag: { stats: {w,h}|null, face: k, goal: k }.
+    // null / 1 = natural size. The stats chip drops its least important blocks when made small.
+    chipSizes: null,
     // Last desktop pane setup ({ showRsvp, showLines, showToc, showStats, showSource, showIndex }),
     // restored on launch so the app opens with the layout you left. null = the boot defaults.
     // Compact screens ignore it (they boot with their own minimal stack).

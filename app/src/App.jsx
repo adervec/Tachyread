@@ -10,7 +10,6 @@ import DashboardPane from './components/DashboardPane.jsx';
 import FloatingFace from './components/FloatingFace.jsx';
 import FloatingStats from './components/FloatingStats.jsx';
 import FloatingGoal from './components/FloatingGoal.jsx';
-import FloatingTimer from './components/FloatingTimer.jsx';
 import SourcePane from './components/SourcePane.jsx';
 import LinePane from './components/LinePane.jsx';
 import ControlsBar from './components/ControlsBar.jsx';
@@ -205,7 +204,6 @@ function AppInner() {
   const [facePos, setFacePos] = useState(() => state.global.mobileFacePos || null);
   const [statsPos, setStatsPos] = useState(() => state.global.mobileStatsPos || null);
   const [goalPos, setGoalPos] = useState(() => state.global.mobileGoalPos || null);
-  const [timerPos, setTimerPos] = useState(() => state.global.mobileTimerPos || null);
   // Epoch-ms the read-aloud auto-stop fires (0 = none), so the timer chip can count down.
   const [autoStopAt, setAutoStopAt] = useState(0);
   // Live scroll-mode flag for closures (Space keydown) that would otherwise read a stale value.
@@ -304,6 +302,21 @@ function AppInner() {
     const id = setInterval(compute, 1000);
     return () => clearInterval(id);
   }, [playing, activeTab?.settings.readAloud, peek.line]);
+  // ANY in-tab activity holds off idle — clicks, keys, wheel ticks, scrolls, touches — not just
+  // advancing a word. Throttled to 1/s; feeds the detector's keep-alive only (no mode vote, and
+  // deliberately NOT the reading tracker's active-time clock, which would inflate WPM).
+  useEffect(() => {
+    let last = 0;
+    const touch = () => {
+      const now = Date.now();
+      if (now - last < 1000) return;
+      last = now;
+      modeDetRef.current?.touch?.(now);
+    };
+    const evs = ['pointerdown', 'keydown', 'wheel', 'scroll', 'touchstart'];
+    for (const e of evs) window.addEventListener(e, touch, { passive: true, capture: true });
+    return () => { for (const e of evs) window.removeEventListener(e, touch, { capture: true }); };
+  }, []);
   const [paneWidths, setPaneWidths] = useState({ toc: 320, dash: 260, rsvp: 420, source: 380 });
   const resizePane = (id, w) => setPaneWidths((prev) => ({ ...prev, [id]: w }));
   // Filled by the Lines pane: page(dir) → the top/bottom currently-visible line index (excluding
@@ -2587,7 +2600,18 @@ function AppInner() {
                 onExitContinue={planState ? undefined : (wi) => {
                   // Typed-through text counts as read, tagged as typing (no pace/efficiency credit).
                   const cur = activeTab.settings.wordIndex;
-                  if (wi > cur && !incognitoRef.current) activeTab.tracker?.markRangeRead(cur, wi, 'typing');
+                  if (wi > cur && !incognitoRef.current) {
+                    activeTab.tracker?.markRangeRead(cur, wi, 'typing');
+                    // Reflect the typed-as-read range in the LINES AREA too: the same session-read
+                    // line sets a deliberate forward read fills — without this the lines looked
+                    // unread even though coverage counted them.
+                    const l0 = getLineIndex(activeTab.doc, cur);
+                    const l1 = getLineIndex(activeTab.doc, Math.min(wi, activeTab.doc.words.length - 1));
+                    for (let li = l0; li < l1; li++) {
+                      activeTab.sessionLinesRead.add(li);
+                      activeTab.readLinesAllTime.add(li);
+                    }
+                  }
                   jumpWord(wi);
                   patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } });
                 }}
@@ -2688,7 +2712,7 @@ function AppInner() {
             float as draggable transparent chips instead so the dock stays out of the way. */}
         {!chips && activeTab && (activeTab.settings.showEyes || state.showStats) && (
           <div className="dock-dash">
-            <DashboardPane tab={activeTab} dock showFaces={!!activeTab.settings.showEyes} showStats={state.showStats} />
+            <DashboardPane tab={activeTab} dock showFaces={!!activeTab.settings.showEyes} showStats={state.showStats} autoStopAt={autoStopAt} />
           </div>
         )}
         {activeTab ? (
@@ -3127,6 +3151,8 @@ function AppInner() {
           pos={facePos}
           onMove={setFacePos}
           onDrop={(p) => p && updateGlobal({ mobileFacePos: p })}
+          scale={state.global.chipSizes?.face ?? 1}
+          onScale={(k) => updateGlobal({ chipSizes: { ...(state.global.chipSizes || {}), face: k } })}
         />
       )}
       {chips && activeTab && state.showStats && (
@@ -3135,6 +3161,9 @@ function AppInner() {
           pos={statsPos}
           onMove={setStatsPos}
           onDrop={(p) => p && updateGlobal({ mobileStatsPos: p })}
+          size={state.global.chipSizes?.stats || null}
+          onSize={(s) => updateGlobal({ chipSizes: { ...(state.global.chipSizes || {}), stats: s } })}
+          autoStopAt={autoStopAt}
         />
       )}
       {chips && activeTab && (
@@ -3143,17 +3172,12 @@ function AppInner() {
           pos={goalPos}
           onMove={setGoalPos}
           onDrop={(p) => p && updateGlobal({ mobileGoalPos: p })}
+          scale={state.global.chipSizes?.goal ?? 1}
+          onScale={(k) => updateGlobal({ chipSizes: { ...(state.global.chipSizes || {}), goal: k } })}
         />
       )}
-      {chips && activeTab && (
-        <FloatingTimer
-          tab={activeTab}
-          pos={timerPos}
-          onMove={setTimerPos}
-          onDrop={(p) => p && updateGlobal({ mobileTimerPos: p })}
-          autoStopAt={autoStopAt}
-        />
-      )}
+      {/* The timer chip is gone — its finish-at-pace ETA and ⏳ auto-stop countdown live in the
+          stats chip now (Tab Settings → Stats chip toggles them). */}
 
       {/* Single shared WebGL context for every 3D reader face (drei <View> portals here).
           Mounted only while faces are actually shown so there's no idle render loop. */}

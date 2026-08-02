@@ -3,14 +3,13 @@ import { goalFraction, computeGoalStatus } from '../engine/goals.js';
 
 // The active goal as a floating transparent chip (mobile always; desktop when chip mode is on) —
 // its status line + a progress bar. Renders nothing when no goal is set.
-export default function FloatingGoal({ tab, pos, onMove, onDrop }) {
+export default function FloatingGoal({ tab, pos, onMove, onDrop, scale = 1, onScale }) {
   const goal = tab.settings.goal;
   if (!goal || !goal.type || goal.type === 'None') return null;
   const status = computeGoalStatus(tab, goal);
   const frac = goalFraction(tab, goal);
   const complete = frac != null && frac >= 1;
   const opacity = tab.settings.statsOpacity ?? 0.92;
-  // Default to the right side (clear of the top-left stats chip), stacked above the timer.
   const defaultPos = { x: typeof window !== 'undefined' ? window.innerWidth - 210 : 300, y: 150 };
 
   return (
@@ -22,6 +21,8 @@ export default function FloatingGoal({ tab, pos, onMove, onDrop }) {
       className="floating-goal"
       defaultPos={defaultPos}
       stub="🏁"
+      scale={scale}
+      onScale={onScale}
       title="Active goal · drag to move · transparency in Tab Settings"
     >
       <div className="chip-label">🏁 {goal.type.replace(/^(Absolute|Relative)/, '$1 ')}</div>
