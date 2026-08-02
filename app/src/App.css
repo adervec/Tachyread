@@ -3234,6 +3234,18 @@
 .tr-snd select { font-size: 11px; padding: 1px 4px; }
 .tr-snd-tick { gap: 5px; font-weight: 600; color: var(--menu-fg); }
 .tr-hint { font-size: 12px; color: var(--status-fg); text-align: center; }
+/* Typing error log: every imperfect commit as target → typed; reuses the run's .trc verdict colours. */
+.tr-errlog {
+  border: 1px solid var(--divider); border-radius: 6px; margin: 6px auto; padding: 4px 10px 6px;
+  max-width: 720px; max-height: 160px; overflow-y: auto; font-size: 13px;
+}
+.tr-errlog-head { font-size: 11px; color: var(--status-fg); letter-spacing: 0.4px; margin-bottom: 2px; }
+.tr-errlog-empty { font-size: 12px; color: var(--status-fg); opacity: 0.8; }
+.tr-errlog-list { display: flex; flex-direction: column; gap: 1px; }
+.tr-err-row { display: flex; gap: 8px; align-items: baseline; font-family: 'Consolas', 'Menlo', monospace; }
+.tr-err-target { opacity: 0.75; min-width: 90px; text-align: right; }
+.tr-err-arrow { color: var(--status-fg); }
+.tr-err-fixed { font-size: 11px; color: var(--status-fg); margin-left: 6px; font-family: inherit; }
 .tr-results { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 10px; border-top: 1px solid var(--divider); flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* Results chart (raw / effective / burst / accuracy over the run) */
 .tr-chart-wrap { width: 100%; max-width: 780px; }
