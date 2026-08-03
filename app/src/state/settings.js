@@ -337,6 +337,7 @@ export function defaultGlobalSettings() {
     translateTarget: 'ja',         // language the text is translated INTO
     // On a typing run's end, show a grade + final statement and play a grade-matched sound.
     typingEndFanfare: true,
+    typingCfg: {}, // APP-LEVEL typing practice options (case, punctuation, discipline, pace ghost, sounds…) — per-tab typing.enabled just opens the overlay
     // Touch gesture navigation (off by default — it can interfere with text selection/scroll):
     // horizontal swipes over the reading area step lines (long swipes step paragraphs).
     gestureControls: false,

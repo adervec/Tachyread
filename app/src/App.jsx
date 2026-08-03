@@ -2677,6 +2677,8 @@ function AppInner() {
                 onSaveRun={onSaveTypingRun}
                 sessionRuns={typingRuns}
                 endFanfare={state.global.typingEndFanfare !== false}
+                globalCfg={state.global.typingCfg}
+                onPatchCfg={(p) => updateGlobal({ typingCfg: { ...(state.global.typingCfg || {}), ...p } })}
                 plan={planState ? {
                   name: planState.plan.name,
                   step: planState.step + 1,

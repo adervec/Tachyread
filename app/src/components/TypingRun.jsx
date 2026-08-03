@@ -109,10 +109,20 @@ const PendingWord = memo(function PendingWord({ w, orig, vc, bypassSym, noSpecia
   );
 });
 
-export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns, endFanfare = true, plan = null, onPlanNext, onPlanExit }) {
+export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns, endFanfare = true, plan = null, onPlanNext, onPlanExit, globalCfg = null, onPatchCfg = null }) {
   const { doc, settings } = tab;
-  const cfg = settings.typing || {};
-  const caseSensitive = !!cfg.caseSensitive;
+  // Typing OPTIONS are APP-LEVEL (global.typingCfg): they persist across tabs and launches. Only
+  // `enabled` lives per-tab. Old per-tab options act as fallback defaults beneath the global
+  // layer; in plan mode the plan's pushed per-tab step config (mode/runMode/runLimit) wins.
+  const cfg = plan
+    ? { ...(globalCfg || {}), ...(settings.typing || {}) }
+    : { ...(settings.typing || {}), ...(globalCfg || {}) };
+  // ALL option writes go through here → the app-level store when wired, per-tab otherwise.
+  const patchCfg = (p) => (onPatchCfg ? onPatchCfg(p) : onPatch?.({ typing: { ...cfg, ...p } }));
+  // Case behaviour is BINARY and explicit: 'as written' MATCHES case (a lowercase letter no
+  // longer satisfies a capital); cfg.caseFold opts into case-agnostic; the lowercase transforms
+  // are inherently agnostic (typing caps still counts, per the Aa-shown display mode).
+  const caseSensitive = !cfg.lowercase && !cfg.caseFold;
   const oneWord = !!cfg.oneWord; // show one word at a time; it must be typed perfectly to advance
   const raceVoice = !!cfg.raceVoice; // race the TTS voice: it reads the passage; get caught if it passes you
   const stopOnError = !!cfg.stopOnError; // a wrong key is refused (still costs an error) — accuracy discipline
@@ -127,7 +137,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const [showSounds, setShowSounds] = useState(false);
   // Play an event cue ('off' / falsy = silent).
   const ping = (id) => { if (id && id !== 'off') playLineSound(id, volume); };
-  const setSound = (k, v) => onPatch?.({ typing: { ...cfg, sounds: { ...sounds, [k]: v } } });
+  const setSound = (k, v) => patchCfg({ sounds: { ...sounds, [k]: v } });
   // One labelled sound dropdown for the on-screen panel; changing it previews the sound.
   const soundRow = (label, k) => (
     <label className="tr-snd" key={k}>
@@ -775,19 +785,20 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       : mode === 'endless' ? `${live.secs.toFixed(0)}s · endless`
         : `${live.secs.toFixed(0)} / ${limit}s`;
 
-  // ── Options sidebar: toggle tiles (idle/done only — config never shifts mid-run) ──
-  const patchCfg = (p) => onPatch?.({ typing: { ...cfg, ...p } });
-  const sideVisible = phase !== 'running' && phase !== 'countdown' && !plan;
-  // Tri-state cycles: punctuation shown → hidden → dim auto-skipped ghosts; case as-written →
-  // all-lowercase → lowercase-but-capitals-shown. Required typing is identical for the display-only states.
+  // ── Options sidebar: toggle tiles — always visible, LOCKED (not hidden) while a run is live ──
+  const locked = phase === 'running' || phase === 'countdown';
+  const sideVisible = !plan;
+  // Cycles: punctuation shown → hidden → dim auto-skipped ghosts; case match → any-case →
+  // all-lowercase → lowercase-but-capitals-shown. Display-only states never change the required typing.
   const punctState = !noSpecial ? 'shown' : wantGhosts ? 'ghosts 👻' : 'hidden';
   const cyclePunct = () => patchCfg(!noSpecial
     ? { noSpecial: true, ghostSpecials: false }
     : !wantGhosts ? { noSpecial: true, ghostSpecials: true } : { noSpecial: false });
-  const caseState = !lowercase ? 'as written' : wantCaps ? 'lower · Aa shown' : 'lowercase';
-  const cycleCase = () => patchCfg(!lowercase
-    ? { lowercase: true, showCaps: false }
-    : !wantCaps ? { lowercase: true, showCaps: true } : { lowercase: false });
+  const caseState = !lowercase ? (caseSensitive ? 'match case' : 'any case') : wantCaps ? 'lower · Aa shown' : 'lowercase';
+  const cycleCase = () => patchCfg(!lowercase && caseSensitive ? { caseFold: true }
+    : !lowercase ? { lowercase: true, caseFold: false, showCaps: false }
+      : !wantCaps ? { lowercase: true, showCaps: true }
+        : { lowercase: false, caseFold: false, showCaps: false });
   const paceState = paceMode === 'off' ? 'off' : paceMode === 'last' ? 'last run' : paceMode === 'pb' ? 'personal best' : `custom · ${cfg.paceWpm ?? 60} wpm`;
   const cyclePace = () => patchCfg({ pace: { off: 'last', last: 'pb', pb: 'custom', custom: 'off' }[paceMode] || 'off' });
 
@@ -844,30 +855,31 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           {phase === 'running' && paceWpmVal > 0 && <Stat v={paceWpmVal} l="👻 pace" />}
         </div>
         <div className="tr-controls">
-          {phase !== 'running' && !plan && (
+          {!plan && (
             <>
               <select
                 value={gameMode}
+                disabled={locked}
                 title="Typing mode — Passage types your book; the rest are drills"
-                onChange={(e) => { setGameMode(e.target.value); if (e.target.value !== 'review') onPatch?.({ typing: { ...cfg, mode: e.target.value } }); reattempt(); }}
+                onChange={(e) => { setGameMode(e.target.value); if (e.target.value !== 'review') patchCfg({ mode: e.target.value }); reattempt(); }}
               >
                 {TYPING_MODES.filter((tm) => tm.id !== 'review' || reviewRef.current.length > 0).map((tm) => <option key={tm.id} value={tm.id}>{tm.label}</option>)}
               </select>
-              <select value={mode} onChange={(e) => { setMode(e.target.value); onPatch?.({ typing: { ...cfg, runMode: e.target.value } }); }}>
+              <select value={mode} disabled={locked} onChange={(e) => { setMode(e.target.value); patchCfg({ runMode: e.target.value }); }}>
                 <option value="seconds">Seconds</option>
                 <option value="words">Words</option>
                 <option value="endless">Endless</option>
               </select>
               {mode !== 'endless' && (
                 <input type="number" min={1} max={9999} value={limit}
-                  onChange={(e) => { const v = Math.max(1, Number(e.target.value) || 1); setLimit(v); onPatch?.({ typing: { ...cfg, runLimit: v } }); }}
+                  onChange={(e) => { const v = Math.max(1, Number(e.target.value) || 1); setLimit(v); patchCfg({ runLimit: v }); }} disabled={locked}
                   style={{ width: 64 }} />
               )}
             </>
           )}
           <label className="tr-vol" title="Sound volume">🔊
             <input type="range" min={0} max={1} step={0.05} value={volume}
-              onChange={(e) => onPatch?.({ typing: { ...cfg, soundVolume: Number(e.target.value) } })} />
+              onChange={(e) => patchCfg({ soundVolume: Number(e.target.value) })} />
           </label>
           <button type="button" className={showSounds ? 'toggle-on' : ''} title="Customize the typing sound effects"
             onClick={() => setShowSounds((v) => !v)}>🎚 Sounds</button>
@@ -890,7 +902,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           {mode === 'seconds' && (
             <label className="tr-snd tr-snd-tick" title="Ticking clock that speeds up in the final seconds">
               <input type="checkbox" checked={tickClock}
-                onChange={(e) => onPatch?.({ typing: { ...cfg, tickClock: e.target.checked } })} />
+                onChange={(e) => patchCfg({ tickClock: e.target.checked })} />
               <span>⏱ Countdown tick</span>
             </label>
           )}
@@ -901,44 +913,44 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         {sideVisible && (
           <aside className="tr-side" aria-label="Typing options">
             <div className="tt-group">Text</div>
-            <Tile icon="#" label="Punctuation" state={punctState} on={noSpecial} onClick={cyclePunct}
+            <Tile icon="#" label="Punctuation" state={punctState} on={noSpecial} onClick={cyclePunct} disabled={locked}
               title="Cycle: shown → hidden → dim auto-skipped ghosts. Ghosts are never required — but typing one anyway is accepted, never an error." />
-            <Tile icon="Aa" label="Case" state={caseState} on={lowercase} onClick={cycleCase}
-              title="Cycle: as written → all lowercase → lowercase but capitals SHOWN (typing lowercase still counts)" />
+            <Tile icon="Aa" label="Case" state={caseState} on={lowercase || !caseSensitive} onClick={cycleCase} disabled={locked}
+              title="Cycle: match case (capitals must be typed) → any case → all lowercase → lowercase but capitals SHOWN. Lowercase modes are inherently case-agnostic." />
             {isDocMode && (
               <Tile icon="¶" label="Line breaks" state={cfg.showBreaks ? 'book layout' : 'flowing wall'} on={!!cfg.showBreaks}
-                onClick={() => patchCfg({ showBreaks: !cfg.showBreaks })} disabled={oneWord || !!cfg.ticker}
+                onClick={() => patchCfg({ showBreaks: !cfg.showBreaks })} disabled={locked || oneWord || !!cfg.ticker}
                 title="Show the book's own line and paragraph breaks — visual only, the words you type are identical" />
             )}
             <Tile icon="📟" label="Ticker" state={cfg.ticker ? 'single line' : 'off'} on={!!cfg.ticker}
-              onClick={() => patchCfg({ ticker: !cfg.ticker })} disabled={oneWord}
+              onClick={() => patchCfg({ ticker: !cfg.ticker })} disabled={locked || oneWord}
               title="Show the passage as one horizontal ticker line — the active word holds a fixed point while committed words stream off to the left" />
             <div className="tt-group">Discipline</div>
             <Tile icon="①" label="One word" state={oneWord ? 'on' : 'off'} on={oneWord}
-              onClick={() => patchCfg({ oneWord: !oneWord })}
+              onClick={() => patchCfg({ oneWord: !oneWord })} disabled={locked}
               title="One word at a time — each word must be typed perfectly to advance" />
             <Tile icon="🛑" label="Stop on error" state={stopOnError ? 'on' : 'off'} on={stopOnError}
-              onClick={() => patchCfg({ stopOnError: !stopOnError })}
+              onClick={() => patchCfg({ stopOnError: !stopOnError })} disabled={locked}
               title="A wrong key is refused (it still costs an error), and space only commits a complete word — the classic accuracy-discipline mode" />
             <Tile icon="⌫" label="No backspace" state={confidence ? 'on' : 'off'} on={confidence}
-              onClick={() => patchCfg({ confidence: !confidence })}
+              onClick={() => patchCfg({ confidence: !confidence })} disabled={locked}
               title="Confidence mode — backspace is disabled entirely; errors cost accuracy, not time" />
             <Tile icon="🙈" label="Blind" state={blind ? 'on' : 'off'} on={blind}
-              onClick={() => patchCfg({ blind: !blind })}
+              onClick={() => patchCfg({ blind: !blind })} disabled={locked}
               title="No per-character verdicts while you type — trust your fingers and let the numbers tell the tale at the end" />
             <div className="tt-group">Extras</div>
             <Tile icon="🏁" label="Race voice" state={raceVoice ? 'on' : 'off'} on={raceVoice}
-              onClick={() => patchCfg({ raceVoice: !raceVoice })}
+              onClick={() => patchCfg({ raceVoice: !raceVoice })} disabled={locked}
               title="The TTS voice reads the passage aloud; if it passes the word you're typing, you're caught. Lower the read-aloud rate in Settings to make it easier." />
-            <Tile icon="👻" label="Pace ghost" state={paceState} on={paceMode !== 'off'} onClick={cyclePace}
+            <Tile icon="👻" label="Pace ghost" state={paceState} on={paceMode !== 'off'} onClick={cyclePace} disabled={locked}
               title="A marker moves through the passage at a steady speed (your last run, your best, or a custom WPM) — try to stay ahead of it. Click to cycle." />
             {paceMode === 'custom' && (
-              <input className="tt-wpm" type="number" min={10} max={400} value={cfg.paceWpm ?? 60}
+              <input className="tt-wpm" type="number" min={10} max={400} value={cfg.paceWpm ?? 60} disabled={locked}
                 onChange={(e) => patchCfg({ paceWpm: Math.max(10, Math.min(400, Number(e.target.value) || 60)) })}
                 title="Pace ghost speed (WPM)" aria-label="Pace ghost speed (WPM)" />
             )}
             <Tile icon="📋" label="Error log" state={cfg.errorLog ? 'on' : 'off'} on={!!cfg.errorLog}
-              onClick={() => patchCfg({ errorLog: !cfg.errorLog })}
+              onClick={() => patchCfg({ errorLog: !cfg.errorLog })} disabled={locked}
               title="A separate area listing every error entry as it happens — the target word vs what you actually typed" />
           </aside>
         )}
