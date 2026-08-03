@@ -235,6 +235,10 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const linesRef = useRef(null);
   const activeRef = useRef(null);
   const caretRef = useRef(null);
+  // Esc-during-run guard: first press arms (hint shows), second within 2.5s actually ends.
+  const escArmRef = useRef(0);
+  const escArmTimer = useRef(0);
+  const [escArmed, setEscArmed] = useState(false);
   const lineH = useRef(0);
   // Voice-race state. posRef mirrors `pos` so the speech callbacks (which close over a stale render)
   // can read your live typing position; the rest track the racing voice.
@@ -716,7 +720,16 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     if (e.key === 'Escape') {
       e.preventDefault();
       if (phase === 'countdown') { clearCount(); setCount(null); setPhase('idle'); return; }
-      phase === 'running' ? endRun() : onExitDiscard?.();
+      if (phase === 'running') {
+        // A single stray Esc must not kill a run in flight — arm, and only a second Esc within
+        // the window ends it (the armed hint shows). Progress is never lost either way: the run
+        // saves on end, and even a discard credits the typed words as read.
+        const now = Date.now();
+        if (now - escArmRef.current < 2500) { escArmRef.current = 0; setEscArmed(false); endRun(); }
+        else { escArmRef.current = now; setEscArmed(true); clearTimeout(escArmTimer.current); escArmTimer.current = setTimeout(() => setEscArmed(false), 2500); }
+        return;
+      }
+      onExitDiscard?.(discardCreditWi());
       return;
     }
     // Confidence mode: backspace is off entirely — within the word AND back into the previous one.
@@ -740,6 +753,13 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       commitWord(buf);
     }
   }
+
+  // The doc-word frontier actually typed this session. A discarding exit (Esc, the Discard
+  // button) passes it up so App can still CREDIT the typed words as read — only the reading
+  // position stays put. Quitting never throws typed progress away.
+  const discardCreditWi = () => (isDocMode && stats.current.words > 0
+    ? (lastGiRef.current != null ? lastGiRef.current + 1 : startIndex.current + stats.current.words)
+    : undefined);
 
   // On the done screen: is there more book ahead to walk into with "Onward"?
   const moreAhead = !!summary && isDocMode && startIndex.current + (summary.words || 0) < doc.words.length;
@@ -854,7 +874,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           {phase === 'idle' && <button className="toggle-on" onClick={beginCountdown} title="Start the run (Ready·Set·Go)">▶ Start</button>}
           {phase === 'running'
             ? <button className="toggle-on" onClick={endRun}>■ End run</button>
-            : <button onClick={onExitDiscard}>{plan ? 'Exit plan' : 'Discard'}</button>}
+            : <button onClick={() => onExitDiscard?.(discardCreditWi())} title="Close typing — anything you typed still counts as read; only the reading position stays put">{plan ? 'Exit plan' : 'Discard'}</button>}
         </div>
       </div>
 
@@ -929,6 +949,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           otherwise they overflow beneath the bottom dock, which also swallows chart hovers. */}
       <div className={`tr-viewport${ticker ? ' ticker-vp' : ''}`} style={{ display: phase === 'done' ? 'none' : undefined, ...(settings.fontFamily ? { fontFamily: settings.fontFamily } : null) }}>
         {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{count}</div>}
+        {escArmed && phase === 'running' && <div className="tr-esc-hint" role="status">Esc again to end the run</div>}
         <div className={`tr-cursor${phase === 'running' ? '' : ' waiting'}`} ref={caretRef} style={{ opacity: phase === 'done' ? 0 : 1 }} />
         <div className={`tr-lines${oneWord ? ' one-word' : ''}${blind ? ' blind' : ''}${ticker ? ' ticker' : ''}`} ref={linesRef}>
           {passage.map((w, i) => {
@@ -1081,7 +1102,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                 {isDocMode && (
                   <button onClick={() => onExitContinue?.(lastGiRef.current != null ? lastGiRef.current + 1 : startIndex.current + stats.current.words)}>Continue (count as read)</button>
                 )}
-                <button onClick={onExitDiscard}>{isDocMode ? 'Discard' : 'Exit'}</button>
+                <button onClick={() => onExitDiscard?.(discardCreditWi())} title={isDocMode ? 'Close typing — the typed words still count as read; only the reading position stays put' : undefined}>{isDocMode ? 'Discard' : 'Exit'}</button>
               </>
             )}
           </div>
