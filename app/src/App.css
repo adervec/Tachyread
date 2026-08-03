@@ -505,9 +505,15 @@
 .dash-stat .dash-num { font-size: 22px; font-weight: 600; color: var(--wpm-fg, var(--rsvp-fg)); font-family: Consolas, monospace; }
 .dash-stat-hero .dash-num { font-size: 38px; }
 .dash-stat .dash-num .dash-of { font-size: 14px; font-weight: 400; color: var(--meta-fg, var(--status-fg)); }
-.dash-stat .dash-label { font-size: 11px; color: var(--stats-fg, var(--status-fg)); text-transform: uppercase; letter-spacing: 1px; margin-top: 3px; }
-.dash-stat-row { flex-direction: row; gap: 12px; flex-wrap: wrap; justify-content: center; }
-.dash-mini { font-size: 11px; color: var(--meta-fg, var(--status-fg)); font-family: Consolas, monospace; }
+.dash-stat .dash-label { font-size: 11px; color: var(--stats-fg, var(--status-fg)); text-transform: uppercase; letter-spacing: 1px; margin-top: 3px; text-align: center; }
+.dash-stat-row { flex-direction: row; gap: 6px; flex-wrap: wrap; justify-content: center; }
+/* Each label-less mini stat is its own PILL — readable size, real foreground colour, clearly
+   separated from its neighbours instead of a run-on line of small dim monospace. */
+.dash-mini {
+  font-size: 12.5px; color: var(--stats-fg, var(--menu-fg)); font-family: Consolas, monospace;
+  background: color-mix(in srgb, var(--menu-fg) 7%, transparent);
+  border-radius: 6px; padding: 2px 7px; white-space: nowrap;
+}
 
 /* Source page pane (original PDF page / EPUB section) */
 .source-pane { display: flex; flex-direction: column; background: var(--textview-bg, var(--pane-bg)); min-height: 0; }
@@ -1947,7 +1953,8 @@
 .dashboard-pane.dock .dash-stat-hero .dash-num { font-size: 22px; }
 .dashboard-pane.dock .dash-num { font-size: 16px; }
 .dashboard-pane.dock .dash-label { font-size: 9px; margin-top: 0; }
-.dashboard-pane.dock .dash-stat-row { gap: 8px; }
+.dashboard-pane.dock .dash-stat-row { gap: 6px; }
+.dashboard-pane.dock .dash-mini { font-size: 12px; padding: 1px 6px; }
 
 /* Bottom controls */
 /* Focus mode (in-app spotlight): fade the chrome, tab bar, controls and status so only the reading
@@ -2244,9 +2251,14 @@
   transition: opacity 150ms ease;
 }
 .floating-stats:active { cursor: grabbing; }
-.floating-stats .dash-stats { gap: 4px; }
+/* Chip: an even rhythm — same gap everywhere, a faint divider between blocks so each stat reads
+   as its own unit, and a tighter num/hero size range for consistency. */
+.floating-stats .dash-stats { gap: 7px; }
+.floating-stats .dash-stat { width: 100%; }
+.floating-stats .dash-stat + .dash-stat { border-top: 1px dashed color-mix(in srgb, var(--divider) 70%, transparent); padding-top: 7px; }
 .floating-stats .dash-num { font-size: 20px; }
 .floating-stats .dash-stat-hero .dash-num { font-size: 26px; }
+.floating-stats .dash-label { font-size: 10px; }
 
 /* Generic draggable info chip (goal, timer): matches the floating-stats look. */
 .floating-chip {
@@ -2285,7 +2297,13 @@
 
 /* Stats-chip WPM sparkline: fixed 0–1400 scale, 15s buckets over the last 8 minutes. */
 .chip-spark { margin-top: 6px; }
+.chip-spark-plot { position: relative; }
 .chip-spark svg { display: block; width: 100%; height: 28px; background: color-mix(in srgb, var(--menu-fg) 5%, transparent); border-radius: 4px; }
+/* Gridline labels (only rendered when the plot is tall enough for a legible step). */
+.chip-spark-gl {
+  position: absolute; right: 3px; transform: translateY(-50%); pointer-events: none;
+  font-size: 9px; color: var(--status-fg); font-variant-numeric: tabular-nums; line-height: 1;
+}
 .chip-spark-line { fill: none; stroke: var(--toggle-active-bg, #3a86ff); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .chip-spark-mid { stroke: var(--divider); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
 .chip-spark-axis { display: flex; justify-content: space-between; font-size: 9px; color: var(--status-fg); margin-top: 1px; }
@@ -3229,7 +3247,8 @@
 .floating-stats.sized .chip-body .dash-stats { height: 100%; flex-wrap: nowrap; }
 .floating-stats.sized .chip-body .dash-stat { flex: 0 0 auto; } /* blocks never squish — overflow stays honest so the sacrifice logic sees it */
 .floating-stats.sized .chip-spark { flex: 1 1 auto; min-height: 40px; width: 100%; display: flex; flex-direction: column; }
-.floating-stats.sized .chip-spark svg { flex: 1 1 auto; height: auto; min-height: 28px; }
+.floating-stats.sized .chip-spark-plot { flex: 1 1 auto; min-height: 28px; display: flex; }
+.floating-stats.sized .chip-spark-plot svg { flex: 1 1 auto; height: auto; min-height: 28px; }
 .floating-stats { position: fixed; }
 /* Each word is an ATOMIC inline-block: nothing inside it (per-char spans, the caret anchor) can
    create a mid-word line break — words wrap only as whole units. white-space:pre keeps the
