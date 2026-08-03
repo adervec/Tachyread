@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { recordSpark, getSpark, sparkBuckets, sparkPoints, SPARK_MAX_WPM } from '../features/wpmSpark.js';
 import { fmtDate } from '../features/dateFmt.js';
 
@@ -48,13 +48,36 @@ export function WpmSparkline({ tabId }) {
     const id = setInterval(() => setBuckets(sparkBuckets(getSpark(tabId))), 3000);
     return () => clearInterval(id);
   }, [tabId]);
+  // When the spark is given real height (the resized stats chip flexes it), earn it: labelled
+  // horizontal gridlines at the finest WPM step that still leaves each band ~26px — legible or
+  // nothing. At the natural 28px only the dashed midline shows, exactly as before.
+  const plotRef = useRef(null);
+  const [pxH, setPxH] = useState(0);
+  useEffect(() => {
+    const el = plotRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver((es) => setPxH(Math.round(es[0]?.contentRect?.height || 0)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const W = 128, H = 28;
+  let step = 0;
+  for (const s of [100, 200, 350, 700]) { if (pxH / (SPARK_MAX_WPM / s) >= 26) { step = s; break; } }
+  const grid = [];
+  if (step) for (let v = step; v < SPARK_MAX_WPM; v += step) grid.push(v);
   return (
     <div className="chip-spark" title={`15s-averaged WPM over the last 8 minutes (scale 0–${SPARK_MAX_WPM})`}>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-        <line className="chip-spark-mid" x1="0" y1={H / 2} x2={W} y2={H / 2} />
-        <polyline className="chip-spark-line" points={sparkPoints(buckets, W, H)} />
-      </svg>
+      <div className="chip-spark-plot" ref={plotRef}>
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+          {grid.length
+            ? grid.map((v) => <line key={v} className="chip-spark-mid" x1="0" x2={W} y1={H * (1 - v / SPARK_MAX_WPM)} y2={H * (1 - v / SPARK_MAX_WPM)} />)
+            : <line className="chip-spark-mid" x1="0" y1={H / 2} x2={W} y2={H / 2} />}
+          <polyline className="chip-spark-line" points={sparkPoints(buckets, W, H)} />
+        </svg>
+        {grid.map((v) => (
+          <span key={v} className="chip-spark-gl" style={{ top: `${(1 - v / SPARK_MAX_WPM) * 100}%` }}>{v}</span>
+        ))}
+      </div>
       <div className="chip-spark-axis"><span>8m</span><span>0–{SPARK_MAX_WPM}</span><span>now</span></div>
     </div>
   );
