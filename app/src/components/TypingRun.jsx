@@ -47,7 +47,7 @@ const ENDLESS_SECS = 99999;
 // from reflowing onto the next line while it's being typed.
 const OVERTYPE_MAX = 4;
 
-const freshStats = () => ({ start: 0, chars: 0, correct: 0, errors: 0, words: 0, perfect: 0, errorKeys: {}, keys: {} });
+const freshStats = () => ({ start: 0, endAt: 0, chars: 0, correct: 0, errors: 0, words: 0, perfect: 0, errorKeys: {}, keys: {} });
 
 // Pending words further ahead than this aren't rendered — they're below the viewport fold anyway,
 // and skipping their DOM is what keeps long timed/endless passages (up to 600 words) light.
@@ -304,7 +304,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // ── live metrics ──
   const metrics = useCallback(() => {
     const s = stats.current;
-    const secs = s.start ? (Date.now() - s.start) / 1000 : 0;
+    // The clock freezes at endAt — otherwise every re-render of the results screen recomputes
+    // elapsed time from Date.now() and the "timer" visibly keeps counting after the run ended.
+    const secs = s.start ? ((s.endAt || Date.now()) - s.start) / 1000 : 0;
     const mins = secs / 60;
     const gross = mins > 0 ? (s.chars / 5) / mins : 0;
     const net = mins > 0 ? Math.max(0, (s.chars / 5 - s.errors) / mins) : 0;
@@ -317,6 +319,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     if (idleTimer.current) { clearTimeout(idleTimer.current); idleTimer.current = null; }
     if (racerRef.current) { racerRef.current.stop(); racerRef.current = null; }
     const s = stats.current;
+    if (!s.endAt) s.endAt = Date.now(); // freeze the run clock — the results screen must not keep counting
     const m = metrics();
     const net = Math.round(m.net);
     const run = {
