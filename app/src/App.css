@@ -3223,6 +3223,13 @@
 .chip-resize:hover { opacity: 0.95; }
 .floating-stats.sized { overflow: hidden; }
 .floating-stats.sized .chip-body { overflow: hidden; height: 100%; }
+/* In a resized chip the WPM trendline is the flexible block: it swallows any free height the
+   other stats don't need (the svg stretches — preserveAspectRatio is none), and gives it back
+   the moment the box shrinks (min-height keeps it readable until the sacrifice order drops it). */
+.floating-stats.sized .chip-body .dash-stats { height: 100%; flex-wrap: nowrap; }
+.floating-stats.sized .chip-body .dash-stat { flex: 0 0 auto; } /* blocks never squish — overflow stays honest so the sacrifice logic sees it */
+.floating-stats.sized .chip-spark { flex: 1 1 auto; min-height: 40px; width: 100%; display: flex; flex-direction: column; }
+.floating-stats.sized .chip-spark svg { flex: 1 1 auto; height: auto; min-height: 28px; }
 .floating-stats { position: fixed; }
 /* Each word is an ATOMIC inline-block: nothing inside it (per-char spans, the caret anchor) can
    create a mid-word line break — words wrap only as whole units. white-space:pre keeps the
