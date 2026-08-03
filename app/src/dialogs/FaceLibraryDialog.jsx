@@ -65,8 +65,8 @@ export default function FaceLibraryDialog({ onClose }) {
             onChange={(e) => patchSettings(activeTab.id, { faceCount: Math.max(1, Math.min(3, Number(e.target.value))) })}
           />
         </label>
-        <label title="Rayman-style floating hands beside each avatar — they mirror your biometric controls (gestures, joystick, claps, voice) and move with the current activity">
-          🤚 Rayman hands{' '}
+        <label title="Floating cartoon-glove hands beside each avatar, tinted to match it — they mirror your biometric controls (gestures, joystick, claps, voice) and move with the current activity">
+          🤚 Floating hands{' '}
           <input
             type="checkbox"
             checked={!!s.avatarHands}

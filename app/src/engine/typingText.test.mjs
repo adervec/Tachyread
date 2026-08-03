@@ -1,7 +1,7 @@
 // ponytail: the non-QWERTY bypass must (a) normalize typographic look-alikes to keyboard chars,
 // (b) flag purely-decorative tokens to skip, (c) keep real words (incl. accented), (d) mark exotic
 // target chars as auto-accept. Run: node src/engine/typingText.test.mjs
-import { normalizeTypography, prepToken, isExotic, toKeyboard, transformToken, displayCells } from './typingText.js';
+import { normalizeTypography, prepToken, isExotic, toKeyboard, transformToken, displayCells, ghostCharsAt } from './typingText.js';
 import assert from 'node:assert';
 
 // Typographic look-alikes → what the keyboard types.
@@ -74,4 +74,21 @@ assert.deepEqual(exp.map((c) => c.t), [0, 1, 2, 3, 4]);
 // A fully-decorative token is ALL ghosts under noSpecial (shown dim, typed never).
 assert.ok(displayCells('•', { bypassNonQwerty: false, noSpecial: true }).every((c) => c.t == null));
 
-console.log('ok — transforms compose, accents transliterate, decorative tokens skipped, WYSIWYG');
+// ghostCharsAt: the stripped punctuation adjacent to each typing position — typed ghosts are
+// ACCEPTED, so the input path needs to know which chars are absorbable where.
+// "don't" -> target "dont": the apostrophe sits before target index 3.
+assert.ok(ghostCharsAt("don't", 3).has("'"), 'mid-word ghost at its boundary');
+assert.equal(ghostCharsAt("don't", 1).size, 0, 'no ghost elsewhere');
+// Trailing punctuation: "word," -> target "word": ghost waits at pos 4 (end of word).
+assert.ok(ghostCharsAt('word,', 4).has(','), 'trailing ghost at word end');
+assert.equal(ghostCharsAt('word,', 2).size, 0);
+// Leading punctuation: '"word' -> ghost at pos 0.
+assert.ok(ghostCharsAt('"word', 0).has('"'), 'leading ghost at position 0');
+// Typographic ghosts accept BOTH the original glyph and its keyboard form.
+const curly = ghostCharsAt('“word', 0); // curly opening quote
+assert.ok(curly.has('"'), 'curly quote ghost accepts the straight keyboard form');
+// Consecutive ghosts pool at one boundary ("end.)" -> both . and ) absorbable at pos 3).
+const pool = ghostCharsAt('end.)', 3);
+assert.ok(pool.has('.') && pool.has(')'), 'consecutive ghosts pool at the boundary');
+
+console.log('ok — transforms compose, accents transliterate, decorative tokens skipped, WYSIWYG, ghosts absorbable');

@@ -151,7 +151,7 @@ export function defaultFileSettings() {
     faceCount: 1,
     faceStyles: ['Man', 'Owl', 'Robot'],
     artStyle: 'Cartoon',
-    avatarHands: false, // Rayman-style floating hands that mirror the biometric controls + activity
+    avatarHands: false, // floating glove hands (avatar-tinted) that mirror the biometric controls + activity
     // Reading pointer
     showPointer: false,
     pointerStyle: 'Arrow',

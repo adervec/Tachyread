@@ -6,7 +6,7 @@ import { useApp } from '../state/AppContext.jsx';
 // Desktop dock: the animated reader AVATARS and/or the live reading stats, each shown
 // independently (showFaces / showStats). On mobile these both float as separate draggable popups
 // instead — see FloatingFace / FloatingStats. `avatar` carries the live theatrics state
-// (activity / drowsiness stage / TTS speaking / Rayman hands).
+// (activity / drowsiness stage / TTS speaking / floating hands).
 export default function DashboardPane({ tab, dock = false, showFaces = true, showStats = true, autoStopAt = 0, avatar = null }) {
   const { state } = useApp();
   const { settings, doc } = tab;

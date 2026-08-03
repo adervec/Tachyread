@@ -1238,7 +1238,7 @@ function AppInner() {
     const gmap = { ...DEFAULT_GESTURE_MAP, ...(state.global.gestureMap || {}) };
     const cmdId = (hand && gmap[`${kind}:${hand}`]) || gmap[kind];
     const info = GESTURE_INFO[kind];
-    publishHandPose({ emoji: info?.icon || '🖐', ts: Date.now() }); // the avatars' Rayman hands mirror it
+    publishHandPose({ emoji: info?.icon || '🖐', ts: Date.now() }); // the avatars' floating hands mirror it
     if (cmdId) {
       runCommand(cmdId, cmdCtx());
       setStatus(`${info?.icon || '🖐'} ${actionLabel(cmdId)}`);
@@ -1310,7 +1310,7 @@ function AppInner() {
         holdPauseRef.current?.(present ? gesture : null);
       },
       onScroll: (v) => {
-        // Joystick engaging (0 → moving) flashes a gliding palm on the avatars' Rayman hands.
+        // Joystick engaging (0 → moving) flashes a gliding palm on the avatars' floating hands.
         if (v && !handVelRef.current) publishHandPose({ emoji: v < 0 ? '🤚' : '🖐', ts: Date.now() });
         handVelRef.current = v;
       },
@@ -2206,7 +2206,7 @@ function AppInner() {
   const panesFull = linesLocked || auxOpen;
   // What the AVATARS are doing right now: the live activity (reading mode), the drowsiness stage
   // (awake → drowsy as idle approaches → asleep, with zzz + sheep), whether the TTS is speaking
-  // (mouths move with it), and whether the Rayman hands are on. One object, every avatar surface.
+  // (mouths move with it), and whether the floating hands are on. One object, every avatar surface.
   const avatarState = {
     activity: readingMode,
     stage: idleStage(modeIdleFrac, readingMode === 'idle'),

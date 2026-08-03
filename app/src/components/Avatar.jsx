@@ -1,23 +1,32 @@
 import { useEffect, useRef, useState } from 'react';
 import Face from './Face.jsx';
+import { decor3d } from './faceDecor3d.js';
 import { subscribeHandPose } from '../features/avatarBus.js';
 
-// An AVATAR = a reader face plus its theatrics: optional Rayman-style floating hands that mirror
-// the biometric controls (a detected 👍 flashes on a hand; the scroll joystick raises a gliding
-// palm) and otherwise move with the current activity; and the idle sleep act — drowsy first, then
-// snoozing with floating zzz and counting sheep. The face itself animates per activity too
-// (FaceSVG classes / FaceHead frame loop). Everything display-only.
+// An AVATAR = a reader face plus its theatrics: optional FLOATING HANDS — disembodied cartoon
+// gloves tinted to match the avatar's own skin/stroke colours — that mirror the biometric
+// controls (a detected 👍 flashes as a badge; the scroll joystick raises a gliding palm) and
+// float with the current activity; and the idle sleep act — drowsy first, then snoozing with
+// floating zzz and counting sheep. The face itself animates per activity too (FaceSVG classes /
+// FaceHead frame loop). Everything display-only.
 //
 // Props: the Face props, plus activity (reading-mode id or 'typing'), stage ('awake'|'drowsy'|
 // 'asleep'), speaking (TTS is talking — the mouth moves with it), irisOverride (typing screen's
-// consensus-WPM eye colour), hands (show the Rayman hands), forceSvg (typing overlay sits above
+// consensus-WPM eye colour), hands (show the floating hands), forceSvg (typing overlay sits above
 // the shared WebGL canvas, so it must use the SVG renderer).
 
-// Default hand glyphs per activity (right hand leads; the left mirrors, flipped by CSS).
-const ACTIVITY_HANDS = {
-  typing: ['🤛', '🤜'], scroll: ['🤚', '✋'], page: ['🫱', '🫲'], para: ['🫱', '🫲'],
-  listen: ['🫲', '🫱'], speak: ['🤙', '🎤'], idle: ['🤚', '🤚'],
-};
+// One floating glove, tinted with the avatar's palette (mirrored for the left via CSS).
+function Mitt({ skin, stroke }) {
+  return (
+    <svg className="av-mitt" viewBox="0 0 40 44" aria-hidden="true">
+      <path
+        d="M9 27 Q6 15 13 12 Q12 4 18 5 Q20 1 24 4 Q31 4 30 12 Q36 16 34 27 Q35 40 21 41 Q7 40 9 27 Z"
+        fill={skin} stroke={stroke} strokeWidth="2.4" strokeLinejoin="round"
+      />
+      <path d="M14 33 Q21 37 28 33" fill="none" stroke={stroke} strokeWidth="1.6" strokeLinecap="round" opacity="0.55" />
+    </svg>
+  );
+}
 
 export default function Avatar({
   wpm = 0, lineProgress = 0.5, faceStyle = 'Man', artStyle = 'Cartoon', size = 72,
@@ -45,8 +54,9 @@ export default function Avatar({
     return () => clearInterval(id);
   }, [stage]);
 
-  const [handL, handR] = ACTIVITY_HANDS[activity] || ['🤚', '✋'];
-  const shownR = pose?.emoji || handR;
+  // The gloves wear the avatar's own palette, so a Frog gets green hands and a Robot steel ones.
+  const pal = decor3d(faceStyle) || {};
+  const handW = Math.round(size * 0.3);
 
   return (
     <div className={`avatar av-${activity} av-${stage}${speaking ? ' av-speaking' : ''}`} style={{ position: 'relative' }}>
@@ -56,8 +66,11 @@ export default function Avatar({
       />
       {hands && stage !== 'asleep' && (
         <>
-          <span className="av-hand av-hand-l" style={{ fontSize: Math.round(size * 0.3) }} aria-hidden="true">{handL}</span>
-          <span className={`av-hand av-hand-r${pose ? ' av-hand-pose' : ''}`} style={{ fontSize: Math.round(size * 0.3) }} aria-hidden="true">{shownR}</span>
+          <span className="av-hand av-hand-l" style={{ width: handW }} aria-hidden="true"><Mitt skin={pal.skin || '#ffd5aa'} stroke={pal.stroke || '#9b643c'} /></span>
+          <span className={`av-hand av-hand-r${pose ? ' av-hand-pose' : ''}`} style={{ width: handW }} aria-hidden="true">
+            <Mitt skin={pal.skin || '#ffd5aa'} stroke={pal.stroke || '#9b643c'} />
+            {pose && <span className="av-hand-badge" style={{ fontSize: Math.round(size * 0.22) }}>{pose.emoji}</span>}
+          </span>
         </>
       )}
       {stage === 'asleep' && (

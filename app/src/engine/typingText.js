@@ -78,3 +78,22 @@ export function displayCells(raw, { bypassNonQwerty = true, noSpecial = false } 
 export function isExotic(ch) {
   return ch !== undefined && ch !== '' && !ASCII_PRINTABLE.test(ch);
 }
+
+// Ghost characters adjacent to typing position `pos` of a token under noSpecial: the stripped
+// punctuation that sits immediately BEFORE the target character at `pos` (pos === target length →
+// the token's trailing ghosts). Ghosts are auto-skipped, but a user who types one anyway must be
+// ACCEPTED, not scored wrong — this set is what the input path checks. Both the original glyph and
+// its keyboard form are included (a ghost '“' accepts a typed '"').
+export function ghostCharsAt(raw, pos, { bypassNonQwerty = true } = {}) {
+  const set = new Set();
+  let t = 0;
+  for (const c of displayCells(raw, { bypassNonQwerty, noSpecial: true })) {
+    if (c.t == null) {
+      if (t === pos) {
+        set.add(c.ch);
+        for (const k of (bypassNonQwerty ? toKeyboard(c.ch) : c.ch)) set.add(k);
+      }
+    } else t = c.t + 1;
+  }
+  return set;
+}
