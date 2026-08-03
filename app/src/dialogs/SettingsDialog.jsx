@@ -703,7 +703,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       <Field label="Show avatars">
         <input type="checkbox" checked={!!s.showEyes} onChange={(e) => patch({ showEyes: e.target.checked })} />
       </Field>
-      <Field label="Rayman hands">
+      <Field label="Floating hands">
         <label className="inline-check" title="Floating hands beside each avatar that mirror your biometric controls (gestures, scroll joystick, claps, voice commands) and move with the current activity">
           <input type="checkbox" checked={!!s.avatarHands} onChange={(e) => patch({ avatarHands: e.target.checked })} />
           Floating hands that mimic the biometric controls

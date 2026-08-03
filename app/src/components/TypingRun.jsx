@@ -3,7 +3,7 @@ import { playLineSound, playTick, TYPING_SOUNDS } from '../features/clickSound.j
 import { getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import { deviceKind } from '../state/device.js';
 import { buildPassage, TYPING_MODES, TYPING_MODE_BY_ID } from '../engine/typingModes.js';
-import { transformToken, displayCells, isExotic } from '../engine/typingText.js';
+import { transformToken, displayCells, isExotic, ghostCharsAt } from '../engine/typingText.js';
 import { letterGrade, playGradeSound, GRADE_STATEMENTS } from '../features/gradeChime.js';
 import { createReadAloud } from '../features/readAloud.js';
 import { rateFromIndex } from '../features/tts.js';
@@ -157,7 +157,10 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   useEffect(() => { allTypingRuns().then((r) => { pastRunsRef.current = r || []; }).catch(() => { pastRunsRef.current = []; }); }, []);
   const isDocMode = (TYPING_MODE_BY_ID[gameMode]?.kind || 'doc') === 'doc';
   // Show the book's own line/paragraph breaks instead of a flowing wall — visual only.
-  const showBreaks = !!cfg.showBreaks && isDocMode && !oneWord;
+  const showBreaks = !!cfg.showBreaks && isDocMode && !oneWord && !cfg.ticker;
+  // Ticker display: the passage as ONE horizontal line — the active word holds a fixed point
+  // (~35% in) while committed words slide off left and pending words stream in from the right.
+  const ticker = !!cfg.ticker && !oneWord;
   // Auto-bypass characters a QWERTY keyboard can't make (default on): normalize typographic look-
   // alikes and drop purely-decorative tokens so the drill never asks you to type a "•" or a "¶".
   const bypassSym = cfg.bypassNonQwerty !== false;
@@ -382,18 +385,25 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   }, [phase, tickClock, mode, effLimitSecs, volume, metrics]);
 
   // Line-by-line scroll: keep the active word's line pinned near the top (updates only when the
-  // active word moves to a new visual line, so the text doesn't jitter per word).
+  // active word moves to a new visual line, so the text doesn't jitter per word). In TICKER mode
+  // the passage is one horizontal line instead: pin the active word's left edge ~35% in and slide
+  // the whole line left as words commit (same transition, horizontal).
   useLayoutEffect(() => {
     const lines = linesRef.current;
     const active = activeRef.current;
     if (!lines || !active) return;
+    if (ticker) {
+      const hold = (lines.parentElement?.clientWidth || 800) * 0.35;
+      lines.style.transform = `translate(${-Math.max(0, active.offsetLeft - hold)}px, 0px)`;
+      return;
+    }
     if (!lineH.current) {
       const lh = parseFloat(getComputedStyle(lines).lineHeight);
       lineH.current = isFinite(lh) && lh > 0 ? lh : 40;
     }
     const lineIdx = Math.round(active.offsetTop / lineH.current);
     lines.style.transform = `translateY(${-Math.max(0, lineIdx - 1) * lineH.current}px)`;
-  }, [pos, buf]);
+  }, [pos, buf, ticker]);
 
   // Floating cursor (monkeytype-style): a single absolutely-positioned bar that GLIDES to the
   // zero-width anchor rendered at the typing position, instead of a caret that pops per keystroke.
@@ -404,15 +414,18 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     const lines = linesRef.current;
     const anchor = activeRef.current?.querySelector('.caret-anchor');
     if (!caret || !lines || !anchor) return;
-    const m = /translateY\((-?\d+(?:\.\d+)?)px\)/.exec(lines.style.transform || '');
-    const shift = m ? parseFloat(m[1]) : 0;
+    const t = lines.style.transform || '';
+    const my = /translateY\((-?\d+(?:\.\d+)?)px\)/.exec(t);
+    const mx = /translate\((-?\d+(?:\.\d+)?)px/.exec(t); // ticker's horizontal slide
+    const shiftY = my ? parseFloat(my[1]) : 0;
+    const shiftX = mx ? parseFloat(mx[1]) : 0;
     const fs = parseFloat(getComputedStyle(lines).fontSize) || 26;
     // The anchor's CSS box (1.12em, dipped below the baseline) IS the caret's geometry. Its
     // offsetParent is .tr-lines directly — the inline-block word is NOT positioned, so it never
     // becomes an offset ancestor (adding word offsets here would double-count).
     caret.style.height = `${anchor.offsetHeight || Math.round(fs * 1.1)}px`;
-    caret.style.transform = `translate(${anchor.offsetLeft}px, ${anchor.offsetTop + shift + lines.offsetTop}px)`;
-  }, [pos, buf, phase, oneWord]);
+    caret.style.transform = `translate(${anchor.offsetLeft + shiftX}px, ${anchor.offsetTop + shiftY + lines.offsetTop}px)`;
+  }, [pos, buf, phase, oneWord, ticker]);
 
   function stopRace() { racerRef.current?.stop(); racerRef.current = null; }
   // Start the voice racer: it reads the passage aloud and reports the word it's speaking. You're
@@ -598,6 +611,29 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     }
   }
 
+  // Ghost punctuation typed FOR REAL is accepted: the drill auto-skips ghosts, but a user who
+  // types one anyway gets a correct keystroke, absorbed out of the buffer so the target text is
+  // untouched. Ghost chars are punctuation and targets are letters/numbers under noSpecial, so the
+  // two sets can never collide. Runs before stop-on-error, which would otherwise refuse the key.
+  function absorbGhosts(val) {
+    if (!noSpecial || !wantGhosts || val.length <= buf.length) return val;
+    const orig = prepared[pos]?.orig;
+    const w = passage[pos] || '';
+    if (!orig || !cellsFor(orig, w, { bypassSym, noSpecial, wantCaps, wantGhosts })) return val; // alignment invariant failed → plain scoring
+    let out = buf;
+    for (let p = buf.length; p < val.length; p++) {
+      const ch = val[p];
+      if (!/\s/.test(ch) && ghostCharsAt(orig, out.length, { bypassNonQwerty: bypassSym }).has(ch)) {
+        const s = stats.current;
+        s.chars += 1; s.correct += 1;
+        ping(sounds.charCorrect);
+        continue; // accepted and absorbed — never lands in the buffer
+      }
+      out += ch;
+    }
+    return out;
+  }
+
   // Letters, space (commit) and backspace flow through the input's value here instead of keydown so
   // that mobile soft keyboards work — many of them don't emit usable keydown events (key:"Unidentified",
   // keyCode 229). The input holds the in-progress word (value={buf}); we diff each change. Enter and
@@ -648,6 +684,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         return;
       }
     }
+    val = absorbGhosts(val); // typed ghost punctuation → accepted + absorbed before any scoring
     // Confidence mode: no corrections — a shrinking value (backspace/autocorrect) is ignored and
     // the controlled input snaps back to the buffer.
     if (confidence && val.length < buf.length) return;
@@ -845,14 +882,17 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           <aside className="tr-side" aria-label="Typing options">
             <div className="tt-group">Text</div>
             <Tile icon="#" label="Punctuation" state={punctState} on={noSpecial} onClick={cyclePunct}
-              title="Cycle: shown → hidden → dim auto-skipped ghosts. Hidden and ghosts never ask you to type punctuation or symbols." />
+              title="Cycle: shown → hidden → dim auto-skipped ghosts. Ghosts are never required — but typing one anyway is accepted, never an error." />
             <Tile icon="Aa" label="Case" state={caseState} on={lowercase} onClick={cycleCase}
               title="Cycle: as written → all lowercase → lowercase but capitals SHOWN (typing lowercase still counts)" />
             {isDocMode && (
               <Tile icon="¶" label="Line breaks" state={cfg.showBreaks ? 'book layout' : 'flowing wall'} on={!!cfg.showBreaks}
-                onClick={() => patchCfg({ showBreaks: !cfg.showBreaks })} disabled={oneWord}
+                onClick={() => patchCfg({ showBreaks: !cfg.showBreaks })} disabled={oneWord || !!cfg.ticker}
                 title="Show the book's own line and paragraph breaks — visual only, the words you type are identical" />
             )}
+            <Tile icon="📟" label="Ticker" state={cfg.ticker ? 'single line' : 'off'} on={!!cfg.ticker}
+              onClick={() => patchCfg({ ticker: !cfg.ticker })} disabled={oneWord}
+              title="Show the passage as one horizontal ticker line — the active word holds a fixed point while committed words stream off to the left" />
             <div className="tt-group">Discipline</div>
             <Tile icon="①" label="One word" state={oneWord ? 'on' : 'off'} on={oneWord}
               onClick={() => patchCfg({ oneWord: !oneWord })}
@@ -887,13 +927,14 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
       {/* The passage hides on the done screen so the results (chart included) get the room —
           otherwise they overflow beneath the bottom dock, which also swallows chart hovers. */}
-      <div className="tr-viewport" style={{ display: phase === 'done' ? 'none' : undefined, ...(settings.fontFamily ? { fontFamily: settings.fontFamily } : null) }}>
+      <div className={`tr-viewport${ticker ? ' ticker-vp' : ''}`} style={{ display: phase === 'done' ? 'none' : undefined, ...(settings.fontFamily ? { fontFamily: settings.fontFamily } : null) }}>
         {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{count}</div>}
         <div className={`tr-cursor${phase === 'running' ? '' : ' waiting'}`} ref={caretRef} style={{ opacity: phase === 'done' ? 0 : 1 }} />
-        <div className={`tr-lines${oneWord ? ' one-word' : ''}${blind ? ' blind' : ''}`} ref={linesRef}>
+        <div className={`tr-lines${oneWord ? ' one-word' : ''}${blind ? ' blind' : ''}${ticker ? ' ticker' : ''}`} ref={linesRef}>
           {passage.map((w, i) => {
             if (oneWord && i !== pos) return null; // one-word mode shows only the current word
             if (i > pos + PENDING_WINDOW) return null; // far tail is below the fold — skip its DOM
+            if (ticker && i < pos - 12) return null; // ticker: far-committed words have slid off left
             const vc = (i === voicePos ? ' voice' : '') // word the racing voice is speaking…
               + (i === pacePos && phase === 'running' && paceWpmVal > 0 ? ' pace' : ''); // …and the 👻 ghost's word
             // Display-only extras: fully-skipped decorative tokens ahead of this word render as
