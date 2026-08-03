@@ -1729,6 +1729,13 @@
    the pane's gutter grid. */
 .orp-preview { display: block; margin: 2px 0 10px; padding: 8px 10px; border: 1px solid var(--divider); border-radius: 6px; font-size: 15px; }
 .line-row .bionic-bold { font-weight: 700; }
+/* Highlight algorithms (Tab Settings → Lines): the algorithm picks WHICH words flag (hl-mark) or
+   fade (hl-fade); the pane-level hl-s-* class picks HOW a flagged word looks. */
+.line-row .word.hl-fade { opacity: 0.55; }
+.hl-s-bold .line-row .word.hl-mark { font-weight: 700; }
+.hl-s-tint .line-row .word.hl-mark { color: var(--lines-hl, var(--toggle-active-bg, #3a86ff)); }
+.hl-s-underline .line-row .word.hl-mark { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1.5px; text-decoration-color: var(--lines-hl, var(--toggle-active-bg, #3a86ff)); }
+.hl-s-glow .line-row .word.hl-mark { text-shadow: 0 0 7px var(--lines-hl, var(--toggle-active-bg, #3a86ff)); }
 
 /* "Just entered the page" flash: a line gets one of these when it first scrolls into view, easing
    back to the normal style over the configured seconds (--entry-secs). One-shot; see LinePane Row.
@@ -3294,6 +3301,12 @@
 .tr-snd select { font-size: 11px; padding: 1px 4px; }
 .tr-snd-tick { gap: 5px; font-weight: 600; color: var(--menu-fg); }
 .tr-hint { font-size: 12px; color: var(--status-fg); text-align: center; }
+/* Armed-Esc toast: a stray Esc mid-run arms instead of killing; this names the second press. */
+.tr-esc-hint {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 3;
+  font-size: 12px; padding: 4px 12px; border-radius: 12px; pointer-events: none;
+  background: color-mix(in srgb, var(--menu-fg) 12%, var(--pane-bg)); border: 1px solid var(--divider);
+}
 /* Typing error log: every imperfect commit as target → typed; reuses the run's .trc verdict colours. */
 .tr-errlog {
   border: 1px solid var(--divider); border-radius: 6px; margin: 6px auto; padding: 4px 10px 6px;

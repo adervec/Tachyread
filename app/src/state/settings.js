@@ -81,6 +81,9 @@ export function defaultFileSettings() {
     orpStyles: ['Bold'], // combinable Lines-pane ORP looks (see SettingsDialog ORP_STYLES)
     orpLargerPct: 18, // how much bigger the 'Larger' ORP style draws the letter (+% of the text size)
     orpFont: '', // ORP letter font in the Lines pane ('' = same as the text; a different font re-wraps lines)
+    highlightAlgo: 'off', // research-backed word-emphasis rule for the Lines pane (see HIGHLIGHT_ALGOS)
+    highlightStyle: 'bold', // how flagged words render: bold | tint | underline | glow
+    highlightColor: '', // tint/glow colour ('' = theme accent)
     statsChip: {}, // stats-chip block toggles (see STATS_CHIP_ITEMS; {} = the default layout)
     orpHorizontalPercent: 0.5,
     rsvpFocus: 'none', // eye-focuser at the ORP: none | fisheye | pulse | converge

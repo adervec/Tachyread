@@ -8,6 +8,7 @@ import { DEFAULT_METRONOME } from '../engine/metronome.js';
 import { LINE_SOUNDS, playLineSound } from '../features/clickSound.js';
 import { FACE_STYLES } from '../components/faceDecor3d.js';
 import { STATS_CHIP_ITEMS } from '../components/ReadingStats.jsx';
+import { HIGHLIGHT_ALGOS, HIGHLIGHT_STYLES, highlightAlgoById } from '../features/highlightAlgos.js';
 
 const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel'];
 // Reading-pointer options archived with its Settings section (see below). Restore alongside it.
@@ -351,6 +352,30 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
         />
         <span className="range-val">{Math.round((s.orpHorizontalPercent ?? 0.5) * 100)}%</span>
       </Field>
+
+      <Section>Highlight algorithm (Lines)</Section>
+      <Field label="Algorithm">
+        <select value={s.highlightAlgo || 'off'} onChange={(e) => patch({ highlightAlgo: e.target.value })}>
+          {HIGHLIGHT_ALGOS.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+        </select>
+      </Field>
+      {(s.highlightAlgo || 'off') !== 'off' && (
+        <>
+          <p className="settings-note">{highlightAlgoById(s.highlightAlgo).desc}</p>
+          <Field label="Flagged-word style">
+            <select value={s.highlightStyle || 'bold'} onChange={(e) => patch({ highlightStyle: e.target.value })}>
+              {HIGHLIGHT_STYLES.map((st) => <option key={st.id} value={st.id}>{st.label}</option>)}
+            </select>
+            {['tint', 'underline', 'glow'].includes(s.highlightStyle || 'bold') && (
+              <>
+                {' '}<input type="color" value={s.highlightColor || '#3a86ff'} title="Highlight colour"
+                  onChange={(e) => patch({ highlightColor: e.target.value })} />
+                <button onClick={() => patch({ highlightColor: '' })} title="Back to the theme accent">↺</button>
+              </>
+            )}
+          </Field>
+        </>
+      )}
       <Field label="Eye focuser at the ORP">
         <select value={s.rsvpFocus || 'none'} onChange={(e) => patch({ rsvpFocus: e.target.value })}>
           <option value="none">None</option>

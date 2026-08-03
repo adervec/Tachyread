@@ -1,6 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { List, useDynamicRowHeight, useListRef } from 'react-window';
 import { ReadStatus, orpIndex, getLineIndex, getParagraphRange, WS_SPLIT, isWsRun } from '../document/readerDocument.js';
+import { hlWordClass, endsSentence } from '../features/highlightAlgos.js';
 import { getTocEntries } from '../document/toc.js';
 import { buildWallDoc, WALL_SEP } from '../document/wallText.js';
 import { resolveHeadingPack } from '../state/themes.js';
@@ -64,6 +65,10 @@ function renderWords(line, opts) {
   let wordIdx = line.startWordIndex;
   const elems = [];
   let runIdx = 0;
+  // Sentence tracking for the 'sentence' highlight algorithm: the first word of this line starts a
+  // sentence if the previous line ended one (or this line starts a paragraph); after that, any word
+  // following a terminator does.
+  let atSentenceStart = !!opts.hlSentenceLead;
   for (const rawTok of words) {
     if (rawTok === '' || isWsRun(rawTok)) {
       elems.push(<span key={runIdx++}>{rawTok}</span>);
@@ -109,6 +114,12 @@ function renderWords(line, opts) {
     const styleClasses = isCurrentWord && Array.isArray(opts.currentWordStyles)
       ? opts.currentWordStyles.map((st) => `style-${st}`)
       : [];
+    // Highlight algorithm (Tab Settings): a research-backed class per word — the current word's
+    // own styling keeps priority, so the algorithm skips it.
+    const hlCls = opts.hlAlgo && opts.hlAlgo !== 'off' && !isCurrentWord
+      ? hlWordClass(tok, opts.hlAlgo, { sentenceStart: atSentenceStart })
+      : null;
+    atSentenceStart = endsSentence(rawTok);
     const cls = [
       'word',
       isCurrentWord ? 'current' : '',
@@ -116,6 +127,7 @@ function renderWords(line, opts) {
       ...(isDone ? ['done', ...opts.doneStyles.map((st) => `done-${st}`)] : []),
       isProperName ? 'proper-name' : '',
       hidden ? 'hidden-word' : '',
+      hlCls || '',
     ].filter(Boolean).join(' ');
     const cwStyle = isCurrentWord && opts.cwFontDelta ? { fontSize: `calc(1em + ${opts.cwFontDelta}pt)` } : undefined;
     elems.push(<span key={runIdx++} className={cls} style={cwStyle}>{inner}</span>);
@@ -259,6 +271,11 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
               hideBeyond: ctx.hideBeyond,
               swaps: dsettings.swaps,
               cwFontDelta: dsettings.currentWordFontDelta,
+              hlAlgo: dsettings.hlAlgo,
+              // Sentence-start seed: a paragraph's first line always starts one; otherwise the
+              // previous line must have ended a sentence.
+              hlSentenceLead: dsettings.hlAlgo === 'sentence'
+                && (index === 0 || doc.lines[index - 1]?.isEmpty || endsSentence(doc.lines[index - 1]?.text)),
             });
             if (!parallel) return words;
             return (
@@ -577,6 +594,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       doneWordStyles: Array.isArray(settings.doneWordStyles) ? settings.doneWordStyles : [],
       currentWordFontDelta: settings.currentWordFontDelta || 0,
       swaps: swapLookup(settings.wordSwaps),
+      hlAlgo: settings.highlightAlgo || 'off',
     }),
     [
       settings.blurLinesBefore, settings.blurLinesAfter, settings.blurGradient, settings.obscureMode, settings.parallelTranslation, settings.altSentenceColors,
@@ -584,6 +602,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       settings.textAlignment, settings.showPointer, settings.pointerStyle, settings.pointerPlacement,
       settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP, settings.orpStyles,
       settings.currentWordStyles, settings.currentWordStyle, settings.doneWordStyles, settings.currentWordFontDelta, settings.wordSwaps, wall,
+      settings.highlightAlgo,
     ]
   );
 
@@ -1109,9 +1128,12 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   // own. CSS-var-driven so the .orp-* rules stay static (fallbacks preserve pre-setting tabs).
   if (settings.orpLargerPct != null) paneStyle['--orp-larger'] = `${(100 + settings.orpLargerPct) / 100}em`;
   if (settings.orpFont) paneStyle['--orp-font'] = settings.orpFont;
+  // Highlight algorithm styling: the pane-level hl-s-* class decides HOW hl-mark words look.
+  const hlOn = settings.highlightAlgo && settings.highlightAlgo !== 'off';
+  if (hlOn && settings.highlightColor) paneStyle['--lines-hl'] = settings.highlightColor;
   return (
     <div
-      className={`line-pane${headingPack ? ` hsp-${headingPack}` : ''}${settings.currentLineHighlight === false ? ' no-curline' : ''}`}
+      className={`line-pane${headingPack ? ` hsp-${headingPack}` : ''}${settings.currentLineHighlight === false ? ' no-curline' : ''}${hlOn ? ` hl-s-${settings.highlightStyle || 'bold'}` : ''}`}
       ref={paneVisRef}
       style={Object.keys(paneStyle).length ? paneStyle : undefined}
     >

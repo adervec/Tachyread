@@ -2636,7 +2636,26 @@ function AppInner() {
                 key={planState ? `plan-${planState.step}-${planState.set}` : 'single'}
                 tab={activeTab}
                 onPatch={(p) => patchSettings(activeTab.id, p)}
-                onExitDiscard={planState ? exitPlan : () => patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } })}
+                onExitDiscard={planState ? exitPlan : (wi) => {
+                  // Even a discarding exit (Esc / Discard) keeps the typed words COUNTED as read —
+                  // tracker range + Lines fills — it just doesn't move the reading position the
+                  // way "Continue" does. Quitting typing never damages progress.
+                  const cur = activeTab.settings.wordIndex;
+                  if (Number.isFinite(wi) && wi > cur && !incognitoRef.current) {
+                    activeTab.tracker?.markRangeRead(cur, wi, 'typing');
+                    const l0 = getLineIndex(activeTab.doc, cur);
+                    const l1 = getLineIndex(activeTab.doc, Math.min(wi, activeTab.doc.words.length - 1));
+                    for (let li = l0; li < l1; li++) {
+                      activeTab.sessionLinesRead.add(li);
+                      activeTab.readLinesAllTime.add(li);
+                    }
+                    // Fresh Set identities: the row memo compares these by reference, and unlike
+                    // "Continue" nothing moves the cursor here to invalidate the filled rows.
+                    activeTab.sessionLinesRead = new Set(activeTab.sessionLinesRead);
+                    activeTab.readLinesAllTime = new Set(activeTab.readLinesAllTime);
+                  }
+                  patchSettings(activeTab.id, { typing: { ...activeTab.settings.typing, enabled: false } });
+                }}
                 onExitContinue={planState ? undefined : (wi) => {
                   // Typed-through text counts as read, tagged as typing (no pace/efficiency credit).
                   const cur = activeTab.settings.wordIndex;
