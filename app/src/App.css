@@ -3300,6 +3300,20 @@
 .tr-snd > span { white-space: nowrap; }
 .tr-snd select { font-size: 11px; padding: 1px 4px; }
 .tr-snd-tick { gap: 5px; font-weight: 600; color: var(--menu-fg); }
+/* Typing completion bar: clock (timed) / words (word runs) / passage (endless), with the pace
+   ghost's position as a tick so you can see whether you're ahead of it. */
+.tr-progress {
+  position: relative; height: 16px; border-radius: 8px; overflow: hidden;
+  background: color-mix(in srgb, var(--menu-fg) 8%, transparent); border: 1px solid var(--divider);
+  width: 100%; max-width: 820px; align-self: center; flex: 0 0 auto;
+}
+.tr-progress-fill { position: absolute; inset: 0 auto 0 0; background: var(--toggle-active-bg, #3a86ff); opacity: 0.55; transition: width 0.25s ease-out; }
+.tr-progress-ghost { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--status-fg); opacity: 0.8; transform: translateX(-1px); }
+.tr-progress-label {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 10.5px; letter-spacing: 0.04em; color: var(--menu-fg); pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
 .tr-hint { font-size: 12px; color: var(--status-fg); text-align: center; }
 /* Armed-Esc toast: a stray Esc mid-run arms instead of killing; this names the second press. */
 .tr-esc-hint {
