@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import {
   runProgress,
+  penaltyRewind,
   consistencyPct, pbFlags, bestNet, typingStreak, problemWords, reviewPassage,
   keyFinger, aggregateKeys, fingerStats, buildCum, paceChars, paceWordIndex, FINGERS,
 } from './typingUpgrades.js';
@@ -118,5 +119,23 @@ assert.equal(runProgress('endless', { pos: 30, total: 120 }), 0.25, 'endless mea
 assert.equal(runProgress('endless', { pos: 5, total: 0 }), 0, 'empty passage is safe');
 assert.equal(runProgress('endless', {}), 0);
 assert.equal(runProgress('seconds'), 0, 'missing opts never throw');
+
+// penaltyRewind: setback mode erases committed words when one is mistyped.
+const R = [{ perfect: true }, { perfect: true }, { perfect: false }, { perfect: true }, { perfect: false }];
+assert.deepEqual(penaltyRewind(R, 5, 0), { pos: 5, dropped: 0, perfectLost: 0, kept: R }, 'off = untouched');
+const one = penaltyRewind(R, 5, 1);
+assert.equal(one.pos, 4, 'one-word penalty erases just the bad word');
+assert.equal(one.dropped, 1);
+assert.equal(one.perfectLost, 0, 'the erased word was the imperfect one');
+assert.equal(one.kept.length, 4);
+const three = penaltyRewind(R, 5, 3);
+assert.equal(three.pos, 2);
+assert.equal(three.dropped, 3);
+assert.equal(three.perfectLost, 1, 'a perfect word was among the erased');
+const deep = penaltyRewind(R, 2, 9);
+assert.equal(deep.pos, 0, 'never rewinds past the start');
+assert.equal(deep.dropped, 2);
+assert.deepEqual(deep.kept, []);
+assert.equal(penaltyRewind([], 0, 3).pos, 0, 'empty run is safe');
 
 console.log('typingUpgrades: all checks passed');

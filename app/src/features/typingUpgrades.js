@@ -175,3 +175,20 @@ export function runProgress(mode, { secs = 0, limit = 0, words = 0, pos = 0, tot
       : (total > 0 ? pos / total : 0);
   return Number.isFinite(frac) ? Math.max(0, Math.min(1, frac)) : 0;
 }
+
+// SETBACK mode: a mistyped word erases committed progress. Given the results so far and the
+// position just after the bad commit, work out where the run rewinds to and what the word/perfect
+// tallies lose. Char stats are deliberately NOT rewound — you really did type those keys (same
+// model as monkeytype-style backspace-into-the-previous-word).
+export function penaltyRewind(results, pos, words) {
+  const n = Math.max(0, Math.floor(words || 0));
+  if (!n) return { pos, dropped: 0, perfectLost: 0, kept: results };
+  const target = Math.max(0, pos - n);
+  const lost = results.slice(target, pos);
+  return {
+    pos: target,
+    dropped: lost.length,
+    perfectLost: lost.filter((r) => r?.perfect).length,
+    kept: results.slice(0, target),
+  };
+}
