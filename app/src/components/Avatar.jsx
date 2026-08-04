@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Face from './Face.jsx';
 import { decor3d } from './faceDecor3d.js';
+import { webglAvailable } from './webgl.js';
 import { subscribeHandPose } from '../features/avatarBus.js';
 
 // An AVATAR = a reader face plus its theatrics: optional FLOATING HANDS — disembodied cartoon
@@ -54,17 +55,21 @@ export default function Avatar({
     return () => clearInterval(id);
   }, [stage]);
 
-  // The gloves wear the avatar's own palette, so a Frog gets green hands and a Robot steel ones.
+  // The hands wear the avatar's own palette, so a Frog gets green hands and a Robot steel ones.
   const pal = decor3d(faceStyle) || {};
   const handW = Math.round(size * 0.3);
+  // Real articulated 3D hands live in the WebGL scene (Face → FaceHead → Hands3D). The flat SVG
+  // gloves only stand in where that scene can't render: the typing overlay and WebGL-less devices.
+  const svgPath = forceSvg || !webglAvailable();
 
   return (
     <div className={`avatar av-${activity} av-${stage}${speaking ? ' av-speaking' : ''}`} style={{ position: 'relative' }}>
       <Face
         wpm={wpm} lineProgress={lineProgress} faceStyle={faceStyle} artStyle={artStyle} size={size}
         activity={activity} stage={stage} speaking={speaking} irisOverride={irisOverride} forceSvg={forceSvg}
+        hands={hands} handPose={pose}
       />
-      {hands && stage !== 'asleep' && (
+      {hands && svgPath && stage !== 'asleep' && (
         <>
           <span className="av-hand av-hand-l" style={{ width: handW }} aria-hidden="true"><Mitt skin={pal.skin || '#ffd5aa'} stroke={pal.stroke || '#9b643c'} /></span>
           <span className={`av-hand av-hand-r${pose ? ' av-hand-pose' : ''}`} style={{ width: handW }} aria-hidden="true">
