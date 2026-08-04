@@ -4,6 +4,7 @@ import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import { faceExpression } from '../engine/faceExpression.js';
 import { decor3d, artMaterial } from './faceDecor3d.js';
+import Hands3D from './Hands3D.jsx';
 
 // The 3D reader head. The shared eye/brow/lid/mouth rig is animated every frame from
 // faceExpression(wpm) (the same pure model the 2D face used), and the whole head yaws to
@@ -74,6 +75,7 @@ function Part({ part, mat, neon }) {
 export default function FaceHead({
   wpm = 0, lineProgress = 0.5, faceStyle = 'Man', artStyle = 'Cartoon',
   activity = null, stage = 'awake', speaking = false, irisOverride = null,
+  hands = false, handPose = null,
 }) {
   const d = useMemo(() => decor3d(faceStyle), [faceStyle]);
   const baseMat = useMemo(() => artMaterial(artStyle), [artStyle]);
@@ -249,6 +251,8 @@ export default function FaceHead({
           <Part key={`x${i}`} part={part} mat={baseMat} neon={neon} />
         ))}
       </group>
+      {/* Floating 3D hands — outside the head group so the head's yaw/nod doesn't drag them. */}
+      {hands && <Hands3D skin={d.skin} stroke={d.stroke} pose={handPose} activity={activity} stage={stage} />}
     </>
   );
 }

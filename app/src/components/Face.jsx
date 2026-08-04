@@ -12,8 +12,10 @@ import { webglAvailable } from './webgl.js';
 export default function Face({
   wpm = 0, lineProgress = 0.5, faceStyle = 'Man', artStyle = 'Cartoon', size = 130,
   activity = null, stage = 'awake', speaking = false, irisOverride = null, forceSvg = false,
+  hands = false, handPose = null,
 }) {
-  const w = Math.round((size * RIG.W) / RIG.H); // preserve the 130:165 aspect ratio
+  // Hands need horizontal room beside the head, so the 3D box widens when they're on.
+  const w = Math.round((size * (hands ? RIG.W * 1.9 : RIG.W)) / RIG.H);
   const extra = { activity, stage, speaking, irisOverride };
 
   // forceSvg: the typing overlay stacks ABOVE the shared WebGL canvas, so a <View> face would
@@ -24,10 +26,10 @@ export default function Face({
 
   return (
     <View
-      className={`reader-face-3d art-${artStyle.toLowerCase()}`}
+      className={`reader-face-3d art-${artStyle.toLowerCase()}${hands ? ' with-hands' : ''}`}
       style={{ width: w, height: size }}
     >
-      <FaceHead wpm={wpm} lineProgress={lineProgress} faceStyle={faceStyle} artStyle={artStyle} {...extra} />
+      <FaceHead wpm={wpm} lineProgress={lineProgress} faceStyle={faceStyle} artStyle={artStyle} hands={hands} handPose={handPose} {...extra} />
     </View>
   );
 }
