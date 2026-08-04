@@ -9,7 +9,7 @@ import { createReadAloud } from '../features/readAloud.js';
 import { rateFromIndex } from '../features/tts.js';
 import { fmtTime } from '../features/dateFmt.js';
 import { allTypingRuns } from '../state/storage.js';
-import { consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress } from '../features/typingUpgrades.js';
+import { consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress, penaltyRewind } from '../features/typingUpgrades.js';
 import { typingEyeColor } from '../features/avatarMood.js';
 import Avatar from './Avatar.jsx';
 
@@ -128,25 +128,33 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const stopOnError = !!cfg.stopOnError; // a wrong key is refused (still costs an error) — accuracy discipline
   const confidence = !!cfg.confidence;   // no backspace — errors cost accuracy, not time
   const blind = !!cfg.blind;             // hide per-char verdicts while running; the numbers tell the tale at the end
+  const penaltyWords = Math.max(0, Math.min(9, Number(cfg.penaltyWords) || 0)); // setback mode: words erased per mistyped word
   // Display-only variants of the transforms (the REQUIRED typing is identical either way):
   const wantCaps = !!cfg.showCaps;         // under lowercase: show the capitals as written
   const wantGhosts = !!cfg.ghostSpecials;  // under no-special: show the stripped chars as dim auto-skipped ghosts
   const volume = cfg.soundVolume ?? 0.4;
   const sounds = { ...DEFAULT_SOUNDS, ...(cfg.sounds || {}) };
   const tickClock = !!cfg.tickClock;
-  const [showSounds, setShowSounds] = useState(false);
   // Play an event cue ('off' / falsy = silent).
   const ping = (id) => { if (id && id !== 'off') playLineSound(id, volume); };
   const setSound = (k, v) => patchCfg({ sounds: { ...sounds, [k]: v } });
   // One labelled sound dropdown for the on-screen panel; changing it previews the sound.
-  const soundRow = (label, k) => (
-    <label className="tr-snd" key={k}>
-      <span>{label}</span>
-      <select value={sounds[k]} onChange={(e) => { setSound(k, e.target.value); if (e.target.value !== 'off') playLineSound(e.target.value, volume); }}>
-        <option value="off">Off</option>
-        {TYPING_SOUNDS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-      </select>
-    </label>
+  // One sound as a sidebar tile: icon, event name, and a compact picker whose choice previews
+  // itself. (21 sounds is far too many to cycle through with a click, so the tile keeps a select.)
+  const soundRow = (icon, label, k) => (
+    <div className={`tt-tile tt-sound${sounds[k] && sounds[k] !== 'off' ? ' on' : ''}`} key={k}>
+      <span className="tt-ico" aria-hidden="true">{icon}</span>
+      <span className="tt-txt">
+        <span className="tt-lbl">{label}</span>
+        <select
+          className="tt-pick" value={sounds[k]} disabled={locked} aria-label={`${label} sound`}
+          onChange={(e) => { setSound(k, e.target.value); if (e.target.value !== 'off') playLineSound(e.target.value, volume); }}
+        >
+          <option value="off">off</option>
+          {TYPING_SOUNDS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+      </span>
+    </div>
   );
 
   // Reading position captured once, when typing opened. Discard returns here.
@@ -249,6 +257,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const escArmRef = useRef(0);
   const escArmTimer = useRef(0);
   const [escArmed, setEscArmed] = useState(false);
+  // Setback flash: names how much progress a mistake just cost.
+  const [penalty, setPenalty] = useState(null);
+  const penaltyTimer = useRef(0);
   const lineH = useRef(0);
   // Voice-race state. posRef mirrors `pos` so the speech callbacks (which close over a stale render)
   // can read your live typing position; the rest track the racing voice.
@@ -570,6 +581,26 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     resultsRef.current = [...resultsRef.current, entry];
     setResults((r) => [...r, entry]);
     setBuf('');
+    // SETBACK mode: a mistyped word erases committed progress — you're knocked back and have to
+    // retype your way forward. Runs BEFORE the limit checks so a penalised word can't also end
+    // the run, and the char stats stand (you really typed those keys).
+    if (penaltyWords > 0 && !perfect) {
+      const back = penaltyRewind(resultsRef.current, pos + 1, penaltyWords);
+      if (back.dropped > 0) {
+        resultsRef.current = back.kept;
+        setResults(back.kept);
+        setPos(back.pos);
+        posRef.current = back.pos;
+        s.words = Math.max(0, s.words - back.dropped);
+        s.perfect = Math.max(0, s.perfect - back.perfectLost);
+        lastGiRef.current = back.pos > 0 ? (prepared[back.pos - 1]?.gi ?? null) : null;
+        wordStartRef.current = 0;
+        setPenalty({ n: back.dropped, at: Date.now() });
+        clearTimeout(penaltyTimer.current);
+        penaltyTimer.current = setTimeout(() => setPenalty(null), 1200);
+        return;
+      }
+    }
     const nextPos = pos + 1;
     setPos(nextPos);
     if (mode === 'words' && s.words >= limit) { endRun(); return; }
@@ -880,37 +911,12 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               )}
             </>
           )}
-          <label className="tr-vol" title="Sound volume">🔊
-            <input type="range" min={0} max={1} step={0.05} value={volume}
-              onChange={(e) => patchCfg({ soundVolume: Number(e.target.value) })} />
-          </label>
-          <button type="button" className={showSounds ? 'toggle-on' : ''} title="Customize the typing sound effects"
-            onClick={() => setShowSounds((v) => !v)}>🎚 Sounds</button>
           {phase === 'idle' && <button className="toggle-on" onClick={beginCountdown} title="Start the run (Ready·Set·Go)">▶ Start</button>}
           {phase === 'running'
             ? <button className="toggle-on" onClick={endRun}>■ End run</button>
             : <button onClick={() => onExitDiscard?.(discardCreditWi())} title="Close typing — anything you typed still counts as read; only the reading position stays put">{plan ? 'Exit plan' : 'Discard'}</button>}
         </div>
       </div>
-
-      {showSounds && (
-        <div className="tr-sounds">
-          {soundRow('Char ✓', 'charCorrect')}
-          {soundRow('Char ✗', 'charWrong')}
-          {soundRow('Word ✓', 'wordPerfect')}
-          {soundRow('Word ✗', 'wordError')}
-          {isDocMode && soundRow('Line ✓', 'linePerfect')}
-          {isDocMode && soundRow('Sentence ✓', 'sentencePerfect')}
-          {isDocMode && soundRow('Paragraph ✓', 'paragraphPerfect')}
-          {mode === 'seconds' && (
-            <label className="tr-snd tr-snd-tick" title="Ticking clock that speeds up in the final seconds">
-              <input type="checkbox" checked={tickClock}
-                onChange={(e) => patchCfg({ tickClock: e.target.checked })} />
-              <span>⏱ Countdown tick</span>
-            </label>
-          )}
-        </div>
-      )}
 
       {/* Completion bar: how much of THIS run is done — the clock for timed runs, the word count
           for word runs, the passage for endless. The pace ghost's position rides along as a tick
@@ -958,6 +964,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             <Tile icon="🙈" label="Blind" state={blind ? 'on' : 'off'} on={blind}
               onClick={() => patchCfg({ blind: !blind })} disabled={locked}
               title="No per-character verdicts while you type — trust your fingers and let the numbers tell the tale at the end" />
+            <Tile
+              icon="💥" label="Setback" state={penaltyWords ? `−${penaltyWords} word${penaltyWords > 1 ? 's' : ''}` : 'off'}
+              on={penaltyWords > 0} disabled={locked}
+              onClick={() => patchCfg({ penaltyWords: { 0: 1, 1: 3, 3: 5 }[penaltyWords] ?? 0 })}
+              title="Mistakes ERASE progress: a mistyped word knocks you back and you retype your way forward. Click to cycle off → 1 → 3 → 5 words." />
             <div className="tt-group">Extras</div>
             <Tile icon="🏁" label="Race voice" state={raceVoice ? 'on' : 'off'} on={raceVoice}
               onClick={() => patchCfg({ raceVoice: !raceVoice })} disabled={locked}
@@ -972,6 +983,29 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             <Tile icon="📋" label="Error log" state={cfg.errorLog ? 'on' : 'off'} on={!!cfg.errorLog}
               onClick={() => patchCfg({ errorLog: !cfg.errorLog })} disabled={locked}
               title="A separate area listing every error entry as it happens — the target word vs what you actually typed" />
+            <div className="tt-group">Sound</div>
+            <div className="tt-tile tt-vol" title="Master volume for the typing sound effects">
+              <span className="tt-ico" aria-hidden="true">{volume > 0 ? '🔊' : '🔇'}</span>
+              <span className="tt-txt">
+                <span className="tt-lbl">Volume</span>
+                <input
+                  type="range" min={0} max={1} step={0.05} value={volume} aria-label="Sound volume"
+                  onChange={(e) => patchCfg({ soundVolume: Number(e.target.value) })}
+                />
+              </span>
+            </div>
+            {soundRow('⌨', 'Key ✓', 'charCorrect')}
+            {soundRow('✗', 'Key ✗', 'charWrong')}
+            {soundRow('✔', 'Word ✓', 'wordPerfect')}
+            {soundRow('⚠', 'Word ✗', 'wordError')}
+            {isDocMode && soundRow('↩', 'Line ✓', 'linePerfect')}
+            {isDocMode && soundRow('•', 'Sentence ✓', 'sentencePerfect')}
+            {isDocMode && soundRow('¶', 'Paragraph ✓', 'paragraphPerfect')}
+            {mode === 'seconds' && (
+              <Tile icon="⏱" label="Countdown tick" state={tickClock ? 'on' : 'off'} on={tickClock} disabled={locked}
+                onClick={() => patchCfg({ tickClock: !tickClock })}
+                title="Ticking clock that speeds up in the final seconds" />
+            )}
           </aside>
         )}
         <div className="tr-main">
@@ -982,6 +1016,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       <div className={`tr-viewport${ticker ? ' ticker-vp' : ''}`} style={{ display: phase === 'done' ? 'none' : undefined, ...(settings.fontFamily ? { fontFamily: settings.fontFamily } : null) }}>
         {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{count}</div>}
         {escArmed && phase === 'running' && <div className="tr-esc-hint" role="status">Esc again to end the run</div>}
+        {penalty && <div className="tr-penalty" role="status" key={penalty.at}>💥 −{penalty.n} word{penalty.n > 1 ? 's' : ''}</div>}
         <div className={`tr-cursor${phase === 'running' ? '' : ' waiting'}`} ref={caretRef} style={{ opacity: phase === 'done' ? 0 : 1 }} />
         <div className={`tr-lines${oneWord ? ' one-word' : ''}${blind ? ' blind' : ''}${ticker ? ' ticker' : ''}`} ref={linesRef}>
           {passage.map((w, i) => {

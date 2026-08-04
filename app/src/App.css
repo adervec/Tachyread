@@ -3101,6 +3101,30 @@
 .tt-lbl { font-size: 12px; font-weight: 600; }
 .tt-state { font-size: 10px; opacity: 0.75; }
 .tt-wpm { width: 74px; margin: 0 0 2px 36px; }
+/* Sound + volume tiles: same tile chrome, but the control lives inside where the state caption
+   sits (21 sounds is far too many to cycle with a click). */
+.tt-sound, .tt-vol { cursor: default; }
+.tt-sound .tt-txt, .tt-vol .tt-txt { flex: 1 1 auto; gap: 2px; }
+.tt-pick {
+  font-size: 10.5px; padding: 1px 4px; max-width: 100%;
+  background: var(--input-bg); color: var(--input-fg); border: 1px solid var(--input-border); border-radius: 4px;
+}
+.tt-sound.on .tt-pick { background: color-mix(in srgb, var(--toggle-active-fg) 92%, transparent); color: #1a1a1a; border-color: transparent; }
+.tt-vol input[type='range'] { width: 100%; margin: 0; }
+/* Setback flash: names the progress a mistake just cost. */
+.tr-penalty {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 4;
+  font-size: 13px; font-weight: 700; padding: 4px 14px; border-radius: 12px; pointer-events: none;
+  background: color-mix(in srgb, #e05252 88%, transparent); color: #fff;
+  animation: trPenalty 1.2s ease-out forwards;
+}
+@keyframes trPenalty {
+  0% { opacity: 0; transform: translate(-50%, 6px) scale(0.85); }
+  15% { opacity: 1; transform: translate(-50%, 0) scale(1.08); }
+  70% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -8px) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .tr-penalty { animation: none; } }
 @media (max-width: 760px) {
   .tr-body { flex-direction: column; }
   .tr-side { width: auto; flex: 0 0 auto; flex-direction: row; flex-wrap: wrap; overflow: visible; }
