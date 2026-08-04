@@ -9,7 +9,7 @@ import { createReadAloud } from '../features/readAloud.js';
 import { rateFromIndex } from '../features/tts.js';
 import { fmtTime } from '../features/dateFmt.js';
 import { allTypingRuns } from '../state/storage.js';
-import { consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex } from '../features/typingUpgrades.js';
+import { consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress } from '../features/typingUpgrades.js';
 import { typingEyeColor } from '../features/avatarMood.js';
 import Avatar from './Avatar.jsx';
 
@@ -911,6 +911,23 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           )}
         </div>
       )}
+
+      {/* Completion bar: how much of THIS run is done — the clock for timed runs, the word count
+          for word runs, the passage for endless. The pace ghost's position rides along as a tick
+          so you can see at a glance whether you're ahead of it. */}
+      {phase !== 'done' && (() => {
+        const frac = runProgress(mode, { secs: live.secs, limit, words: stats.current.words, pos, total: passage.length });
+        const ghost = phase === 'running' && paceWpmVal > 0 && passage.length
+          ? Math.max(0, Math.min(1, (mode === 'seconds' ? frac : pacePos / passage.length)))
+          : null;
+        return (
+          <div className="tr-progress" title={`${progressLabel} — ${Math.round(frac * 100)}% complete`}>
+            <div className="tr-progress-fill" style={{ width: `${frac * 100}%` }} />
+            {ghost != null && mode !== 'seconds' && <span className="tr-progress-ghost" style={{ left: `${ghost * 100}%` }} aria-hidden="true" />}
+            <span className="tr-progress-label">{progressLabel} · {Math.round(frac * 100)}%</span>
+          </div>
+        );
+      })()}
 
       <div className="tr-body">
         {sideVisible && (

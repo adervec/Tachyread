@@ -2,6 +2,7 @@
 // profiles, pace-caret math). Run: node src/features/typingUpgrades.test.mjs
 import assert from 'node:assert/strict';
 import {
+  runProgress,
   consistencyPct, pbFlags, bestNet, typingStreak, problemWords, reviewPassage,
   keyFinger, aggregateKeys, fingerStats, buildCum, paceChars, paceWordIndex, FINGERS,
 } from './typingUpgrades.js';
@@ -106,5 +107,16 @@ assert.equal(paceWordIndex(cum, 4.5), 1, 'past word 0’s span → word 1');
 assert.equal(paceWordIndex(cum, 999), 2, 'parks on the last word');
 assert.equal(Math.round(paceChars(60, 10)), 50, '60wpm = 300 chars/min = 50 chars in 10s');
 assert.equal(paceChars(60, 0), 0);
+
+// runProgress: each run mode measures the thing that actually ends it, clamped to 0..1.
+assert.equal(runProgress('seconds', { secs: 15, limit: 60 }), 0.25);
+assert.equal(runProgress('seconds', { secs: 90, limit: 60 }), 1, 'overrun clamps');
+assert.equal(runProgress('seconds', { secs: 15, limit: 0 }), 0, 'no limit → no progress, never NaN');
+assert.equal(runProgress('words', { words: 25, limit: 50 }), 0.5);
+assert.equal(runProgress('words', { words: 25, limit: 50, secs: 999 }), 0.5, 'word runs ignore the clock');
+assert.equal(runProgress('endless', { pos: 30, total: 120 }), 0.25, 'endless measures the passage');
+assert.equal(runProgress('endless', { pos: 5, total: 0 }), 0, 'empty passage is safe');
+assert.equal(runProgress('endless', {}), 0);
+assert.equal(runProgress('seconds'), 0, 'missing opts never throw');
 
 console.log('typingUpgrades: all checks passed');

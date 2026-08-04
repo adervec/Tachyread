@@ -165,3 +165,13 @@ export function paceWordIndex(cum, chars) {
   for (let i = 0; i < cum.length; i++) if (chars < cum[i]) return i;
   return cum.length - 1;
 }
+
+// Completion progress of a run, 0..1 — drives the typing progress bar. Timed runs measure the
+// clock, word runs the committed count, and ENDLESS runs (no limit at all) measure how far
+// through the loaded passage you've typed, so the bar still means something.
+export function runProgress(mode, { secs = 0, limit = 0, words = 0, pos = 0, total = 0 } = {}) {
+  const frac = mode === 'seconds' ? (limit > 0 ? secs / limit : 0)
+    : mode === 'words' ? (limit > 0 ? words / limit : 0)
+      : (total > 0 ? pos / total : 0);
+  return Number.isFinite(frac) ? Math.max(0, Math.min(1, frac)) : 0;
+}

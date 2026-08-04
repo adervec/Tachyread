@@ -4,6 +4,7 @@ import FaceSVG from '../components/FaceSVG.jsx';
 import FacePreview from '../components/FacePreview.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { FACE_STYLES } from '../components/faceDecor3d.js';
+import { FACE_WPM_MAX, FACE_TIER_LABELS, faceTier } from '../engine/faceExpression.js';
 
 const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel'];
 
@@ -105,8 +106,10 @@ export default function FaceLibraryDialog({ onClose }) {
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
         <span style={{ fontSize: 11, color: 'var(--status-fg)' }}>Preview WPM</span>
-        <input type="range" min={0} max={1100} step={10} value={wpm} onChange={(e) => setWpm(Number(e.target.value))} style={{ flex: 1 }} />
-        <span style={{ width: 44, textAlign: 'right' }}>{wpm}</span>
+        <input type="range" min={0} max={Math.round(FACE_WPM_MAX * 1.2)} step={10} value={wpm} onChange={(e) => setWpm(Number(e.target.value))} style={{ flex: 1 }} />
+        <span style={{ width: 96, textAlign: 'right' }} title={`Tier ${faceTier(wpm)} of 7 — the face is fully lit at ${FACE_WPM_MAX} wpm sustained`}>
+          {wpm} · {FACE_TIER_LABELS[faceTier(wpm)]}
+        </span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 10 }}>

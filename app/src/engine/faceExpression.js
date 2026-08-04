@@ -17,27 +17,31 @@ export const RIG = Object.freeze({
   MaxOffset: 10 - 4.5, // 5.5px pupil travel
 });
 
+// Tier bands are calibrated to REAL sustained reading, not the old 1000-WPM fantasy scale:
+// meta-analytic silent reading averages ~238 wpm for non-fiction and ~260 for fiction, with most
+// adults between ~175 and ~300 (Brysbaert 2019). So "average" sits at 260, and the top tier is a
+// genuinely exceptional — but attainable — 600 sustained, rather than a speed nobody holds.
+export const FACE_TIERS = [0, 120, 200, 260, 330, 400, 500, 600];
+export const FACE_TIER_LABELS = ['warming up', 'slow', 'building', 'average', 'brisk', 'fast', 'very fast', 'exceptional'];
+// The WPM at which the face is fully lit — the Avatar Library preview slider ranges a bit past it.
+export const FACE_WPM_MAX = FACE_TIERS[FACE_TIERS.length - 1];
+
 // Keyframes: [wpm, lidDroop, browOff, browArch, mouthCtrl, [r,g,b], glowRadius]
 // lidDroop 0=open..1=closed; browOff/Arch negative=raised; mouthCtrl negative=smile.
+// The wpm anchors are the tier thresholds, so each tier lands on its own expression step.
 const KF = [
-  [0, 0.78, +6, +2, +12, [110, 95, 60], 0],
-  [100, 0.6, +4, +1, +7, [120, 105, 65], 0],
-  [250, 0.4, +2, 0, +3, [110, 115, 75], 0],
-  [400, 0.2, 0, 0, 0, [90, 115, 85], 0],
-  [550, 0.07, -5, -3, -5, [190, 140, 30], 0],
-  [700, 0.02, -9, -5, -10, [70, 190, 90], 2],
-  [800, 0.0, -12, -6, -13, [66, 165, 245], 6],
-  [1000, 0.0, -14, -7, -15, [66, 165, 245], 6],
+  [FACE_TIERS[0], 0.78, +6, +2, +12, [110, 95, 60], 0],
+  [FACE_TIERS[1], 0.6, +4, +1, +7, [120, 105, 65], 0],
+  [FACE_TIERS[2], 0.4, +2, 0, +3, [110, 115, 75], 0],
+  [FACE_TIERS[3], 0.2, 0, 0, 0, [90, 115, 85], 0],
+  [FACE_TIERS[4], 0.07, -5, -3, -5, [190, 140, 30], 0],
+  [FACE_TIERS[5], 0.02, -9, -5, -10, [70, 190, 90], 2],
+  [FACE_TIERS[6], 0.0, -12, -6, -13, [66, 165, 245], 6],
+  [FACE_TIERS[7], 0.0, -14, -7, -15, [66, 165, 245], 6],
 ];
 
 export function faceTier(wpm) {
-  if (wpm >= 1000) return 7;
-  if (wpm >= 800) return 6;
-  if (wpm >= 700) return 5;
-  if (wpm >= 550) return 4;
-  if (wpm >= 400) return 3;
-  if (wpm >= 250) return 2;
-  if (wpm >= 100) return 1;
+  for (let t = FACE_TIERS.length - 1; t > 0; t--) if (wpm >= FACE_TIERS[t]) return t;
   return 0;
 }
 
