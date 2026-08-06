@@ -6,13 +6,20 @@
   "scope": "./",
   "id": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
   "background_color": "#161035",
   "theme_color": "#161035",
+  "categories": ["books", "education", "productivity"],
+  "launch_handler": { "client_mode": "focus-existing" },
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
     { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "screenshots": [
+    { "src": "shot-wide.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "Reading with live pacing and stats" },
+    { "src": "shot-narrow.png", "sizes": "720x1280", "type": "image/png", "form_factor": "narrow", "label": "Reading on a phone" }
   ]
 }
