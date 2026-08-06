@@ -105,6 +105,7 @@ const MENUS = {
   ],
   help: [
     { label: 'Help...', shortcut: 'F1', action: 'help' },
+    { label: 'Install as App...', action: 'install-pwa' },
     { label: 'About / Disclaimer...', action: 'disclaimer' },
   ],
 };

@@ -69,6 +69,7 @@ import RegressionDialog from './dialogs/RegressionDialog.jsx';
 import ProgressDetailDialog from './dialogs/ProgressDetailDialog.jsx';
 import { fmtTime, fmtDateTime } from './features/dateFmt.js';
 import { startCoworkScheduler } from './features/coworkScheduler.js';
+import { promptInstall, installState, installHelp, runningStandalone } from './features/pwaInstall.js';
 import DictationDialog from './dialogs/DictationDialog.jsx';
 import AttentionDialog from './dialogs/AttentionDialog.jsx';
 import AmbientDialog from './dialogs/AmbientDialog.jsx';
@@ -2152,6 +2153,16 @@ function AppInner() {
     if (action === 'cursor-manager') return openDialog({ kind: 'cursor-manager' });
     if (action === 'crosshairs') return openDialog({ kind: 'crosshairs' });
     if (action === 'bulk-add') return openDialog({ kind: 'bulk-add' });
+    if (action === 'install-pwa') {
+      // The browser owns installability; this just surfaces its prompt (and explains when there
+      // isn't one — already installed, or a browser that doesn't offer it).
+      if (runningStandalone()) return setStatus('✅ Tachyread is already running as an installed app.');
+      if (installState() !== 'ready') return setStatus(`ℹ ${installHelp()}`);
+      promptInstall().then((r) => setStatus(
+        r === 'accepted' ? '✅ Installing Tachyread…' : r === 'dismissed' ? 'Install cancelled.' : `ℹ ${installHelp()}`
+      ));
+      return undefined;
+    }
     if (action === 'disclaimer') return openDialog({ kind: 'disclaimer' });
     if (action === 'typing-progress') return openDialog({ kind: 'typing-progress' });
     if (action === 'typing-plans') return openDialog({ kind: 'typing-plan' });

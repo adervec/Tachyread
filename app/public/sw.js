@@ -5,7 +5,7 @@
 // cached app shell. Cross-origin requests (OCR engine CDN, Google sign-in, Drive) are left untouched
 // so nothing is cached or intercepted that shouldn't be.
 
-const VERSION = 'tachyread-v2';
+const VERSION = 'tachyread-v3';
 const BASE = new URL('./', self.location).pathname; // '/' in dev, '/Tachyread/' on Pages
 const SHELL = [
   BASE,
@@ -46,6 +46,19 @@ self.addEventListener('fetch', (e) => {
         return net;
       } catch {
         return (await cache.match(req)) || (await cache.match(BASE + 'index.html')) || (await cache.match(BASE)) || Response.error();
+      }
+    }
+
+    // The MANIFEST and icons decide installability, so they are never served stale: a bad or
+    // outdated copy stuck in the cache silently breaks "Install app" until the cache is cleared.
+    // Network-first (cache only as an offline fallback) keeps Chrome reading the real thing.
+    if (/manifest\.webmanifest$|icon-\d+\.png$|icon-maskable-\d+\.png$/.test(new URL(req.url).pathname)) {
+      try {
+        const net = await fetch(req, { cache: 'no-cache' });
+        if (net && net.status === 200) cache.put(req, net.clone());
+        return net;
+      } catch {
+        return (await cache.match(req)) || Response.error();
       }
     }
 
