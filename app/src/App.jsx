@@ -2157,7 +2157,7 @@ function AppInner() {
       // The browser owns installability; this just surfaces its prompt (and explains when there
       // isn't one — already installed, or a browser that doesn't offer it).
       if (runningStandalone()) return setStatus('✅ Tachyread is already running as an installed app.');
-      if (installState() !== 'ready') return setStatus(`ℹ ${installHelp()}`);
+      if (installState() !== 'ready') setStatus('Checking with your browser…'); // promptInstall re-asks Chrome
       promptInstall().then((r) => setStatus(
         r === 'accepted' ? '✅ Installing Tachyread…' : r === 'dismissed' ? 'Install cancelled.' : `ℹ ${installHelp()}`
       ));

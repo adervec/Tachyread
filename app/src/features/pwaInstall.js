@@ -35,8 +35,27 @@ export function initPwaInstall() {
   window.addEventListener('appinstalled', () => { deferred = null; state = 'installed'; emit(); });
 }
 
+// Chrome runs its installability check once per page load and, if that pass says "no", never fires
+// beforeinstallprompt again — the app is then uninstallable for the whole session even after the
+// blocker is gone. Re-pointing <link rel=manifest> makes Chrome re-run the check, which re-fires the
+// event. Only used when the user actually asks to install.
+// ponytail: query-string cache-bust on the same manifest file — no new asset, and the service
+// worker still matches it (its rule tests the pathname, not the query).
+let probe = 0;
+function recheck(ms = 4000) {
+  const link = typeof document !== 'undefined' && document.querySelector('link[rel="manifest"]');
+  if (!link) return Promise.resolve();
+  link.href = `${link.href.split('?')[0]}?recheck=${++probe}`;
+  return new Promise((res) => {
+    const done = () => { clearTimeout(t); window.removeEventListener('beforeinstallprompt', done); res(); };
+    const t = setTimeout(done, ms);
+    window.addEventListener('beforeinstallprompt', done);
+  });
+}
+
 // Show the browser's install dialog. Returns 'accepted' | 'dismissed' | 'unavailable'.
 export async function promptInstall() {
+  if (!deferred) await recheck();
   if (!deferred) return 'unavailable';
   const e = deferred;
   deferred = null; // a prompt can only be used once
