@@ -5,7 +5,7 @@
 // cached app shell. Cross-origin requests (OCR engine CDN, Google sign-in, Drive) are left untouched
 // so nothing is cached or intercepted that shouldn't be.
 
-const VERSION = 'tachyread-v3';
+const VERSION = 'tachyread-v4';
 const BASE = new URL('./', self.location).pathname; // '/' in dev, '/Tachyread/' on Pages
 const SHELL = [
   BASE,
