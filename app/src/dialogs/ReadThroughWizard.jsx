@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { getStream } from '../features/audioRecorder.js';
 import { encodeWav } from '../features/audiobookExport.js';
-import { addAudioClip } from '../state/storage.js';
+import { addAudioClip, getFsHandle, setFsHandle } from '../state/storage.js';
 import {
   rmsOf, adaptiveThreshold, cleanTake, expectedMs, shouldAdvance, sessionQueue,
 } from '../features/readThrough.js';
+import { takeQuality, sessionConsistency, buildNarrationLog } from '../features/narrationQuality.js';
 
 // Read the whole book aloud in ONE sitting: a single mic session, chunk text on screen, and the
 // app does the bookkeeping — trims each take to the speech, shortens mid-take dead air, saves the
@@ -26,7 +27,7 @@ function micErr(e) {
   return 'Could not open the microphone: ' + (e?.message || e);
 }
 
-export default function ReadThroughWizard({ checksum, chunks, isCovered, onClose, onDone }) {
+export default function ReadThroughWizard({ checksum, docName = '', chunks, isCovered, onClose, onDone }) {
   const [phase, setPhase] = useState('setup'); // setup | requesting | reading | done
   const [err, setErr] = useState('');
   const [onlyUncovered, setOnlyUncovered] = useState(true);
@@ -37,6 +38,11 @@ export default function ReadThroughWizard({ checksum, chunks, isCovered, onClose
   const [skipped, setSkipped] = useState(0);
   const [onBreak, setOnBreak] = useState(false);
   const [speaking, setSpeaking] = useState(false); // low-rate UI mirror of the live VAD
+  const [liveLevel, setLiveLevel] = useState('');  // 'quiet' | 'good' | 'hot' while speaking
+  const [lastQ, setLastQ] = useState(null);        // last committed take's quality readout
+  const [consistency, setConsistency] = useState(null); // session-wide steadiness so far
+  const [logDir, setLogDir] = useState(null);      // FileSystemDirectoryHandle for the training log
+  const [logNote, setLogNote] = useState('');
 
   const ctxRef = useRef(null), srcRef = useRef(null), procRef = useRef(null);
   const meterRef = useRef(null);
@@ -45,8 +51,14 @@ export default function ReadThroughWizard({ checksum, chunks, isCovered, onClose
   const lastSpeechAtRef = useRef(0);    // ms timestamp of the last block over threshold
   const speechMsRef = useRef(0);        // accumulated speech in this take
   const committingRef = useRef(false);
+  const takesRef = useRef([]);          // quality of every committed take → session log + consistency
+  const sessionStartRef = useRef(0);
+  const logNameRef = useRef('');
   const liveRef = useRef({});           // advanceMode/onBreak/queue/qi mirrored for the audio callback
   liveRef.current = { advanceMode, onBreak, queue, qi };
+
+  // A previously linked training-log folder is offered again automatically.
+  useEffect(() => { getFsHandle('speechTrainingDir').then((h) => h && setLogDir(h)).catch(() => {}); }, []);
 
   const uncoveredCount = useMemo(() => sessionQueue(chunks, isCovered, true).length, [chunks, isCovered]);
   const chunk = queue.length && qi < queue.length ? chunks[queue[qi]] : null;
@@ -74,8 +86,41 @@ export default function ReadThroughWizard({ checksum, chunks, isCovered, onClose
     proc.connect(ctx.destination); // required for the processor to run; it outputs silence
     ctxRef.current = ctx; srcRef.current = src; procRef.current = proc;
     setQueue(q); setQi(0); setSaved(0); setSkipped(0); setOnBreak(false);
+    takesRef.current = [];
+    sessionStartRef.current = Date.now();
+    logNameRef.current = `tachyread-narration-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    setLastQ(null); setConsistency(null);
+    // Re-ask for folder permission inside this user gesture; a denied folder just disables logging.
+    if (logDir?.requestPermission) {
+      try { if ((await logDir.requestPermission({ mode: 'readwrite' })) !== 'granted') setLogDir(null); } catch { setLogDir(null); }
+    }
     resetTake();
     setPhase('reading');
+  }
+
+  async function pickLogDir() {
+    try {
+      const h = await window.showDirectoryPicker({ id: 'tachyread-narration-log', mode: 'readwrite' });
+      await setFsHandle('speechTrainingDir', h).catch(() => {});
+      setLogDir(h);
+      setLogNote('');
+    } catch { /* cancelled */ }
+  }
+
+  // Rewrite the whole session log after every take (atomic via createWritable) — a crash mid-session
+  // still leaves every finished take on disk for SpeechImprover to pick up.
+  async function writeLog(dir) {
+    if (!dir) return;
+    try {
+      const log = buildNarrationLog({ docName, startedAt: sessionStartRef.current, takes: takesRef.current });
+      const fh = await dir.getFileHandle(logNameRef.current, { create: true });
+      const w = await fh.createWritable();
+      await w.write(JSON.stringify(log, null, 1));
+      await w.close();
+      setLogNote('');
+    } catch (e) {
+      setLogNote('Log write failed: ' + (e?.message || e));
+    }
   }
 
   function onBlock(data, sampleRate) {
@@ -118,11 +163,23 @@ export default function ReadThroughWizard({ checksum, chunks, isCovered, onClose
       let o = 0;
       for (const b of blocks) { samples.set(b, o); o += b.length; }
       const sr = ctxRef.current?.sampleRate || 48000;
-      const clean = cleanTake(samples, sr, { threshold: adaptiveThreshold(rmsHistRef.current), maxPauseMs: 700 });
+      const th = adaptiveThreshold(rmsHistRef.current);
+      const clean = cleanTake(samples, sr, { threshold: th, maxPauseMs: 700 });
       if (clean) {
         const durationMs = Math.round((clean.length / sr) * 1000);
+        const q = takeQuality(clean, sr, { threshold: th, words: wordCountOf(ch) });
         const blob = new Blob([encodeWav(clean, sr)], { type: 'audio/wav' });
-        await addAudioClip(checksum, ch.startLine, blob, { source: 'mic', durationMs, spanEndLine: ch.endLine });
+        // tips are live coaching, not archive material — the stored clip keeps only the numbers
+        await addAudioClip(checksum, ch.startLine, blob, {
+          source: 'mic', durationMs, spanEndLine: ch.endLine,
+          quality: q ? { ...q, tips: undefined } : null,
+        });
+        if (q) {
+          takesRef.current.push(q);
+          setLastQ(q);
+          setConsistency(sessionConsistency(takesRef.current));
+          writeLog(logDir); // fire-and-forget; failures surface in logNote
+        }
         setSaved((n) => n + 1);
         advance();
       }
@@ -163,10 +220,18 @@ export default function ReadThroughWizard({ checksum, chunks, isCovered, onClose
   }
   useEffect(() => () => teardownAudio(), []);
 
-  // Low-rate mirror of the live VAD for the state chip (no per-block renders).
+  // Low-rate mirror of the live VAD for the state chips (no per-block renders). Level coaching is
+  // instant feedback: the last ~1s of speech blocks decide quiet / good / hot.
   useEffect(() => {
     if (phase !== 'reading') return undefined;
-    const id = setInterval(() => setSpeaking(Date.now() - lastSpeechAtRef.current < 800), 300);
+    const id = setInterval(() => {
+      setSpeaking(Date.now() - lastSpeechAtRef.current < 800);
+      const tail = rmsHistRef.current.slice(-12);
+      const talk = tail.filter((v) => v >= adaptiveThreshold(rmsHistRef.current));
+      if (!talk.length) { setLiveLevel(''); return; }
+      const m = Math.max(...talk);
+      setLiveLevel(m > 0.35 ? 'hot' : m < 0.03 ? 'quiet' : 'good');
+    }, 300);
     return () => clearInterval(id);
   }, [phase]);
 
@@ -218,6 +283,14 @@ export default function ReadThroughWizard({ checksum, chunks, isCovered, onClose
               <option value="off">Never — I’ll press Space</option>
             </select>
           </div>
+          <div className="field-row">
+            <label>Speech training log</label>
+            {logDir
+              ? <span>📁 Logging quality to <b>{logDir.name}</b> — SpeechImprover can watch this folder. <button onClick={() => { setFsHandle('speechTrainingDir', null).catch(() => {}); setLogDir(null); }}>Forget</button></span>
+              : typeof window.showDirectoryPicker === 'function'
+                ? <button onClick={pickLogDir} title="Each session writes a small JSON quality log there; point SpeechImprover at the same folder and narrations count as speech training">📁 Log quality to a folder…</button>
+                : <span className="settings-note" style={{ margin: 0 }}>Folder logging needs a Chromium browser.</span>}
+          </div>
           {err && <p className="settings-note" style={{ color: 'var(--ox-bright, #b0413e)' }}>{err}</p>}
           <button className="toggle-on" onClick={start} disabled={phase === 'requesting'}>🎙 Start reading</button>
         </>
@@ -230,6 +303,11 @@ export default function ReadThroughWizard({ checksum, chunks, isCovered, onClose
             <span className={`rtw-chip${onBreak ? ' break' : speaking ? ' talk' : ''}`}>
               {onBreak ? '⏸ On a break — audio discarded' : speaking ? '🗣 Recording you' : '🎙 Listening…'}
             </span>
+            {speaking && !onBreak && liveLevel && (
+              <span className={`rtw-chip lvl-${liveLevel}`}>
+                {liveLevel === 'hot' ? '🔥 Too loud' : liveLevel === 'quiet' ? '🤫 Too quiet' : '✅ Good level'}
+              </span>
+            )}
             <span className="settings-note" style={{ margin: 0 }}>{saved} saved · {skipped} skipped</span>
           </div>
           <div className="rcw-meter"><div className="rcw-meter-fill" ref={meterRef} /></div>
@@ -241,17 +319,33 @@ export default function ReadThroughWizard({ checksum, chunks, isCovered, onClose
             <button onClick={skip} title="Move on without saving audio for this chunk (S)">⏭ Skip</button>
             <button onClick={toggleBreak} title="Pause the session — nothing is kept until you resume (B)">{onBreak ? '▶ Resume' : '⏸ Break'}</button>
           </div>
-          {err && <p className="settings-note" style={{ color: 'var(--ox-bright, #b0413e)' }}>{err}</p>}
+          {lastQ && (
+            <div className="rtw-quality">
+              <span className={`rtw-score s${lastQ.score >= 85 ? 'good' : lastQ.score >= 65 ? 'ok' : 'bad'}`}>★ {lastQ.score}</span>
+              <span>{lastQ.wpm != null ? `${lastQ.wpm} wpm` : '— wpm'} · {lastQ.rmsDb} dB · steadiness {lastQ.volumeCv}</span>
+              {consistency && <span title="Pace and level consistency across this session's takes">· session {consistency.label} ({consistency.score})</span>}
+              {lastQ.tips.length > 0 && <div className="rtw-tips">{lastQ.tips.join(' ')}</div>}
+            </div>
+          )}
+          {(err || logNote) && <p className="settings-note" style={{ color: 'var(--ox-bright, #b0413e)' }}>{err || logNote}</p>}
         </>
       )}
 
       {phase === 'done' && (
         <>
           <p><b>Session finished.</b> {saved} chunk{saved === 1 ? '' : 's'} recorded{skipped ? `, ${skipped} skipped` : ''}.</p>
+          {takesRef.current.length > 0 && (
+            <p>
+              Average quality <b>★ {Math.round(takesRef.current.reduce((a, t) => a + t.score, 0) / takesRef.current.length)}</b>
+              {consistency && <> · pace &amp; level <b>{consistency.label.toLowerCase()}</b> across the session</>}
+              {logDir && <> · quality log saved to <b>{logDir.name}</b></>}
+            </p>
+          )}
           <p className="settings-note">
             Every take was trimmed to your speech and filed against its chunk — recordings outrank
             generated audio automatically. Play any chunk in the manager to check a take; Rec… on a
             chunk re-records just that one.
+            {logDir && ' In SpeechImprover, watch the same folder (Settings → Tachyread narration) to count this as speech training.'}
           </p>
         </>
       )}

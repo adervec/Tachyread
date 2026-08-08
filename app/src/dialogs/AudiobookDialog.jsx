@@ -16,6 +16,7 @@ import { saveBlobToFile, pickFile, readFileText } from '../features/fileSystem.j
 import AudiobookExportWizard from './AudiobookExportWizard.jsx';
 import RecordClipWizard from './RecordClipWizard.jsx';
 import ReadThroughWizard from './ReadThroughWizard.jsx';
+import { sessionConsistency } from '../features/narrationQuality.js';
 
 // Rough clip duration from the blob: mp3 (~128 kbps, ElevenLabs) vs 16-bit 22.05 kHz WAV (Piper).
 const estMs = (blob) => (/mpe?g|mp3/i.test(blob.type)
@@ -433,6 +434,20 @@ export default function AudiobookDialog({ tab, onClose }) {
         })}
       </div>
 
+      {/* stored narration-quality feedback: every recorded clip that carries metrics */}
+      {(() => {
+        const qs = Object.values(manifest.lines || {}).flatMap((e) => entryClips(e)).map((c) => c.quality).filter(Boolean);
+        if (!qs.length) return null;
+        const avg = Math.round(qs.reduce((a, q) => a + (q.score || 0), 0) / qs.length);
+        const cons = sessionConsistency(qs);
+        return (
+          <p className="settings-note" style={{ margin: '2px 0 0' }}>
+            🎙 Narration quality: <strong>★ {avg}</strong> average across {qs.length} recorded take{qs.length === 1 ? '' : 's'}
+            {cons && <> · pace &amp; level <strong>{cons.label.toLowerCase()}</strong></>} — per-take details in each chunk’s clip list.
+          </p>
+        );
+      })()}
+
       {/* storage details + wipe */}
       <div className="ab-storage">
         <div className="field-section" style={{ marginTop: 10 }}>Storage</div>
@@ -494,6 +509,12 @@ export default function AudiobookDialog({ tab, onClose }) {
                   <span className="clip-pri">{i === 0 ? '★' : i + 1}</span>
                   <span className="clip-src">{c.source === 'mic' ? '🎤 recording' : (c.voiceId?.startsWith('el:') ? labelVoice(c.voiceId) : `🤖 ${voiceLabel(c.voiceId)}`)}</span>
                   <span className="clip-meta">{fmtDur(c.durationMs)} · {fmtBytes(c.sizeBytes)} · {fmtWhen(c.createdAt)}</span>
+                  {c.quality && (
+                    <span
+                      className={`rtw-score s${c.quality.score >= 85 ? 'good' : c.quality.score >= 65 ? 'ok' : 'bad'}`}
+                      title={`${c.quality.wpm != null ? c.quality.wpm + ' wpm · ' : ''}${c.quality.rmsDb} dB RMS · peak ${c.quality.peakDb} dB · volume CV ${c.quality.volumeCv}${c.quality.clippingPct ? ` · clipping ${c.quality.clippingPct}%` : ''}`}
+                    >★ {c.quality.score}</span>
+                  )}
                 </div>
                 <div className="clip-card-row">
                   <ClipWave checksum={checksum} line={li} clipId={c.id} />
@@ -526,6 +547,7 @@ export default function AudiobookDialog({ tab, onClose }) {
       {readThru && (
         <ReadThroughWizard
           checksum={checksum}
+          docName={tab.doc.fileName || 'Document'}
           chunks={chunks}
           isCovered={(c) => clipsFor(c.startLine).length > 0}
           onClose={() => setReadThru(false)}
