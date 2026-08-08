@@ -70,6 +70,7 @@ import ProgressDetailDialog from './dialogs/ProgressDetailDialog.jsx';
 import { fmtTime, fmtDateTime } from './features/dateFmt.js';
 import { startCoworkScheduler } from './features/coworkScheduler.js';
 import { promptInstall, installState, installHelp, runningStandalone } from './features/pwaInstall.js';
+import { revealFile, rememberFile, revealSupported } from './features/revealFile.js';
 import DictationDialog from './dialogs/DictationDialog.jsx';
 import AttentionDialog from './dialogs/AttentionDialog.jsx';
 import AmbientDialog from './dialogs/AmbientDialog.jsx';
@@ -1617,7 +1618,26 @@ function AppInner() {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  function triggerOpen(accept) {
+  async function triggerOpen(accept) {
+    // Prefer the File System Access picker: it hands back handles, which is what lets
+    // File → Show File Location reopen the OS dialog in that document's folder later.
+    if (revealSupported()) {
+      try {
+        const exts = accept.split(',').map((s) => s.trim()).filter((s) => s.startsWith('.'));
+        const picked = await window.showOpenFilePicker({
+          multiple: true, id: 'tachyread-open',
+          // The picker validates these keys as real MIME types, so the extension list hangs off a
+          // generic one rather than a wildcard.
+          ...(exts.length ? { types: [{ description: 'Documents', accept: { 'application/octet-stream': exts } }] } : {}),
+        });
+        for (const h of picked) await rememberFile(h);
+        openFiles(await Promise.all(picked.map((h) => h.getFile())));
+        return;
+      } catch (e) {
+        if (e?.name === 'AbortError') return;  // user cancelled
+        /* anything else: fall through to the plain input below */
+      }
+    }
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = true;
@@ -1640,6 +1660,10 @@ function AppInner() {
       setDragOver(false);
       const files = e.dataTransfer?.files;
       if (files && files.length) openFiles(files);
+      // Dropped items also carry a handle in Chromium — remember it so Show File Location works.
+      for (const it of e.dataTransfer?.items || []) {
+        it.getAsFileSystemHandle?.().then(rememberFile).catch(() => {});
+      }
     }
     document.addEventListener('dragover', onDragOver);
     document.addEventListener('dragleave', onDragLeave);
@@ -2161,6 +2185,13 @@ function AppInner() {
       promptInstall().then((r) => setStatus(
         r === 'accepted' ? '✅ Installing Tachyread…' : r === 'dismissed' ? 'Install cancelled.' : `ℹ ${installHelp()}`
       ));
+      return undefined;
+    }
+    if (action === 'reveal-file') {
+      revealFile(activeTab?.fileName || activeTab?.doc?.fileName).then(({ text, files }) => {
+        setStatus(text);
+        if (files?.length) openFiles(files);
+      });
       return undefined;
     }
     if (action === 'disclaimer') return openDialog({ kind: 'disclaimer' });
