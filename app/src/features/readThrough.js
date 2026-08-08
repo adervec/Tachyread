@@ -23,6 +23,11 @@ export function adaptiveThreshold(rmsList) {
   if (!rmsList?.length) return 0.015;
   const sorted = [...rmsList].sort((a, b) => a - b);
   const p20 = sorted[Math.floor(sorted.length * 0.2)] || 0;
+  const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))] || 0;
+  // A near-constant signal (steady dictation with no gaps yet, test tones) has no silence to learn
+  // a floor from — 3×p20 would sit above everything ever heard and mute the whole session. When the
+  // history is that compressed, slip the bar just under it so sound counts as speech.
+  if (p95 > 0 && p95 < p20 * 2) return Math.min(0.06, Math.max(0.008, p20 * 0.8));
   return Math.min(0.06, Math.max(0.008, p20 * 3));
 }
 

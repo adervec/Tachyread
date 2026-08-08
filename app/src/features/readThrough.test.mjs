@@ -39,6 +39,9 @@ assert.ok(th > rmsOf(quiet(secs(0.1))) && th < 0.15, `threshold ${th} must split
 assert.equal(adaptiveThreshold([]), 0.015);
 assert.ok(adaptiveThreshold([0, 0, 0, 0, 0]) >= 0.008, 'a digitally-silent mic must not produce a hair trigger');
 assert.ok(adaptiveThreshold([0.5, 0.5, 0.5, 0.5, 0.5]) <= 0.06, 'a loud room must stay reachable');
+// A constant signal with no silence history must still count as speech, not mute the session.
+const flat = adaptiveThreshold(Array(100).fill(0.011));
+assert.ok(flat < 0.011, `constant 0.011 signal needs a threshold under it, got ${flat}`);
 
 // trim: 2s silence + 1s speech + 3s silence → roughly the speech ± padding.
 const take = join(quiet(secs(2)), tone(secs(1)), quiet(secs(3)));

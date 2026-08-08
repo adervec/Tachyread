@@ -4670,3 +4670,13 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .rtw-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Narration quality readouts (read-through wizard + clip manager). */
+.rtw-quality { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; font-size: 0.95em; }
+.rtw-tips { flex-basis: 100%; opacity: 0.8; font-size: 0.9em; }
+.rtw-score { padding: 1px 8px; border-radius: 999px; font-weight: 600; font-size: 0.85em; }
+.rtw-score.sgood { background: rgba(46, 160, 67, 0.18); border: 1px solid rgba(46, 160, 67, 0.5); }
+.rtw-score.sok { background: rgba(210, 153, 34, 0.18); border: 1px solid rgba(210, 153, 34, 0.5); }
+.rtw-score.sbad { background: rgba(226, 59, 59, 0.16); border: 1px solid rgba(226, 59, 59, 0.5); }
+.rtw-chip.lvl-good { background: rgba(46, 160, 67, 0.18); border-color: rgba(46, 160, 67, 0.5); }
+.rtw-chip.lvl-quiet, .rtw-chip.lvl-hot { background: rgba(226, 59, 59, 0.16); border-color: rgba(226, 59, 59, 0.5); }

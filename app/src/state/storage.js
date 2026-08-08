@@ -408,7 +408,7 @@ export async function addAudioClip(checksum, line, blob, meta = {}) {
   const manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
   const entry = manifest.lines[line] || {};
   const clips = entryClips(entry);
-  clips.unshift({ id, source, voiceId: meta.voiceId || null, createdAt: now, durationMs: meta.durationMs || 0, sizeBytes: blob.size });
+  clips.unshift({ id, source, voiceId: meta.voiceId || null, createdAt: now, durationMs: meta.durationMs || 0, sizeBytes: blob.size, quality: meta.quality || null });
   entry.clips = entryClips({ clips });
   entry.spanEndLine = meta.spanEndLine != null ? meta.spanEndLine : (entry.spanEndLine != null ? entry.spanEndLine : line);
   // shed any legacy scalar meta now that we track a clips[] array
