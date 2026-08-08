@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Dialog from './Dialog.jsx';
 import ProfilesBar from '../components/ProfilesBar.jsx';
+import { keyboardList, renameKeyboard, removeKeyboard, upsertKeyboard, linkKeyboard, hidSupported, setActiveKeyboard } from '../features/keyboards.js';
 
 // Typing-practice settings, reachable from the Typing menu (they used to hide inside Tab
 // Settings). Everything here is a per-tab setting under settings.typing / typingEndFanfare;
@@ -22,6 +23,9 @@ export default function TypingSettingsDialog({ settings, onPatch, global, onPatc
   }
   const t = s.typing || {};
   const patchTyping = (p) => patch({ typing: { ...t, ...p } });
+  const [linkNote, setLinkNote] = useState('');
+  const list = keyboardList(global.keyboards);
+  const current = list.find((k) => k.id === global.activeKeyboard) || null;
 
   return (
     <Dialog title="Typing Settings" onClose={onClose} width={520} buttons={<button onClick={onClose}>Close</button>}>
@@ -105,6 +109,55 @@ export default function TypingSettingsDialog({ settings, onPatch, global, onPatc
           onChange={(e) => onPatchGlobal({ typingEndFanfare: e.target.checked })}
         />
       </Field>
+
+      <div className="field-section">Keyboard</div>
+      <p className="settings-note">
+        Every run is stamped with the keyboard you typed it on, so Typing Progress can compare them.
+        Detection is best-effort: the web hides keyboard hardware from key events, so Tachyread reads
+        your OS layout (a QWERTY board is told apart from an AZERTY or QWERTZ one, not from another
+        QWERTY) — link the hardware below to tell same-layout boards apart, and rename either way.
+      </p>
+      <Field label="Typing on">
+        <select value={global.activeKeyboard || ''} onChange={(e) => onPatchGlobal({ activeKeyboard: e.target.value })}>
+          {!list.length && <option value="">Not detected yet</option>}
+          {list.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
+        </select>
+      </Field>
+      {!!current && (
+        <Field label="Name it">
+          <input
+            type="text"
+            value={current.label}
+            placeholder="e.g. Keychron K2, ThinkPad built-in"
+            onChange={(e) => onPatchGlobal({ keyboards: renameKeyboard(list, current.id, e.target.value) })}
+          />
+        </Field>
+      )}
+      <Field label="Link hardware">
+        <button
+          disabled={!hidSupported()}
+          title={hidSupported()
+            ? 'Grant access to the keyboard so runs can be matched to it by vendor and product id'
+            : 'Needs a Chromium browser (Chrome, Edge, Brave)'}
+          onClick={async () => {
+            try {
+              const kb = await linkKeyboard();
+              if (!kb) return setLinkNote('No keyboard was picked.');
+              onPatchGlobal({ keyboards: upsertKeyboard(list, kb), activeKeyboard: kb.id });
+              setActiveKeyboard(kb);
+              setLinkNote(`Linked ${kb.label}.`);
+            } catch (err) { setLinkNote(`Couldn’t link that: ${err.message}`); }
+          }}
+        >Choose keyboard…</button>
+      </Field>
+      <p className="settings-note">
+        {linkNote || 'Chrome hides plain keyboards from this chooser for security — only boards that also publish a vendor channel (QMK/VIA, Keychron, Logitech, Razer…) appear. A laptop’s built-in keyboard never will; name it by hand instead.'}
+      </p>
+      {!!current && list.length > 1 && (
+        <Field label="Forget this keyboard">
+          <button onClick={() => onPatchGlobal({ keyboards: removeKeyboard(list, current.id), activeKeyboard: '' })}>Remove</button>
+        </Field>
+      )}
     </Dialog>
   );
 }

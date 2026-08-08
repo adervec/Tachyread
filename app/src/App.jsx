@@ -71,6 +71,7 @@ import { fmtTime, fmtDateTime } from './features/dateFmt.js';
 import { startCoworkScheduler } from './features/coworkScheduler.js';
 import { promptInstall, installState, installHelp, runningStandalone } from './features/pwaInstall.js';
 import { revealFile, rememberFile, revealSupported } from './features/revealFile.js';
+import { detectKeyboard, setActiveKeyboard, upsertKeyboard } from './features/keyboards.js';
 import DictationDialog from './dialogs/DictationDialog.jsx';
 import AttentionDialog from './dialogs/AttentionDialog.jsx';
 import AmbientDialog from './dialogs/AmbientDialog.jsx';
@@ -1675,6 +1676,37 @@ function AppInner() {
     };
   }, [openFiles]);
 
+  // Which physical keyboard is in front of you — stamped onto every typing run (see
+  // features/keyboards.js for why detection is best-effort). Re-checked when a linked HID board is
+  // plugged or unplugged, and on window focus, which is when an OS layout switch usually lands.
+  const knownKeyboards = useRef(state.global.keyboards);
+  knownKeyboards.current = state.global.keyboards;
+  const activeIdRef = useRef(state.global.activeKeyboard);
+  useEffect(() => {
+    let alive = true;
+    async function sync() {
+      const kb = await detectKeyboard();
+      if (!alive) return;
+      setActiveKeyboard(kb);
+      if (!kb) return;
+      const known = knownKeyboards.current || [];
+      const isNew = !known.some((k) => k.id === kb.id);
+      if (!isNew && activeIdRef.current === kb.id) return; // nothing changed — don't churn settings
+      activeIdRef.current = kb.id;
+      updateGlobal(isNew ? { keyboards: upsertKeyboard(known, kb), activeKeyboard: kb.id } : { activeKeyboard: kb.id });
+    }
+    sync();
+    window.addEventListener('focus', sync);
+    navigator.hid?.addEventListener?.('connect', sync);
+    navigator.hid?.addEventListener?.('disconnect', sync);
+    return () => {
+      alive = false;
+      window.removeEventListener('focus', sync);
+      navigator.hid?.removeEventListener?.('connect', sync);
+      navigator.hid?.removeEventListener?.('disconnect', sync);
+    };
+  }, [updateGlobal]);
+
   // Speaking minigame: webkitSpeechRecognition
   useEffect(() => {
     if (!activeTab || !activeTab.settings.speaking?.enabled) {
@@ -3031,7 +3063,7 @@ function AppInner() {
           }}
         />
       )}
-      {dialog?.kind === 'typing-progress' && <TypingProgressDialog onClose={closeDialog} />}
+      {dialog?.kind === 'typing-progress' && <TypingProgressDialog keyboards={state.global.keyboards} onClose={closeDialog} />}
       {dialog?.kind === 'span-drill' && <SpanDrillDialog doc={activeTab?.doc} onClose={closeDialog} />}
       {dialog?.kind === 'eye-warmup' && <EyeWarmupDialog onClose={closeDialog} />}
       {dialog?.kind === 'flow-writer' && <FlowWriterDialog doc={activeTab?.doc} onClose={closeDialog} />}

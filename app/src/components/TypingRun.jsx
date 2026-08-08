@@ -2,6 +2,7 @@ import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { playLineSound, playTick, TYPING_SOUNDS } from '../features/clickSound.js';
 import { getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import { deviceKind } from '../state/device.js';
+import { activeKeyboard } from '../features/keyboards.js';
 import { buildPassage, TYPING_MODES, TYPING_MODE_BY_ID } from '../engine/typingModes.js';
 import { transformToken, displayCells, isExotic, ghostCharsAt } from '../engine/typingText.js';
 import { letterGrade, playGradeSound, GRADE_STATEMENTS } from '../features/gradeChime.js';
@@ -350,6 +351,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       tier: netTier(net),
       grade: letterGrade(net),
       device: deviceKind(), // 'Mobile' | 'Desktop' — which device this run was typed on
+      keyboard: activeKeyboard()?.id || 'unknown',      // which physical keyboard it was typed on
+      keyboardLabel: activeKeyboard()?.label || '',     // snapshot, so a deleted board still reads back
       mode: gameMode,       // which typing mode/drill this run used
       raced: racedRef.current,    // was this a voice race
       caught: caughtRef.current,  // did the voice catch you
