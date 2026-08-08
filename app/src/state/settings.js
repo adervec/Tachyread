@@ -223,6 +223,16 @@ export function resetGlobalToDefaults(current) {
 // settings still sync via the progress bundle's fileSettings. Mirrored on import — incoming settings
 // are re-filtered through this same rule, so a stale bundle can't push app settings onto a device.
 export function isSyncedGlobalKey(k) { return k === 'fileDefaults'; }
+
+// The AFK guard window in ms, clamped to the range the settings UI offers. Shared by the reading
+// tracker's active-time cap, the mode chip's idle countdown, and the blur-when-idle veil, so all
+// three trip at the same moment instead of drifting apart on three copies of the clamp.
+export const IDLE_GRACE_MIN = 5;
+export const IDLE_GRACE_MAX = 600;
+export function idleGraceMs(global) {
+  const secs = Number(global?.idleGraceSecs);
+  return Math.max(IDLE_GRACE_MIN, Math.min(IDLE_GRACE_MAX, secs > 0 ? secs : 60)) * 1000;
+}
 export function syncableGlobalSettings(g) {
   const out = {};
   for (const k of Object.keys(g || {})) if (isSyncedGlobalKey(k)) out[k] = g[k];
@@ -415,6 +425,10 @@ export function defaultGlobalSettings() {
     // AFK guard: the longest pause (seconds) still credited as active reading. Gaps beyond this stop
     // counting toward active time/WPM, and the reading-mode chip drains to idle after it.
     idleGraceSecs: 60,
+    // Blur the whole app once the guard above trips. Scroll reading has no playback to pause, so
+    // walking away leaves text on screen and time quietly uncredited; the veil makes that visible
+    // and forces a deliberate resume. Off by default.
+    blurWhenIdle: false,
     // Webcam attention (opt-in, experimental): pause non-TTS reading when the camera can't see you
     // facing the screen with eyes open. Processed entirely on-device; nothing leaves the machine.
     webcamAttention: false,

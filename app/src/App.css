@@ -4615,3 +4615,37 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .sync-conflict-opts { display: flex; gap: 8px; flex-wrap: wrap; }
 .sync-conflict-opts button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 12px; }
 .sync-conflict-opts button em { font-size: 10px; font-style: normal; opacity: 0.75; }
+
+/* Blur when idle (AFK screen). The blur is applied to the app's CHILDREN, not to .app itself: a
+   CSS filter blurs its whole subtree, so a veil nested inside the blurred element would be just as
+   unreadable. The veil is a sibling and stays sharp. Children also stop taking pointer events so
+   the click that wakes you lands on the veil instead of a button you can't see. */
+.app.idle-blurred > *:not(.idle-veil):not(.night-shift) {
+  filter: blur(14px) saturate(0.55);
+  pointer-events: none;
+  user-select: none;
+}
+.idle-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 99000;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+.idle-veil span {
+  padding: 14px 22px;
+  border-radius: 12px;
+  background: var(--panel-bg, #1b1638);
+  color: var(--fg, #f2efff);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+  font-size: 15px;
+  text-align: center;
+  max-width: min(90vw, 460px);
+}
+/* The fade in is the only cue that something changed; honour a reduced-motion preference. */
+@media (prefers-reduced-motion: no-preference) {
+  .app > *:not(.idle-veil):not(.night-shift) { transition: filter 0.4s ease; }
+}

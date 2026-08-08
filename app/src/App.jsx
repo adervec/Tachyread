@@ -81,7 +81,7 @@ import LiteraryJourneyDialog from './dialogs/LiteraryJourneyDialog.jsx';
 import ComfortMonitor from './components/ComfortMonitor.jsx';
 import { getLineIndex, getParagraphRange, detectProperNames, audiobookChunks } from './document/readerDocument.js';
 import { getTocEntries, sectionSpan, mergeSkipRanges, currentChapter } from './document/toc.js';
-import { defaultFileSettings, tabDefaultsFrom } from './state/settings.js';
+import { defaultFileSettings, tabDefaultsFrom, idleGraceMs } from './state/settings.js';
 import { cancelSpeech, speak, setPreferredLanguage } from './features/tts.js';
 import { getLanguage } from './state/languages.js';
 import TypingPlanDialog from './dialogs/TypingPlanDialog.jsx';
@@ -201,7 +201,7 @@ function AppInner() {
   // Idle grace (AFK guard) as a live ref, so the tracker's active-time cap and the mode chip's
   // idle window both follow the Application Settings value without rebuilding anything.
   const graceMsRef = useRef(60000);
-  graceMsRef.current = Math.max(5, Math.min(600, Number(state.global.idleGraceSecs) || 60)) * 1000;
+  graceMsRef.current = idleGraceMs(state.global);
   const modeDetRef = useRef(null);
   if (!modeDetRef.current) modeDetRef.current = createModeDetector(() => graceMsRef.current);
   const [readingMode, setReadingMode] = useState('idle');
@@ -323,6 +323,29 @@ function AppInner() {
     for (const e of evs) window.addEventListener(e, touch, { passive: true, capture: true });
     return () => { for (const e of evs) window.removeEventListener(e, touch, { capture: true }); };
   }, []);
+  // Blur-when-idle: an AFK screen on the same window as the guard that stops crediting active time,
+  // so scroll reading can't quietly run on through uncounted minutes. Its own timer rather than the
+  // reading-mode chip, because a keep-alive event holds off idle WITHOUT voting a new mode — the
+  // chip can still read 'idle' right after you touch something, which would re-blur instantly.
+  const [idleTimedOut, setIdleTimedOut] = useState(false);
+  // Derived, so turning the option off never has to reset the timer's state.
+  const idleBlurred = !!state.global.blurWhenIdle && idleTimedOut;
+  useEffect(() => {
+    if (!state.global.blurWhenIdle) return undefined;
+    const graceMs = idleGraceMs(state.global);
+    let timer = setTimeout(() => setIdleTimedOut(true), graceMs);
+    const wake = () => {
+      setIdleTimedOut(false);
+      clearTimeout(timer);
+      timer = setTimeout(() => setIdleTimedOut(true), graceMs);
+    };
+    // Same events as the mode detector's keep-alive, so the veil and the AFK guard agree on what
+    // "still here" means. Deliberately not pointermove: a jittering mouse is not reading.
+    const evs = ['pointerdown', 'keydown', 'wheel', 'scroll', 'touchstart'];
+    for (const e of evs) window.addEventListener(e, wake, { passive: true, capture: true });
+    return () => { clearTimeout(timer); for (const e of evs) window.removeEventListener(e, wake, { capture: true }); };
+  }, [state.global.blurWhenIdle, state.global.idleGraceSecs]);
+
   const [paneWidths, setPaneWidths] = useState({ toc: 320, dash: 260, rsvp: 420, source: 380 });
   const resizePane = (id, w) => setPaneWidths((prev) => ({ ...prev, [id]: w }));
   // Filled by the Lines pane: page(dir) → the top/bottom currently-visible line index (excluding
@@ -2522,9 +2545,17 @@ function AppInner() {
 
   return (
     <div
-      className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}${forcePortrait != null ? ' force-portrait' : ''}${immersive ? ' immersive' : ''}${!isCompact && immersive === 'lines' ? ' lines-full' : ''}${!isCompact && immersive === 'source' ? ' source-full' : ''}`}
+      className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}${forcePortrait != null ? ' force-portrait' : ''}${immersive ? ' immersive' : ''}${!isCompact && immersive === 'lines' ? ' lines-full' : ''}${!isCompact && immersive === 'source' ? ' source-full' : ''}${idleBlurred ? ' idle-blurred' : ''}`}
       style={forcePortrait != null ? { transform: `translate(-50%, -50%) rotate(${forcePortrait}deg)` } : undefined}
     >
+      {/* Idle veil. A sibling of the blurred content, not a child — a CSS filter blurs its own
+          subtree, so an overlay inside the blurred element would be unreadable too. It swallows the
+          click that wakes you so a stray tap can't hit a button behind the blur. */}
+      {idleBlurred && (
+        <div className="idle-veil" role="status">
+          <span>💤 Paused — this time isn’t counting. Press any key or click to carry on.</span>
+        </div>
+      )}
       {immersive && (
         <button className="immersive-exit" title="Exit full-screen reading (Esc)" aria-label="Exit full-screen reading" onClick={() => setImmersive(false)}>⛶</button>
       )}

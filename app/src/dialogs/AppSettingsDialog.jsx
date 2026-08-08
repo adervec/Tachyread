@@ -253,6 +253,20 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
           </span>
         </div>
       </Field>
+      <Field label="Blur everything when idle">
+        <label className="inline-check" title="Once the grace period above elapses, blur the whole app behind a “paused” veil. Any key, click, scroll or tap brings it back.">
+          <input
+            type="checkbox"
+            checked={!!g.blurWhenIdle}
+            onChange={(e) => patch({ blurWhenIdle: e.target.checked })}
+          />
+          <span className="settings-note" style={{ margin: 0 }}>
+            Scroll reading has no playback to pause, so stepping away leaves the page readable while
+            the guard has already stopped crediting time. The veil makes that visible, so a distracted
+            stretch can’t masquerade as reading — and nothing resumes until you say so.
+          </span>
+        </label>
+      </Field>
       <Field label="Scroll-to-read break-out">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <select
