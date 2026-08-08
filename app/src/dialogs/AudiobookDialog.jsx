@@ -15,6 +15,7 @@ import { getTocEntries } from '../document/toc.js';
 import { saveBlobToFile, pickFile, readFileText } from '../features/fileSystem.js';
 import AudiobookExportWizard from './AudiobookExportWizard.jsx';
 import RecordClipWizard from './RecordClipWizard.jsx';
+import ReadThroughWizard from './ReadThroughWizard.jsx';
 
 // Rough clip duration from the blob: mp3 (~128 kbps, ElevenLabs) vs 16-bit 22.05 kHz WAV (Piper).
 const estMs = (blob) => (/mpe?g|mp3/i.test(blob.type)
@@ -65,6 +66,7 @@ export default function AudiobookDialog({ tab, onClose }) {
   const { state } = useApp();
   const [manifest, setManifest] = useState({ lines: {} });
   const [recWiz, setRecWiz] = useState(null); // chunk whose record/import wizard is open
+  const [readThru, setReadThru] = useState(false); // continuous read-the-book-aloud session
   const [secWiz, setSecWiz] = useState(null); // { firstLine, role, previewText, dlgTitle } — section extra wizard
   const [secBusy, setSecBusy] = useState(''); // `${firstLine}:${role}` while a section-title TTS runs
   const [gen, setGen] = useState(null); // { done, total } while generating
@@ -331,6 +333,7 @@ export default function AudiobookDialog({ tab, onClose }) {
       ) : <p className="settings-note">Offline Piper voice isn’t available in this browser. Add an ElevenLabs key in Audio Settings to generate in the cloud instead.</p>}
 
       <div className="ab-genbar">
+        <button className="toggle-on" onClick={() => setReadThru(true)} title="Narrate it yourself in one sitting: read chunk after chunk, pause to advance — each take is trimmed, cleaned and filed automatically">📖 Read it aloud yourself…</button>
         <button className="toggle-on" onClick={() => setShowExport(true)} disabled={!totalCovered} title="Save the generated narration as standalone audio tracks (WAV/MP3 + playlist) to play on your phone">🎧 Export as audiobook…</button>
         <button onClick={doExport} disabled={busy || !size.clips} title="Save this book's clips as a Tachyread transfer file for another device">⬆ Transfer file…</button>
         <button onClick={doImport} disabled={busy} title="Load an exported Tachyread audiobook transfer file">⬇ Import…</button>
@@ -517,6 +520,16 @@ export default function AudiobookDialog({ tab, onClose }) {
           sections={sections}
           manifest={manifest}
           onClose={() => setShowExport(false)}
+        />
+      )}
+
+      {readThru && (
+        <ReadThroughWizard
+          checksum={checksum}
+          chunks={chunks}
+          isCovered={(c) => clipsFor(c.startLine).length > 0}
+          onClose={() => setReadThru(false)}
+          onDone={({ saved, skipped }) => { setMsg(`📖 Read-through: ${saved} chunk${saved === 1 ? '' : 's'} recorded${skipped ? `, ${skipped} skipped` : ''}.`); refresh(); }}
         />
       )}
 
