@@ -338,6 +338,10 @@ export function defaultGlobalSettings() {
     // On a typing run's end, show a grade + final statement and play a grade-matched sound.
     typingEndFanfare: true,
     typingCfg: {}, // APP-LEVEL typing practice options (case, punctuation, discipline, pace ghost, sounds…) — per-tab typing.enabled just opens the overlay
+    // Physical keyboards this device types on: [{ id, label }]. Device-local by nature (the boards
+    // plugged into THIS machine), so deliberately outside GLOBAL_DATA_KEYS and never synced.
+    keyboards: [],
+    activeKeyboard: '',            // id of the board typing runs are currently stamped with
     // Touch gesture navigation (off by default — it can interfere with text selection/scroll):
     // horizontal swipes over the reading area step lines (long swipes step paragraphs).
     gestureControls: false,

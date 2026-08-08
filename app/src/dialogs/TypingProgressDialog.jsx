@@ -5,6 +5,7 @@ import { TYPING_MODE_BY_ID } from '../engine/typingModes.js';
 import { fmtDateTime } from '../features/dateFmt.js';
 import { typingWeekly, typingOverall } from '../features/typingStats.js';
 import { typingStreak, aggregateKeys, fingerStats, keyFinger } from '../features/typingUpgrades.js';
+import { keyboardRows } from '../features/keyboards.js';
 
 function fmtDur(ms) {
   const s = Math.round((ms || 0) / 1000);
@@ -68,7 +69,7 @@ function KeyHeatmap({ agg }) {
 }
 
 // Detailed typing-practice history — separate from reading history.
-export default function TypingProgressDialog({ onClose }) {
+export default function TypingProgressDialog({ keyboards = [], onClose }) {
   const [runs, setRuns] = useState(null);
 
   useEffect(() => {
@@ -167,6 +168,34 @@ export default function TypingProgressDialog({ onClose }) {
                     </tbody>
                   </table>
                 </div>
+              </>
+            );
+          })()}
+
+          {(() => {
+            const rows = keyboardRows(runs, keyboards);
+            if (rows.length < 2) return null; // one keyboard is just the summary above
+            return (
+              <>
+                <div className="tp-section">By keyboard</div>
+                <div className="tp-table-wrap">
+                  <table className="tp-table">
+                    <thead><tr><th>Keyboard</th><th>Runs</th><th>Avg net</th><th>Best</th><th>Avg acc</th><th>Words</th></tr></thead>
+                    <tbody>
+                      {rows.map((k) => (
+                        <tr key={k.id}>
+                          <td>{k.label}</td>
+                          <td>{k.runs}</td>
+                          <td>{k.avgNet}</td>
+                          <td>{k.best}</td>
+                          <td>{k.avgAcc}%</td>
+                          <td>{k.words.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="settings-note">Rename a keyboard in Typing → Typing Settings.</p>
               </>
             );
           })()}
