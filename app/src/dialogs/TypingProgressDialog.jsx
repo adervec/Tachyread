@@ -6,6 +6,7 @@ import { fmtDateTime } from '../features/dateFmt.js';
 import { typingWeekly, typingOverall } from '../features/typingStats.js';
 import { typingStreak, aggregateKeys, fingerStats, keyFinger } from '../features/typingUpgrades.js';
 import { keyboardRows } from '../features/keyboards.js';
+import { normalizeRuns, difficultyRows, runDifficulty, difficultyLabel } from '../features/typingDifficulty.js';
 
 function fmtDur(ms) {
   const s = Math.round((ms || 0) / 1000);
@@ -70,11 +71,18 @@ function KeyHeatmap({ agg }) {
 
 // Detailed typing-practice history — separate from reading history.
 export default function TypingProgressDialog({ keyboards = [], onClose }) {
-  const [runs, setRuns] = useState(null);
+  const [rawRuns, setRawRuns] = useState(null);
+  // On by default: raw WPM tracks the text as much as the typist, so an un-normalised trend calls a
+  // week of dense text a slump. The toggle is there because the raw number is still what you felt.
+  const [adjust, setAdjust] = useState(true);
 
   useEffect(() => {
-    allTypingRuns().then((r) => setRuns(r.sort((a, b) => a.ts - b.ts))).catch(() => setRuns([]));
+    allTypingRuns().then((r) => setRawRuns(r.sort((a, b) => a.ts - b.ts))).catch(() => setRawRuns([]));
   }, []);
+
+  // Every aggregate below (chart, weekly, overall, per-keyboard) runs on this one list, so
+  // normalising here switches the whole page without touching any of them.
+  const runs = useMemo(() => (rawRuns && adjust ? normalizeRuns(rawRuns) : rawRuns), [rawRuns, adjust]);
 
   const stats = useMemo(() => {
     if (!runs || !runs.length) return null;
@@ -93,7 +101,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
 
   async function clearAll() {
     await clearTypingRuns().catch(() => {});
-    setRuns([]);
+    setRawRuns([]);
   }
 
   return (
@@ -115,15 +123,25 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
       {stats && (
         <>
           <div className="tp-summary">
-            <Stat v={stats.best} l="best net WPM" />
-            <Stat v={stats.avgNet} l="avg net WPM" />
+            <Stat v={stats.best} l={adjust ? 'best adj WPM' : 'best net WPM'} />
+            <Stat v={stats.avgNet} l={adjust ? 'avg adj WPM' : 'avg net WPM'} />
             <Stat v={`${stats.avgAcc}%`} l="avg accuracy" />
             <Stat v={stats.n} l="runs" />
             <Stat v={`🔥 ${stats.streak.days}`} l="day streak" />
             <Stat v={stats.streak.todayWords.toLocaleString()} l="words today" />
           </div>
 
-          <div className="tp-legend"><span className="tp-lg-net">— net WPM</span> <span className="tp-lg-acc">— accuracy</span></div>
+          <label className="inline-check" title="Price each run by the keys its text actually demanded — shift, digits and punctuation cost more than home-row prose — and report what that pace is worth on ordinary prose. Scored from the per-key profile every run already stores, so your whole history re-reads.">
+            <input type="checkbox" checked={adjust} onChange={(e) => setAdjust(e.target.checked)} />
+            <span>Normalise for text difficulty</span>
+          </label>
+          <p className="settings-note">
+            {adjust
+              ? 'WPM below is difficulty-adjusted: 1.00 is ordinary prose, so a numbers drill or a page of quotes and capitals no longer reads as a slump.'
+              : 'Showing raw WPM — it moves with the text as much as with your hands.'}
+          </p>
+
+          <div className="tp-legend"><span className="tp-lg-net">— {adjust ? 'adjusted' : 'net'} WPM</span> <span className="tp-lg-acc">— accuracy</span></div>
           <TpChart runs={runs} />
 
           {(() => {
@@ -168,6 +186,41 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                     </tbody>
                   </table>
                 </div>
+              </>
+            );
+          })()}
+
+          {(() => {
+            // Always built from the RAW runs: this table is the evidence that normalising is
+            // warranted, so it has to show both numbers side by side.
+            const rows = difficultyRows(rawRuns);
+            if (rows.length < 2) return null; // one band is nothing to compare
+            return (
+              <>
+                <div className="tp-section">By text difficulty</div>
+                <div className="tp-table-wrap">
+                  <table className="tp-table">
+                    <thead><tr><th>Text</th><th>Runs</th><th>Difficulty</th><th>Raw net</th><th>Adjusted</th><th>Best raw</th><th>Avg acc</th></tr></thead>
+                    <tbody>
+                      {rows.map((b) => (
+                        <tr key={b.band}>
+                          <td>{b.band}</td>
+                          <td>{b.runs}</td>
+                          <td>{b.avgDifficulty.toFixed(2)}×</td>
+                          <td>{b.avgNet}</td>
+                          <td className={b.avgAdj >= b.avgNet ? 'tp-up' : 'tp-down'}>{b.avgAdj}</td>
+                          <td>{b.best}</td>
+                          <td>{b.avgAcc}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="settings-note">
+                  Difficulty is priced per keystroke from the run’s own key profile: home-row letters
+                  are the unit, other letters cost a little more, then punctuation, digits, and
+                  anything needing shift. 1.00× is ordinary prose.
+                </p>
               </>
             );
           })()}
@@ -232,7 +285,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
           <div className="tp-table-wrap">
             <table className="tp-table">
               <thead>
-                <tr><th>When</th><th>Mode</th><th>Device</th><th>Net</th><th>Gross</th><th>Acc</th><th>Consist.</th><th>Words</th><th>Time</th><th>Tier</th></tr>
+                <tr><th>When</th><th>Mode</th><th>Device</th><th>Text</th><th>{adjust ? 'Adj' : 'Net'}</th><th>Gross</th><th>Acc</th><th>Consist.</th><th>Words</th><th>Time</th><th>Tier</th></tr>
               </thead>
               <tbody>
                 {[...runs].reverse().slice(0, 50).map((r, i) => (
@@ -240,7 +293,8 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                     <td>{fmtDateTime(r.ts)}{r.pb?.allTime ? ' 🏆' : r.pb?.mode ? ' 🥇' : ''}</td>
                     <td>{r.mode ? (TYPING_MODE_BY_ID[r.mode]?.label || r.mode) : '—'}</td>
                     <td>{r.device ? <span className={`tp-dev tp-dev-${String(r.device).toLowerCase()}`}>{r.device === 'Mobile' ? '📱' : '🖥'} {r.device}</span> : '—'}</td>
-                    <td>{r.netWpm}</td>
+                    <td title={`${difficultyLabel(runDifficulty(r))} text`}>{runDifficulty(r).toFixed(2)}×</td>
+                    <td title={adjust ? `${r.rawNetWpm} raw` : undefined}>{r.netWpm}</td>
                     <td>{r.grossWpm}</td>
                     <td>{r.accuracy}%</td>
                     <td>{r.consistency != null ? `${r.consistency}%` : '—'}</td>
