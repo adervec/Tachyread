@@ -67,6 +67,18 @@ function drillWords(chars, count, seed = 0) {
   return out;
 }
 
+// How many words to pull ahead for a run. A run ends when the passage runs out, so this has to
+// cover the whole limit — and the caller then drops tokens that transform away (punctuation-only,
+// non-typeable), which is why the word count asks for comfortably more than `limit`.
+// ponytail: 300 WPM is above any human ceiling and 'endless' just gets a big buffer rather than a
+// streaming refill — swap in incremental top-ups if someone actually types past 5000 words.
+export function passageWordsFor(mode, limit) {
+  const n = Math.max(1, Number(limit) || 0);
+  if (mode === 'words') return Math.ceil(n * 1.8) + 60;
+  if (mode === 'seconds') return Math.max(600, Math.ceil((n / 60) * 300 * 1.5));
+  return 5000; // endless — bounded only by idle/Esc/End run
+}
+
 // Build the passage (word array) for a mode. `seed` lets callers vary drills between attempts;
 // `reviewWords` feeds the 'review' drill (the last run's problem words).
 export function buildPassage(mode, { docWords = [], startIndex = 0, max = 600, seed = 0, reviewWords = null } = {}) {

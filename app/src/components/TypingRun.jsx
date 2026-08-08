@@ -3,7 +3,7 @@ import { playLineSound, playTick, TYPING_SOUNDS } from '../features/clickSound.j
 import { getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import { deviceKind } from '../state/device.js';
 import { activeKeyboard } from '../features/keyboards.js';
-import { buildPassage, TYPING_MODES, TYPING_MODE_BY_ID } from '../engine/typingModes.js';
+import { buildPassage, passageWordsFor, TYPING_MODES, TYPING_MODE_BY_ID } from '../engine/typingModes.js';
 import { transformToken, displayCells, isExotic, ghostCharsAt } from '../engine/typingText.js';
 import { letterGrade, playGradeSound, GRADE_STATEMENTS } from '../features/gradeChime.js';
 import { createReadAloud } from '../features/readAloud.js';
@@ -40,7 +40,6 @@ function netTier(net) {
   return 'Beginner';
 }
 
-const PASSAGE_MAX = 600;     // words pulled ahead for a run
 const IDLE_END_MS = 5000;    // auto-end after this much inactivity
 const ENDLESS_SECS = 99999;
 // Cap how many typed-past-the-end characters render (stats still count them all). Together with
@@ -190,8 +189,14 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // Prepared passage: `prepared` entries are { text, gi } where gi is the source-doc word index (for
   // line/sentence cues and forward continuation), with transformed-away tokens filtered out; `passage`
   // is the text-only array the run/render use. Built in one memo so the two stay in lockstep.
+  // Declared above the passage memo because the passage has to be long enough for the run: pulling
+  // a fixed 600 words ahead ended a "1000 words" run at whatever survived the transform (~500).
+  const [mode, setMode] = useState(cfg.runMode || 'seconds'); // 'seconds' | 'words' | 'endless'
+  const [limit, setLimit] = useState(cfg.runLimit || 60);
+  const passageMax = passageWordsFor(mode, limit);
+
   const { prepared, passage } = useMemo(() => {
-    const raw = buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: PASSAGE_MAX, seed, reviewWords: reviewRef.current });
+    const raw = buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: passageMax, seed, reviewWords: reviewRef.current });
     const base = isDocMode ? startIndex.current : 0;
     const prep = [];
     let pre = null; // fully-skipped decorative tokens ahead of the next kept word (ghost display)
@@ -203,7 +208,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       pre = null;
     }
     return { prepared: prep, passage: prep.map((p) => p.text) };
-  }, [doc, gameMode, seed, bypassSym, lowercase, noSpecial, isDocMode]);
+  }, [doc, gameMode, seed, bypassSym, lowercase, noSpecial, isDocMode, passageMax]);
   // A typed char matches its target when it's equal (case rule) or the target is exotic (auto-accepted).
   const charOk = (typedCh, targetCh) => (bypassSym && isExotic(targetCh)) || sameChar(typedCh, targetCh, caseSensitive);
 
@@ -226,8 +231,6 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   }, [doc, isDocMode, prepared]);
   const seg = useRef({ line: true, sent: true, para: true }); // stays true while the current segment is error-free
 
-  const [mode, setMode] = useState(cfg.runMode || 'seconds'); // 'seconds' | 'words' | 'endless'
-  const [limit, setLimit] = useState(cfg.runLimit || 60);
   const [phase, setPhase] = useState('idle'); // idle | countdown | running | done
   const [count, setCount] = useState(null);   // 'Ready' | 'Set' | 'Go!' during the countdown
   const countTimers = useRef([]);
@@ -1022,9 +1025,10 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         {penalty && <div className="tr-penalty" role="status" key={penalty.at}>💥 −{penalty.n} word{penalty.n > 1 ? 's' : ''}</div>}
         <div className={`tr-cursor${phase === 'running' ? '' : ' waiting'}`} ref={caretRef} style={{ opacity: phase === 'done' ? 0 : 1 }} />
         <div className={`tr-lines${oneWord ? ' one-word' : ''}${blind ? ' blind' : ''}${ticker ? ' ticker' : ''}`} ref={linesRef}>
-          {passage.map((w, i) => {
+          {/* Sliced, not just skipped inside the loop: a long run's passage is now thousands of
+              words and this re-runs on every keystroke. Slicing from 0 keeps `i` a passage index. */}
+          {passage.slice(0, pos + PENDING_WINDOW + 1).map((w, i) => {
             if (oneWord && i !== pos) return null; // one-word mode shows only the current word
-            if (i > pos + PENDING_WINDOW) return null; // far tail is below the fold — skip its DOM
             if (ticker && i < pos - 12) return null; // ticker: far-committed words have slid off left
             const vc = (i === voicePos ? ' voice' : '') // word the racing voice is speaking…
               + (i === pacePos && phase === 'running' && paceWpmVal > 0 ? ' pace' : ''); // …and the 👻 ghost's word
