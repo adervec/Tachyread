@@ -24,6 +24,7 @@ const MENUS = {
     { label: 'Open from Clipboard', shortcut: 'Ctrl+B', action: 'open-clip' },
     { label: 'Grab Text (OCR)...', shortcut: 'Ctrl+Shift+G', action: 'grab' },
     { label: 'Grab from Web URL...', action: 'web-grab' },
+    { label: 'Show File Location...', action: 'reveal-file' },
     { label: 'Save Tab Text...', action: 'save-tab' },
     { label: 'HTML Tools (guide & print to HTML)...', action: 'html-tools' },
     { kind: 'separator' },
