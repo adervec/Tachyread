@@ -63,9 +63,11 @@ const init = {
   panels: [],         // [{ id, kind, ...props }] — dialog tabs
   activePanelId: null,
   panelSeq: 0,        // monotonic id source for panels
-  showRsvp: true,
+  // Boot layout: Lines is the reader people live in, so it leads. Desktop adds the ToC; the Fast
+  // Reader (RSVP) is opt-in from the View menu. Compact screens stay minimal — Lines only.
+  showRsvp: false,
   showLines: true,
-  showToc: false,
+  showToc: !compactStart,
   showStats: !compactStart, // reading-stats panel (faces are gated per-tab by settings.showEyes)
   showSource: false,
   showIndex: false,
@@ -704,7 +706,14 @@ export function AppProvider({ children }) {
   const reorderTabs = useCallback((fromId, toId) => dispatch({ type: 'REORDER_TABS', fromId, toId }), []);
 
   const updateGlobal = useCallback(async (patch) => {
-    const g = { ...stateRef.current.global, ...patch };
+    // A write that lands BEFORE stored settings hydrate must not use the in-memory defaults as its
+    // base — saveGlobal writes the whole object, so that would reset every stored setting to
+    // factory (this is exactly how the boot-time keyboard probe kept wiping the saved pane layout).
+    // Merge onto the stored copy instead; scrollAdvances stays off, mirroring the hydration path.
+    const base = stateRef.current.globalHydrated
+      ? stateRef.current.global
+      : { ...(await loadGlobal()), scrollAdvances: false };
+    const g = { ...base, ...patch };
     // Stamp the settings-sync clock only when a synced setting actually changed (not on sync metadata
     // or data-library churn) — otherwise lastSync writes would keep this device "newest" forever and
     // it would never adopt another device's settings.

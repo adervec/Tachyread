@@ -43,6 +43,8 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
   const [consistency, setConsistency] = useState(null); // session-wide steadiness so far
   const [logDir, setLogDir] = useState(null);      // FileSystemDirectoryHandle for the training log
   const [logNote, setLogNote] = useState('');
+  const [stt, setStt] = useState({ final: '', interim: '' }); // live speech-to-text of this take
+  const [cleaned, setCleaned] = useState(0);       // dead air removed from the LAST take (ms)
 
   const ctxRef = useRef(null), srcRef = useRef(null), procRef = useRef(null);
   const meterRef = useRef(null);
@@ -51,6 +53,8 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
   const lastSpeechAtRef = useRef(0);    // ms timestamp of the last block over threshold
   const speechMsRef = useRef(0);        // accumulated speech in this take
   const committingRef = useRef(false);
+  const recogRef = useRef(null);        // webkitSpeechRecognition while the session runs
+  const deadAirRef = useRef(0);         // session total of removed dead air (ms)
   const takesRef = useRef([]);          // quality of every committed take → session log + consistency
   const sessionStartRef = useRef(0);
   const logNameRef = useRef('');
@@ -63,6 +67,40 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
   const uncoveredCount = useMemo(() => sessionQueue(chunks, isCovered, true).length, [chunks, isCovered]);
   const chunk = queue.length && qi < queue.length ? chunks[queue[qi]] : null;
   const nextChunk = queue.length && qi + 1 < queue.length ? chunks[queue[qi + 1]] : null;
+  const prevChunk = queue.length && qi > 0 ? chunks[queue[qi - 1]] : null;
+
+  // Live speech-to-text: shows WHAT the recognizer heard, so a misread line is obvious before the
+  // take commits. Display-only — assignment stays sequential; recognition never drives the cursor.
+  // Chrome restarts recognition every minute or so; the onend handler just starts it again.
+  const STT = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  function startStt() {
+    if (!STT || recogRef.current) return;
+    try {
+      const r = new STT();
+      r.continuous = true;
+      r.interimResults = true;
+      r.onresult = (e) => {
+        if (liveRef.current.onBreak) return; // break audio is discarded — its words are too
+        let fin = '', interim = '';
+        for (let i = 0; i < e.results.length; i++) {
+          const t = e.results[i][0].transcript;
+          if (e.results[i].isFinal) fin += t + ' ';
+          else interim += t;
+        }
+        setStt({ final: fin.trim().split(/\s+/).slice(-24).join(' '), interim: interim.trim() });
+      };
+      r.onend = () => { if (recogRef.current === r) { try { r.start(); } catch { /* tab closing */ } } };
+      r.onerror = () => { /* no-speech / network hiccups — onend restarts it */ };
+      r.start();
+      recogRef.current = r;
+    } catch { /* recognition unavailable — the strip just doesn't render */ }
+  }
+  function stopStt() {
+    const r = recogRef.current;
+    recogRef.current = null; // clear FIRST so onend doesn't resurrect it
+    try { r?.stop(); } catch { /* already stopped */ }
+  }
+  function clearStt() { setStt({ final: '', interim: '' }); try { recogRef.current?.abort(); } catch { /* restarts via onend */ } }
 
   function resetTake() {
     takeRef.current = [];
@@ -87,6 +125,9 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
     ctxRef.current = ctx; srcRef.current = src; procRef.current = proc;
     setQueue(q); setQi(0); setSaved(0); setSkipped(0); setOnBreak(false);
     takesRef.current = [];
+    deadAirRef.current = 0;
+    setCleaned(0);
+    startStt();
     sessionStartRef.current = Date.now();
     logNameRef.current = `tachyread-narration-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
     setLastQ(null); setConsistency(null);
@@ -167,6 +208,10 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
       const clean = cleanTake(samples, sr, { threshold: th, maxPauseMs: 700 });
       if (clean) {
         const durationMs = Math.round((clean.length / sr) * 1000);
+        // Dead air actually removed (edges trimmed + long pauses compressed) — shown, not silent.
+        const removedMs = Math.max(0, Math.round((samples.length / sr) * 1000) - durationMs);
+        deadAirRef.current += removedMs;
+        setCleaned(removedMs);
         const q = takeQuality(clean, sr, { threshold: th, words: wordCountOf(ch) });
         const blob = new Blob([encodeWav(clean, sr)], { type: 'audio/wav' });
         // tips are live coaching, not archive material — the stored clip keeps only the numbers
@@ -181,6 +226,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
           writeLog(logDir); // fire-and-forget; failures surface in logNote
         }
         setSaved((n) => n + 1);
+        clearStt();
         advance();
       }
       // No speech in the take → stay on this chunk; an accidental Space saves nothing.
@@ -199,11 +245,12 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
       return n;
     });
   }
-  function redo() { resetTake(); }
-  function skip() { resetTake(); setSkipped((n) => n + 1); advance(); }
+  function redo() { resetTake(); clearStt(); }
+  function skip() { resetTake(); clearStt(); setSkipped((n) => n + 1); advance(); }
   function toggleBreak() {
     setOnBreak((b) => {
-      if (b) lastSpeechAtRef.current = Date.now(); // resuming — the break must not read as "done"
+      if (b) { lastSpeechAtRef.current = Date.now(); startStt(); } // resuming — break ≠ "done"
+      else stopStt(); // break audio is discarded; don't transcribe it either
       return !b;
     });
   }
@@ -213,6 +260,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
   }
 
   function teardownAudio() {
+    stopStt();
     try { procRef.current?.disconnect(); } catch { /* already gone */ }
     try { srcRef.current?.disconnect(); } catch { /* already gone */ }
     try { ctxRef.current?.close(); } catch { /* already gone */ }
@@ -311,8 +359,17 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
             <span className="settings-note" style={{ margin: 0 }}>{saved} saved · {skipped} skipped</span>
           </div>
           <div className="rcw-meter"><div className="rcw-meter-fill" ref={meterRef} /></div>
+          {prevChunk && <div className="rtw-prev" title="Just read">{prevChunk.text}</div>}
           <div className={`rtw-text${onBreak ? ' dim' : ''}`}>{chunk.text}</div>
           {nextChunk && <div className="rtw-next" title="Up next">{nextChunk.text}</div>}
+          {STT && !onBreak && (
+            <div className="rtw-stt" title="What the speech recognizer is hearing — a misread line shows up here before you commit the take">
+              <span className="rtw-stt-tag">🎧 heard</span>
+              {(stt.final || stt.interim)
+                ? <>{stt.final} <i>{stt.interim}</i></>
+                : <span className="rtw-stt-idle">…waiting for speech</span>}
+            </div>
+          )}
           <div className="rtw-controls">
             <button className="toggle-on" onClick={() => commit()} title="Save this chunk's take and move on (Space)">✔ Next chunk</button>
             <button onClick={redo} title="Discard this chunk's take and read it again (R)">⟲ Redo</button>
@@ -323,6 +380,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
             <div className="rtw-quality">
               <span className={`rtw-score s${lastQ.score >= 85 ? 'good' : lastQ.score >= 65 ? 'ok' : 'bad'}`}>★ {lastQ.score}</span>
               <span>{lastQ.wpm != null ? `${lastQ.wpm} wpm` : '— wpm'} · {lastQ.rmsDb} dB · steadiness {lastQ.volumeCv}</span>
+              {cleaned >= 500 && <span title="Leading/trailing silence trimmed and long mid-take pauses compressed">· ✂ {(cleaned / 1000).toFixed(1)}s dead air removed</span>}
               {consistency && <span title="Pace and level consistency across this session's takes">· session {consistency.label} ({consistency.score})</span>}
               {lastQ.tips.length > 0 && <div className="rtw-tips">{lastQ.tips.join(' ')}</div>}
             </div>
@@ -338,6 +396,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
             <p>
               Average quality <b>★ {Math.round(takesRef.current.reduce((a, t) => a + t.score, 0) / takesRef.current.length)}</b>
               {consistency && <> · pace &amp; level <b>{consistency.label.toLowerCase()}</b> across the session</>}
+              {deadAirRef.current >= 1000 && <> · ✂ <b>{(deadAirRef.current / 1000).toFixed(1)}s</b> of dead air cleaned automatically</>}
               {logDir && <> · quality log saved to <b>{logDir.name}</b></>}
             </p>
           )}
