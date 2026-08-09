@@ -1706,6 +1706,7 @@ function AppInner() {
   knownKeyboards.current = state.global.keyboards;
   const activeIdRef = useRef(state.global.activeKeyboard);
   useEffect(() => {
+    if (!state.globalHydrated) return undefined; // the known-keyboards list isn't real until stored settings load
     let alive = true;
     async function sync() {
       const kb = await detectKeyboard();
@@ -1728,7 +1729,7 @@ function AppInner() {
       navigator.hid?.removeEventListener?.('connect', sync);
       navigator.hid?.removeEventListener?.('disconnect', sync);
     };
-  }, [updateGlobal]);
+  }, [updateGlobal, state.globalHydrated]);
 
   // Speaking minigame: webkitSpeechRecognition
   useEffect(() => {
@@ -1904,6 +1905,13 @@ function AppInner() {
     if (paneRestoredRef.current || !state.globalHydrated) return;
     paneRestoredRef.current = true;
     if (isCompact || !state.global.paneLayout) return;
+    // Migration: a saved layout identical to the OLD boot default (Fast Reader on, ToC off) was
+    // never a choice — it's the old default echoed back by persistence. Skip restoring it so the
+    // new default (ToC + Lines) applies; the persist effect below then overwrites the stored copy.
+    // A layout that differs in ANY pane was arranged on purpose and is restored untouched.
+    const pl = state.global.paneLayout;
+    const oldDefault = pl.showRsvp && pl.showLines && !pl.showToc && pl.showStats && !pl.showSource && !pl.showIndex;
+    if (oldDefault) return;
     dispatch({ type: 'SET_PANES', panes: state.global.paneLayout });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.globalHydrated]);
