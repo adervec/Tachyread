@@ -256,9 +256,10 @@ export function AppProvider({ children }) {
   useEffect(() => {
     (async () => {
       const g = await loadGlobal();
-      // Scroll-to-read never survives a restart: booting with it on silently credits whatever the
-      // restored scroll position passes (phantom "read" text). It's an explicitly-armed mode.
-      g.scrollAdvances = false;
+      // Scroll-to-read PERSISTS across restarts as the user's intent — but crediting is gated by
+      // App's `scrollArmed` state, which stays off until the session-restore scroll has settled and
+      // the view has been snapped to the current word. That gate is what prevents phantom progress;
+      // the setting itself no longer gets wiped here.
       dispatch({ type: 'SET_GLOBAL', global: g });
     })();
   }, []);
@@ -405,9 +406,9 @@ export function AppProvider({ children }) {
       const g = stateRef.current.global;
       const recentFiles = [{ name: doc.fileName, checksum: doc.contentChecksum, lastOpened: Date.now() },
         ...(g.recentFiles || []).filter((r) => r.checksum !== doc.contentChecksum)].slice(0, 20);
-      // Opening a file also disarms scroll-to-read (like a fresh boot) — the initial scroll/restore
-      // of a newly opened document must never count as reading.
-      const ng = { ...g, recentFiles, scrollAdvances: false };
+      // Opening a file no longer clears the scroll-to-read SETTING — App drops its armed gate on the
+      // doc-opened event below, so the new document's initial scroll still can't count as reading.
+      const ng = { ...g, recentFiles };
       dispatch({ type: 'SET_GLOBAL', global: ng });
       saveGlobal(ng).catch(() => {});
       // Let App offer to add this document to Trackyread if it isn't tracked yet. Interactive,
@@ -709,10 +710,10 @@ export function AppProvider({ children }) {
     // A write that lands BEFORE stored settings hydrate must not use the in-memory defaults as its
     // base — saveGlobal writes the whole object, so that would reset every stored setting to
     // factory (this is exactly how the boot-time keyboard probe kept wiping the saved pane layout).
-    // Merge onto the stored copy instead; scrollAdvances stays off, mirroring the hydration path.
+    // Merge onto the stored copy instead.
     const base = stateRef.current.globalHydrated
       ? stateRef.current.global
-      : { ...(await loadGlobal()), scrollAdvances: false };
+      : await loadGlobal();
     const g = { ...base, ...patch };
     // Stamp the settings-sync clock only when a synced setting actually changed (not on sync metadata
     // or data-library churn) — otherwise lastSync writes would keep this device "newest" forever and
