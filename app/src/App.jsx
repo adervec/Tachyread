@@ -212,9 +212,50 @@ function AppInner() {
   const [goalPos, setGoalPos] = useState(() => state.global.mobileGoalPos || null);
   // Epoch-ms the read-aloud auto-stop fires (0 = none), so the timer chip can count down.
   const [autoStopAt, setAutoStopAt] = useState(0);
-  // Live scroll-mode flag for closures (Space keydown) that would otherwise read a stale value.
-  const scrollAdvancesRef = useRef(state.global.scrollAdvances);
-  scrollAdvancesRef.current = state.global.scrollAdvances;
+  // Scroll-to-read: the SETTING persists across sessions; CREDITING is gated by `scrollArmed`,
+  // which starts off so a boot's session-restore scroll (or a fresh document's initial scroll)
+  // can never count as reading. The gate re-arms a moment later, aligned to the current word.
+  const [scrollArmed, setScrollArmed] = useState(false);
+  const scrollActive = !!state.global.scrollAdvances && scrollArmed;
+  const scrollBootRef = useRef(true);
+  useEffect(() => {
+    if (!state.globalHydrated) return undefined;
+    if (!state.global.scrollAdvances) { setScrollArmed(false); scrollBootRef.current = false; return undefined; }
+    if (!scrollBootRef.current) { setScrollArmed(true); return undefined; } // a live toggle is a real gesture — arm now
+    // Booted with it on: let the restore scroll settle, snap to the current word, then arm.
+    scrollBootRef.current = false;
+    const t2 = { current: 0 };
+    const t1 = setTimeout(() => {
+      kbdRef.current.jumpToCurrent?.();
+      t2.current = setTimeout(() => {
+        setScrollArmed(true);
+        setStatus('📜 Scroll-to-read re-armed — view aligned to your current word.');
+      }, 700); // the jump's own scroll must not be credited either
+    }, 2500);
+    return () => { clearTimeout(t1); clearTimeout(t2.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.globalHydrated, state.global.scrollAdvances]);
+  // Opening a document mid-session drops the gate and re-arms the same way.
+  useEffect(() => {
+    const timers = { t1: 0, t2: 0 };
+    const onOpened = () => {
+      setScrollArmed(false);
+      clearTimeout(timers.t1); clearTimeout(timers.t2);
+      timers.t1 = setTimeout(() => {
+        if (!scrollPrefRef.current) return; // setting off — stay off
+        kbdRef.current.jumpToCurrent?.();
+        timers.t2 = setTimeout(() => setScrollArmed(true), 700);
+      }, 2000);
+    };
+    window.addEventListener('tachyread-doc-opened', onOpened);
+    return () => { window.removeEventListener('tachyread-doc-opened', onOpened); clearTimeout(timers.t1); clearTimeout(timers.t2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const scrollPrefRef = useRef(false);
+  scrollPrefRef.current = !!state.global.scrollAdvances;
+  // Live ACTIVE flag for closures (Space keydown) that would otherwise read a stale value.
+  const scrollAdvancesRef = useRef(false);
+  scrollAdvancesRef.current = scrollActive;
 
   // When the active tab is a lazy placeholder (e.g. selected via a restored tab strip, or auto-
   // selected after closing another tab), build its document on demand.
@@ -2528,7 +2569,7 @@ function AppInner() {
           visibleRef={linesVisibleRef}
           onVisible={onLinesVisible}
           compact={isCompact}
-          scrollRead={state.global.scrollAdvances}
+          scrollRead={scrollActive}
           scrollCmd={scrollCmd}
           recenterKey={recenterKey}
           onAddNote={(wi) => { jumpWord(wi); openDialog({ kind: 'notes' }); }}
@@ -2537,7 +2578,7 @@ function AppInner() {
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showStats, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances, scrollCmd, recenterKey]);
+  }, [activeTab, state.showToc, state.showStats, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances, scrollActive, scrollCmd, recenterKey]);
 
   // One derived `dialog` drives the whole render block below: a blocking modal wins, otherwise the
   // focused dialog tab. When it's a panel (no modal), `dialogDocked` restyles it from a centered

@@ -2,7 +2,7 @@
 // but keyed by content checksum so renamed/moved files keep their progress.
 
 import { openDB } from 'idb';
-import { defaultGlobalSettings, defaultFileSettings, tabDefaultsFrom, syncableGlobalSettings } from './settings.js';
+import { defaultGlobalSettings, defaultFileSettings, syncableGlobalSettings } from './settings.js';
 import { mergePresence, presenceList } from '../features/presence.js';
 
 const DB_NAME = 'Tachyread';
@@ -1215,8 +1215,9 @@ export async function exportProgressData() {
     const rec = { name: f.fileName || nameByChecksum.get(f.checksum) || '' };
     for (const k of PROGRESS_FILE_FIELDS) if (f[k] !== undefined) rec[k] = f[k];
     out.files[f.checksum] = rec;
-    // Reusable per-file appearance/behaviour settings (no progress, no identity), LWW by updatedAt.
-    out.fileSettings[f.checksum] = { ...tabDefaultsFrom(f), updatedAt: f.updatedAt || 0 };
+    // Per-file tab settings are DEVICE-LOCAL and deliberately NOT exported: a phone's reading font
+    // and sizes must not follow the desktop's (and vice versa). Only progress travels per file;
+    // reading/display DEFAULTS still follow you via fileDefaults in the global slice above.
   }
   for (const gr of await db.getAll('grabbed')) {
     if (!gr?.checksum) continue;
@@ -1323,20 +1324,8 @@ export async function importProgressData(bundle) {
     await tx.done;
     merged++;
   }
-  // Per-file tab settings (appearance/behaviour) — last-write-wins by updatedAt. The progress fields
-  // merged above are left untouched; only the reusable settings are overlaid.
-  for (const [checksum, inc] of Object.entries(bundle.fileSettings || {})) {
-    const tx = db.transaction('files', 'readwrite');
-    const cur = (await tx.store.get(checksum)) || { ...defaultFileSettings(), contentChecksum: checksum, checksum };
-    if ((inc.updatedAt || 0) > (cur.updatedAt || 0)) {
-      const { updatedAt, ...fields } = inc;
-      Object.assign(cur, tabDefaultsFrom(fields)); // only reusable keys (never progress/identity)
-      cur.updatedAt = inc.updatedAt || 0;
-      cur.contentChecksum = checksum; cur.checksum = checksum;
-      await tx.store.put(cur);
-    }
-    await tx.done;
-  }
+  // Per-file tab settings are device-local now: `bundle.fileSettings` from older builds or other
+  // devices is deliberately IGNORED — applying it was exactly how a desktop font stomped a phone's.
   // Global: remote-grab markers (only for grabs we DON'T already have locally) + book groups.
   const g = (await db.get('global', 'settings')) || defaultGlobalSettings();
   // Application settings (prefs + Default Tab Settings) — last-write-wins by the settings clock.

@@ -4701,3 +4701,20 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .tr-info-row.dim { opacity: 0.55; }
 .tr-info-bar { height: 8px; border-radius: 999px; background: rgba(127, 127, 127, 0.22); overflow: hidden; margin: 2px 0 4px; }
 .tr-info-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #2e9d4f, #46c06b); transition: width 0.5s ease; }
+
+/* Themed scrollbars app-wide (most visible on phones, where default overlays clash with themes).
+   scrollbar-color covers modern Chrome/Firefox; the ::-webkit rules cover older WebKit. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent, #5b8def) 55%, transparent) transparent;
+}
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent, #5b8def) 45%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--accent, #5b8def); }
+*::-webkit-scrollbar-corner { background: transparent; }
