@@ -11,6 +11,7 @@ import { rateFromIndex } from '../features/tts.js';
 import { fmtTime } from '../features/dateFmt.js';
 import { allTypingRuns } from '../state/storage.js';
 import { consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress, penaltyRewind } from '../features/typingUpgrades.js';
+import { currentSession, sessionStats, bookForecast } from '../features/typingSession.js';
 import { typingEyeColor } from '../features/avatarMood.js';
 import Avatar from './Avatar.jsx';
 
@@ -955,7 +956,42 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       })()}
 
       <div className="tr-body">
-        {sideVisible && (
+        {/* While a run is live the option tiles are all disabled anyway — that flank becomes the
+            book/session dashboard: progress through the whole document, and this SITTING's numbers
+            (today's runs, split from an earlier sitting by a multi-hour break, live run included). */}
+        {locked && (() => {
+          const liveRun = { netWpm: live.net, accuracy: live.acc, words: stats.current.words, durationMs: live.secs * 1000 };
+          const sessRuns = currentSession(pastRunsRef.current || [], Date.now());
+          const sess = sessionStats(sessRuns, liveRun);
+          const todayCount = (pastRunsRef.current || []).filter((r) => r?.ts && new Date(r.ts).toDateString() === new Date().toDateString()).length;
+          const wi = lastGiRef.current != null ? lastGiRef.current + 1 : startIndex.current + stats.current.words;
+          const book = isDocMode && doc?.words?.length ? bookForecast({ totalWords: doc.words.length, throughWord: wi, avgNet: sess?.avgNet || live.net }) : null;
+          const fmtMin = (min) => (min >= 60 ? `${Math.floor(min / 60)}h ${min % 60}m` : `${min}m`);
+          return (
+            <aside className="tr-side tr-side-info" aria-label="Book and session progress">
+              {book && (
+                <>
+                  <div className="tt-group">📖 This book</div>
+                  <div className="tr-info-bar" title={`${book.pct}% of the document typed through`}>
+                    <div className="tr-info-fill" style={{ width: `${Math.min(100, book.pct)}%` }} />
+                  </div>
+                  <div className="tr-info-row"><b>{book.pct}%</b> · word {book.through.toLocaleString()} of {doc.words.length.toLocaleString()}</div>
+                  <div className="tr-info-row">{book.left.toLocaleString()} words left{book.etaMin != null && <> · ~<b>{fmtMin(book.etaMin)}</b> at this pace</>}</div>
+                </>
+              )}
+              <div className="tt-group">⏱ This sitting</div>
+              {sess ? (
+                <>
+                  <div className="tr-info-row"><b>{sess.runs}</b> run{sess.runs === 1 ? '' : 's'} · <b>{sess.words.toLocaleString()}</b> words · {fmtMin(Math.max(1, Math.round(sess.ms / 60000)))}</div>
+                  <div className="tr-info-row">avg <b>{sess.avgNet}</b> wpm · best <b>{sess.best}</b> · {sess.avgAcc}% acc</div>
+                  {sessRuns.length === 0 && <div className="tr-info-row dim">First run of this sitting</div>}
+                  {todayCount > sessRuns.length && <div className="tr-info-row dim">{todayCount} run{todayCount === 1 ? '' : 's'} today across sittings</div>}
+                </>
+              ) : <div className="tr-info-row dim">Warming up…</div>}
+            </aside>
+          );
+        })()}
+        {sideVisible && !locked && (
           <aside className="tr-side" aria-label="Typing options">
             <div className="tt-group">Text</div>
             <Tile icon="#" label="Punctuation" state={punctState} on={noSpecial} onClick={cyclePunct} disabled={locked}
