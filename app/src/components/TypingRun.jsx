@@ -127,6 +127,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const raceVoice = !!cfg.raceVoice; // race the TTS voice: it reads the passage; get caught if it passes you
   const stopOnError = !!cfg.stopOnError; // a wrong key is refused (still costs an error) — accuracy discipline
   const confidence = !!cfg.confidence;   // no backspace — errors cost accuracy, not time
+  const fixErrors = !!cfg.fixErrors;     // middle ground: errors land, backspace works, but space only advances a CORRECT word
   const blind = !!cfg.blind;             // hide per-char verdicts while running; the numbers tell the tale at the end
   const penaltyWords = Math.max(0, Math.min(9, Number(cfg.penaltyWords) || 0)); // setback mode: words erased per mistyped word
   // Display-only variants of the transforms (the REQUIRED typing is identical either way):
@@ -211,6 +212,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   }, [doc, gameMode, seed, bypassSym, lowercase, noSpecial, isDocMode, passageMax]);
   // A typed char matches its target when it's equal (case rule) or the target is exotic (auto-accepted).
   const charOk = (typedCh, targetCh) => (bypassSym && isExotic(targetCh)) || sameChar(typedCh, targetCh, caseSensitive);
+  // Exact-match test for fix-errors mode: same length, every char passing the run's own char rule.
+  const wordOk = (typed, target) => typed.length === (target || '').length && [...typed].every((c, i) => charOk(c, target[i]));
 
   // Which passage indices end a line / sentence / paragraph — for the "segment complete, no errors"
   // cues. Only doc-backed modes (the passage runs consecutive document words from startIndex) map to
@@ -755,6 +758,15 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         armIdle();
         return;
       }
+      // Fix-errors mode: the space is refused until the word reads EXACTLY right — mistakes stay
+      // on screen and must be backspaced away first. (Chars typed in this event still score.)
+      if (fixErrors && !wordOk(typed, passage[pos])) {
+        scoreChars(buf.length, typed);
+        ping(sounds.charWrong);
+        setBuf(typed);
+        armIdle();
+        return;
+      }
       scoreChars(buf.length, typed);
       armIdle();
       if (typed.length > 0) commitWord(typed); else setBuf('');
@@ -799,6 +811,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       e.preventDefault();
       if (phase !== 'running') return; // a run is started with the Start button, not Enter
       if (buf.length === 0) return;
+      if (fixErrors && !wordOk(buf, passage[pos])) { ping(sounds.charWrong); return; } // Enter can't sneak past the fix gate
       armIdle();
       commitWord(buf);
     }
@@ -964,8 +977,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             <Tile icon="🛑" label="Stop on error" state={stopOnError ? 'on' : 'off'} on={stopOnError}
               onClick={() => patchCfg({ stopOnError: !stopOnError })} disabled={locked}
               title="A wrong key is refused (it still costs an error), and space only commits a complete word — the classic accuracy-discipline mode" />
+            <Tile icon="🔧" label="Fix errors" state={fixErrors ? 'on' : 'off'} on={fixErrors}
+              onClick={() => patchCfg({ fixErrors: !fixErrors, ...(fixErrors ? {} : { confidence: false }) })} disabled={locked}
+              title="Mistakes land on screen and backspace works, but space won't advance until the word is typed exactly right — repair before you move on" />
             <Tile icon="⌫" label="No backspace" state={confidence ? 'on' : 'off'} on={confidence}
-              onClick={() => patchCfg({ confidence: !confidence })} disabled={locked}
+              onClick={() => patchCfg({ confidence: !confidence, ...(confidence ? {} : { fixErrors: false }) })} disabled={locked}
               title="Confidence mode — backspace is disabled entirely; errors cost accuracy, not time" />
             <Tile icon="🙈" label="Blind" state={blind ? 'on' : 'off'} on={blind}
               onClick={() => patchCfg({ blind: !blind })} disabled={locked}
