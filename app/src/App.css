@@ -4778,3 +4778,6 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .ghost-race.ahead .gr-delta { color: var(--ok-fg, #2e9d4f); }
 .ghost-race.behind .gr-delta { color: var(--ox-bright, #b0413e); }
 .ghost-race .gr-reset { padding: 0 6px; min-height: 0; font-size: 11px; }
+.ghost-race .gr-verdict { font-size: 11px; opacity: 0.85; padding: 0 4px; border-radius: 4px; }
+.ghost-race .gr-verdict.you { color: var(--ok-fg, #2e9d4f); }
+.ghost-race .gr-verdict.ghost { color: var(--ox-bright, #b0413e); }

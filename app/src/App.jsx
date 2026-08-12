@@ -95,7 +95,8 @@ import { createRecognizer, wordMatches, speechRecognitionSupported } from './fea
 import { recordClip } from './features/audioRecorder.js';
 import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal, allFiles } from './state/storage.js';
 import { activitySummary } from './features/activitySummary.js';
-import { ghostIndexAt, raceState, ghostRunFrom, ghostResetReason } from './features/paceGhost.js';
+import { ghostIndexAt, raceState, ghostRunFrom, ghostResetReason, ghostAtGoal, goalRace } from './features/paceGhost.js';
+import { goalTargetIndex } from './engine/goals.js';
 import { bookFromOpenedDoc } from './features/trackyreadAdd.js';
 import { sectionChecksum } from './document/sectionHash.js';
 import { acquireInstance } from './state/singleInstance.js';
@@ -427,22 +428,47 @@ function AppInner() {
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ghostOn, playing, readingMode, activeTab?.id]);
+  // With a goal set, its target is the race's FINISH LINE: the ghost stops there instead of
+  // wandering off, so "who gets to the goal first" is a real question rather than a moving one.
+  const ghostGoalTarget = useMemo(() => {
+    const g = activeTab?.settings?.goal;
+    if (!ghostOn || !activeTab || !g || g.type === 'None') return null;
+    try { return goalTargetIndex(activeTab, g)?.index ?? null; } catch { return null; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ghostOn, activeTab?.settings?.goal, activeTab?.settings?.wordIndex, activeTab?.id]);
+  const ghostGoalRef = useRef(null);
+  ghostGoalRef.current = ghostGoalTarget;
+
   // Walk it. 250ms is smooth for a word marker and costs one multiply per tick.
   useEffect(() => {
     if (!ghostOn || !ghostRun) return undefined;
     const step = () => {
-      const idx = ghostIndexAt({ ...ghostRun, now: Date.now(), wpm: ghostWpm, totalWords: ghostTotal });
+      const raw = ghostIndexAt({ ...ghostRun, now: Date.now(), wpm: ghostWpm, totalWords: ghostTotal });
+      const idx = ghostAtGoal(raw, ghostGoalRef.current)?.idx ?? raw;
       setGhostIdx(idx);
       // A jump (chapter skip, search hit, big rewind) makes the comparison meaningless — restart
       // level with the reader rather than showing a nonsense lead.
       const wi = activeTabRef.current?.settings?.wordIndex || 0;
-      if (ghostResetReason({ readerIdx: wi, ghostIdx: idx }) === 'jump') resetGhost();
+      // Skip the jump check once the ghost is parked on the goal — a big remaining gap there is the
+      // race being lost, not a navigation jump, and restarting would erase the result.
+      const parked = ghostGoalRef.current != null && idx >= ghostGoalRef.current;
+      if (!parked && ghostResetReason({ readerIdx: wi, ghostIdx: idx }) === 'jump') resetGhost();
     };
     step();
     const t = setInterval(step, 250);
     return () => clearInterval(t);
   }, [ghostOn, ghostRun, ghostWpm, ghostTotal, resetGhost]);
   const ghostRace = ghostOn && ghostIdx != null ? raceState(activeTab?.settings.wordIndex ?? 0, ghostIdx) : null;
+  // Goal verdict: reader's MEASURED pace against the ghost's SET pace, both to the goal target.
+  const ghostGoal = ghostOn && ghostIdx != null && ghostGoalTarget != null
+    ? goalRace({
+      readerIdx: activeTab?.settings.wordIndex ?? 0,
+      ghostIdx,
+      targetIdx: ghostGoalTarget,
+      readerWpm: (activeTab?.tracker && (activeTab.tracker.recentWpm() || activeTab.tracker.sessionWpm())) || 0,
+      ghostWpm,
+    })
+    : null;
 
   const [paneWidths, setPaneWidths] = useState({ toc: 320, dash: 260, rsvp: 420, source: 380 });
   const resizePane = (id, w) => setPaneWidths((prev) => ({ ...prev, [id]: w }));
@@ -3033,6 +3059,7 @@ function AppInner() {
             onJumpToGap={jumpToGap}
             onOpenBiometric={() => openDialog({ kind: 'biometric-settings' })}
             ghostRace={ghostRace}
+            ghostGoal={ghostGoal}
             onResetGhost={resetGhost}
           />
         ) : (

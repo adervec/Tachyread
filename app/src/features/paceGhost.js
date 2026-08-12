@@ -37,3 +37,38 @@ export function ghostResetReason({ playing = false, idle = false, readerIdx = 0,
   if (ghostIdx != null && Math.abs(readerIdx - ghostIdx) > jumpThreshold) return 'jump';
   return null;
 }
+
+// ── goal integration ──────────────────────────────────────────────────────────────────────────
+// With a goal set, the race gets a finish line: the ghost stops at the goal's target index rather
+// than wandering past it, and the readout becomes "who reaches the goal first".
+
+// Cap a ghost position at the goal's target. Returns { idx, done }.
+export function ghostAtGoal(ghostIdx, targetIdx) {
+  if (ghostIdx == null) return null;
+  if (targetIdx == null || !(targetIdx > 0)) return { idx: ghostIdx, done: false };
+  return ghostIdx >= targetIdx ? { idx: targetIdx, done: true } : { idx: ghostIdx, done: false };
+}
+
+// Seconds for a walker at `wpm` to cover `words`. null when it will never get there.
+const etaSec = (words, wpm) => (wpm > 0 ? Math.max(0, words) / wpm * 60 : null);
+
+// Who reaches the goal target first, and by how much. `readerWpm` is the reader's MEASURED pace
+// (their real speed), `ghostWpm` the ghost's set pace — comparing a measured rate against a target
+// rate is the whole point, so they deliberately come from different places.
+export function goalRace({ readerIdx = 0, ghostIdx = null, targetIdx = null, readerWpm = 0, ghostWpm = 0 } = {}) {
+  if (targetIdx == null || !(targetIdx > 0) || ghostIdx == null) return null;
+  const readerDone = readerIdx >= targetIdx;
+  const ghostDone = ghostIdx >= targetIdx;
+  const readerEta = readerDone ? 0 : etaSec(targetIdx - readerIdx, readerWpm);
+  const ghostEta = ghostDone ? 0 : etaSec(targetIdx - ghostIdx, ghostWpm);
+  // A finished racer beats an unfinished one outright, whatever the estimates say.
+  if (readerDone || ghostDone) {
+    const leader = readerDone && ghostDone ? 'tie' : readerDone ? 'you' : 'ghost';
+    return { readerEta, ghostEta, leader, marginSec: 0, readerDone, ghostDone };
+  }
+  if (readerEta == null || ghostEta == null) return { readerEta, ghostEta, leader: null, marginSec: null, readerDone, ghostDone };
+  const marginSec = Math.abs(readerEta - ghostEta);
+  // Inside 5s the projection isn't precise enough to crown anyone.
+  const leader = marginSec < 5 ? 'tie' : readerEta < ghostEta ? 'you' : 'ghost';
+  return { readerEta, ghostEta, leader, marginSec, readerDone, ghostDone };
+}

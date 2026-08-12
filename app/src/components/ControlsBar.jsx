@@ -8,6 +8,16 @@ import { MODES } from '../engine/readingMode.js';
 import { lastCountableWord } from '../document/toc.js';
 import { playButtonView } from '../features/playButtonMode.js';
 
+// Compact gap for the ghost verdict — "1m 30s" reads at a glance where "00:01:30" doesn't.
+function fmtGap(secs) {
+  if (!isFinite(secs) || secs < 0) return '—';
+  const s = Math.round(secs);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return s % 60 ? `${m}m ${s % 60}s` : `${m}m`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
 function formatTime(secs) {
   if (!isFinite(secs) || secs < 0) return '--:--:--';
   const h = Math.floor(secs / 3600);
@@ -16,7 +26,7 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', modeIdleFrac = null, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, onJumpToFrontier, onJumpToGap, onOpenBiometric, ghostRace = null, onResetGhost }) {
+export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', modeIdleFrac = null, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, onJumpToFrontier, onJumpToGap, onOpenBiometric, ghostRace = null, ghostGoal = null, onResetGhost }) {
   const { patchSettings, state, updateGlobal } = useApp();
   const isCompact = useIsCompact();
   // Mobile: the expanded dock shows the FULL controls immediately (no "more" disclosure) —
@@ -126,6 +136,18 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
           <div className={`progress-meta ghost-race ${ghostRace.status}`} title={`You are ${ghostRace.status === 'level' ? 'level with' : `${Math.abs(ghostRace.delta)} words ${ghostRace.status} of`} the pace ghost — it walks at your set WPM. It restarts when you go idle, jump, or press ↺.`}>
             <span aria-hidden="true">👻</span>
             <span className="gr-delta">{ghostRace.status === 'level' ? 'level' : `${ghostRace.delta > 0 ? '+' : ''}${ghostRace.delta}`}</span>
+            {/* With a goal set, the goal's target is the finish line — show who reaches it first. */}
+            {ghostGoal && (
+              ghostGoal.readerDone || ghostGoal.ghostDone ? (
+                <span className={`gr-verdict ${ghostGoal.leader}`} title={ghostGoal.leader === 'you' ? 'You reached the goal before the ghost' : ghostGoal.leader === 'ghost' ? 'The ghost reached the goal first' : 'You and the ghost reached the goal together'}>
+                  {ghostGoal.leader === 'you' ? '🏁 you win' : ghostGoal.leader === 'ghost' ? '🏁 ghost wins' : '🏁 dead heat'}
+                </span>
+              ) : ghostGoal.leader ? (
+                <span className={`gr-verdict ${ghostGoal.leader}`} title={`To the goal: you ~${fmtGap(ghostGoal.readerEta)} at your measured pace, ghost ~${fmtGap(ghostGoal.ghostEta)} at its set WPM`}>
+                  {ghostGoal.leader === 'tie' ? 'neck and neck' : `${ghostGoal.leader === 'you' ? 'you' : 'ghost'} by ${fmtGap(ghostGoal.marginSec)}`}
+                </span>
+              ) : null
+            )}
             <button className="gr-reset" title="Restart the ghost from your current word" aria-label="Restart pace ghost" onClick={onResetGhost}>↺</button>
           </div>
         )}
