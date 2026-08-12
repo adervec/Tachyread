@@ -12,14 +12,14 @@ assert.equal(scroll.glyph, '📜', 'scroll glyph');
 assert.match(scroll.title, /Scroll-to-read is on/);
 
 // idle / playing base glyphs
-assert.equal(V({}).glyph, '▶', 'idle → play triangle');
-assert.equal(V({ playing: true }).glyph, '❚❚', 'playing → pause bars');
+assert.equal(V({}).glyph, '▶️', 'idle → play triangle');
+assert.equal(V({ playing: true }).glyph, '⏸️', 'playing → pause bars');
 assert.equal(V({}).disabled, false, 'not disabled normally');
 
 // read-aloud changes the glyph (native vs offline voice), even while paused shows pause bars
 assert.equal(V({ readAloud: true }).glyph, '🔊', 'read-aloud native → speaker');
 assert.equal(V({ readAloud: true, offlineVoice: true }).glyph, '🎧', 'read-aloud offline → headphones');
-assert.equal(V({ readAloud: true, playing: true }).glyph, '❚❚', 'playing beats the aloud glyph');
+assert.equal(V({ readAloud: true, playing: true }).glyph, '⏸️', 'playing beats the aloud glyph');
 assert.equal(V({ readAloud: true }).cls, 'read-aloud', 'read-aloud class');
 assert.equal(V({}).cls, '', 'no class when plain');
 
