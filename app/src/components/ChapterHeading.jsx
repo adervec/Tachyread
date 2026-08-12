@@ -12,7 +12,12 @@ function fmtDur(secs) {
 
 // Slim heading bar: current section name, progress within it, and time figures — elapsed in
 // the section, an ETA to finish it (from your measured pace), and the estimated total.
-export default function ChapterHeading({ tab, onJumpWord }) {
+// Segment ticks stop being informative once they're a hair apart — past this the bar just reads as
+// a texture, so it goes back to plain. ponytail: a flat cap, not a density calculation off the
+// measured pixel width; raise it if a wide desktop bar ever wants finer granularity.
+const MAX_SEGMENTS = 40;
+
+export default function ChapterHeading({ tab, onJumpWord, visibleRef }) {
   const { doc, settings, tracker } = tab;
   const idx = settings.wordIndex;
   const entries = useMemo(() => getTocEntries(tab), [tab, settings.tocEntries]); // eslint-disable-line
@@ -37,6 +42,16 @@ export default function ChapterHeading({ tab, onJumpWord }) {
   const spentSecs = startedTs ? (Date.now() - startedTs) / 1000 : null;
   const totalSecs = spentSecs != null && isFinite(etaSecs) ? spentSecs + etaSecs : null;
 
+  // Segment the bar by SCREENFULS, so its ticks answer "how many pages is this section?" at the
+  // current text size — resize the font or the pane and the ticks re-space on the next tick (this
+  // component already re-renders every second for the clock, so no extra plumbing is needed).
+  const pageWords = visibleRef?.current?.words?.() || 0;
+  const sectionWords = Math.max(0, chapter.end - chapter.start);
+  const rawPages = pageWords > 0 && sectionWords > 0 ? Math.ceil(sectionWords / pageWords) : 0;
+  const pages = rawPages > 1 && rawPages <= MAX_SEGMENTS ? rawPages : 0;
+  const barTitle = `${pct}% through this section`
+    + (rawPages > 1 ? ` · about ${rawPages} screenfuls at this text size` : '');
+
   return (
     <div className="chapter-heading">
       <button
@@ -48,7 +63,7 @@ export default function ChapterHeading({ tab, onJumpWord }) {
       </button>
       <span className="ch-title" title={chapter.title}>{chapter.title}</span>
       <span className="ch-num">§ {num}</span>
-      <div className="ch-bar" title={`${pct}% through this section`}>
+      <div className={`ch-bar${pages > 1 ? ' segmented' : ''}`} title={barTitle} style={pages > 1 ? { '--ch-seg': `${100 / pages}%` } : undefined}>
         <div className="ch-fill" style={{ width: `${pct}%` }} />
       </div>
       <span className="ch-pct">{pct}%</span>

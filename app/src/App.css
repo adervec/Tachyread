@@ -454,8 +454,25 @@
 }
 .chapter-heading .ch-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 .chapter-heading .ch-num { color: var(--status-fg); font-family: Consolas, monospace; font-size: 11px; }
-.chapter-heading .ch-bar { flex: 1; height: 6px; background: var(--track-bg); border-radius: 3px; overflow: hidden; }
+.chapter-heading .ch-bar { flex: 1; height: 6px; background: var(--track-bg); border-radius: 3px; overflow: hidden; position: relative; }
 .chapter-heading .ch-fill { height: 100%; background: var(--toggle-active-bg); }
+/* Page ticks: one hairline per screenful of this section, so the bar's grain says how long the
+   section is. Drawn as a gradient OVER the fill (one paint, no element per page) and kept faint —
+   it should read as texture you can count, not as chrome competing with the fill. --ch-seg is the
+   per-page width in %, set inline from the measured screenful. */
+.chapter-heading .ch-bar.segmented::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(var(--ch-seg) - 1px),
+    var(--ch-tick, rgba(128, 128, 128, 0.45)) calc(var(--ch-seg) - 1px),
+    var(--ch-tick, rgba(128, 128, 128, 0.45)) var(--ch-seg)
+  );
+}
 .chapter-heading .ch-pct { color: var(--meta-fg, var(--status-fg)); font-size: 11px; width: 34px; text-align: right; }
 .chapter-heading .ch-times { display: flex; gap: 8px; font-size: 11px; color: var(--status-fg); font-family: Consolas, monospace; white-space: nowrap; }
 
