@@ -42,6 +42,13 @@ export function defaultFileSettings() {
     doneWordStyles: [], // completed words in the CURRENT line (combinable: Dim | Faint | Strikethrough | Italic | Color | Background); [] = off
     currentWordColor: '', // highlight colour for Color/Background/Box/Glow/Underline styles ('' = theme default)
     currentWordFontDelta: 0, // current-word font-size adjust in points (−3..+3)
+    // Pace ghost for MANUAL reading: a marker walking the text at the auto-play WPM to race.
+    // Styled exactly like the current word (same option set), so it can be made as loud or as
+    // faint as you like — and told apart from your own position at a glance.
+    paceGhost: false,
+    ghostWordStyles: ['Box'], // same vocabulary as currentWordStyles
+    ghostWordColor: '',       // '' = a theme-derived default distinct from the current-word colour
+    ghostWordFontDelta: 0,
     rightPaneFontSize: 12,
     // Auto font size for the Lines pane: fit roughly this many characters per line — the pane's
     // WIDTH drives the font (follows resizes/rotation). 0 = off (use rightPaneFontSize).

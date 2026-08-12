@@ -95,6 +95,7 @@ import { createRecognizer, wordMatches, speechRecognitionSupported } from './fea
 import { recordClip } from './features/audioRecorder.js';
 import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal, allFiles } from './state/storage.js';
 import { activitySummary } from './features/activitySummary.js';
+import { ghostIndexAt, raceState, ghostRunFrom, ghostResetReason } from './features/paceGhost.js';
 import { bookFromOpenedDoc } from './features/trackyreadAdd.js';
 import { sectionChecksum } from './document/sectionHash.js';
 import { acquireInstance } from './state/singleInstance.js';
@@ -401,6 +402,47 @@ function AppInner() {
     for (const e of evs) window.addEventListener(e, wake, { passive: true, capture: true });
     return () => { clearTimeout(timer); for (const e of evs) window.removeEventListener(e, wake, { capture: true }); };
   }, [state.global.blurWhenIdle, state.global.idleGraceSecs]);
+
+  // ── Pace ghost (manual reading) ──────────────────────────────────────────────────────────────
+  // A marker walking the text at the tab's WPM so there's something to race while YOU drive the
+  // position. Auto-play already moves at that speed, so a run only exists while playback is off.
+  // The run is two numbers (where + when it started); the position is derived per tick, so nothing
+  // drifts and a re-render can't advance it.
+  const [ghostRun, setGhostRun] = useState(null);
+  const [ghostIdx, setGhostIdx] = useState(null);
+  const ghostOn = !!activeTab?.settings.paceGhost;
+  const ghostWpm = activeTab?.settings.wpm || 250;
+  const ghostTotal = activeTab?.doc?.words?.length || 0;
+  const resetGhost = useCallback(() => {
+    const wi = activeTabRef.current?.settings?.wordIndex || 0;
+    setGhostRun(ghostRunFrom(wi, Date.now()));
+    setGhostIdx(wi);
+  }, []);
+  // Start / tear down a run. Playing hands the pace back to auto-play; idle means you stopped.
+  useEffect(() => {
+    if (!ghostOn || !activeTab) { setGhostRun(null); setGhostIdx(null); return undefined; }
+    const reason = ghostResetReason({ playing, idle: readingMode === 'idle' });
+    if (reason) { setGhostRun(null); setGhostIdx(null); return undefined; }
+    if (!ghostRun) resetGhost();
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ghostOn, playing, readingMode, activeTab?.id]);
+  // Walk it. 250ms is smooth for a word marker and costs one multiply per tick.
+  useEffect(() => {
+    if (!ghostOn || !ghostRun) return undefined;
+    const step = () => {
+      const idx = ghostIndexAt({ ...ghostRun, now: Date.now(), wpm: ghostWpm, totalWords: ghostTotal });
+      setGhostIdx(idx);
+      // A jump (chapter skip, search hit, big rewind) makes the comparison meaningless — restart
+      // level with the reader rather than showing a nonsense lead.
+      const wi = activeTabRef.current?.settings?.wordIndex || 0;
+      if (ghostResetReason({ readerIdx: wi, ghostIdx: idx }) === 'jump') resetGhost();
+    };
+    step();
+    const t = setInterval(step, 250);
+    return () => clearInterval(t);
+  }, [ghostOn, ghostRun, ghostWpm, ghostTotal, resetGhost]);
+  const ghostRace = ghostOn && ghostIdx != null ? raceState(activeTab?.settings.wordIndex ?? 0, ghostIdx) : null;
 
   const [paneWidths, setPaneWidths] = useState({ toc: 320, dash: 260, rsvp: 420, source: 380 });
   const resizePane = (id, w) => setPaneWidths((prev) => ({ ...prev, [id]: w }));
@@ -2588,12 +2630,13 @@ function AppInner() {
           scrollCmd={scrollCmd}
           recenterKey={recenterKey}
           onAddNote={(wi) => { jumpWord(wi); openDialog({ kind: 'notes' }); }}
+          ghostIdx={ghostOn ? ghostIdx : null}
         />
       ),
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showStats, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances, scrollActive, scrollCmd, recenterKey]);
+  }, [activeTab, state.showToc, state.showStats, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances, scrollActive, scrollCmd, recenterKey, ghostOn, ghostIdx]);
 
   // One derived `dialog` drives the whole render block below: a blocking modal wins, otherwise the
   // focused dialog tab. When it's a panel (no modal), `dialogDocked` restyles it from a centered
@@ -2989,6 +3032,8 @@ function AppInner() {
             onJumpToFrontier={jumpToFrontier}
             onJumpToGap={jumpToGap}
             onOpenBiometric={() => openDialog({ kind: 'biometric-settings' })}
+            ghostRace={ghostRace}
+            onResetGhost={resetGhost}
           />
         ) : (
           <div className="controls-bar" style={{ opacity: 0.5 }}>

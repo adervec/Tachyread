@@ -4757,3 +4757,24 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 
 /* Splash-screen recent-activity line — quiet, one notch above the shortcuts hint. */
 .empty-state .splash-activity { opacity: 0.75; font-size: 14px; margin: 2px 0 0; }
+
+/* Pace ghost (manual reading): the marker you race, styled from the SAME option vocabulary as the
+   current word so it can be tuned to taste — a separate --ghost-color keeps the two tellable
+   apart when both are on screen. Deliberately never bolder than your own position. */
+.line-row .word.ghost-word { --gc: var(--ghost-color, #7c5cff); }
+.line-row .word.ghost-word.gstyle-Underline { text-decoration: underline; text-decoration-style: dashed; text-decoration-color: var(--gc); }
+.line-row .word.ghost-word.gstyle-Overline { text-decoration: overline; text-decoration-style: dashed; text-decoration-color: var(--gc); }
+.line-row .word.ghost-word.gstyle-Underline.gstyle-Overline { text-decoration: underline overline; text-decoration-style: dashed; text-decoration-color: var(--gc); }
+.line-row .word.ghost-word.gstyle-Bold { font-weight: 700; }
+.line-row .word.ghost-word.gstyle-Italic { font-style: italic; }
+.line-row .word.ghost-word.gstyle-Color { color: var(--gc); }
+.line-row .word.ghost-word.gstyle-Background { background: color-mix(in srgb, var(--gc) 22%, transparent); border-radius: 2px; }
+.line-row .word.ghost-word.gstyle-Box { outline: 1.5px dashed var(--gc); border-radius: 3px; padding: 0 2px; }
+.line-row .word.ghost-word.gstyle-Glow { text-shadow: 0 0 6px var(--gc); }
+
+/* Race readout in the controls bar. */
+.ghost-race { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.ghost-race .gr-delta { font-variant-numeric: tabular-nums; font-weight: 600; }
+.ghost-race.ahead .gr-delta { color: var(--ok-fg, #2e9d4f); }
+.ghost-race.behind .gr-delta { color: var(--ox-bright, #b0413e); }
+.ghost-race .gr-reset { padding: 0 6px; min-height: 0; font-size: 11px; }
