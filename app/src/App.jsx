@@ -93,7 +93,8 @@ import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal, allFiles } from './state/storage.js';
+import { activitySummary } from './features/activitySummary.js';
 import { bookFromOpenedDoc } from './features/trackyreadAdd.js';
 import { sectionChecksum } from './document/sectionHash.js';
 import { acquireInstance } from './state/singleInstance.js';
@@ -145,6 +146,20 @@ function isSentenceStart(doc, i) {
 // doesn't sit there forever. Each new message (tracked by seq, so identical repeats re-trigger)
 // snaps back to full opacity and restarts the timer; hovering the bar holds it visible to read.
 const STATUS_HOLD_MS = 6000;
+// Splash-screen activity line: recent reading volume + week-over-week direction, worded by
+// features/activitySummary.js (facts only — no cheering, no guilt). Renders nothing on a quiet
+// fortnight or while history is still loading, so the hero never flashes a zero.
+function SplashActivity() {
+  const [line, setLine] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    allFiles().then((files) => { if (alive) setLine(activitySummary(files)); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  if (!line) return null;
+  return <p className="splash-activity">{line}</p>;
+}
+
 function StatusText({ text, seq }) {
   const [faded, setFaded] = useState(false);
   // Stamp each message with the wall-clock time it appeared, so a glance tells you how long ago the
@@ -2860,6 +2875,7 @@ function AppInner() {
           <p>Open a file (File → Open TXT, Ctrl+O), open a document (Ctrl+D), or drop a file here.</p>
           <p>Supports .txt, .md, .html, .docx, .pdf, .epub.</p>
           {state.tabs.length > 0 && <p>Or pick one of your {state.tabs.length} open tab(s) above.</p>}
+          <SplashActivity />
           <p className="hint">Shortcuts: Space play, ←→ word, ↑↓ line, Ctrl+↑↓ paragraph, Home restart, Ctrl+F find</p>
         </div>
       ))}
