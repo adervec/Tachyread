@@ -50,6 +50,11 @@ function currentWordStyles(settings) {
   return ['Underline'];
 }
 
+// The ghost reuses the current word's whole style vocabulary — same names, own selection.
+function ghostWordStyles(settings) {
+  return Array.isArray(settings.ghostWordStyles) ? settings.ghostWordStyles : ['Box'];
+}
+
 // Combinable ORP-letter looks, precomputed into one class string (it's the same for every word on
 // the page, so building it per word would be pure waste).
 function orpClass(settings) {
@@ -82,6 +87,8 @@ function renderWords(line, opts) {
     // Per-document display substitution (render one word as another) — display only.
     const tok = opts.swaps ? applySwap(rawTok, opts.swaps) : rawTok;
     const isCurrentWord = opts.isCurrent && wordIdx === opts.currentWordIndex;
+    // The pace ghost is a document-wide index, so unlike `current` it isn't scoped to this line.
+    const isGhostWord = opts.ghostWordIndex != null && wordIdx === opts.ghostWordIndex;
     // Completed words in the CURRENT line (already read, before the current word) can take their
     // own look — with paragraph-sized lines (wall mode) it shows where you are inside the block.
     const isDone = opts.isCurrent && opts.doneStyles && opts.doneStyles.length > 0 && wordIdx < opts.currentWordIndex;
@@ -124,12 +131,16 @@ function renderWords(line, opts) {
       'word',
       isCurrentWord ? 'current' : '',
       ...styleClasses,
+      // Ghost styling loses to the current word's when they land on the SAME word — at that moment
+      // you're level, and your own position is the one you steer by.
+      ...(isGhostWord && !isCurrentWord ? ['ghost-word', ...(opts.ghostWordStyles || []).map((st) => `gstyle-${st}`)] : []),
       ...(isDone ? ['done', ...opts.doneStyles.map((st) => `done-${st}`)] : []),
       isProperName ? 'proper-name' : '',
       hidden ? 'hidden-word' : '',
       hlCls || '',
     ].filter(Boolean).join(' ');
-    const cwStyle = isCurrentWord && opts.cwFontDelta ? { fontSize: `calc(1em + ${opts.cwFontDelta}pt)` } : undefined;
+    const cwStyle = isCurrentWord && opts.cwFontDelta ? { fontSize: `calc(1em + ${opts.cwFontDelta}pt)` }
+      : (isGhostWord && !isCurrentWord && opts.ghostFontDelta ? { fontSize: `calc(1em + ${opts.ghostFontDelta}pt)` } : undefined);
     elems.push(<span key={runIdx++} className={cls} style={cwStyle}>{inner}</span>);
     wordIdx++;
   }
@@ -261,6 +272,9 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
             const words = renderWords(line, {
               isCurrent,
               currentWordIndex: ctx.currentWordIndex,
+              ghostWordIndex: ctx.ghostLine === index ? ctx.ghostWordIndex : null,
+              ghostWordStyles: dsettings.ghostWordStyles,
+              ghostFontDelta: dsettings.ghostFontDelta,
               bionic: dsettings.bionicFont,
               highlightORP: dsettings.highlightORP,
               orpCls: dsettings.orpCls,
@@ -308,6 +322,9 @@ function lineRowEqual(p, n) {
   const pCur = pc.currentLine === i, nCur = nc.currentLine === i;
   if (pCur !== nCur) return false;                          // gained / lost "current"
   if (nCur && pc.currentWordIndex !== nc.currentWordIndex) return false; // word highlight moved within this line
+  const pGhost = pc.ghostLine === i, nGhost = nc.ghostLine === i;
+  if (pGhost !== nGhost) return false;                      // the pace ghost entered / left this line
+  if (nGhost && pc.ghostWordIndex !== nc.ghostWordIndex) return false; // …or stepped within it
   if ((i < pc.currentLine) !== (i < nc.currentLine)) return false;       // crossed the cursor → read-status flips
   if ((i >= pc.paraStart && i <= pc.paraEnd) !== (i >= nc.paraStart && i <= nc.paraEnd)) return false; // paragraph highlight
   if (pc.currentLine !== nc.currentLine) {                  // obscuring shifts with the current line
@@ -486,7 +503,7 @@ function revealBoundary(doc, idx, mode) {
   return Infinity;
 }
 
-export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { line: -1, token: 0 }, visibleRef, onVisible, compact = false, scrollRead = false, scrollCmd = null, recenterKey = 0, onAddNote }) {
+export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { line: -1, token: 0 }, visibleRef, onVisible, compact = false, scrollRead = false, scrollCmd = null, recenterKey = 0, onAddNote, ghostIdx = null }) {
   const { doc: srcDoc, settings } = tab;
   // Wall-of-text mode: merge source lines into flowing blocks (breaks only at headings, percent, or
   // every N lines). Not in the split view. The whole pane then operates on the merged doc.
@@ -593,6 +610,8 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       currentWordStyles: currentWordStyles(settings),
       doneWordStyles: Array.isArray(settings.doneWordStyles) ? settings.doneWordStyles : [],
       currentWordFontDelta: settings.currentWordFontDelta || 0,
+      ghostWordStyles: ghostWordStyles(settings),
+      ghostFontDelta: settings.ghostWordFontDelta || 0,
       swaps: swapLookup(settings.wordSwaps),
       hlAlgo: settings.highlightAlgo || 'off',
     }),
@@ -602,6 +621,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       settings.textAlignment, settings.showPointer, settings.pointerStyle, settings.pointerPlacement,
       settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP, settings.orpStyles,
       settings.currentWordStyles, settings.currentWordStyle, settings.doneWordStyles, settings.currentWordFontDelta, settings.wordSwaps, wall,
+      settings.ghostWordStyles, settings.ghostWordFontDelta,
       settings.highlightAlgo,
     ]
   );
@@ -966,6 +986,8 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     () => ({
       currentLine,
       currentWordIndex: idx,
+      ghostWordIndex: ghostIdx,
+      ghostLine: ghostIdx == null ? -1 : getLineIndex(doc, ghostIdx),
       wall,
       sessionLines: tab.sessionLinesRead,
       sessionNavLines: tab.sessionNavLinesRead,
@@ -978,7 +1000,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       translations,
       pageMark,
     }),
-    [currentLine, idx, wall, tab.sessionLinesRead, tab.sessionNavLinesRead, tab.readLinesAllTime, paraRange, hideBeyond, pressingStart, longPressMs, translations, pageMark]
+    [currentLine, idx, ghostIdx, doc, wall, tab.sessionLinesRead, tab.sessionNavLinesRead, tab.readLinesAllTime, paraRange, hideBeyond, pressingStart, longPressMs, translations, pageMark]
   );
 
   // "Just entered the page" flash: an IntersectionObserver on the scroller catches each line the
@@ -1139,6 +1161,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   const paneStyle = {};
   if (settings.fontFamily) paneStyle.fontFamily = settings.fontFamily;
   if (settings.currentWordColor) paneStyle['--cw-color'] = settings.currentWordColor;
+  if (settings.ghostWordColor) paneStyle['--ghost-color'] = settings.ghostWordColor;
   if (settings.orpColor) paneStyle['--lines-orp'] = settings.orpColor;
   // ORP letter tuning: how much bigger the 'Larger' style draws it, and an optional font of its
   // own. CSS-var-driven so the .orp-* rules stay static (fallbacks preserve pre-setting tabs).

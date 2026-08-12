@@ -169,6 +169,14 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
     patch({ currentWordStyles: [...set] });
   }
 
+  const ghostStyles = Array.isArray(s.ghostWordStyles) ? s.ghostWordStyles : ['Box'];
+  function toggleGhostStyle(name) {
+    const set = new Set(ghostStyles);
+    if (set.has(name)) set.delete(name);
+    else set.add(name);
+    patch({ ghostWordStyles: [...set] });
+  }
+
   const doneStyles = Array.isArray(s.doneWordStyles) ? s.doneWordStyles : [];
   function toggleDoneStyle(name) {
     const set = new Set(doneStyles);
@@ -672,6 +680,56 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           />
           <span>{(s.currentWordFontDelta ?? 0) > 0 ? '+' : ''}{s.currentWordFontDelta ?? 0}pt</span>
           {(s.currentWordFontDelta ?? 0) !== 0 && <button type="button" onClick={() => patch({ currentWordFontDelta: 0 })}>Reset</button>}
+        </div>
+      </Field>
+
+      <Section>Pace ghost</Section>
+      <Field label="Race a pace ghost">
+        <input type="checkbox" checked={!!s.paceGhost} onChange={(e) => patch({ paceGhost: e.target.checked })} />
+      </Field>
+      <p className="settings-note" style={{ margin: '2px 0 6px' }}>
+        While you read manually, a ghost marker walks the text at the WPM above so you have
+        something to race. The controls bar shows how far ahead or behind you are, with ↺ to
+        restart it from your word; it also restarts itself whenever you go idle or jump.
+        Auto-play already moves at that speed, so the ghost stands down while it&rsquo;s running.
+      </p>
+      <Field label="Ghost-word highlight (combine any)">
+        <div className="checkbox-group">
+          {CURRENT_WORD_STYLES.map((name) => {
+            const active = ghostStyles.includes(name);
+            return (
+              <label key={name} className="checkbox-pill">
+                <input type="checkbox" checked={active} onChange={() => toggleGhostStyle(name)} />
+                {name}
+              </label>
+            );
+          })}
+        </div>
+      </Field>
+      <Field label="Ghost-word colour">
+        <div className="swatch-row">
+          {HIGHLIGHT_COLORS.map(([hex, label]) => (
+            <button
+              key={hex || 'theme'}
+              type="button"
+              className={`swatch${(s.ghostWordColor || '') === hex ? ' on' : ''}`}
+              style={hex ? { background: hex } : undefined}
+              title={label}
+              onClick={() => patch({ ghostWordColor: hex })}
+            >{hex ? '' : 'A'}</button>
+          ))}
+          <input type="color" className="swatch-custom" value={s.ghostWordColor || '#7c5cff'} onChange={(e) => patch({ ghostWordColor: e.target.value })} title="Custom colour" />
+        </div>
+      </Field>
+      <Field label="Ghost-word font size adjust (pt)">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="range" min={-3} max={3} step={0.5}
+            value={s.ghostWordFontDelta ?? 0}
+            onChange={(e) => patch({ ghostWordFontDelta: Math.max(-3, Math.min(3, Number(e.target.value) || 0)) })}
+          />
+          <span>{(s.ghostWordFontDelta ?? 0) > 0 ? '+' : ''}{s.ghostWordFontDelta ?? 0}pt</span>
+          {(s.ghostWordFontDelta ?? 0) !== 0 && <button type="button" onClick={() => patch({ ghostWordFontDelta: 0 })}>Reset</button>}
         </div>
       </Field>
 

@@ -16,7 +16,7 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', modeIdleFrac = null, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, onJumpToFrontier, onJumpToGap, onOpenBiometric }) {
+export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', modeIdleFrac = null, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, onJumpToFrontier, onJumpToGap, onOpenBiometric, ghostRace = null, onResetGhost }) {
   const { patchSettings, state, updateGlobal } = useApp();
   const isCompact = useIsCompact();
   // Mobile: the expanded dock shows the FULL controls immediately (no "more" disclosure) —
@@ -120,6 +120,15 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
         )}
         <div className="progress-meta" title={skipRanges.length ? 'Percent of the countable book read (flagged front/back matter excluded)' : 'Percent of the book actually read'}>📖 {coverage.toFixed(1)}%{skipRanges.length ? '*' : ''}</div>
         <div className="progress-meta" title="Estimated time remaining at your measured pace">⏱ {formatTime(secs)}</div>
+        {/* Pace-ghost race: how far ahead of (or behind) the auto-speed marker you are, and a
+            one-tap restart. The ghost also restarts itself when you go idle or jump. */}
+        {ghostRace && (
+          <div className={`progress-meta ghost-race ${ghostRace.status}`} title={`You are ${ghostRace.status === 'level' ? 'level with' : `${Math.abs(ghostRace.delta)} words ${ghostRace.status} of`} the pace ghost — it walks at your set WPM. It restarts when you go idle, jump, or press ↺.`}>
+            <span aria-hidden="true">👻</span>
+            <span className="gr-delta">{ghostRace.status === 'level' ? 'level' : `${ghostRace.delta > 0 ? '+' : ''}${ghostRace.delta}`}</span>
+            <button className="gr-reset" title="Restart the ghost from your current word" aria-label="Restart pace ghost" onClick={onResetGhost}>↺</button>
+          </div>
+        )}
         <div
           className={`progress-meta reading-mode${readingMode === 'idle' ? ' rm-idle' : ''}`}
           title={`How the app thinks you're reading right now — ${MODES[readingMode]?.hint || ''}${modeIdleFrac != null ? ' (the underline drains as this decays to idle)' : ''}`}
