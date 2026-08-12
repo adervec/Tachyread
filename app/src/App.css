@@ -369,11 +369,19 @@
   font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   border: 1px solid var(--input-border);
   background: var(--btn-bg, transparent);
   color: var(--menu-fg);
   border-radius: 6px;
+}
+.reading-view-switch .rvs-lbl { margin-left: 5px; }
+/* Narrow phones: drop the words rather than ellipsing them — "☰ ..." told you nothing that the
+   icon didn't. The icon grows to carry the button on its own; title/aria-label keep the meaning
+   for screen readers and long-press tooltips. Wider compact screens (tablets) keep the labels. */
+@media (max-width: 560px) {
+  .reading-view-switch .rvs-lbl { display: none; }
+  .reading-view-switch .rvs-ico { font-size: 17px; line-height: 1; }
+  .reading-view-switch button { padding: 8px 2px; }
 }
 .reading-view-switch button.on {
   background: var(--toggle-active-bg);

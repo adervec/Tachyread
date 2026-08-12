@@ -13,7 +13,7 @@ export function playButtonView({ playing, scrollMode, readAloud, offlineVoice, f
   if (timerMin) modes.push(`auto-stop ${timerMin}m`);
   if (voiceCmd) modes.push('voice commands');
   const suffix = modes.length ? ` — ${modes.join(' · ')}` : '';
-  const glyph = playing ? '❚❚' : (readAloud ? (offlineVoice ? '🎧' : '🔊') : '▶');
+  const glyph = playing ? '⏸️' : (readAloud ? (offlineVoice ? '🎧' : '🔊') : '▶️');
   const cls = readAloud ? 'read-aloud' : '';
   return { glyph, cls, disabled: false, title: `${playing ? 'Pause' : 'Play'} (Space)${suffix}` };
 }

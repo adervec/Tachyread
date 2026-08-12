@@ -2685,44 +2685,49 @@ function AppInner() {
                 <button
                   role="tab"
                   aria-selected={!auxOpen && mobileView === 'rsvp'}
+                  aria-label="Fast Reader view" title="Fast Reader (RSVP) view"
                   className={!auxOpen && mobileView === 'rsvp' ? 'on' : ''}
                   onClick={() => { showAuxOnly(null); setMobileView('rsvp'); }}
                 >
-                  ⚡ Fast
+                  <span className="rvs-ico">⚡</span><span className="rvs-lbl">Fast</span>
                 </button>
               )}
               <button
                 role="tab"
                 aria-selected={!auxOpen && mobileView === 'lines'}
+                aria-label="Lines view" title="Lines view"
                 className={!auxOpen && mobileView === 'lines' ? 'on' : ''}
                 onClick={() => { showAuxOnly(null); setMobileView('lines'); }}
               >
-                ☰ Lines
+                <span className="rvs-ico">📃</span><span className="rvs-lbl">Lines</span>
               </button>
               <button
                 role="tab"
                 aria-selected={state.showToc}
+                aria-label="Table of contents" title="Table of contents"
                 className={state.showToc ? 'on' : ''}
                 onClick={() => showAuxOnly(state.showToc ? null : 'toc')}
               >
-                📖 ToC
+                <span className="rvs-ico">📖</span><span className="rvs-lbl">ToC</span>
               </button>
               <button
                 role="tab"
                 aria-selected={state.showIndex}
+                aria-label="Index" title="Index"
                 className={state.showIndex ? 'on' : ''}
                 onClick={() => showAuxOnly(state.showIndex ? null : 'index')}
               >
-                🔎 Index
+                <span className="rvs-ico">🔎</span><span className="rvs-lbl">Index</span>
               </button>
               {activeTab?.doc?.source && (
                 <button
                   role="tab"
                   aria-selected={state.showSource}
+                  aria-label="Source pages" title="Original source pages"
                   className={state.showSource ? 'on' : ''}
                   onClick={() => showAuxOnly(state.showSource ? null : 'source')}
                 >
-                  🗐 Source
+                  <span className="rvs-ico">📄</span><span className="rvs-lbl">Source</span>
                 </button>
               )}
               {/* Full-screen reading: hide ALL chrome (menus, tabs, controls, status) — a tiny
@@ -2771,7 +2776,7 @@ function AppInner() {
                     aria-label={`Rotate reader (currently ${readerRotation}°)`}
                     onClick={() => updateGlobal({ readerRotation: ((state.global.readerRotation || 0) + 90) % 360 })}
                   >
-                    ⟳{readerRotation ? ` ${readerRotation}°` : ''}
+                    🔄{readerRotation ? ` ${readerRotation}°` : ''}
                   </button>
                   {/* Lock the whole app to portrait — ignore the phone's physical auto-rotate. */}
                   <button
@@ -2923,17 +2928,17 @@ function AppInner() {
               })()}
               {/* The collapsed dock has room for the core nav, not just play — so paging through a
                   book (esp. with a pane hidden) doesn't force expanding the controls. */}
-              <button className="dock-mini-nav" title="Page up (⇞)" aria-label="Page up" onClick={() => pageLines(-1)}>⇞</button>
-              <button className="dock-mini-nav" title="Previous line (↑)" aria-label="Previous line" onClick={() => nav('prevLine')}>↑</button>
-              <button className="dock-mini-nav" title="Next line (↓)" aria-label="Next line" onClick={() => nav('nextLine')}>↓</button>
-              <button className="dock-mini-nav" title="Page down (⇟)" aria-label="Page down" onClick={() => pageLines(1)}>⇟</button>
+              <button className="dock-mini-nav" title="Page up (⇞)" aria-label="Page up" onClick={() => pageLines(-1)}>⏫</button>
+              <button className="dock-mini-nav" title="Previous line (↑)" aria-label="Previous line" onClick={() => nav('prevLine')}>⬆️</button>
+              <button className="dock-mini-nav" title="Next line (↓)" aria-label="Next line" onClick={() => nav('nextLine')}>⬇️</button>
+              <button className="dock-mini-nav" title="Page down (⇟)" aria-label="Page down" onClick={() => pageLines(1)}>⏬</button>
               {activeTab.doc.source && state.showSource && (
                 <>
-                  <button className="dock-mini-nav src" title="Previous source page" aria-label="Previous source page" onClick={() => jumpSourcePage(-1)}>◀▤</button>
-                  <button className="dock-mini-nav src" title="Next source page" aria-label="Next source page" onClick={() => jumpSourcePage(1)}>▤▶</button>
+                  <button className="dock-mini-nav src" title="Previous source page" aria-label="Previous source page" onClick={() => jumpSourcePage(-1)}>⬅️📄</button>
+                  <button className="dock-mini-nav src" title="Next source page" aria-label="Next source page" onClick={() => jumpSourcePage(1)}>📄➡️</button>
                 </>
               )}
-              <button className="dock-mini-jump" title="Jump to the current word" aria-label="Jump to current word" onClick={jumpToCurrent}>⌖</button>
+              <button className="dock-mini-jump" title="Jump to the current word" aria-label="Jump to current word" onClick={jumpToCurrent}>📍</button>
               <span className="dock-mini-meta">{activeTab.settings.wordIndex + 1} / {activeTab.doc.words.length}</span>
             </div>
           )
