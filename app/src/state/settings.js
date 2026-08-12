@@ -425,6 +425,10 @@ export function defaultGlobalSettings() {
     // AFK guard: the longest pause (seconds) still credited as active reading. Gaps beyond this stop
     // counting toward active time/WPM, and the reading-mode chip drains to idle after it.
     idleGraceSecs: 60,
+    // Which page of the mobile dock's Steps / Modes / Goal pager is selected. Device-local (it's a
+    // phone-layout choice) and persisted so it survives closing the dock, switching tabs, or a
+    // relaunch — reopening the dock on a different page than you left it is pure friction.
+    mobilePillPage: 0,
     // Blur the whole app once the guard above trips. Scroll reading has no playback to pause, so
     // walking away leaves text on screen and time quietly uncredited; the veil makes that visible
     // and forces a deliberate resume. Off by default.

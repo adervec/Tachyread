@@ -22,7 +22,10 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
   // Mobile: the expanded dock shows the FULL controls immediately (no "more" disclosure) —
   // paginated between Steps / Modes / Goal so it never becomes one tall scrolling stack.
   const moreOpen = true;
-  const [morePage, setMorePage] = useState(0);
+  // Persisted (device-local) so the chosen page survives closing the dock, a tab change, and a
+  // relaunch — it lives in global settings rather than component state for exactly that reason.
+  const morePage = Math.max(0, Math.min(2, Number(state.global.mobilePillPage) || 0));
+  const setMorePage = (i) => updateGlobal({ mobilePillPage: i });
   // One BIOMETRIC control unifies the old separate voice-command toggle and the camera "watching"
   // buttons: the button opens a quick popup with every hands-free source in one place.
   const [bioOpen, setBioOpen] = useState(false);
@@ -84,15 +87,18 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
     </button>
   );
   const B = {
-    restart: () => navBtn('Restart (Home)', onRestart, '|<', 'Home'),
-    pageUp: () => navBtn('Page up — current line jumps to the top visible line (PgUp)', onPageUp, '⇞', 'PgUp'),
-    prevPara: () => navBtn('Previous paragraph (Ctrl+Up)', onPrevPara, '⇈', 'Ctrl↑'),
-    prevLine: () => navBtn('Previous line (Up)', onPrevLine, '↑', '↑'),
-    prevWord: () => navBtn('Previous word (Left)', onPrevWord, '‹', '←'),
-    nextWord: () => navBtn('Next word (Right)', onNextWord, '›', '→'),
-    nextLine: () => navBtn('Next line (Down)', onNextLine, '↓', '↓'),
-    nextPara: () => navBtn('Next paragraph (Ctrl+Down)', onNextPara, '⇊', 'Ctrl↓'),
-    pageDown: () => navBtn('Page down — current line jumps to the bottom visible line (PgDn)', onPageDown, '⇟', 'PgDn'),
+    // Emoji glyphs over typographic characters: they carry colour and read at a glance on a phone,
+    // where bare ‹ › ⇈ ⇊ are thin and near-identical. Grain is encoded by SHAPE — page ⏫⏬,
+    // paragraph 🔼🔽, line ⬆️⬇️, word ⬅️➡️ — so the pairs stay distinguishable at a size.
+    restart: () => navBtn('Restart (Home)', onRestart, '⏮️', 'Home'),
+    pageUp: () => navBtn('Page up — current line jumps to the top visible line (PgUp)', onPageUp, '⏫', 'PgUp'),
+    prevPara: () => navBtn('Previous paragraph (Ctrl+Up)', onPrevPara, '🔼', 'Ctrl↑'),
+    prevLine: () => navBtn('Previous line (Up)', onPrevLine, '⬆️', '↑'),
+    prevWord: () => navBtn('Previous word (Left)', onPrevWord, '⬅️', '←'),
+    nextWord: () => navBtn('Next word (Right)', onNextWord, '➡️', '→'),
+    nextLine: () => navBtn('Next line (Down)', onNextLine, '⬇️', '↓'),
+    nextPara: () => navBtn('Next paragraph (Ctrl+Down)', onNextPara, '🔽', 'Ctrl↓'),
+    pageDown: () => navBtn('Page down — current line jumps to the bottom visible line (PgDn)', onPageDown, '⏬', 'PgDn'),
   };
 
   return (
@@ -102,9 +108,16 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
         <div className="progress-meta">
           {idx + 1} / {totalWords}
         </div>
-        <button className="jump-current-btn" title="Jump to the current word — scroll the Lines pane back to where you're reading (J)" aria-label="Jump to current word" onClick={onJumpToCurrent}>⌖{!isCompact && <kbd className="key-hint">J</kbd>}</button>
-        {onJumpToFrontier && <button className="jump-current-btn" title="Jump to the latest unread word — the first word after everything you've ever read (U)" aria-label="Jump to latest unread" onClick={onJumpToFrontier}>⇥{!isCompact && <kbd className="key-hint">U</kbd>}</button>}
-        {onJumpToGap && <button className="jump-current-btn" title="Jump to the first unread word (skipped sections excluded). Click again from there to hop to the next read/unread boundary — backfill the patchy sections. (G)" aria-label="Jump to first unread gap" onClick={onJumpToGap}>↷{!isCompact && <kbd className="key-hint">G</kbd>}</button>}
+        {/* The three jump buttons are desktop-only: on a phone this row has to hold the counter,
+            coverage, ETA and the reading-mode chip, and the icons pushed it into a crowded wrap.
+            Their keyboard shortcuts (J / U / G) and the Lines pane's own affordances still work. */}
+        {!isCompact && (
+          <>
+            <button className="jump-current-btn" title="Jump to the current word — scroll the Lines pane back to where you're reading (J)" aria-label="Jump to current word" onClick={onJumpToCurrent}>📍<kbd className="key-hint">J</kbd></button>
+            {onJumpToFrontier && <button className="jump-current-btn" title="Jump to the latest unread word — the first word after everything you've ever read (U)" aria-label="Jump to latest unread" onClick={onJumpToFrontier}>⏭️<kbd className="key-hint">U</kbd></button>}
+            {onJumpToGap && <button className="jump-current-btn" title="Jump to the first unread word (skipped sections excluded). Click again from there to hop to the next read/unread boundary — backfill the patchy sections. (G)" aria-label="Jump to first unread gap" onClick={onJumpToGap}>🩹<kbd className="key-hint">G</kbd></button>}
+          </>
+        )}
         <div className="progress-meta" title={skipRanges.length ? 'Percent of the countable book read (flagged front/back matter excluded)' : 'Percent of the book actually read'}>📖 {coverage.toFixed(1)}%{skipRanges.length ? '*' : ''}</div>
         <div className="progress-meta" title="Estimated time remaining at your measured pace">⏱ {formatTime(secs)}</div>
         <div
@@ -136,7 +149,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             aria-label="Slower"
             onClick={() => patchSettings(tab.id, { wpm: Math.max(60, settings.wpm - 25) })}
           >
-            −
+            ➖
           </button>
           <input
             type="range"
@@ -153,7 +166,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             aria-label="Faster"
             onClick={() => patchSettings(tab.id, { wpm: Math.min(1500, settings.wpm + 25) })}
           >
-            +
+            ➕
           </button>
           <span className="wpm-value">{settings.wpm}</span>
           <select

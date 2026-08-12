@@ -3957,7 +3957,18 @@
   /* Compact tab strip: the whole tab is the tap target, so it doesn't need button-sized chrome —
      tighter padding + a close ✕ exempt from the 44px button floor roughly halves the strip height. */
   .tab-bar .tab { padding: 5px 9px; font-size: 11.5px; }
-  .tab-bar.multi-row { max-height: 96px; }
+  /* Phones get ONE horizontally-scrollable row, multi-row preference included: stacked rows ate
+     three lines of an already-short screen before any text appeared. Tabs keep their natural width
+     (no shrinking to slivers) and the strip scrolls with momentum instead of wrapping. */
+  .tab-bar, .tab-bar.multi-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: none;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab-bar .tab, .tab-bar .dialog-tab { flex: 0 0 auto; max-width: 62vw; scroll-snap-align: start; }
   /* ~44px minimum hit target on touch (Apple/Google guidance) without changing the desktop look. */
   button, select, input[type='text'], input[type='number'] { min-height: 44px; }
   .ctrl-btn { width: 44px; height: 44px; }
