@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { List, useDynamicRowHeight, useListRef } from 'react-window';
-import { ReadStatus, orpIndex, getLineIndex, getParagraphRange, WS_SPLIT, isWsRun } from '../document/readerDocument.js';
+import { ReadStatus, orpIndex, getLineIndex, getParagraphRange, wordSpanOfLines, WS_SPLIT, isWsRun } from '../document/readerDocument.js';
 import { hlWordClass, endsSentence } from '../features/highlightAlgos.js';
 import { getTocEntries } from '../document/toc.js';
 import { buildWallDoc, WALL_SEP } from '../document/wallText.js';
@@ -1071,7 +1071,10 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   // position by a screenful. Blurred (within the focus-blur window) and unrevealed (beyond the
   // progressive-reveal boundary) lines don't count as visible. Returns null in the split view (no
   // scroll) or when nothing qualifies, so the parent can fall back to paragraph paging.
-  function pageTargetLine(dir) {
+  // Top/bottom line currently on screen, by the same rules paging uses (a row needs ~half of itself
+  // inside the viewport, and blurred / unrevealed rows don't count). Split out so the section
+  // heading can size a "page" from it without duplicating the scan — or moving the reading position.
+  function visibleLineRange() {
     const wrap = listWrapRef.current;
     if (!wrap) return null;
     const rows = wrap.querySelectorAll('.line-row[data-line]');
@@ -1095,7 +1098,13 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       if (i < top) top = i;
       if (i > bottom) bottom = i;
     });
-    if (top === Infinity) return null;
+    return top === Infinity ? null : { top, bottom };
+  }
+
+  function pageTargetLine(dir) {
+    const range = visibleLineRange();
+    if (!range) return null;
+    const { top, bottom } = range;
     // Leave PAGE_OVERLAP lines of the old screen on the new one — landing exactly on the edge line
     // reads as overshooting, because the line you were mid-way through is gone.
     const edge = dir > 0 ? bottom : top;
@@ -1105,8 +1114,15 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       : Math.min(currentLine - 1, top + PAGE_OVERLAP);
     return Math.max(0, Math.min(doc.lines.length - 1, target));
   }
+  // How many words a screenful holds right now — the unit the section bar segments by. Zero when
+  // nothing is measurable (pane hidden, split view), which callers read as "don't segment".
+  function visibleWordCount() {
+    const range = visibleLineRange();
+    if (!range) return 0;
+    return wordSpanOfLines(doc.lines, range.top, range.bottom);
+  }
   useEffect(() => {
-    if (visibleRef) visibleRef.current = { page: pageTargetLine };
+    if (visibleRef) visibleRef.current = { page: pageTargetLine, words: visibleWordCount };
   });
 
   // Faint background gridlines (Tab Settings → Lines pane). Horizontal spacing follows the line

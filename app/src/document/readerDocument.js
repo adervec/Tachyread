@@ -285,3 +285,22 @@ export function isLongWord(w, threshold) {
 export function hasSpecialChars(w) {
   return /[^\p{L}\p{N}\s'’.,!?;:()-]/u.test(w);
 }
+
+// How many document words a run of lines [top..bottom] covers. Blank/spacer lines carry no word
+// indices, and a screenful very often BEGINS or ENDS on one — so walk inward to the first and last
+// lines that actually hold words rather than reading the edges and calling the page empty.
+// Used to size a "page" for the section progress bar's segment ticks.
+export function wordSpanOfLines(lines, top, bottom) {
+  if (!lines?.length) return 0;
+  const a = Math.max(0, Math.min(lines.length - 1, top));
+  const b = Math.max(a, Math.min(lines.length - 1, bottom));
+  let from = -1;
+  let to = -1;
+  for (let i = a; i <= b; i++) {
+    const ln = lines[i];
+    if (!ln || !(ln.startWordIndex >= 0) || !(ln.endWordIndex >= 0)) continue;
+    if (from < 0) from = ln.startWordIndex;
+    to = ln.endWordIndex;
+  }
+  return from >= 0 && to >= from ? to - from + 1 : 0;
+}
