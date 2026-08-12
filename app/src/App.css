@@ -4718,3 +4718,6 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 }
 *::-webkit-scrollbar-thumb:hover { background: var(--accent, #5b8def); }
 *::-webkit-scrollbar-corner { background: transparent; }
+
+/* Splash-screen recent-activity line — quiet, one notch above the shortcuts hint. */
+.empty-state .splash-activity { opacity: 0.75; font-size: 14px; margin: 2px 0 0; }
