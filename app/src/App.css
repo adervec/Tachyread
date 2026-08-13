@@ -1601,6 +1601,18 @@
 /* Paragraph highlight lives in the line-number gutter only — tinting the text itself read as a
    second "current line" band and competed with the read-status colours. */
 .line-row.in-current-para .num { background: var(--current-para-bg); border-radius: 2px; }
+/* Gridlines are painted on the LIST's background, so an opaque row highlight sits on top and hides
+   them — the rules appeared to stop at the current line. With the grid on, the row tints become
+   translucent versions of the same colours so the lines carry straight through. Scoped to .has-grid
+   so the highlights keep their full strength when there are no gridlines to show through. */
+.line-pane-list.has-grid .line-row.status-Current { background: color-mix(in srgb, var(--current-line-bg) 72%, transparent); }
+.line-pane-list.has-grid .line-row.in-current-para .num { background: color-mix(in srgb, var(--current-para-bg) 72%, transparent); }
+.line-pane-list.has-grid .line-row.pressing { background: color-mix(in srgb, var(--current-para-bg) 72%, transparent); }
+.line-pane-list.has-grid .percent-separator { background: color-mix(in srgb, var(--current-para-bg) 72%, transparent); }
+.line-pane-list.has-grid .line-row.status-Read .text,
+.line-pane-list.has-grid .line-row.status-SessionRead .text,
+.line-pane-list.has-grid .line-row.status-NavSessionRead .text { background: transparent; }
+
 /* Page-edge marker: after PgUp/PgDn the line that was at the edge of the screen you just left stays
    lit for a few seconds, so you can see how far you moved and where you'd got to. Deliberately
    unlike the current-line band — a tinted bar with a hard rule down its left edge. */
@@ -4781,3 +4793,14 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .ghost-race .gr-verdict { font-size: 11px; opacity: 0.85; padding: 0 4px; border-radius: 4px; }
 .ghost-race .gr-verdict.you { color: var(--ok-fg, #2e9d4f); }
 .ghost-race .gr-verdict.ghost { color: var(--ox-bright, #b0413e); }
+
+/* Rich section headers: the facts under a heading line. Deliberately quieter than the heading and
+   than body text — this is reference material you glance at, not something to read through. */
+.toc-head-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 2px 0 4px; padding-left: 2px; }
+.toc-head-meta .thm-chip {
+  font-size: 0.72em; line-height: 1.6; opacity: 0.72; white-space: nowrap;
+  padding: 0 6px; border-radius: 999px;
+  border: 1px solid var(--divider);
+  background: color-mix(in srgb, var(--divider) 18%, transparent);
+}
+.toc-head-meta .thm-progress { opacity: 0.9; }

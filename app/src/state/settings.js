@@ -156,6 +156,9 @@ export function defaultFileSettings() {
     // tier. 'auto' = use the current theme's heading-style pack; 'off' = plain; or a pack name
     // (classic | rule | terminal | deco | ornate | engraved | neon | retro) to force one.
     tocHeadingStyle: 'auto',
+    // Rich section headers: which facts to print under a heading line in the Lines pane.
+    // [] = plain headings (the previous behaviour). Catalog: features/headingMeta.js.
+    headingDetails: [],
     // Animated avatars (né faces)
     showEyes: false,
     faceCount: 1,

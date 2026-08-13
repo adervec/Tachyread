@@ -3,6 +3,7 @@ import { List, useDynamicRowHeight, useListRef } from 'react-window';
 import { ReadStatus, orpIndex, getLineIndex, getParagraphRange, wordSpanOfLines, WS_SPLIT, isWsRun } from '../document/readerDocument.js';
 import { hlWordClass, endsSentence } from '../features/highlightAlgos.js';
 import { getTocEntries } from '../document/toc.js';
+import { buildHeadingMeta, headingDetailChips } from '../features/headingMeta.js';
 import { buildWallDoc, WALL_SEP } from '../document/wallText.js';
 import { resolveHeadingPack } from '../state/themes.js';
 import Pointer from './Pointer.jsx';
@@ -165,7 +166,7 @@ function statusForLine(li, ctx) {
 // `dsettings` is a STABLE display-settings subset (see LinePane) rather than the whole settings
 // object, whose identity changes on every word step; that, plus the memo() comparator below, is
 // what keeps unchanged lines from re-rendering on each tick of playback.
-function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, headingPack }) {
+function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, headingPack, headingMetaMap }) {
   const line = doc.lines[index];
   const status = statusForLine(index, ctx);
   const isCurrent = status === ReadStatus.Current;
@@ -302,6 +303,21 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
         )}
         {pointer && !pointerBefore && pointer}
       </div>
+      {/* Rich section header: the facts a reader wants at the moment a section opens — how long it
+          is, where it sits in the structure, how much is already behind them. Rendered under the
+          heading's own row so it inherits the heading styling pack and scrolls with it. */}
+      {(() => {
+        if (!isHead || !headingMetaMap) return null;
+        const chips = headingDetailChips(headingMetaMap.get(index), dsettings.headingDetails, {
+          wpm: dsettings.headingWpm, readerIdx: ctx.currentWordIndex,
+        });
+        if (!chips.length) return null;
+        return (
+          <div className="toc-head-meta" aria-hidden="true">
+            {chips.map((c) => <span key={c.id} className={`thm-chip thm-${c.id}`}>{c.text}</span>)}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -310,7 +326,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
 // so without this every visible line (and all ~120 in the split view) would re-render each tick.
 function lineRowEqual(p, n) {
   if (p.index !== n.index || p.doc !== n.doc || p.dsettings !== n.dsettings || p.propNameKeys !== n.propNameKeys) return false;
-  if (p.headingMap !== n.headingMap || p.headingPack !== n.headingPack) return false; // stable refs; see LinePane
+  if (p.headingMap !== n.headingMap || p.headingPack !== n.headingPack || p.headingMetaMap !== n.headingMetaMap) return false; // stable refs; see LinePane
   const pc = p.ctx, nc = n.ctx;
   if (pc === nc) return true;
   const i = n.index;
@@ -339,7 +355,7 @@ const LineRow = memo(LineRowImpl, lineRowEqual);
 // Row component for react-window: positions LineRow absolutely and measures its height.
 // In scroll-to-read one PHANTOM row past the last line renders as an end runway — without it the
 // final screenful can never scroll up past the read point, so the last lines were unreachable.
-function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl, headingMap, headingPack }) {
+function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl, headingMap, headingPack, headingMetaMap }) {
   const ref = useRef(null);
   useEffect(() => {
     if (!ref.current) return;
@@ -365,7 +381,7 @@ function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, pr
           <hr />
         </div>
       )}
-      <LineRow index={index} doc={doc} dsettings={dsettings} ctx={ctx} onJumpWord={onJumpWord} propNameKeys={propNameKeys} headingMap={headingMap} headingPack={headingPack} />
+      <LineRow index={index} doc={doc} dsettings={dsettings} ctx={ctx} onJumpWord={onJumpWord} propNameKeys={propNameKeys} headingMap={headingMap} headingPack={headingPack} headingMetaMap={headingMetaMap} />
     </div>
   );
 }
@@ -585,6 +601,24 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, settings.tocEntries, headingStyle, wall]);
 
+  // Rich section headers: line index → the section's facts. Built once per document/ToC rather
+  // than per row — every heading needs the whole entry list to resolve parents and siblings.
+  const headingDetails = Array.isArray(settings.headingDetails) ? settings.headingDetails : [];
+  const headingDetailsKey = headingDetails.join(',');
+  const headingMetaMap = useMemo(() => {
+    if (!headingDetails.length || headingStyle === 'off') return null;
+    const entries = getTocEntries({ settings, doc });
+    if (!entries.length) return null;
+    const metas = buildHeadingMeta(entries, doc.words.length);
+    const m = new Map();
+    entries.forEach((e, i) => {
+      const li = getLineIndex(doc, e.wordIndex);
+      if (li >= 0) m.set(li, metas[i]);
+    });
+    return m.size ? m : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, settings.tocEntries, headingStyle, headingDetailsKey, wall]);
+
   // Stable display-settings subset handed to each line. Unlike `settings` (new identity on every
   // word step, via patchSettings), this keeps the same reference until a display option actually
   // changes — the precondition that lets memo(LineRow) skip unchanged lines during playback.
@@ -610,6 +644,8 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       currentWordStyles: currentWordStyles(settings),
       doneWordStyles: Array.isArray(settings.doneWordStyles) ? settings.doneWordStyles : [],
       currentWordFontDelta: settings.currentWordFontDelta || 0,
+      headingDetails: Array.isArray(settings.headingDetails) ? settings.headingDetails : [],
+      headingWpm: settings.wpm || 250,
       ghostWordStyles: ghostWordStyles(settings),
       ghostFontDelta: settings.ghostWordFontDelta || 0,
       swaps: swapLookup(settings.wordSwaps),
@@ -621,7 +657,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       settings.textAlignment, settings.showPointer, settings.pointerStyle, settings.pointerPlacement,
       settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP, settings.orpStyles,
       settings.currentWordStyles, settings.currentWordStyle, settings.doneWordStyles, settings.currentWordFontDelta, settings.wordSwaps, wall,
-      settings.ghostWordStyles, settings.ghostWordFontDelta,
+      settings.ghostWordStyles, settings.ghostWordFontDelta, settings.headingDetails, settings.wpm,
       settings.highlightAlgo,
     ]
   );
@@ -1041,8 +1077,8 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
 
   // rowProps must not contain ariaAttributes/index/style (those are auto-passed by List).
   const rowProps = useMemo(
-    () => ({ doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl, headingMap, headingPack }),
-    [doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl, headingMap, headingPack]
+    () => ({ doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl, headingMap, headingPack, headingMetaMap }),
+    [doc, dsettings, ctx, onJumpWord, propNameKeys, sepEvery, rowHeightCtl, headingMap, headingPack, headingMetaMap]
   );
 
   // Long-press to navigate: a single click no longer jumps — you must hold a line for
@@ -1194,9 +1230,10 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
           peekLine={peek.line}
           headingMap={headingMap}
           headingPack={headingPack}
+          headingMetaMap={headingMetaMap}
         />
       ) : (
-        <div className="line-pane-list" ref={listWrapRef} data-tie={crossTieY != null ? crossTieY.toFixed(3) : undefined} style={{ fontSize: `${baseFont}px`, lineHeight: lineSpacing, ...gridStyle }} onContextMenu={onContextMenu} {...pressHandlers}>
+        <div className={`line-pane-list${settings.linesGridH || settings.linesGridV ? ' has-grid' : ''}`} ref={listWrapRef} data-tie={crossTieY != null ? crossTieY.toFixed(3) : undefined} style={{ fontSize: `${baseFont}px`, lineHeight: lineSpacing, ...gridStyle }} onContextMenu={onContextMenu} {...pressHandlers}>
           <List
             listRef={listRef}
             rowCount={totalLines + (scrollRead ? 1 : 0)}
