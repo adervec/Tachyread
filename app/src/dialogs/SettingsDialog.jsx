@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { HEADING_DETAIL_ITEMS } from '../features/headingMeta.js';
 import Dialog from './Dialog.jsx';
 import { THEME_CATEGORIES, HEADING_PACKS } from '../state/themes.js';
 import { offDefaultKeys, defaultFileSettings, tabDefaultsFrom } from '../state/settings.js';
@@ -175,6 +176,14 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
     if (set.has(name)) set.delete(name);
     else set.add(name);
     patch({ ghostWordStyles: [...set] });
+  }
+
+  const headingDetails = Array.isArray(s.headingDetails) ? s.headingDetails : [];
+  function toggleHeadingDetail(name) {
+    const set = new Set(headingDetails);
+    if (set.has(name)) set.delete(name);
+    else set.add(name);
+    patch({ headingDetails: [...set] });
   }
 
   const doneStyles = Array.isArray(s.doneWordStyles) ? s.doneWordStyles : [];
@@ -743,6 +752,23 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           ))}
         </select>
       </Field>
+      <Field label="Section header details (combine any)">
+        <div className="checkbox-group">
+          {HEADING_DETAIL_ITEMS.map(([id, label]) => (
+            <label key={id} className="checkbox-pill">
+              <input type="checkbox" checked={headingDetails.includes(id)} onChange={() => toggleHeadingDetail(id)} />
+              {label}
+            </label>
+          ))}
+        </div>
+      </Field>
+      <p className="settings-note" style={{ margin: '2px 0 8px' }}>
+        Prints these facts under each heading in the Lines pane. Section length runs to the next
+        heading at the same or a shallower level, so a part reports its whole span rather than just
+        its first chapter. A detail with nothing to say (no parent, no sub-sections, an only child)
+        is left out rather than shown empty, and progress only appears once you&rsquo;ve reached the
+        section. Leave everything unticked for plain headings.
+      </p>
       <p className="settings-note" style={{ margin: '2px 0 0' }}>
         Styles the lines that are chapter/section headings in the Lines pane, with a distinct look per
         tier. “Auto” picks a style that suits the current theme.
