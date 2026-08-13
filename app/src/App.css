@@ -4823,3 +4823,41 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   opacity: calc(0.55 + var(--ch-depth, 0) * 0.22);
 }
 .chapter-heading.ch-multi .ch-pct { min-width: 3.4em; text-align: right; }
+
+/* Audiobook generation: live detail on the chunk in flight. The loop only updates state between
+   chunks, so a hang used to look identical to slow synthesis — this says which phase, which chunk,
+   and how long it has been there. */
+.ab-gen-live { flex: 1 1 100%; font-size: 12px; line-height: 1.5; margin-top: 4px; padding: 6px 9px; border-radius: 6px; border: 1px solid var(--divider); background: color-mix(in srgb, var(--divider) 14%, transparent); }
+.ab-gen-live .abg-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ab-gen-live .abg-text { opacity: 0.7; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ab-gen-live .abg-warn { margin-top: 3px; font-weight: 600; }
+.ab-gen-live.gh-slow { border-color: rgba(210, 153, 34, 0.6); }
+.ab-gen-live.gh-slow .abg-warn { color: #b8860b; }
+.ab-gen-live.gh-stalled { border-color: rgba(226, 59, 59, 0.7); background: rgba(226, 59, 59, 0.08); }
+.ab-gen-live.gh-stalled .abg-warn { color: var(--ox-bright, #b0413e); }
+
+/* Audiobook Manager: one sticky toolbar holding every action, so Generate and Delete stay
+   reachable however far down a long book you have scrolled. Groups are native <details>. */
+.ab-toolbar {
+  position: sticky; top: 0; z-index: 6;
+  background: var(--pane-bg, var(--menu-bg));
+  border-bottom: 1px solid var(--divider);
+  margin: 0 0 8px; padding: 6px 0 8px;
+  box-shadow: 0 6px 12px -8px rgba(0, 0, 0, 0.45);
+  max-height: 45vh; overflow-y: auto;
+}
+.ab-toolbar .ab-group { border-top: 1px solid var(--divider); padding: 4px 0 2px; }
+.ab-toolbar .ab-group > summary {
+  cursor: pointer; font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; opacity: 0.72; padding: 3px 2px; list-style: none;
+}
+.ab-toolbar .ab-group > summary::-webkit-details-marker { display: none; }
+.ab-toolbar .ab-group > summary::before { content: '▸ '; display: inline-block; width: 1em; }
+.ab-toolbar .ab-group[open] > summary::before { content: '▾ '; }
+.ab-toolbar .ab-group-danger > summary { color: var(--ox-bright, #b0413e); opacity: 0.85; }
+.ab-toolbar .ab-toolbar-msg { margin: 4px 2px 0; }
+/* On a phone the toolbar would swallow the screen if every group were open — cap it harder and
+   let it scroll internally. */
+@media (max-width: 860px), (pointer: coarse) and (max-height: 860px) {
+  .ab-toolbar { max-height: 42vh; }
+}

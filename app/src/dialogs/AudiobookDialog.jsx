@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { totalChars, chunkChars, etaSeconds, chunkHealth, fmtEta, previewText } from '../features/ttsProgress.js';
 import Dialog from './Dialog.jsx';
 import { fmtDateTime } from '../features/dateFmt.js';
 import { useApp } from '../state/AppContext.jsx';
@@ -70,7 +71,15 @@ export default function AudiobookDialog({ tab, onClose }) {
   const [readThru, setReadThru] = useState(false); // continuous read-the-book-aloud session
   const [secWiz, setSecWiz] = useState(null); // { firstLine, role, previewText, dlgTitle } — section extra wizard
   const [secBusy, setSecBusy] = useState(''); // `${firstLine}:${role}` while a section-title TTS runs
-  const [gen, setGen] = useState(null); // { done, total } while generating
+  const [gen, setGen] = useState(null); // { done, total, charsDone, charsTotal, runStart, current } while generating
+  // The generation loop only sets state between chunks, so a long (or hung) chunk would leave the
+  // panel frozen — exactly the case the reader needs to see. This ticks independently.
+  const [genTick, setGenTick] = useState(0);
+  useEffect(() => {
+    if (!gen) return undefined;
+    const t = setInterval(() => setGenTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [!!gen]);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const abort = useRef(false);
@@ -210,7 +219,9 @@ export default function AudiobookDialog({ tab, onClose }) {
     abort.current = false;
     const isEl = voiceId.startsWith('el:');
     const key = state.global.elevenLabsKey, modelId = state.global.elevenModel || 'eleven_multilingual_v2';
-    setGen({ done: 0, total: job.targets.length });
+    const charsTotal = totalChars(job.targets);
+    const runStart = Date.now();
+    setGen({ done: 0, total: job.targets.length, charsTotal, charsDone: 0, runStart, current: null });
     setMsg('');
     let ok = 0, consecutive = 0;
     const errors = [];
@@ -224,13 +235,20 @@ export default function AudiobookDialog({ tab, onClose }) {
       for (let i = 0; i < job.targets.length; i++) {
         if (abort.current) break;
         const c = job.targets[i];
+        // Publish WHAT is happening, not just how far along — a silent freeze used to be
+        // indistinguishable from slow synthesis. Each phase updates before it begins.
+        const cChars = chunkChars(c);
+        const setPhase = (phase) => setGen((g) => (g ? { ...g, current: { ...(g.current || {}), index: i, line: c.startLine, chars: cChars, preview: previewText(c.text), phase, startedAt: g.current?.index === i ? g.current.startedAt : Date.now() } } : g));
+        setPhase('synthesizing');
         try {
           let blob;
           try { blob = await synth(c); }
           catch { // one retry — with a fresh engine for Piper, after a pause for cloud rate limits
+            setPhase('retrying');
             if (engine) engine.recycle(); else await new Promise((r) => setTimeout(r, 1000));
             blob = await synth(c);
           }
+          setPhase('saving');
           await addAudioClip(checksum, c.startLine, blob, { source: 'tts', voiceId, durationMs: estMs(blob), spanEndLine: c.endLine });
           ok++; consecutive = 0;
           if (engine && ok % PIPER_BATCH === 0) engine.recycle(); // fresh heap for the next batch
@@ -240,7 +258,9 @@ export default function AudiobookDialog({ tab, onClose }) {
           appendAppLog('audiobook', `chunk @ line ${c.startLine + 1} (${labelVoice(voiceId)}): ${e?.message || e}`);
           consecutive++;
         }
-        setGen({ done: i + 1, total: job.targets.length });
+        // charsDone counts ATTEMPTED characters: a failed chunk still consumed its synthesis time,
+        // so excluding it would make the rate — and the ETA — optimistic.
+        setGen((g) => (g ? { ...g, done: i + 1, charsDone: (g.charsDone || 0) + cChars } : g));
         if ((i & 7) === 0) await refresh();
         if (consecutive >= CONSEC_ABORT) break;
       }
@@ -288,6 +308,11 @@ export default function AudiobookDialog({ tab, onClose }) {
 
   return (
     <Dialog title="Audiobook Manager" onClose={() => { stopPlay(); onClose(); }} width={760}>
+      {/* Every action lives in ONE sticky toolbar, so the controls stay reachable however far down
+          a 141-section book you have scrolled — previously Delete sat at the very bottom and
+          Generate at the very top. Groups are native <details>, so each collapses independently and
+          the browser remembers nothing we have to manage. */}
+      <div className="ab-toolbar">
       {/* coverage + voice */}
       <div className="ab-coverage">
         {totalCovered >= chunks.length && chunks.length
@@ -303,6 +328,8 @@ export default function AudiobookDialog({ tab, onClose }) {
         </div>
       )}
 
+      <details className="ab-group" open>
+        <summary>🎙 Generate narration</summary>
       {(piperSupported() || elVoices.length > 0) ? (
         <div className="ab-genbar">
           <label>Voice
@@ -319,9 +346,44 @@ export default function AudiobookDialog({ tab, onClose }) {
           </label>
           {gen ? (
             <>
-              <div className="imp-bar" style={{ flex: '1 1 160px', maxWidth: 280 }}><div className="imp-fill" style={{ width: `${gen.total ? (gen.done / gen.total) * 100 : 0}%` }} /></div>
+              {/* Progress is measured in CHARACTERS, not chunks — a heading and a long paragraph
+                  are both "1 chunk" but differ tenfold in synthesis time, which is what made the
+                  old bar and its estimate lurch. */}
+              <div className="imp-bar" style={{ flex: '1 1 160px', maxWidth: 280 }}><div className="imp-fill" style={{ width: `${gen.charsTotal ? (gen.charsDone / gen.charsTotal) * 100 : 0}%` }} /></div>
               <span className="settings-note" style={{ margin: 0 }}>Generating {gen.done}/{gen.total}…</span>
               <button onClick={() => { abort.current = true; }}>Stop</button>
+              {(() => {
+                const elapsedMs = Date.now() - (gen.runStart || Date.now());
+                const eta = etaSeconds({ elapsedMs, charsDone: gen.charsDone || 0, charsTotal: gen.charsTotal || 0 });
+                const msPerChar = gen.charsDone > 0 ? elapsedMs / gen.charsDone : 0;
+                const cur = gen.current;
+                const curMs = cur?.startedAt ? Date.now() - cur.startedAt : 0;
+                const health = cur ? chunkHealth({ chunkElapsedMs: curMs, chunkChars: cur.chars, msPerChar }) : 'ok';
+                const PHASE = { synthesizing: '🎙 synthesising', retrying: '↻ retrying after a failure', saving: '💾 saving clip' };
+                return (
+                  <div className={`ab-gen-live gh-${health}`} data-tick={genTick}>
+                    <div className="abg-line">
+                      <b>{fmtEta(eta)}</b> left · {Math.round((gen.charsDone / Math.max(1, gen.charsTotal)) * 100)}% of the text
+                      {msPerChar > 0 && <> · {Math.round(1000 / msPerChar)} chars/s</>}
+                    </div>
+                    {cur && (
+                      <>
+                        <div className="abg-line">
+                          {PHASE[cur.phase] || cur.phase} · chunk {cur.index + 1} @ line {cur.line + 1} · {cur.chars} chars · {(curMs / 1000).toFixed(1)}s
+                        </div>
+                        <div className="abg-text" title={cur.preview}>“{cur.preview}”</div>
+                        {health !== 'ok' && (
+                          <div className="abg-warn" role="status">
+                            {health === 'stalled'
+                              ? '⚠ This chunk is far past its expected time — the voice engine may have stalled. Stop and start again; a Piper run recycles its worker on restart.'
+                              : '⏳ Taking longer than this run’s usual pace for a chunk this size.'}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
             </>
           ) : (
             <>
@@ -332,16 +394,21 @@ export default function AudiobookDialog({ tab, onClose }) {
           )}
         </div>
       ) : <p className="settings-note">Offline Piper voice isn’t available in this browser. Add an ElevenLabs key in Audio Settings to generate in the cloud instead.</p>}
+      </details>
 
+      <details className="ab-group">
+        <summary>📖 Record &amp; export</summary>
       <div className="ab-genbar">
         <button className="toggle-on" onClick={() => setReadThru(true)} title="Narrate it yourself in one sitting: read chunk after chunk, pause to advance — each take is trimmed, cleaned and filed automatically">📖 Read it aloud yourself…</button>
         <button className="toggle-on" onClick={() => setShowExport(true)} disabled={!totalCovered} title="Save the generated narration as standalone audio tracks (WAV/MP3 + playlist) to play on your phone">🎧 Export as audiobook…</button>
         <button onClick={doExport} disabled={busy || !size.clips} title="Save this book's clips as a Tachyread transfer file for another device">⬆ Transfer file…</button>
         <button onClick={doImport} disabled={busy} title="Load an exported Tachyread audiobook transfer file">⬇ Import…</button>
       </div>
-      {msg && <p className="settings-note" style={{ marginTop: 0 }}>{msg}</p>}
+      </details>
 
       {/* Collapse / expand controls — handy for long books; "completed" = fully-generated sections. */}
+      <details className="ab-group">
+        <summary>🗂 Sections</summary>
       {sections.length > 1 && (() => {
         const doneIds = sections.filter((s) => s.chunks.length && covered(s.chunks) >= s.chunks.length).map((s) => s.id);
         return (
@@ -354,6 +421,25 @@ export default function AudiobookDialog({ tab, onClose }) {
           </div>
         );
       })()}
+      </details>
+
+      <details className="ab-group ab-group-danger">
+        <summary>💾 Storage &amp; delete</summary>
+        <p className="settings-note" style={{ margin: 0 }}>
+          {size.clips} clip(s) across {size.chunks} chunk(s) · <strong>{fmtBytes(size.bytes)}</strong> in this browser’s
+          storage (IndexedDB — there’s no file path to open; use <strong>Export</strong> above to save a real file).
+        </p>
+        <div className="data-row" style={{ marginTop: 6 }}>
+          {!wipeArm
+            ? <button className="grab-trash" disabled={!size.clips} onClick={() => setWipeArm(true)}>🗑 Delete all audio for this book…</button>
+            : <>
+                <button className="grab-trash" onClick={doWipe}>⚠ Confirm — delete {size.clips} clip(s) ({fmtBytes(size.bytes)})</button>
+                <button onClick={() => setWipeArm(false)}>Cancel</button>
+              </>}
+        </div>
+      </details>
+      {msg && <p className="settings-note ab-toolbar-msg">{msg}</p>}
+      </div>
 
       {/* ToC-grouped chunk list */}
       <div className="ab-sections">
@@ -448,22 +534,6 @@ export default function AudiobookDialog({ tab, onClose }) {
         );
       })()}
 
-      {/* storage details + wipe */}
-      <div className="ab-storage">
-        <div className="field-section" style={{ marginTop: 10 }}>Storage</div>
-        <p className="settings-note" style={{ margin: 0 }}>
-          {size.clips} clip(s) across {size.chunks} chunk(s) · <strong>{fmtBytes(size.bytes)}</strong> in this browser’s
-          storage (IndexedDB — there’s no file path to open; use <strong>Export</strong> above to save a real file).
-        </p>
-        <div className="data-row" style={{ marginTop: 6 }}>
-          {!wipeArm
-            ? <button className="grab-trash" disabled={!size.clips} onClick={() => setWipeArm(true)}>🗑 Delete all audio for this book…</button>
-            : <>
-                <button className="grab-trash" onClick={doWipe}>⚠ Confirm — delete {size.clips} clip(s) ({fmtBytes(size.bytes)})</button>
-                <button onClick={() => setWipeArm(false)}>Cancel</button>
-              </>}
-        </div>
-      </div>
 
       {/* Generate confirmation */}
       {confirmJob && (
