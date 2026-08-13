@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AppProvider, useApp } from './state/AppContext.jsx';
 import MenuBar from './components/MenuBar.jsx';
@@ -95,6 +95,8 @@ import { createRecognizer, wordMatches, speechRecognitionSupported } from './fea
 import { recordClip } from './features/audioRecorder.js';
 import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal, allFiles } from './state/storage.js';
 import { activitySummary } from './features/activitySummary.js';
+import { dockMiniIds } from './features/dockMini.js';
+import { cameraOffPatch } from './features/cameraOff.js';
 import { ghostIndexAt, raceState, ghostRunFrom, ghostResetReason, ghostAtGoal, goalRace } from './features/paceGhost.js';
 import { goalTargetIndex } from './engine/goals.js';
 import { bookFromOpenedDoc } from './features/trackyreadAdd.js';
@@ -486,6 +488,8 @@ function AppInner() {
   // Read-aloud (integrated TTS) plumbing.
   const activeTabRef = useRef(null);
   activeTabRef.current = activeTab;
+  const stateGlobalRef = useRef(state.global);
+  stateGlobalRef.current = state.global;
   const readAloudRef = useRef(null);
   const readAloudModeRef = useRef(null); // false = native Web Speech, true = offline Piper
   const [ttsStatus, setTtsStatus] = useState('idle'); // offline read-aloud state: idle | playing | native | error
@@ -1501,7 +1505,10 @@ function AppInner() {
   useEffect(() => { if (!camOn && !handGesturesOn && !audioCtrlOn) setBioLog([]); }, [camOn, handGesturesOn, audioCtrlOn]);
   // Turn off every front-camera feature at once (the popup's × does this).
   const turnOffCamera = useCallback(() => {
-    updateGlobal({ webcamAttention: false, webcamDoze: false, webcamAwayAlarm: false, webcamDistanceNudge: false, webcamFocusStats: false, handGestures: false });
+    // EYE GESTURES have to go too. They bring the camera up on their own (camOn ORs them in), so
+    // clearing only the guards left the feed's ✕ doing nothing visible — the popup closed and
+    // instantly re-rendered. Its own `on` flag is nested, so patch the object, not a bare key.
+    updateGlobal(cameraOffPatch(stateGlobalRef.current));
   }, [updateGlobal]);
   // Calibration / gesture toggles saved while running → apply live without restarting the camera.
   useEffect(() => {
@@ -2973,7 +2980,7 @@ function AppInner() {
         {controlsCollapsed ? (
           activeTab && (
             <div className="dock-mini">
-              {(() => {
+              {dockMiniIds(state.global.dockMiniItems, {}).includes('play') && (() => {
                 const pv = playButtonView({
                   playing,
                   scrollMode: !!state.global.scrollAdvances,
@@ -2995,20 +3002,35 @@ function AppInner() {
                   </button>
                 );
               })()}
-              {/* The collapsed dock has room for the core nav, not just play — so paging through a
-                  book (esp. with a pane hidden) doesn't force expanding the controls. */}
-              <button className="dock-mini-nav" title="Page up (⇞)" aria-label="Page up" onClick={() => pageLines(-1)}>⏫</button>
-              <button className="dock-mini-nav" title="Previous line (↑)" aria-label="Previous line" onClick={() => nav('prevLine')}>⬆️</button>
-              <button className="dock-mini-nav" title="Next line (↓)" aria-label="Next line" onClick={() => nav('nextLine')}>⬇️</button>
-              <button className="dock-mini-nav" title="Page down (⇟)" aria-label="Page down" onClick={() => pageLines(1)}>⏬</button>
-              {activeTab.doc.source && state.showSource && (
-                <>
-                  <button className="dock-mini-nav src" title="Previous source page" aria-label="Previous source page" onClick={() => jumpSourcePage(-1)}>⬅️📄</button>
-                  <button className="dock-mini-nav src" title="Next source page" aria-label="Next source page" onClick={() => jumpSourcePage(1)}>📄➡️</button>
-                </>
-              )}
-              <button className="dock-mini-jump" title="Jump to the current word" aria-label="Jump to current word" onClick={jumpToCurrent}>📍</button>
-              <span className="dock-mini-meta">{activeTab.settings.wordIndex + 1} / {activeTab.doc.words.length}</span>
+              {/* What the collapsed dock carries is the user's call (App Settings → Collapsed
+                  controls) — some readers page from here, others want only play and a count. */}
+              {dockMiniIds(state.global.dockMiniItems, { sourceAvailable: !!activeTab.doc.source && state.showSource })
+                .filter((id) => id !== 'play')
+                .map((id) => {
+                  const nb = (title, label, glyph, fn, cls = 'dock-mini-nav') => (
+                    <button key={id} className={cls} title={title} aria-label={label} onClick={fn}>{glyph}</button>
+                  );
+                  switch (id) {
+                    case 'pageUp': return nb('Page up (PgUp)', 'Page up', '⏫', () => pageLines(-1));
+                    case 'prevLine': return nb('Previous line (↑)', 'Previous line', '⬆️', () => nav('prevLine'));
+                    case 'nextLine': return nb('Next line (↓)', 'Next line', '⬇️', () => nav('nextLine'));
+                    case 'pageDown': return nb('Page down (PgDn)', 'Page down', '⏬', () => pageLines(1));
+                    case 'prevWord': return nb('Previous word (←)', 'Previous word', '⬅️', () => nav('prevWord'));
+                    case 'nextWord': return nb('Next word (→)', 'Next word', '➡️', () => nav('nextWord'));
+                    case 'prevPara': return nb('Previous paragraph (Ctrl+↑)', 'Previous paragraph', '🔼', () => nav('prevPara'));
+                    case 'nextPara': return nb('Next paragraph (Ctrl+↓)', 'Next paragraph', '🔽', () => nav('nextPara'));
+                    case 'restart': return nb('Restart (Home)', 'Restart', '⏮️', () => nav('restart'));
+                    case 'jump': return nb('Jump to the current word', 'Jump to current word', '📍', jumpToCurrent, 'dock-mini-jump');
+                    case 'sourcePage': return (
+                      <Fragment key={id}>
+                        <button className="dock-mini-nav src" title="Previous source page" aria-label="Previous source page" onClick={() => jumpSourcePage(-1)}>⬅️📄</button>
+                        <button className="dock-mini-nav src" title="Next source page" aria-label="Next source page" onClick={() => jumpSourcePage(1)}>📄➡️</button>
+                      </Fragment>
+                    );
+                    case 'counter': return <span key={id} className="dock-mini-meta">{activeTab.settings.wordIndex + 1} / {activeTab.doc.words.length}</span>;
+                    default: return null;
+                  }
+                })}
             </div>
           )
         ) : (
@@ -3435,6 +3457,7 @@ function AppInner() {
           canCalibrate={!!webcamRef.current?.eyesAvailable?.()}
           onCalibrate={() => openDialog({ kind: 'webcam-calib' })}
           onCalibrateHand={() => openDialog({ kind: 'hand-calib' })}
+          onOpenSettings={() => openDialog({ kind: 'biometric-settings' })}
           onMinimize={() => updateGlobal({ webcamPreview: false })}
           onClose={() => { turnOffCamera(); if (audioCtrlOn && activeTab) patchSettings(activeTab.id, { audioCtrl: false }); }}
         />
