@@ -436,6 +436,9 @@ export function defaultGlobalSettings() {
     // phone-layout choice) and persisted so it survives closing the dock, switching tabs, or a
     // relaunch — reopening the dock on a different page than you left it is pure friction.
     mobilePillPage: 0,
+    // Which controls the COLLAPSED dock shows: sparse { id: bool }, folded over the catalog in
+    // features/dockMini.js. Device-local — the minimized bar is a per-screen ergonomics choice.
+    dockMiniItems: {},
     // Blur the whole app once the guard above trips. Scroll reading has no playback to pause, so
     // walking away leaves text on screen and time quietly uncredited; the veil makes that visible
     // and forces a deliberate resume. Off by default.

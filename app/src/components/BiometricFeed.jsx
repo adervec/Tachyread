@@ -56,7 +56,7 @@ export default function BiometricFeed({
   stream, camState, handState, scope, mode = 'Both', log,
   camFilter, eyeFx, eyes, wpm = 0,
   feedHeight, onResizeFeed, features, voiceOn, gestureMap, voiceCommands, clapMap,
-  pos, onMove, onDrop, canCalibrate, onCalibrate, onCalibrateHand, onMinimize, onClose,
+  pos, onMove, onDrop, canCalibrate, onCalibrate, onCalibrateHand, onOpenSettings, onMinimize, onClose,
 }) {
   const vref = useRef(null);
   const canvasRef = useRef(null);
@@ -146,9 +146,10 @@ export default function BiometricFeed({
         <span className="bf-title">Biometric Control Feed</span>
         <span style={{ flex: 1 }} />
         <button className={showLegend ? 'on' : ''} title={showLegend ? 'Back to the event feed' : 'Legend of every trigger'} onClick={() => setShowLegend((v) => !v)}>{showLegend ? '☰' : '?'}</button>
-        {canCalibrate && <button title="Calibrate eye detection" onClick={onCalibrate}>⚙</button>}
-        <button title="Minimize (keeps running)" onClick={onMinimize}>–</button>
-        <button title="Close — turns the biometric controls off" onClick={onClose}>×</button>
+        {canCalibrate && <button title="Calibrate eye detection" onClick={onCalibrate}>🎯</button>}
+        {onOpenSettings && <button title="Open Biometric Controls settings — mappings, calibration, eye gestures, alarms" onClick={onOpenSettings}>⚙️</button>}
+        <button title="Minimize (keeps running)" onClick={onMinimize}>➖</button>
+        <button title="Close — turns every biometric control off" onClick={onClose}>❌</button>
       </div>
 
       {stream && (

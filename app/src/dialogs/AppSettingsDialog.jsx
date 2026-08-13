@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { DOCK_MINI_ITEMS, dockMiniShow } from '../features/dockMini.js';
 import Dialog from './Dialog.jsx';
 import { resetGlobalToDefaults, appProfileSettings } from '../state/settings.js';
 import { FOCUS_WIDGET_LABEL, focusPanelList, reorderPanels } from '../features/focusWidgets.js';
@@ -237,6 +238,30 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
       <p className="settings-note">
         Cover panels need Chrome or Edge with the “window management” permission, pop-ups allowed, and a
         second monitor — otherwise this setup saves but nothing shows. It’s specific to this device.
+      </p>
+
+      <div className="field-section">Collapsed controls</div>
+      <p className="settings-note">
+        What the minimized dock carries. It&rsquo;s the bar you actually live with while reading, so
+        keep the controls you use and drop the rest — an empty bar is a valid choice.
+      </p>
+      <div className="checkbox-group">
+        {DOCK_MINI_ITEMS.map(([id, label]) => {
+          const show = dockMiniShow(g.dockMiniItems);
+          return (
+            <label key={id} className="checkbox-pill">
+              <input
+                type="checkbox"
+                checked={!!show[id]}
+                onChange={(e) => patch({ dockMiniItems: { ...dockMiniShow(g.dockMiniItems), [id]: e.target.checked } })}
+              />
+              {label}
+            </label>
+          );
+        })}
+      </div>
+      <p className="settings-note" style={{ marginTop: 4 }}>
+        The source-page pair only appears when the document has scanned pages and the Source view is open.
       </p>
 
       <div className="field-section">Reading guard</div>

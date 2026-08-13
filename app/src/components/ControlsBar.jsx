@@ -205,9 +205,9 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             onChange={(e) => patchSettings(tab.id, { speedUnit: e.target.value })}
             title="Speed unit"
           >
-            <option>Words</option>
-            <option>Letters</option>
-            <option>Syllables</option>
+            <option value="Words">📝 Words</option>
+            <option value="Letters">🔤 Letters</option>
+            <option value="Syllables">🗣 Syllables</option>
           </select>
         </div>
 
@@ -281,9 +281,9 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
               }}
               title="Speak-along TTS while reading (does not drive the pace); off while full read-aloud TTS is on"
             >
-              <option value="off">Off</option>
-              <option value="firstWord">First word</option>
-              <option value="line">Line</option>
+              <option value="off">🔇 Off</option>
+              <option value="firstWord">🔤 First word</option>
+              <option value="line">📃 Line</option>
             </select>
           </div>
           <div className="mode-pair">
@@ -409,14 +409,14 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
               onChange={(e) => updateGlobal({ ttsAutoStopMin: Number(e.target.value) })}
               title="Auto-stop reading / read-aloud after this long — handy for winding down"
             >
-              <option value={0}>Off</option>
-              <option value={5}>5m</option>
-              <option value={10}>10m</option>
-              <option value={15}>15m</option>
-              <option value={20}>20m</option>
-              <option value={30}>30m</option>
-              <option value={45}>45m</option>
-              <option value={60}>60m</option>
+              <option value={0}>♾ Off</option>
+              <option value={5}>⏱ 5m</option>
+              <option value={10}>⏱ 10m</option>
+              <option value={15}>⏱ 15m</option>
+              <option value={20}>⏱ 20m</option>
+              <option value={30}>⏰ 30m</option>
+              <option value={45}>⏰ 45m</option>
+              <option value={60}>⏰ 60m</option>
             </select>
           </div>
           <div className="mode-pair">
@@ -467,15 +467,15 @@ function GoalRow({ tab, onGoalComplete, goalKills }) {
             })
           }
         >
-          <option>None</option>
-          <option value="Section">Section (set via ToC)</option>
-          <option>AbsoluteWords</option>
-          <option>AbsoluteLines</option>
-          <option>AbsolutePercent</option>
-          <option>RelativeWords</option>
-          <option>RelativeLines</option>
-          <option>RelativePercent</option>
-          <option>ActiveTime</option>
+          <option value="None">🚫 None</option>
+          <option value="Section">📑 Section (set via ToC)</option>
+          <option value="AbsoluteWords">🔢 Reach word #</option>
+          <option value="AbsoluteLines">📏 Reach line #</option>
+          <option value="AbsolutePercent">💯 Reach % of book</option>
+          <option value="RelativeWords">➕🔢 Read N more words</option>
+          <option value="RelativeLines">➕📏 Read N more lines</option>
+          <option value="RelativePercent">➕💯 Read N% more</option>
+          <option value="ActiveTime">⏱ Read for N minutes</option>
         </select>
         <input
           type="text"
