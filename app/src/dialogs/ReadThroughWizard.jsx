@@ -7,6 +7,7 @@ import {
   rmsOf, adaptiveThreshold, cleanTake, expectedMs, shouldAdvance, sessionQueue,
 } from '../features/readThrough.js';
 import { takeQuality, sessionConsistency, buildNarrationLog } from '../features/narrationQuality.js';
+import { setKeepAwake } from '../features/wakeLock.js';
 
 // Read the whole book aloud in ONE sitting: a single mic session, chunk text on screen, and the
 // app does the bookkeeping — trims each take to the speech, shortens mid-take dead air, saves the
@@ -136,6 +137,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
       try { if ((await logDir.requestPermission({ mode: 'readwrite' })) !== 'granted') setLogDir(null); } catch { setLogDir(null); }
     }
     resetTake();
+    setKeepAwake(true); // a narration session is minutes of talking without touching the screen
     setPhase('reading');
   }
 
@@ -260,6 +262,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
   }
 
   function teardownAudio() {
+    setKeepAwake(false);
     stopStt();
     try { procRef.current?.disconnect(); } catch { /* already gone */ }
     try { srcRef.current?.disconnect(); } catch { /* already gone */ }

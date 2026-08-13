@@ -97,6 +97,7 @@ import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSessi
 import { activitySummary } from './features/activitySummary.js';
 import { dockMiniIds } from './features/dockMini.js';
 import { cameraOffPatch } from './features/cameraOff.js';
+import { shouldKeepAwake, setKeepAwake } from './features/wakeLock.js';
 import { ghostIndexAt, raceState, ghostRunFrom, ghostResetReason, ghostAtGoal, goalRace } from './features/paceGhost.js';
 import { goalTargetIndex } from './engine/goals.js';
 import { bookFromOpenedDoc } from './features/trackyreadAdd.js';
@@ -471,6 +472,18 @@ function AppInner() {
       ghostWpm,
     })
     : null;
+
+  // Keep the screen awake while something is running that you aren't touching the screen for.
+  // Reconciled on every change (the helper is idempotent) and released when the app unmounts.
+  useEffect(() => {
+    setKeepAwake(shouldKeepAwake({
+      enabled: state.global.keepAwake !== false,
+      playing,
+      readAloud: !!activeTab?.settings?.readAloud,
+      recording: !!state.global.narrationRecording,
+    }));
+  }, [state.global.keepAwake, playing, activeTab?.settings?.readAloud, state.global.narrationRecording]);
+  useEffect(() => () => setKeepAwake(false), []);
 
   const [paneWidths, setPaneWidths] = useState({ toc: 320, dash: 260, rsvp: 420, source: 380 });
   const resizePane = (id, w) => setPaneWidths((prev) => ({ ...prev, [id]: w }));

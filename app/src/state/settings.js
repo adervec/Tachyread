@@ -440,6 +440,10 @@ export function defaultGlobalSettings() {
     // relaunch — reopening the dock on a different page than you left it is pure friction.
     // Section progress bar: you are inside several sections at once (part / chapter / subsection),
     // so this picks how many of them the heading bar draws. features/sectionBars.js.
+    // Hold a screen wake lock while playback / read-aloud / a narration recording is running. A
+    // phone's lock timer only resets on INPUT, and locking suspends the native speech engine — so
+    // without this, read-aloud dies mid-sentence on any phone. Device-local.
+    keepAwake: true,
     sectionBarMode: 'single', // single | parallel | nested | cycle
     sectionBarCycleSecs: 6,   // seconds per level in cycling mode
     mobilePillPage: 0,

@@ -241,6 +241,22 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         second monitor — otherwise this setup saves but nothing shows. It’s specific to this device.
       </p>
 
+      <Field label="Keep the screen awake">
+        <label className="inline-check">
+          <input
+            type="checkbox"
+            checked={g.keepAwake !== false}
+            onChange={(e) => patch({ keepAwake: e.target.checked })}
+          />
+          Hold the screen on while playback, read-aloud or a narration recording is running
+        </label>
+      </Field>
+      <p className="settings-note">
+        A phone&rsquo;s lock timer only resets when you touch the screen, and locking suspends the
+        browser&rsquo;s speech engine — so without this, read-aloud stops mid-sentence. The lock is
+        released the moment playback stops, and while it&rsquo;s held the screen still dims normally.
+      </p>
+
       <div className="field-section">Section progress bar</div>
       <p className="settings-note">
         Reading a subsection also puts you inside its chapter and its part, each a different
