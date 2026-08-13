@@ -2754,7 +2754,13 @@ function AppInner() {
           dialog returns to exactly the line you were on instead of remounting at the top. */}
       {(activeTab || !dialogDocked) && (activeTab ? (
         <div className="main-wrap" style={dialogDocked ? { display: 'none' } : undefined}>
-          <ChapterHeading tab={activeTab} onJumpWord={jumpWord} visibleRef={linesVisibleRef} />
+          <ChapterHeading
+            tab={activeTab}
+            onJumpWord={jumpWord}
+            visibleRef={linesVisibleRef}
+            barMode={state.global.sectionBarMode || 'single'}
+            cycleSecs={state.global.sectionBarCycleSecs || 6}
+          />
           {isCompact && (
             <div className="reading-view-switch" role="tablist" aria-label="Reading view">
               {!hideWord && (

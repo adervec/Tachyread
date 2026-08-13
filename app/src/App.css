@@ -4804,3 +4804,22 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   background: color-mix(in srgb, var(--divider) 18%, transparent);
 }
 .toc-head-meta .thm-progress { opacity: 0.9; }
+
+/* Section progress bars. You can be inside a part, a chapter and a subsection at once, so the
+   heading can draw one bar per level (App Settings → Section progress bar). */
+.chapter-heading .ch-bars { flex: 1; min-width: 0; display: flex; }
+.chapter-heading .ch-bars-single, .chapter-heading .ch-bars-cycle { align-items: center; }
+/* Parallel: one slim bar per level, stacked — outermost on top, so the eye reads part → chapter. */
+.chapter-heading .ch-bars-parallel { flex-direction: column; gap: 2px; }
+.chapter-heading .ch-bars-parallel .ch-bar { height: 4px; }
+/* Nested: the levels overlay, each inset a little further, so an inner section literally sits
+   inside its parent's bar. Depth comes from --ch-depth (0 = outermost). */
+.chapter-heading .ch-bars-nested { position: relative; height: 12px; }
+.chapter-heading .ch-bar-nested {
+  position: absolute; left: 0; right: 0;
+  top: calc(var(--ch-depth, 0) * 3px);
+  bottom: calc(var(--ch-depth, 0) * 3px);
+  height: auto;
+  opacity: calc(0.55 + var(--ch-depth, 0) * 0.22);
+}
+.chapter-heading.ch-multi .ch-pct { min-width: 3.4em; text-align: right; }

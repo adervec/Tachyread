@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { SECTION_BAR_MODES } from '../features/sectionBars.js';
 import { DOCK_MINI_ITEMS, dockMiniShow } from '../features/dockMini.js';
 import Dialog from './Dialog.jsx';
 import { resetGlobalToDefaults, appProfileSettings } from '../state/settings.js';
@@ -238,6 +239,33 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
       <p className="settings-note">
         Cover panels need Chrome or Edge with the “window management” permission, pop-ups allowed, and a
         second monitor — otherwise this setup saves but nothing shows. It’s specific to this device.
+      </p>
+
+      <div className="field-section">Section progress bar</div>
+      <p className="settings-note">
+        Reading a subsection also puts you inside its chapter and its part, each a different
+        distance from its end — this picks how many of those the heading bar draws.
+      </p>
+      <Field label="Show">
+        <select
+          value={g.sectionBarMode || 'single'}
+          onChange={(e) => patch({ sectionBarMode: e.target.value })}
+        >
+          {SECTION_BAR_MODES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+        </select>
+      </Field>
+      {(g.sectionBarMode || 'single') === 'cycle' && (
+        <Field label="Seconds per level">
+          <input
+            type="number" min={2} max={60} step={1} style={{ width: 80 }}
+            value={g.sectionBarCycleSecs ?? 6}
+            onChange={(e) => patch({ sectionBarCycleSecs: Math.max(2, Math.min(60, Number(e.target.value) || 6)) })}
+          />
+        </Field>
+      )}
+      <p className="settings-note" style={{ marginTop: 4 }}>
+        A document with only one heading level looks the same in every mode — there is nothing to
+        stack or rotate through.
       </p>
 
       <div className="field-section">Collapsed controls</div>

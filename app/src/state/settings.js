@@ -438,6 +438,10 @@ export function defaultGlobalSettings() {
     // Which page of the mobile dock's Steps / Modes / Goal pager is selected. Device-local (it's a
     // phone-layout choice) and persisted so it survives closing the dock, switching tabs, or a
     // relaunch — reopening the dock on a different page than you left it is pure friction.
+    // Section progress bar: you are inside several sections at once (part / chapter / subsection),
+    // so this picks how many of them the heading bar draws. features/sectionBars.js.
+    sectionBarMode: 'single', // single | parallel | nested | cycle
+    sectionBarCycleSecs: 6,   // seconds per level in cycling mode
     mobilePillPage: 0,
     // Which controls the COLLAPSED dock shows: sparse { id: bool }, folded over the catalog in
     // features/dockMini.js. Device-local — the minimized bar is a per-screen ergonomics choice.
