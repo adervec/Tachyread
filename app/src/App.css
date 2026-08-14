@@ -97,6 +97,13 @@
   white-space: nowrap;
 }
 .menu-dropdown .item:hover { background: var(--menu-highlight); }
+/* Menu emoji. Fixed width so the labels line up in a column regardless of glyph width, and the
+   label takes the slack so `justify-content: space-between` still pins the shortcut right. */
+.item-icon { flex: 0 0 auto; width: 1.35em; margin-right: 6px; text-align: center; font-size: 0.95em; line-height: 1; }
+.menu-dropdown .item .item-label { flex: 1 1 auto; text-align: left; }
+.menu-bar > .menu-item .item-icon { width: auto; margin-right: 4px; }
+.menu-cat .item-icon { width: auto; margin-right: 5px; }
+.menu-drawer-section .item-icon { width: auto; margin-right: 5px; }
 .menu-dropdown .item.disabled { opacity: 0.5; cursor: default; }
 .menu-dropdown .item .shortcut {
   margin-left: 24px;
@@ -3921,20 +3928,36 @@
 .app.immersive .reading-view-switch,
 .app.immersive .controls-dock,
 .app.immersive .app-status,
-.app.immersive .incognito-banner,
-.app.immersive .chapter-heading { display: none; }
+.app.immersive .incognito-banner { display: none; }
+/* The section bar stays — full-screen is where you read longest, so "how far through this chapter"
+   matters MORE here, not less. Pared back to the bar itself: no borders, no times column, and
+   translucent so it reads as a hairline rather than chrome. */
+.app.immersive .chapter-heading {
+  background: transparent; border-bottom: none; opacity: 0.5;
+  padding: 2px 10px; gap: 6px; transition: opacity 0.15s;
+}
+.app.immersive .chapter-heading:hover { opacity: 1; }
+.app.immersive .chapter-heading .ch-times,
+.app.immersive .chapter-heading .ch-num { display: none; }
+/* Full-screen must not pan sideways. Anything wider than the pane (a long code line, a wide table)
+   otherwise lets the whole page rubber-band horizontally, which reads as the text wobbling. */
+.app.immersive, .app.immersive .content-area, .app.immersive .main-wrap { overflow-x: hidden; }
+.app.immersive .line-pane,
+.app.immersive .source-pane,
+.app.immersive .rsvp-pane { overscroll-behavior-x: none; touch-action: pan-y; }
 /* With chrome/dock/status hidden, content-area is the only remaining grid child; grid auto-flow
    would drop it into the `auto` row-1 track (collapsing it to content height). Span every row so it
    fills the viewport — this is what actually makes the reading pane full-bleed on mobile. */
 .app.immersive .content-area { grid-row: 1 / -1; min-height: 0; }
-.immersive-exit {
-  position: fixed; top: 6px; right: 6px; z-index: 6500;
+.immersive-tools { position: fixed; top: 6px; right: 6px; z-index: 6500; display: flex; gap: 4px; }
+.immersive-btn {
   width: 30px; height: 30px; padding: 0; line-height: 1;
   border: 1px solid var(--divider); border-radius: 8px;
   background: var(--menu-bg); color: var(--menu-fg);
   opacity: 0.35; font-size: 15px; cursor: pointer;
 }
-.immersive-exit:active, .immersive-exit:hover { opacity: 0.9; }
+.immersive-btn:active, .immersive-btn:hover { opacity: 0.9; }
+.immersive-btn.toggle-on { opacity: 0.9; }
 /* Desktop full-screen Lines: collapse the multi-pane split to just the pane holding the Lines
    list, full-bleed. (:has() picks that pane; supported in every current desktop browser.) */
 .app.lines-full .main-split { display: block; height: 100vh; overflow: hidden; }
@@ -4846,6 +4869,14 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .chapter-heading .ch-bar-nested { box-sizing: border-box; }
 .chapter-heading .ch-bar-nested .ch-fill { opacity: calc(0.55 + var(--ch-depth, 0) * 0.22); }
 .chapter-heading.ch-multi .ch-pct { min-width: 3.4em; text-align: right; }
+/* Phones: the bars shared a line with the title, the § count, the % and three time figures, and
+   `min-width: 0` let them be squeezed to ~76px of a 390px screen — which left parallel and nested
+   bars a few pixels wide, i.e. not working at all. Give them their own full-width row. (This has
+   to live AFTER the base .ch-bars rule above: same specificity, later wins.) */
+@media (max-width: 860px), (pointer: coarse) and (max-height: 860px) {
+  .chapter-heading .ch-bars { flex: 1 0 100%; }
+  .chapter-heading .ch-bar-name { max-width: 45%; font-size: 11px; }
+}
 
 /* Audiobook generation: live detail on the chunk in flight. The loop only updates state between
    chunks, so a hang used to look identical to slow synthesis — this says which phase, which chunk,
