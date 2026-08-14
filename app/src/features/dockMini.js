@@ -16,7 +16,17 @@ export const DOCK_MINI_ITEMS = [
   ['restart', '⏮️ Restart', false],
   ['sourcePage', '📄 Source page back / forward', true],
   ['jump', '📍 Jump to current word', true],
+  // Toggles and shortcuts. All off by default — a saved bar shouldn't grow buttons on upgrade.
+  ['scroll', '📜 Scroll-to-read on / off', false],
+  ['readAloud', '🔊 Read aloud on / off', false],
+  ['focus', '🖥️ Focus mode on / off', false],
+  ['toc', '📑 Contents pane on / off', false],
+  ['wpm', '🐢🐇 Speed down / up', false],
+  ['find', '🔍 Find', false],
+  // Readouts — these sit at the right end of the bar.
   ['counter', '🔢 Word counter', true],
+  ['pct', '📊 Percent complete', false],
+  ['eta', '⏳ Time left at this speed', false],
 ];
 
 const DEFAULTS = Object.fromEntries(DOCK_MINI_ITEMS.map(([id, , on]) => [id, on]));

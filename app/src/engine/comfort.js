@@ -60,6 +60,16 @@ export function fatigueScore({ readingMs = 0, recentScores = [] } = {}, opts = {
   return clamp01(1 - (1 - timeComp) * (1 - perfComp));
 }
 
+// Whether the clock that drives eye-rest breaks should be running.
+//
+// The microbreak is an EYE rest — it exists because your eyes are locked on a screen. When the
+// text is being read aloud, they aren't: you may be walking, or have them shut. Interrupting the
+// narration mid-sentence to say "look 20 feet away" is worse than useless, so listening time
+// simply doesn't accrue eye strain. The clock holds its position and resumes when audio stops.
+export function eyeStrainAccruing({ enabled = true, playing = false, listening = false } = {}) {
+  return !!(enabled && playing && !listening);
+}
+
 // Whether enough active reading has elapsed since the last break to prompt another.
 export function shouldBreak(sinceBreakMs, opts = {}) {
   const o = { ...DEFAULT_COMFORT, ...opts };

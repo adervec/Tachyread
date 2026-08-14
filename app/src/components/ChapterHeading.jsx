@@ -16,20 +16,34 @@ function fmtDur(secs) {
 // measured pixel width; raise it if a wide desktop bar ever wants finer granularity.
 const MAX_SEGMENTS = 40;
 
-// One section's bar. `pages` segments it by screenful (see the ticks note above); `depth` shifts
-// the nested mode's inset so outer sections sit behind the inner one.
-function SectionBar({ sec, pct, pages, title, depth, nested }) {
-  return (
+// One section's bar. `pages` segments it by screenful (see the ticks note above).
+//
+// Stacked modes (parallel, nested) get a name label — an unlabelled stack of bars tells you a
+// section exists at each depth but not WHICH section, which is the least useful half. In nested
+// mode the bar is also positioned at the section's own offset/extent within the outermost bar, so
+// containment is drawn rather than implied: a chapter's bar literally sits inside its part's.
+function SectionBar({ sec, pct, pages, title, depth, nested, labelled }) {
+  const row = (
     <div
-      className={`ch-bar${pages > 1 ? ' segmented' : ''}${nested ? ' ch-bar-nested' : ''}`}
+      className={`ch-bar${pages > 1 ? ' segmented' : ''}`}
       title={title}
-      style={{
-        ...(pages > 1 ? { '--ch-seg': `${100 / pages}%` } : null),
-        ...(nested ? { '--ch-depth': depth } : null),
-      }}
+      style={pages > 1 ? { '--ch-seg': `${100 / pages}%` } : undefined}
       data-level={sec.level}
     >
       <div className="ch-fill" style={{ width: `${pct}%` }} />
+    </div>
+  );
+  if (!labelled) return row;
+  return (
+    <div
+      className={`ch-bar-row${nested ? ' ch-bar-nested' : ''}`}
+      style={{
+        '--ch-depth': depth,
+        ...(nested ? { marginLeft: `${sec.offset * 100}%`, width: `${sec.extent * 100}%` } : null),
+      }}
+    >
+      <span className="ch-bar-name" title={title}>{sec.title || `Level ${sec.level + 1}`}</span>
+      {row}
     </div>
   );
 }
@@ -107,6 +121,7 @@ export default function ChapterHeading({ tab, onJumpWord, visibleRef, barMode = 
             title={barTitleFor(sec)}
             depth={i}
             nested={barMode === 'nested'}
+            labelled={barMode === 'parallel' || barMode === 'nested'}
           />
         )) : (
           <div className="ch-bar" title={`${pct}% through this section`}>

@@ -871,7 +871,6 @@
 .toc-skip-chip { display: inline-flex; align-items: center; gap: 2px; background: rgba(217, 131, 36, 0.16); color: var(--menu-fg); border-radius: 10px; padding: 1px 4px 1px 8px; }
 .toc-skip-chip button { border: none; background: transparent; cursor: pointer; color: var(--status-fg); padding: 0 2px; font-size: 11px; }
 .toc-row.toc-skipped .toc-name-text { opacity: 0.55; text-decoration: line-through; }
-.toc-act .toc-skip-on { color: #d98324; }
 
 /* Adaptive comprehension probe */
 .adapt-probe-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 6; }
@@ -1041,8 +1040,19 @@
   font-weight: 600;
 }
 
-/* ToC "mark as read" toggle (credit sections read elsewhere, e.g. on paper) */
-.toc-act .toc-read-on { color: #2e9d4f; font-weight: 800; }
+/* ToC "excluded from %" (⊘) and "mark as read" (✓) toggles. These were a bare hue shift on a 12px
+   glyph, which is close to invisible — on/off now differs by FILL: off is a dim outlined slot, on
+   is a solid chip with a white glyph. Reads at a glance, and survives a colour-blind eye. */
+.toc-act .toc-mark {
+  min-width: 20px; height: 17px; border-radius: 4px; opacity: 0.45;
+  border: 1px solid var(--divider); background: transparent; line-height: 1;
+}
+.toc-act .toc-mark:hover { opacity: 1; background: var(--btn-hover); }
+.toc-act .toc-skip-on, .toc-act .toc-read-on {
+  opacity: 1; color: #fff; font-weight: 800; border-color: rgba(0, 0, 0, 0.35);
+}
+.toc-act .toc-skip-on, .toc-act .toc-skip-on:hover { background: #b3651a; }
+.toc-act .toc-read-on, .toc-act .toc-read-on:hover { background: #2e7d32; }
 
 /* HTML/Markdown source: sandboxed iframe carrying the document's own styling */
 .source-frame { width: 100%; height: 100%; border: none; background: #fff; display: block; }
@@ -1971,7 +1981,10 @@
   display: inline-flex; align-items: center; justify-content: center;
 }
 .dock-mini-nav.src { font-size: 13px; color: var(--nav-session-read-fg); border-color: var(--nav-session-read-fg); }
+/* Readouts sit at the right end: the first one takes the slack, the rest just follow it. */
 .dock-mini-meta { font-size: 12px; color: var(--meta-fg, var(--status-fg)); font-family: Consolas, monospace; margin-left: auto; }
+.dock-mini-meta ~ .dock-mini-meta { margin-left: 0; }
+.dock-mini-wpm { font-size: 12px; color: var(--meta-fg, var(--status-fg)); font-family: Consolas, monospace; min-width: 30px; text-align: center; }
 .dock-dash {
   flex: 0 0 auto;
   width: 250px;
@@ -3048,6 +3061,10 @@
 .toc-table th.toc-name-h { text-align: left; }
 .toc-table th.toc-act-h { width: 20px; text-align: center; padding: 3px 1px; }
 .toc-table td { padding: 2px 6px; border-bottom: 1px solid rgba(128, 128, 128, 0.14); white-space: nowrap; }
+/* Row tint so read/excluded scan down the list without hunting the toggle columns. Declared
+   before :hover and .current so those (same specificity, later wins) still take over. */
+.toc-row.done { background: rgba(46, 125, 50, 0.14); }
+.toc-row.toc-skipped { background: rgba(179, 101, 26, 0.14); }
 .toc-row:hover { background: var(--menu-highlight); }
 .toc-row.current { background: var(--current-line-bg); color: var(--current-line-fg); }
 .toc-row.current .toc-name-text { font-weight: 700; }
@@ -4809,19 +4826,25 @@ input, textarea { -webkit-user-select: text; user-select: text; }
    heading can draw one bar per level (App Settings → Section progress bar). */
 .chapter-heading .ch-bars { flex: 1; min-width: 0; display: flex; }
 .chapter-heading .ch-bars-single, .chapter-heading .ch-bars-cycle { align-items: center; }
-/* Parallel: one slim bar per level, stacked — outermost on top, so the eye reads part → chapter. */
-.chapter-heading .ch-bars-parallel { flex-direction: column; gap: 2px; }
-.chapter-heading .ch-bars-parallel .ch-bar { height: 4px; }
-/* Nested: the levels overlay, each inset a little further, so an inner section literally sits
-   inside its parent's bar. Depth comes from --ch-depth (0 = outermost). */
-.chapter-heading .ch-bars-nested { position: relative; height: 12px; }
-.chapter-heading .ch-bar-nested {
-  position: absolute; left: 0; right: 0;
-  top: calc(var(--ch-depth, 0) * 3px);
-  bottom: calc(var(--ch-depth, 0) * 3px);
-  height: auto;
-  opacity: calc(0.55 + var(--ch-depth, 0) * 0.22);
+/* Stacked modes. `.ch-bar` carries `flex: 1` for the single-bar row layout, and flex-basis:0 in a
+   COLUMN container collapses every bar to zero height — which is why parallel mode drew nothing.
+   Pin the height back explicitly here. */
+.chapter-heading .ch-bars-parallel,
+.chapter-heading .ch-bars-nested { flex-direction: column; gap: 2px; align-items: stretch; }
+.chapter-heading .ch-bar-row { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.chapter-heading .ch-bar-row .ch-bar { flex: 1 1 auto; height: 5px; min-width: 12px; }
+/* The name is what makes a stack of bars readable — without it you know a section exists at each
+   depth but not which one. Outer levels sit back a little so depth still reads at a glance. */
+.chapter-heading .ch-bar-name {
+  flex: 0 1 auto; min-width: 0; max-width: 40%;
+  font-size: 10px; line-height: 1.2; color: var(--status-fg);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: calc(0.62 + var(--ch-depth, 0) * 0.19);
 }
+/* Nested: each row is offset and sized to its section's span inside the outermost bar, so a
+   chapter's bar is drawn literally within its part's. Inline marginLeft/width do the placing. */
+.chapter-heading .ch-bar-nested { box-sizing: border-box; }
+.chapter-heading .ch-bar-nested .ch-fill { opacity: calc(0.55 + var(--ch-depth, 0) * 0.22); }
 .chapter-heading.ch-multi .ch-pct { min-width: 3.4em; text-align: right; }
 
 /* Audiobook generation: live detail on the chunk in flight. The loop only updates state between

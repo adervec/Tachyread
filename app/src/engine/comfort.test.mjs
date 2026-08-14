@@ -1,7 +1,7 @@
 // ponytail: the comfort/fatigue engine — clamp, comprehension-drop, noisy-OR fatigue, microbreak
 // scheduling, WPM backoff. Pure (no clock), so fully deterministic. Run: node src/engine/comfort.test.mjs
 import assert from 'node:assert';
-import { DEFAULT_COMFORT, clamp01, comprehensionDrop, fatigueScore, shouldBreak, nextBreakInMs, backoffWpm } from './comfort.js';
+import { DEFAULT_COMFORT, clamp01, comprehensionDrop, fatigueScore, shouldBreak, nextBreakInMs, backoffWpm, eyeStrainAccruing } from './comfort.js';
 
 const MIN = 60000;
 
@@ -49,5 +49,21 @@ assert.equal(backoffWpm(400, 1), Math.round(400 * (1 - DEFAULT_COMFORT.backoffPc
 assert.ok(backoffWpm(400, 0.99) <= backoffWpm(400, 0.6), 'more fatigue → equal or slower');
 assert.ok(backoffWpm(400, 2) >= 1 && backoffWpm(0, 1) >= 1, 'never below 1, junk-tolerant');
 assert.equal(backoffWpm(400, 1) < 400 && backoffWpm(400, 1) > 300, true, 'a 15% easing keeps it sane, never raises');
+
+// eyeStrainAccruing: the eye-rest clock runs only when the eyes are actually on the screen.
+assert.equal(eyeStrainAccruing({ enabled: true, playing: true, listening: false }), true, 'reading → accrues');
+assert.equal(eyeStrainAccruing({ enabled: true, playing: true, listening: true }), false, 'read-aloud → eyes are already resting');
+assert.equal(eyeStrainAccruing({ enabled: true, playing: false, listening: false }), false, 'paused → no accrual');
+assert.equal(eyeStrainAccruing({ enabled: false, playing: true, listening: false }), false, 'comfort off → no accrual');
+assert.equal(eyeStrainAccruing(), false, 'nothing running by default');
+
+// The key property: listening never RESETS the clock, it only holds it. 19 min of reading then a
+// stretch of narration then reading again must still break at 20 — not restart the count.
+let since = 19 * MIN;
+for (let i = 0; i < 600; i++) if (eyeStrainAccruing({ playing: true, listening: true })) since += 1000;
+assert.equal(since, 19 * MIN, '10 min of narration adds no eye strain');
+assert.equal(shouldBreak(since), false, 'and does not fire a break while listening');
+for (let i = 0; i < 60; i++) if (eyeStrainAccruing({ playing: true, listening: false })) since += 1000;
+assert.equal(shouldBreak(since), true, 'the held minute still lands the break at 20 min of reading');
 
 console.log('comfort: all cases pass');

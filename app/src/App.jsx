@@ -3029,6 +3029,12 @@ function AppInner() {
                   const nb = (title, label, glyph, fn, cls = 'dock-mini-nav') => (
                     <button key={id} className={cls} title={title} aria-label={label} onClick={fn}>{glyph}</button>
                   );
+                  // A toggle reads as pressed, not just as an icon — same `toggle-on` fill the
+                  // full controls bar uses, so on/off is a fill difference and not only a hue.
+                  const tb = (title, label, glyph, fn, on) => (
+                    <button key={id} className={`dock-mini-nav${on ? ' toggle-on' : ''}`}
+                      title={title} aria-label={label} aria-pressed={on} onClick={fn}>{glyph}</button>
+                  );
                   switch (id) {
                     case 'pageUp': return nb('Page up (PgUp)', 'Page up', '⏫', () => pageLines(-1));
                     case 'prevLine': return nb('Previous line (↑)', 'Previous line', '⬆️', () => nav('prevLine'));
@@ -3046,7 +3052,27 @@ function AppInner() {
                         <button className="dock-mini-nav src" title="Next source page" aria-label="Next source page" onClick={() => jumpSourcePage(1)}>📄➡️</button>
                       </Fragment>
                     );
+                    case 'scroll': return tb('Scroll-to-read (S)', 'Scroll to read', '📜', toggleScrollRead, !!state.global.scrollAdvances);
+                    case 'readAloud': return tb('Read aloud (A)', 'Read aloud', '🔊', toggleReadAloud, !!activeTab.settings.readAloud);
+                    case 'focus': return tb('Focus mode (F)', 'Focus mode', '🖥️', toggleFocusMode, !!state.global.focusMode);
+                    case 'toc': return tb('Contents pane (3)', 'Contents pane', '📑', () => togglePane(3), !!state.showToc);
+                    case 'find': return nb('Find (Ctrl+F)', 'Find', '🔍', () => openDialog({ kind: 'find' }));
+                    case 'wpm': return (
+                      <Fragment key={id}>
+                        <button className="dock-mini-nav" title="Slower (−25 wpm)" aria-label="Slower" onClick={() => adjustWpm(-25)}>🐢</button>
+                        <span className="dock-mini-wpm">{activeTab.settings.wpm}</span>
+                        <button className="dock-mini-nav" title="Faster (+25 wpm)" aria-label="Faster" onClick={() => adjustWpm(25)}>🐇</button>
+                      </Fragment>
+                    );
                     case 'counter': return <span key={id} className="dock-mini-meta">{activeTab.settings.wordIndex + 1} / {activeTab.doc.words.length}</span>;
+                    case 'pct': return <span key={id} className="dock-mini-meta">{Math.floor((activeTab.settings.wordIndex / Math.max(1, activeTab.doc.words.length)) * 100)}%</span>;
+                    case 'eta': {
+                      // Words left at the current target speed. Rough by nature — it's the same
+                      // arithmetic the full bar shows, not a pace model.
+                      const left = Math.max(0, activeTab.doc.words.length - activeTab.settings.wordIndex);
+                      const min = Math.round(left / Math.max(1, activeTab.settings.wpm || 300));
+                      return <span key={id} className="dock-mini-meta">{min >= 60 ? `${Math.floor(min / 60)}h ${min % 60}m` : `${min}m`}</span>;
+                    }
                     default: return null;
                   }
                 })}
@@ -3422,6 +3448,7 @@ function AppInner() {
         <ComfortMonitor
           tab={activeTab}
           playing={playing}
+          listening={!!activeTab?.settings.readAloud}
           cfg={state.global.comfort}
           manualSignal={breakSignal}
           getRecentScores={() => probeScoresRef.current}
