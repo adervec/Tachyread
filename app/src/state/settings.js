@@ -444,6 +444,10 @@ export function defaultGlobalSettings() {
     // phone's lock timer only resets on INPUT, and locking suspends the native speech engine — so
     // without this, read-aloud dies mid-sentence on any phone. Device-local.
     keepAwake: true,
+    // Hold an audio session during native read-aloud so a locked screen doesn't kill the speech
+    // engine. It costs the phone's audio focus, which ducks anything else you're playing — turn
+    // it off if you'd rather keep your music and don't need narration to survive a lock.
+    bgKeepAlive: true,
     sectionBarMode: 'single', // single | parallel | nested | cycle
     sectionBarCycleSecs: 6,   // seconds per level in cycling mode
     mobilePillPage: 0,

@@ -186,6 +186,21 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
         Follow mode speaks as you read without driving the pace — a progress marker, not a narrator.
         Full read-aloud (TTS drives the reading position) toggles from the controls bar.
       </p>
+      <div className="field-section">Background playback</div>
+      <label className="inline-check" title="Holds an audio session while the built-in voice reads, so a screen lock doesn't suspend it. The cost is your phone's audio focus — anything else you're playing gets ducked.">
+        <input
+          type="checkbox"
+          checked={global.bgKeepAlive !== false}
+          onChange={(e) => onPatchGlobal({ bgKeepAlive: e.target.checked })}
+        />
+        Keep the built-in voice alive when the screen locks
+      </label>
+      <p className="settings-note">
+        This holds an audio session, which takes your phone&rsquo;s audio focus and <strong>ducks other
+        apps&rsquo; sound</strong> while read-aloud runs. Turn it off to leave your music alone — narration
+        will then stop when the screen locks. The offline voice doesn&rsquo;t need it (its real speech
+        already holds the session), and neither does the pre-generated Audiobook.
+      </p>
       <div className="field-section">Timers</div>
       <Field label="Auto-stop reading after (minutes, 0 = never)">
         <input

@@ -17,113 +17,114 @@ function ThemeOptions() {
 
 const MENUS = {
   file: [
-    { label: 'Open TXT...', shortcut: 'Ctrl+O', action: 'open-txt' },
-    { label: 'Open Document (PDF, EPUB, HTML, DOCX, MD)...', shortcut: 'Ctrl+D', action: 'open-doc' },
-    { label: 'Open HTML (choose content region)...', action: 'open-html-pick' },
-    { label: 'Bulk Add from Folder...', action: 'bulk-add' },
-    { label: 'Open from Clipboard', shortcut: 'Ctrl+B', action: 'open-clip' },
-    { label: 'Grab Text (OCR)...', shortcut: 'Ctrl+Shift+G', action: 'grab' },
-    { label: 'Grab from Web URL...', action: 'web-grab' },
-    { label: 'Show File Location...', action: 'reveal-file' },
-    { label: 'Save Tab Text...', action: 'save-tab' },
-    { label: 'HTML Tools (guide & print to HTML)...', action: 'html-tools' },
+    { label: 'Open TXT...', shortcut: 'Ctrl+O', action: 'open-txt', icon: '📄'},
+    { label: 'Open Document (PDF, EPUB, HTML, DOCX, MD)...', shortcut: 'Ctrl+D', action: 'open-doc', icon: '📚'},
+    { label: 'Open HTML (choose content region)...', action: 'open-html-pick', icon: '🌐'},
+    { label: 'Bulk Add from Folder...', action: 'bulk-add', icon: '📂'},
+    { label: 'Open from Clipboard', shortcut: 'Ctrl+B', action: 'open-clip', icon: '📋'},
+    { label: 'Grab Text (OCR)...', shortcut: 'Ctrl+Shift+G', action: 'grab', icon: '📸'},
+    { label: 'Grab from Web URL...', action: 'web-grab', icon: '🕸️'},
+    { label: 'Show File Location...', action: 'reveal-file', icon: '📁'},
+    { label: 'Save Tab Text...', action: 'save-tab', icon: '💾'},
+    { label: 'HTML Tools (guide & print to HTML)...', action: 'html-tools', icon: '🧰'},
     { kind: 'separator' },
-    { label: 'Find...', shortcut: 'Ctrl+F', action: 'find' },
-    { label: 'Go to Line...', shortcut: 'Ctrl+G', action: 'goto' },
-    { label: 'Close Tab', action: 'close-tab' },
-    { label: 'Close All Tabs', action: 'close-all' },
+    { label: 'Find...', shortcut: 'Ctrl+F', action: 'find', icon: '🔎'},
+    { label: 'Go to Line...', shortcut: 'Ctrl+G', action: 'goto', icon: '📍'},
+    { label: 'Close Tab', action: 'close-tab', icon: '❌'},
+    { label: 'Close All Tabs', action: 'close-all', icon: '🧹'},
     { kind: 'separator' },
-    { label: 'Disconnect (keep session for next time)', action: 'disconnect' },
-    { label: 'Shut Down (close all, start clean next time)', action: 'shutdown' },
+    { label: 'Disconnect (keep session for next time)', action: 'disconnect', icon: '🔌'},
+    { label: 'Shut Down (close all, start clean next time)', action: 'shutdown', icon: '🛑'},
   ],
   // What's on screen right now.
   view: [
-    { label: 'Notes & Annotations...', shortcut: 'Ctrl+Shift+N', action: 'notes' },
-    { label: 'Show / Hide Lines Pane', action: 'toggle-lines' },
-    { label: 'Proper Names Index...', shortcut: 'Ctrl+I', action: 'proper-names' },
-    { label: 'Preview Footnote', shortcut: 'Ctrl+Shift+F', action: 'footnote' },
-    { label: 'Incognito Reading (no tracking)', action: 'toggle-incognito' },
-    { label: 'Reduce Blue Light (bedtime)', shortcut: 'B', action: 'toggle-bluelight' },
-    { label: 'Reading Cursor & Trail...', action: 'cursor-manager' },
-    { label: 'Crosshairs (Lines overlays)...', action: 'crosshairs' },
-    { label: 'Avatar Library...', action: 'face-library' },
+    { label: 'Notes & Annotations...', shortcut: 'Ctrl+Shift+N', action: 'notes', icon: '📝'},
+    { label: 'Show / Hide Lines Pane', action: 'toggle-lines', icon: '📃'},
+    { label: 'Proper Names Index...', shortcut: 'Ctrl+I', action: 'proper-names', icon: '🏷️'},
+    { label: 'Preview Footnote', shortcut: 'Ctrl+Shift+F', action: 'footnote', icon: '📑'},
+    { label: 'Incognito Reading (no tracking)', action: 'toggle-incognito', icon: '🕶️'},
+    { label: 'Reduce Blue Light (bedtime)', shortcut: 'B', action: 'toggle-bluelight', icon: '🌙'},
+    { label: 'Reading Cursor & Trail...', action: 'cursor-manager', icon: '🖱️'},
+    { label: 'Crosshairs (Lines overlays)...', action: 'crosshairs', icon: '🎯'},
+    { label: 'Avatar Library...', action: 'face-library', icon: '🙂'},
   ],
   // Drills & practice.
   train: [
-    { label: 'Eye Warmup...', action: 'eye-warmup' },
-    { label: 'Span Drill...', action: 'span-drill' },
-    { label: 'Dictation (speak to write)...', action: 'dictation' },
-    { label: 'Vocabulary...', action: 'vocab' },
+    { label: 'Eye Warmup...', action: 'eye-warmup', icon: '👀'},
+    { label: 'Span Drill...', action: 'span-drill', icon: '↔️'},
+    { label: 'Dictation (speak to write)...', action: 'dictation', icon: '🎙️'},
+    { label: 'Vocabulary...', action: 'vocab', icon: '🧠'},
     { kind: 'separator' },
-    { label: 'Take a Break Now', action: 'take-break' },
+    { label: 'Take a Break Now', action: 'take-break', icon: '☕'},
   ],
   // Progress & analytics.
   stats: [
-    { label: 'Statistics...', shortcut: 'Ctrl+T', action: 'stats' },
-    { label: 'Progress Detail...', action: 'progress-detail' },
-    { label: 'Regression Report...', action: 'regressions' },
-    { label: 'Attention Check...', action: 'attention' },
-    { label: 'Reading History...', shortcut: 'Ctrl+H', action: 'history' },
-    { label: 'Trackyread (Reading Tracker)...', action: 'literary-journey' },
-    { label: 'This Book in Trackyread...', action: 'trackyread-book' },
-    { label: 'API Usage & Spend...', action: 'api-usage' },
+    { label: 'Statistics...', shortcut: 'Ctrl+T', action: 'stats', icon: '📊'},
+    { label: 'Progress Detail...', action: 'progress-detail', icon: '📈'},
+    { label: 'Regression Report...', action: 'regressions', icon: '↩️'},
+    { label: 'Attention Check...', action: 'attention', icon: '🧐'},
+    { label: 'Reading History...', shortcut: 'Ctrl+H', action: 'history', icon: '🕰️'},
+    { label: 'Trackyread (Reading Tracker)...', action: 'literary-journey', icon: '🗺️'},
+    { label: 'This Book in Trackyread...', action: 'trackyread-book', icon: '📖'},
+    { label: 'API Usage & Spend...', action: 'api-usage', icon: '💳'},
   ],
   // Document-resource generators.
   tools: [
-    { label: 'Generate Contents (Wizard)...', action: 'toc-wizard' },
-    { label: 'Generate Proper Names (Wizard)...', action: 'names-wizard' },
-    { label: 'Generate Index (Wizard)...', action: 'index-wizard' },
-    { label: 'Locate Footnotes (Wizard)...', action: 'notes-wizard' },
+    { label: 'Generate Contents (Wizard)...', action: 'toc-wizard', icon: '🧭'},
+    { label: 'Generate Proper Names (Wizard)...', action: 'names-wizard', icon: '🏷️'},
+    { label: 'Generate Index (Wizard)...', action: 'index-wizard', icon: '🔖'},
+    { label: 'Locate Footnotes (Wizard)...', action: 'notes-wizard', icon: '📌'},
   ],
   typing: [
-    { label: 'Typing Practice', action: 'typing' },
-    { label: 'Flow Writer...', action: 'flow-writer' },
-    { label: 'Typing Plans...', action: 'typing-plans' },
-    { label: 'Typing Progress...', action: 'typing-progress' },
+    { label: 'Typing Practice', action: 'typing', icon: '⌨️'},
+    { label: 'Flow Writer...', action: 'flow-writer', icon: '✍️'},
+    { label: 'Typing Plans...', action: 'typing-plans', icon: '🗓️'},
+    { label: 'Typing Progress...', action: 'typing-progress', icon: '📈'},
     { kind: 'separator' },
-    { label: 'Typing Settings...', action: 'typing-settings' },
+    { label: 'Typing Settings...', action: 'typing-settings', icon: '🎛️'},
   ],
   audio: [
-    { label: 'Audiobook Manager...', shortcut: 'Ctrl+Shift+A', action: 'audiobook' },
-    { label: 'Text-to-Speech Reader...', shortcut: 'Ctrl+Shift+T', action: 'tts-popup' },
-    { label: 'Ambient Sound...', action: 'ambient' },
+    { label: 'Audiobook Manager...', shortcut: 'Ctrl+Shift+A', action: 'audiobook', icon: '🎧'},
+    { label: 'Text-to-Speech Reader...', shortcut: 'Ctrl+Shift+T', action: 'tts-popup', icon: '🔊'},
+    { label: 'Ambient Sound...', action: 'ambient', icon: '🌊'},
     { kind: 'separator' },
-    { label: 'Audio Settings...', action: 'audio-settings' },
+    { label: 'Audio Settings...', action: 'audio-settings', icon: '🎚️'},
   ],
   settings: [
-    { label: 'Tab Settings...', shortcut: 'Ctrl+,', action: 'tab-settings' },
-    { label: 'Application Settings...', action: 'app-settings' },
-    { label: 'Default Tab Settings...', action: 'def-settings' },
-    { label: 'Reset Tab to Default Settings', action: 'reset-tab' },
-    { label: 'Apply Default Settings to All Tabs', action: 'apply-defaults-all' },
+    { label: 'Tab Settings...', shortcut: 'Ctrl+,', action: 'tab-settings', icon: '🗂️'},
+    { label: 'Application Settings...', action: 'app-settings', icon: '⚙️'},
+    { label: 'Default Tab Settings...', action: 'def-settings', icon: '🧾'},
+    { label: 'Reset Tab to Default Settings', action: 'reset-tab', icon: '♻️'},
+    { label: 'Apply Default Settings to All Tabs', action: 'apply-defaults-all', icon: '🔁'},
     { kind: 'separator' },
-    { label: 'Font Manager...', action: 'font-manager' },
-    { label: 'Biometric Controls...', action: 'biometric-settings' },
-    { label: 'Comfort & Breaks...', action: 'comfort-settings' },
+    { label: 'Font Manager...', action: 'font-manager', icon: '🔤'},
+    { label: 'Biometric Controls...', action: 'biometric-settings', icon: '👁️'},
+    { label: 'Comfort & Breaks...', action: 'comfort-settings', icon: '🛋️'},
     { kind: 'separator' },
-    { label: 'Data Management...', action: 'data' },
-    { label: 'Book Groups...', action: 'book-groups' },
+    { label: 'Data Management...', action: 'data', icon: '💽'},
+    { label: 'Book Groups...', action: 'book-groups', icon: '📚'},
   ],
   help: [
-    { label: 'Help...', shortcut: 'F1', action: 'help' },
-    { label: 'Install as App...', action: 'install-pwa' },
-    { label: 'About / Disclaimer...', action: 'disclaimer' },
+    { label: 'Help...', shortcut: 'F1', action: 'help', icon: '❓'},
+    { label: 'Install as App...', action: 'install-pwa', icon: '⬇️'},
+    { label: 'About / Disclaimer...', action: 'disclaimer', icon: 'ℹ️'},
   ],
 };
 
 // Menu-bar order + display titles (desktop dropdowns and the mobile drawer sections).
 const MENU_ORDER = [
-  ['file', 'File'],
-  ['view', 'View'],
-  ['train', 'Train'],
-  ['stats', 'Stats'],
-  ['tools', 'Tools'],
-  ['typing', 'Typing'],
-  ['audio', 'Audio'],
-  ['settings', 'Settings'],
-  ['help', 'Help'],
+  ['file', 'File', '📁'],
+  ['view', 'View', '👁️'],
+  ['train', 'Train', '🏋️'],
+  ['stats', 'Stats', '📊'],
+  ['tools', 'Tools', '🧰'],
+  ['typing', 'Typing', '⌨️'],
+  ['audio', 'Audio', '🔊'],
+  ['settings', 'Settings', '⚙️'],
+  ['help', 'Help', '❓'],
 ];
-const MENU_TITLE = Object.fromEntries(MENU_ORDER);
+const MENU_TITLE = Object.fromEntries(MENU_ORDER.map(([k, t]) => [k, t]));
+const MENU_ICON = Object.fromEntries(MENU_ORDER.map(([k, , i]) => [k, i]));
 
 // One menu entry (file/view list) rendered as a drawer/dropdown row. `badges` optionally maps an
 // action → a small count shown as a pill (e.g. how many tab settings differ from the defaults).
@@ -132,7 +133,8 @@ function MenuItem({ it, onPick, badges }) {
   const badge = badges?.[it.action];
   return (
     <div className="item" onClick={() => onPick(it.action)}>
-      <span>{it.label}</span>
+      <span className="item-icon" aria-hidden="true">{it.icon || ''}</span>
+      <span className="item-label">{it.label}</span>
       {badge ? <span className="menu-badge" title={`${badge} setting${badge === 1 ? '' : 's'} differ from your defaults`}>{badge}</span> : null}
       {it.shortcut && <span className="shortcut">{it.shortcut}</span>}
     </div>
@@ -345,6 +347,16 @@ export default function MenuBar({ onFileOpen, onAction }) {
         >
           A+
         </button>
+        {/* Full-screen was reachable only by shaking the phone — the ⛶ lived on the desktop bar. */}
+        <button
+          className="menu-font-btn"
+          disabled={!activeTab}
+          title="Full-screen Lines reading (Esc to exit)"
+          aria-label="Full-screen Lines reading"
+          onClick={() => onAction('fullscreen-lines')}
+        >
+          ⛶
+        </button>
         <select
           className="menu-theme-compact"
           value={themeName}
@@ -365,9 +377,9 @@ export default function MenuBar({ onFileOpen, onAction }) {
                 <div className="menu-drawer-section">Menus</div>
                 {/* Tap-friendly tile grid (not a list) — bigger targets, two per row. */}
                 <div className="menu-cat-grid">
-                  {MENU_ORDER.map(([key, title]) => (
+                  {MENU_ORDER.map(([key, title, icon]) => (
                     <div key={key} className="item menu-cat" onClick={() => setSub(key)}>
-                      <span>{title}</span>
+                      <span><span className="item-icon" aria-hidden="true">{icon}</span>{title}</span>
                       <span className="menu-cat-caret">›</span>
                     </div>
                   ))}
@@ -380,7 +392,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
               // Drilled into one menu: back header + that menu's items only, as a tile grid.
               <>
                 <div className="menu-drawer-back" onClick={() => setSub(null)}>‹ All menus</div>
-                <div className="menu-drawer-section">{MENU_TITLE[sub] || sub}</div>
+                <div className="menu-drawer-section"><span className="item-icon" aria-hidden="true">{MENU_ICON[sub] || ''}</span>{MENU_TITLE[sub] || sub}</div>
                 <div className="menu-item-grid">
                   {MENUS[sub].map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}
                 </div>
@@ -395,13 +407,13 @@ export default function MenuBar({ onFileOpen, onAction }) {
 
   return (
     <div className="menu-bar" ref={ref}>
-      {MENU_ORDER.map(([key, title]) => (
+      {MENU_ORDER.map(([key, title, icon]) => (
         <div
           key={key}
           className={`menu-item ${openMenu === key ? 'open' : ''}`}
           onClick={() => setOpenMenu(openMenu === key ? null : key)}
         >
-          {title}
+          <span className="item-icon" aria-hidden="true">{icon}</span>{title}
           {openMenu === key && (
             <div className="menu-dropdown">
               {MENUS[key].map((it, i) => <MenuItem key={i} it={it} onPick={handle} badges={badges} />)}

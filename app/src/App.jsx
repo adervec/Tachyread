@@ -50,7 +50,7 @@ import IndexPane from './components/IndexPane.jsx';
 import { buildProperNamesFromList } from './document/resourceWizard.js';
 import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
 import { createModeDetector } from './engine/readingMode.js';
-import { startMediaSession, updateMediaSession, stopMediaSession, armMediaKeepAlive, nudgeMediaKeepAlive, getSpeechAudio } from './features/mediaSession.js';
+import { startMediaSession, updateMediaSession, stopMediaSession, nudgeMediaKeepAlive, getSpeechAudio } from './features/mediaSession.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
 import AdaptiveProbe from './components/AdaptiveProbe.jsx';
 import { computeSurprisalWeights } from './engine/surprisal.js';
@@ -212,9 +212,11 @@ function AppInner() {
   const docLang = getLanguage(state.global.language);
   useEffect(() => { setPreferredLanguage(docLang.bcp); }, [docLang.bcp]);
 
-  // Arm the read-aloud background keep-alive early so the silent audio unlocks on the FIRST tap —
-  // otherwise it can't play when the screen locks. Harmless if read-aloud is never used.
-  useEffect(() => { armMediaKeepAlive(); }, []);
+  // The read-aloud keep-alive is deliberately NOT armed at mount any more. Priming it played the
+  // (inaudible) tone on the first tap of every session, and a page that plays audio takes the
+  // phone's audio focus — so merely opening the app ducked whatever you were listening to, even
+  // if you never used read-aloud. It is now armed only when read-aloud actually starts
+  // (startMediaSession plays within the toggle's user activation, and re-arms if that is refused).
 
   // Live reading-mode detection: every advancement notes its input source; the chip in the
   // controls bar shows how the app currently thinks you're reading (see engine/readingMode.js).
@@ -724,7 +726,7 @@ function AppInner() {
         onPrev: () => navRef.current?.('prevPara'),
         onSeekForward: () => navRef.current?.('nextLine'),
         onSeekBackward: () => navRef.current?.('prevLine'),
-      }, { keepAlive: !offline });
+      }, { keepAlive: !offline && stateGlobalRef.current.bgKeepAlive !== false });
     } else {
       readAloudRef.current.stop();
       stopMediaSession();
@@ -2710,7 +2712,17 @@ function AppInner() {
         </div>
       )}
       {immersive && (
-        <button className="immersive-exit" title="Exit full-screen reading (Esc)" aria-label="Exit full-screen reading" onClick={() => setImmersive(false)}>⛶</button>
+        <div className="immersive-tools">
+          {/* Focus mode stacks ON TOP of full-screen (it also blacks out other monitors and fades
+              the rest of the desktop), so it stays reachable once every other control is hidden. */}
+          <button
+            className={`immersive-btn${state.global.focusMode ? ' toggle-on' : ''}`}
+            title={state.global.focusMode ? 'Focus mode on — click to turn off (F)' : 'Focus mode: block distractions (F)'}
+            aria-label="Toggle focus mode" aria-pressed={!!state.global.focusMode}
+            onClick={toggleFocusMode}
+          >🎯</button>
+          <button className="immersive-btn immersive-exit" title="Exit full-screen reading (Esc)" aria-label="Exit full-screen reading" onClick={() => setImmersive(false)}>⛶</button>
+        </div>
       )}
       {/* Bedtime blue-light filter: a warm multiply overlay over the whole app. pointer-events:none
           so it never intercepts clicks; strength is the user's. */}
