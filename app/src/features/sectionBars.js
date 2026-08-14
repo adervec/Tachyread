@@ -25,10 +25,23 @@ export function sectionChain(entries, idx, totalWords) {
   // keep the LAST section seen at each depth, which is the one actually containing the position.
   const byLevel = new Map();
   for (const m of chain) byLevel.set(m.level, m);
-  return [...byLevel.values()].sort((a, b) => a.level - b.level).map((m) => ({
+  let out = [...byLevel.values()].sort((a, b) => a.level - b.level);
+  // A top-level heading that spans the WHOLE document (a title page entry, or a one-heading ToC)
+  // is a duplicate of the overall progress bar — drop it, but never down to nothing, or the
+  // heading would lose its bar entirely.
+  const total = Math.max(1, Number(totalWords) || 0);
+  if (out.length > 1 && out[0].start <= 0 && out[0].end >= total) out = out.slice(1);
+  // Where each section sits INSIDE the outermost one still drawn (0..1 of that span). This is what
+  // makes nested mode legible: a chapter's bar is drawn at its own offset within its part.
+  const root = out[0];
+  if (!root) return [];
+  const span = Math.max(1, root.end - root.start);
+  return out.map((m) => ({
     ...m,
     progress: Math.max(0, Math.min(1, (idx - m.start) / Math.max(1, m.words))),
     remaining: Math.max(0, m.end - idx),
+    offset: Math.max(0, Math.min(1, (m.start - root.start) / span)),
+    extent: Math.max(0, Math.min(1, (m.end - m.start) / span)),
   }));
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { DEFAULT_COMFORT, shouldBreak, fatigueScore, backoffWpm } from '../engine/comfort.js';
+import { DEFAULT_COMFORT, shouldBreak, fatigueScore, backoffWpm, eyeStrainAccruing } from '../engine/comfort.js';
 
 // Comfort & calibration monitor. Accumulates *active* reading time (it only ticks while playing
 // forward, and the playback gate already pauses on a hidden tab, so background time is never
@@ -14,6 +14,7 @@ import { DEFAULT_COMFORT, shouldBreak, fatigueScore, backoffWpm } from '../engin
 export default function ComfortMonitor({
   tab,
   playing,
+  listening,
   cfg,
   manualSignal,
   getRecentScores,
@@ -45,9 +46,10 @@ export default function ComfortMonitor({
   }
 
   // Accumulate active reading time and fire the scheduled microbreak. Ticks only while actually
-  // playing forward, comfort is enabled, and no break is already showing.
+  // playing forward, comfort is enabled, no break is already showing — and the eyes are actually
+  // on the screen (read-aloud is listening, not reading; see eyeStrainAccruing).
   useEffect(() => {
-    if (!o.enabled || !playing || brk) return;
+    if (brk || !eyeStrainAccruing({ enabled: o.enabled, playing, listening })) return;
     const id = setInterval(() => {
       sinceBreakRef.current += 1000;
       sessionRef.current += 1000;
@@ -55,7 +57,7 @@ export default function ComfortMonitor({
     }, 1000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [o.enabled, playing, brk, intervalMin]);
+  }, [o.enabled, playing, listening, brk, intervalMin]);
 
   // Microbreak countdown. When the rest completes, optionally ease WPM (based on accumulated
   // fatigue) and advance to the ready card.

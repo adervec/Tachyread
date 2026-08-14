@@ -330,11 +330,12 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
                           )}
                         </td>
                         <td className="toc-act">
-                          <button className={skipped ? 'toc-skip-on' : ''} title={skipped ? 'Excluded from completion % — click to include' : 'Exclude this section from completion %'} onClick={() => toggleSkip(span, e.title)}>⊘</button>
+                          <button className={`toc-mark${skipped ? ' toc-skip-on' : ''}`} aria-pressed={skipped} title={skipped ? 'Excluded from completion % — click to include' : 'Exclude this section from completion %'} onClick={() => toggleSkip(span, e.title)}>⊘</button>
                         </td>
                         <td className="toc-act">
                           <button
-                            className={done ? 'toc-read-on' : ''}
+                            className={`toc-mark${done ? ' toc-read-on' : ''}`}
+                            aria-pressed={done}
                             title={done ? 'Marked read — click to clear this section’s coverage' : 'Mark as read (e.g. read on paper) — credits coverage, no time or WPM'}
                             onClick={() => toggleRead(span)}
                           >✓</button>

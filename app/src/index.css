@@ -120,6 +120,9 @@ button.toggle-on {
   color: var(--toggle-active-fg);
   border-color: var(--toggle-active-bg);
 }
+/* `button:hover` is more specific than `button.toggle-on`, so without this an active toggle loses
+   its fill the moment you point at it — i.e. it reads as OFF exactly while you're about to click. */
+button.toggle-on:hover:not(:disabled) { background: var(--toggle-active-bg); filter: brightness(1.15); }
 
 input[type=text], input[type=number], input[type=search], textarea, select {
   background: var(--input-bg);

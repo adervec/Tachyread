@@ -168,7 +168,12 @@ export default function TabBar() {
         // lightweight placeholder fields instead.
         const fileName = tab.lazy ? tab.fileName : tab.doc.fileName;
         const total = tab.lazy ? (tab.settings.totalWords || 0) : tab.doc.words.length;
-        const pct = total ? (tab.settings.wordIndex / total) * 100 : 0;
+        // COMPLETION, not cursor position: read the 1st, 2nd and 4th quarters of a book and this
+        // sits at 75%, where the cursor alone would claim 100%. A lazy tab has no tracker, so it
+        // falls back to the persisted read count (the same number the tracker would report).
+        const pct = tab.lazy
+          ? (total ? Math.min(100, ((tab.settings.persistentWordsRead || 0) / total) * 100) : 0)
+          : (tab.tracker ? tab.tracker.coverageExcluding(tab.settings.skipRanges) * 100 : 0);
         // If this file is part of a NAMED book group, the tab shows the group name with a marker:
         // ★ for the master (canonical) copy, or a number for each of the other editions.
         const cs = tab.lazy ? tab.settings?.contentChecksum : tab.doc?.contentChecksum;
@@ -197,7 +202,7 @@ export default function TabBar() {
             onDragLeave={() => setDropId((d) => (d === tab.id ? null : d))}
             onDrop={(e) => { e.preventDefault(); if (dragId.current && dragId.current !== tab.id) reorderTabs(dragId.current, tab.id); dragId.current = null; setDropId(null); }}
             onDragEnd={() => { dragId.current = null; setDropId(null); }}
-            title={named ? `${named.name} — ${fileName}${cs === masterOf(named) ? ' (master)' : ''}` : (tab.lazy ? `${fileName} — tap to load` : fileName)}
+            title={`${named ? `${named.name} — ${fileName}${cs === masterOf(named) ? ' (master)' : ''}` : (tab.lazy ? `${fileName} — tap to load` : fileName)}\n${pct.toFixed(1)}% of the text read (completion, not position)`}
           >
             {tiles && (
               <img

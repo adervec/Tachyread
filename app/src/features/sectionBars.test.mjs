@@ -88,4 +88,39 @@ const ids = SECTION_BAR_MODES.map(([id]) => id);
 assert.equal(new Set(ids).size, ids.length);
 assert.ok(ids.includes(DEFAULT_SECTION_BAR_MODE));
 
+// A top-level heading spanning the WHOLE document says nothing the overall progress bar doesn't,
+// so it's dropped from the chain — unless it's all there is, or the bar would go blank.
+const wholeDoc = [{ title: 'The Book', level: 0, wordIndex: 0 }, ...entries.map((e) => ({ ...e, level: e.level + 1 }))];
+assert.deepEqual(
+  sectionChain(wholeDoc, 370, TOTAL).map((m) => m.title),
+  ['Part I', 'Chapter 2', 'Section 2.1'],
+  'the document-wide root is dropped',
+);
+assert.deepEqual(
+  sectionChain([{ title: 'The Book', level: 0, wordIndex: 0 }], 370, TOTAL).map((m) => m.title),
+  ['The Book'],
+  'but never down to no bars at all',
+);
+// A root that merely STARTS at 0 without covering the whole text is a real section — keep it.
+assert.deepEqual(sectionChain(entries, 370, TOTAL)[0].title, 'Part I', 'Part I ends at 600, so it stays');
+
+// offset/extent place each bar inside the outermost one — this is what nested mode draws.
+const geo = sectionChain(entries, 370, TOTAL);
+assert.equal(geo[0].offset, 0, 'the outermost bar starts at its own left edge');
+assert.equal(geo[0].extent, 1, 'and spans the full width');
+// Chapter 2 is [300,600) inside Part I [0,600): half in, half wide.
+assert.equal(geo[1].offset.toFixed(4), '0.5000');
+assert.equal(geo[1].extent.toFixed(4), '0.5000');
+// Section 2.1 is [350,400) inside the same 600-word part.
+assert.equal(geo[2].offset.toFixed(4), (350 / 600).toFixed(4));
+assert.equal(geo[2].extent.toFixed(4), (50 / 600).toFixed(4));
+// Every bar must fit inside its parent, at every position — otherwise nested mode draws outside.
+for (let i = 0; i < TOTAL; i += 7) {
+  const c = sectionChain(entries, i, TOTAL);
+  for (let k = 1; k < c.length; k++) {
+    assert.ok(c[k].offset >= c[k - 1].offset - 1e-9, `bar ${k} starts inside its parent at ${i}`);
+    assert.ok(c[k].offset + c[k].extent <= c[k - 1].offset + c[k - 1].extent + 1e-9, `bar ${k} ends inside its parent at ${i}`);
+  }
+}
+
 console.log('sectionBars: all cases pass');
