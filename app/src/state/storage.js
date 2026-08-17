@@ -476,6 +476,32 @@ export async function getAudiobookManifest(checksum) {
   return (await db.get('audiobookManifest', checksum)) || { lines: {} };
 }
 
+// Every book's manifest in one walk, for the Audiobook command centre's library + analytics. Reads
+// only manifests (clip metadata), never blobs — a 2 GB library costs a few hundred KB here.
+export async function allAudiobookManifests() {
+  const db = await getDB();
+  const out = [];
+  let cursor = await db.transaction('audiobookManifest').store.openCursor();
+  while (cursor) {
+    out.push({ checksum: cursor.key, ...cursor.value });
+    cursor = await cursor.continue();
+  }
+  return out;
+}
+
+// Stamp a book's identity + chunk count onto its manifest. Coverage is meaningless without knowing
+// how many chunks the book HAS, and the manifest only records the ones already generated — so the
+// count is written whenever something parses the document, and the library reads it back for free.
+export async function setAudiobookMeta(checksum, meta = {}) {
+  if (!checksum) return;
+  const db = await getDB();
+  const manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
+  if (meta.chunks != null) manifest.chunks = meta.chunks;
+  if (meta.fileName) manifest.fileName = meta.fileName;
+  if (meta.words != null) manifest.words = meta.words;
+  await db.put('audiobookManifest', manifest, checksum);
+}
+
 // Total bytes of a book's audio clips (for the manager's storage readout).
 export async function audiobookSize(checksum) {
   const manifest = await getAudiobookManifest(checksum);
