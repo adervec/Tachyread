@@ -216,6 +216,10 @@ export const GLOBAL_DATA_KEYS = new Set([
   'recentFiles', 'ocrTemplates', 'ocrProfiles', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey', 'translateKey', 'settingsProfiles',
   'readingList', 'drillBestSpan', 'bestFlowWpm', 'bestDictationWpm', 'webcamCalib', 'handCalib', 'sync',
   'deviceName', 'fileDefaults', 'ambient', 'customCursors', 'crosshairStable',
+  // The narration queue and its measured run history are DATA, not preferences: a saved settings
+  // profile must not carry someone else's work list, and resetting preferences must not bin a
+  // half-finished queue of twelve books.
+  'abQueue', 'abRuns',
 ]);
 
 // Reset global preferences to defaults while keeping the user's data (GLOBAL_DATA_KEYS).
@@ -448,6 +452,11 @@ export function defaultGlobalSettings() {
     // engine. It costs the phone's audio focus, which ducks anything else you're playing — turn
     // it off if you'd rather keep your music and don't need narration to survive a lock.
     bgKeepAlive: true,
+    // Audiobook command centre. The narration queue and its run history are DEVICE-local: the work
+    // is this machine's CPU (or this machine's API key), and a queue synced to a phone that cannot
+    // run Piper would be a list of jobs it can never do. features/audiobookQueue.js.
+    abQueue: [],
+    abRuns: [],
     sectionBarMode: 'single', // single | parallel | nested | cycle
     sectionBarCycleSecs: 6,   // seconds per level in cycling mode
     mobilePillPage: 0,
