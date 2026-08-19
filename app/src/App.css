@@ -4893,8 +4893,8 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 /* Audiobook Manager: one sticky toolbar holding every action, so Generate and Delete stay
    reachable however far down a long book you have scrolled. Groups are native <details>. */
 /* ── Audiobook command centre ──────────────────────────────────────────────────────────────────
-   Narration is batch work across a shelf of books, so the dialog is a console with four views
-   (Queue / Library / This book / Analytics) rather than one long per-tab page. */
+   Narration is batch work across a shelf of books, so the dialog is a singleton console with three
+   views (Queue / Library / Analytics) plus a book editor you drill into from the Library. */
 .ab-views {
   display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
   padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid var(--divider);
@@ -4908,6 +4908,8 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 }
 .ab-run-pill.idle { background: color-mix(in srgb, var(--divider) 40%, transparent); color: var(--status-fg); }
 .ab-view { display: flex; flex-direction: column; gap: 8px; }
+/* Breadcrumb for the drilled-into book — the console itself has no "current book". */
+.ab-crumb { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
 .ab-queue-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ab-queue-head label { display: flex; align-items: center; gap: 5px; font-size: 12px; }
 

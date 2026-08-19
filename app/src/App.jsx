@@ -1751,7 +1751,7 @@ function AppInner() {
       }
       if (ctrl && shift) {
         if (key === 'f') { e.preventDefault(); if (k.activeTab) k.setShowFootnote((s) => !s); return; }
-        if (key === 'a') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'audiobook' }); return; }
+        if (key === 'a') { e.preventDefault(); k.openDialog({ kind: 'audiobook' }); return; }
         if (key === 'n') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'notes' }); return; }
         if (key === 't') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'tts-popup' }); return; }
         if (key === 'g') { e.preventDefault(); k.openDialog({ kind: 'grab' }); return; }
@@ -2370,7 +2370,7 @@ function AppInner() {
     if (action === 'names-wizard' && activeTab) return openDialog({ kind: 'resource-wizard', resourceKind: 'names' });
     if (action === 'index-wizard' && activeTab) return openDialog({ kind: 'resource-wizard', resourceKind: 'index' });
     if (action === 'notes-wizard' && activeTab) return openDialog({ kind: 'resource-wizard', resourceKind: 'notes' });
-    if (action === 'audiobook' && activeTab) return openDialog({ kind: 'audiobook' });
+    if (action === 'audiobook') return openDialog({ kind: 'audiobook' });
     if (action === 'notes' && activeTab) return openDialog({ kind: 'notes' });
     if (action === 'footnote' && activeTab) return setShowFootnote((s) => !s);
     if (action === 'typing' && activeTab) {
@@ -3286,9 +3286,8 @@ function AppInner() {
           onClose={closeDialog}
         />
       )}
-      {dialog?.kind === 'audiobook' && dlgTab && (
-        <AudiobookDialog tab={dlgTab} onClose={closeDialog} />
-      )}
+      {/* Not doc-scoped: one console for the whole shelf, so it neither needs nor follows a tab. */}
+      {dialog?.kind === 'audiobook' && <AudiobookDialog onClose={closeDialog} />}
       {dialog?.kind === 'notes' && dlgTab && (
         <NotesDialog tab={dlgTab} onJumpWord={(wi) => jumpWord(wi)} onClose={closeDialog} />
       )}
