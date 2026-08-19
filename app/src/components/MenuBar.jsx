@@ -84,7 +84,7 @@ const MENUS = {
     { label: 'Typing Settings...', action: 'typing-settings', icon: '🎛️'},
   ],
   audio: [
-    { label: 'Audiobook Manager...', shortcut: 'Ctrl+Shift+A', action: 'audiobook', icon: '🎧'},
+    { label: 'Audiobook Command Centre...', shortcut: 'Ctrl+Shift+A', action: 'audiobook', icon: '🎧'},
     { label: 'Text-to-Speech Reader...', shortcut: 'Ctrl+Shift+T', action: 'tts-popup', icon: '🔊'},
     { label: 'Ambient Sound...', action: 'ambient', icon: '🌊'},
     { kind: 'separator' },

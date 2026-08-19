@@ -70,12 +70,15 @@ function ClipWave({ checksum, line, clipId }) {
 // ToC so you can see which parts are generated. Each chunk can hold MULTIPLE clips (mic recordings +
 // Piper renders in different voices); the top-priority one plays. Manage clips, voices, and generation
 // from here — everything stays on-device (browser storage; use Export to save a real file).
-export default function AudiobookDialog({ tab, onClose }) {
+export default function AudiobookDialog({ onClose }) {
   const { state, updateGlobal, openRecent } = useApp();
-  // Command-centre views. Narration is batch work across a shelf of books, not a per-tab errand:
-  // Queue is the work list, Library is every book's coverage, Analytics is how it's actually going,
-  // and "This book" is the original chunk-by-chunk editor for whichever book the tab holds.
+  // Command-centre views. Narration is batch work across a shelf of books, not a per-tab errand, so
+  // this console is a SINGLETON that belongs to no document: Queue is the work list, Library is
+  // every book's coverage, Analytics is how it is actually going. The chunk-by-chunk editor is a
+  // drill-down from the Library — you pick the book here rather than inheriting whichever tab
+  // happened to open the panel, so one console covers the whole shelf.
   const [view, setView] = useState('queue');
+  const [sel, setSel] = useState(null); // { checksum, fileName, doc, tabLike } — book open in the editor
   const [manifest, setManifest] = useState({ lines: {} });
   const [recWiz, setRecWiz] = useState(null); // chunk whose record/import wizard is open
   const [readThru, setReadThru] = useState(false); // continuous read-the-book-aloud session
@@ -93,7 +96,7 @@ export default function AudiobookDialog({ tab, onClose }) {
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const abort = useRef(false);
-  const checksum = tab?.doc?.contentChecksum;
+  const checksum = sel?.checksum || null;
 
   const [voiceId, setVoiceId] = useState(state.global.offlineVoiceId || defaultVoiceForLang(state.global.language || 'en'));
   const [voices, setVoices] = useState([]); // installed Piper voice ids
@@ -132,12 +135,13 @@ export default function AudiobookDialog({ tab, onClose }) {
   const commitQueue = (q) => { setQueue(q); updateGlobal({ abQueue: q }); };
   const liveQueue = (q) => { setQueue(q); queueRef.current = q; };
 
-  const chunks = useMemo(() => audiobookChunks(tab.doc), [tab.doc]);
+  const chunks = useMemo(() => (sel ? audiobookChunks(sel.doc) : []), [sel]);
 
   // Group chunks into ToC sections (front matter first) — each with its own coverage.
   const sections = useMemo(() => {
-    const entries = getTocEntries(tab) || [];
-    if (!entries.length) return [{ id: 'all', title: tab.doc.fileName || 'Document', chunks }];
+    if (!sel) return [];
+    const entries = getTocEntries(sel.tabLike) || [];
+    if (!entries.length) return [{ id: 'all', title: sel.fileName || 'Document', chunks }];
     const secs = entries.map((e, i) => ({ id: 't' + i, title: e.title, start: e.wordIndex, chunks: [] }));
     const lead = { id: 'lead', title: 'Front matter', start: -1, chunks: [] };
     for (const c of chunks) {
@@ -146,7 +150,7 @@ export default function AudiobookDialog({ tab, onClose }) {
       target.chunks.push(c);
     }
     return [lead, ...secs].filter((s) => s.chunks.length);
-  }, [tab, chunks]);
+  }, [sel, chunks]);
 
   async function refresh() {
     if (!checksum) return;
@@ -182,14 +186,36 @@ export default function AudiobookDialog({ tab, onClose }) {
   }
   useEffect(() => { refreshLibrary(); /* eslint-disable-next-line */ }, []);
 
-  // A book's document, from the open tab when it matches and from the saved payload otherwise —
-  // this is what lets the queue work on books that aren't open in a tab.
+  // A book's document: from an open reading tab when there is one (so a hand-edited ToC is
+  // respected) and from the saved payload otherwise — this is what lets the console work on books
+  // that aren't open. `tabLike` is only what getTocEntries needs; a payload-loaded book has no
+  // stored ToC, so it falls back to auto-detection.
   async function resolveBook(cs) {
-    if (cs === checksum && tab?.doc) return { doc: tab.doc, fileName: tab.doc.fileName || 'Document' };
+    const open = state.tabs.find((t) => !t.lazy && t.doc?.contentChecksum === cs);
+    if (open) return { doc: open.doc, fileName: open.doc.fileName || 'Document', tabLike: open };
     const rec = await loadDocPayload(cs);
     if (!rec?.fullText) return null;
-    return { doc: readerDocFromText(rec.fullText, rec.fileName || 'Document'), fileName: rec.fileName || 'Document' };
+    const doc = readerDocFromText(rec.fullText, rec.fileName || 'Document');
+    return { doc, fileName: rec.fileName || 'Document', tabLike: { doc, settings: {} } };
   }
+
+  // Which books are open for READING — only used for a badge and the 'open in a tab' button. The
+  // console itself never follows the active tab.
+  const openChecksums = useMemo(
+    () => new Set(state.tabs.filter((t) => !t.lazy && t.doc?.contentChecksum).map((t) => t.doc.contentChecksum)),
+    [state.tabs]);
+
+  // Drill into one book's chunk editor. Nothing else in the console cares which book this is.
+  async function openBook(cs) {
+    setLibBusy(true);
+    const book = await resolveBook(cs);
+    setLibBusy(false);
+    if (!book) { setMsg('That book’s saved text is no longer available — open it once and it will be restored.'); return; }
+    stopPlay();
+    setSel({ checksum: cs, ...book });
+    setView('book');
+  }
+  function closeBook() { stopPlay(); setSel(null); setView('library'); }
 
   // Which chunks a pass covers, against any book's manifest (not just the open tab's).
   function targetsFor(kind, list, man, vid) {
@@ -424,10 +450,10 @@ export default function AudiobookDialog({ tab, onClose }) {
   async function doExport() {
     setBusy(true); setMsg('Gathering audiobook clips…');
     try {
-      const bundle = await exportAudiobook(checksum, tab.doc.fileName);
+      const bundle = await exportAudiobook(checksum, sel.fileName);
       if (!bundle.clips.length) { setMsg('Nothing to export yet.'); setBusy(false); return; }
       const text = JSON.stringify(bundle);
-      const safe = (tab.doc.fileName || 'book').replace(/[^\w.-]+/g, '_').slice(0, 40);
+      const safe = (sel.fileName || 'book').replace(/[^\w.-]+/g, '_').slice(0, 40);
       const res = await saveBlobToFile(new Blob([text], { type: 'application/json' }), `tachyread-audiobook-${safe}.json`, [{ description: 'Tachyread audiobook', accept: { 'application/json': ['.json'] } }]);
       setMsg(res.canceled ? 'Save canceled.' : `Exported ${bundle.clips.length} clip(s) (${fmtBytes(text.length)})${res.method === 'download' ? ' to your downloads' : ` to ${res.name}`}.`);
     } catch (e) { setMsg('Export failed: ' + (e?.message || e)); }
@@ -464,8 +490,9 @@ export default function AudiobookDialog({ tab, onClose }) {
   const VIEWS = [
     ['queue', `📋 Queue${totals.queued + totals.running ? ` (${totals.queued + totals.running})` : ''}`, 'The work list — every book waiting to be narrated'],
     ['library', `📚 Library${library.length ? ` (${library.length})` : ''}`, 'Every book’s narration coverage, and what to queue next'],
-    ['book', '📖 This book', 'Chunk-by-chunk editor for the book in the current tab'],
     ['stats', '📈 Analytics', 'How generation is actually going: throughput, voices, recent runs'],
+    // The editor tab exists only while a book is open IN it — the console has no "current book".
+    ...(sel ? [['book', `📖 ${sel.fileName.length > 20 ? sel.fileName.slice(0, 19) + '…' : sel.fileName}`, `Chunk-by-chunk editor for “${sel.fileName}”`]] : []),
   ];
 
   // The live generation panel — shared by the Queue view and the per-book toolbar so a run reads the
@@ -639,7 +666,7 @@ export default function AudiobookDialog({ tab, onClose }) {
                   <div className="ab-lib-main">
                     <div className="ab-lib-title">
                       <strong title={r.fileName}>{r.fileName}</strong>
-                      {r.checksum === checksum && <span className="ab-lib-tag" title="The book in the current tab">open</span>}
+                      {openChecksums.has(r.checksum) && <span className="ab-lib-tag" title="This book is open in a reading tab">open</span>}
                       {cpct === 100 && <span className="ab-lib-tag done">complete</span>}
                     </div>
                     <div className="imp-bar ab-lib-bar" title={cpct == null ? 'Chunk count unknown until this book is queued or opened' : `${cpct}%`}>
@@ -659,7 +686,8 @@ export default function AudiobookDialog({ tab, onClose }) {
                     <button disabled={!canTTS} onClick={() => enqueue(r.checksum, 'fill')} title="Queue every chunk that has no audio yet">🎙 Gaps</button>
                     <button disabled={!canTTS} onClick={() => enqueue(r.checksum, 'othervoice')} title="Queue only the chunks whose audio uses a different voice from the one selected">🎚 Match</button>
                     <button disabled={!canTTS} onClick={() => enqueue(r.checksum, 'all')} title="Queue a fresh render of every chunk that is not one of your recordings">↻ All</button>
-                    {r.checksum !== checksum && <button onClick={() => openRecent(r.checksum)} title="Open this book in a tab">📂</button>}
+                    <button onClick={() => openBook(r.checksum)} title="Open this book’s chunk-by-chunk editor: per-chunk clips, your own recordings, section music and export">📖 Chunks</button>
+                    {!openChecksums.has(r.checksum) && <button onClick={() => openRecent(r.checksum)} title="Open this book in a reading tab">📂</button>}
                   </div>
                 </div>
               );
@@ -678,6 +706,7 @@ export default function AudiobookDialog({ tab, onClose }) {
                     </div>
                     <div className="ab-lib-acts">
                       <button className="toggle-on" disabled={!canTTS} onClick={() => enqueue(f.checksum, 'fill')} title="Queue the whole book for narration">🎙 Narrate</button>
+                      <button onClick={() => openBook(f.checksum)} title="Open this book’s chunk-by-chunk editor">📖 Chunks</button>
                     </div>
                   </div>
                 ))}
@@ -754,18 +783,24 @@ export default function AudiobookDialog({ tab, onClose }) {
           <div className="field-section">Storage</div>
           <p className="settings-note" style={{ marginTop: 0 }}>
             <strong>{fmtBytes(libTotals.bytes)}</strong> across {libTotals.clips.toLocaleString()} clip(s) in{' '}
-            {libTotals.booksStarted} book(s), in this browser’s storage. There is no file path to open — use{' '}
-            <strong>This book → Record &amp; export</strong> to save real audio files.
+            {libTotals.booksStarted} book(s), in this browser’s storage. There is no file path to open — open a
+            book from <strong>📚 Library</strong> and use its <strong>Record &amp; export</strong> group to save real audio files.
           </p>
         </div>
       )}
 
-      {/* ───────────────────────── THIS BOOK ───────────────────────── */}
-      {view === 'book' && !checksum && (
-        <p className="settings-note">No document is open in this tab. Use <strong>📚 Library</strong> to work on any book.</p>
+      {/* ─────────── BOOK EDITOR — a drill-down from the Library, not a fixed tab ─────────── */}
+      {view === 'book' && !sel && (
+        <p className="settings-note">No book open here. Pick one in <strong>📚 Library</strong> — any book, whether or not it is open in a reading tab.</p>
       )}
-      {view === 'book' && checksum && (
+      {view === 'book' && sel && (
       <>
+      <div className="ab-crumb">
+        <button onClick={() => setView('library')} title="Back to the library list (this book stays open here)">‹ Library</button>
+        <strong title={sel.fileName}>{sel.fileName}</strong>
+        <span className="grow" />
+        <button onClick={closeBook} title="Close this book’s editor">✕ Close book</button>
+      </div>
       {/* Every action lives in ONE sticky toolbar, so the controls stay reachable however far down
           a 141-section book you have scrolled — previously Delete sat at the very bottom and
           Generate at the very top. Groups are native <details>, so each collapses independently and
@@ -1024,7 +1059,7 @@ export default function AudiobookDialog({ tab, onClose }) {
       {showExport && (
         <AudiobookExportWizard
           checksum={checksum}
-          fileName={tab.doc.fileName}
+          fileName={sel.fileName}
           sections={sections}
           manifest={manifest}
           onClose={() => setShowExport(false)}
@@ -1034,7 +1069,7 @@ export default function AudiobookDialog({ tab, onClose }) {
       {readThru && (
         <ReadThroughWizard
           checksum={checksum}
-          docName={tab.doc.fileName || 'Document'}
+          docName={sel.fileName}
           chunks={chunks}
           isCovered={(c) => clipsFor(c.startLine).length > 0}
           onClose={() => setReadThru(false)}

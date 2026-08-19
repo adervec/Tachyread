@@ -89,9 +89,11 @@ const MODAL_KINDS = new Set([
 // Dialog-tab kinds whose subject is ONE document. Opening one stamps the active doc tab's id onto
 // the panel: it stays locked to that file (switching doc tabs doesn't retarget it), shows the file's
 // name in its title, renders grouped next to its file tab, and closes when the file tab closes.
+// The Audiobook console is deliberately NOT here: narration is shelf-wide work, so it is one
+// singleton tab that outlives any document and picks its book from its own Library view.
 export const DOC_SCOPED_KINDS = new Set([
   'tab-settings', 'typing-settings', 'audio-settings', 'font-manager', 'proper-names',
-  'audiobook', 'notes', 'tts-popup', 'regressions', 'progress-detail', 'attention',
+  'notes', 'tts-popup', 'regressions', 'progress-detail', 'attention',
 ]);
 
 function reducer(state, action) {

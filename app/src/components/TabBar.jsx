@@ -13,7 +13,7 @@ const PANEL_LABELS = {
   'font-manager': 'Fonts', 'help': 'Help', 'def-settings': 'Default Settings', 'app-settings': 'App Settings',
   'biometric-settings': 'Biometric Controls', 'comfort-settings': 'Comfort', 'data': 'Data', 'book-groups': 'Book Groups',
   'stats': 'Statistics', 'history': 'History', 'literary-journey': 'Trackyread', 'proper-names': 'Proper Names',
-  'audiobook': 'Audiobook', 'notes': 'Notes', 'tts-popup': 'Text-to-Speech', 'face-library': 'Avatars',
+  'audiobook': 'Audiobook Centre', 'notes': 'Notes', 'tts-popup': 'Text-to-Speech', 'face-library': 'Avatars',
   'typing-progress': 'Typing Progress', 'span-drill': 'Span Drill', 'eye-warmup': 'Eye Warmup',
   'flow-writer': 'Flow Writer', 'dictation': 'Dictation', 'ambient': 'Ambient', 'vocab': 'Vocabulary',
   'regressions': 'Regressions', 'progress-detail': 'Progress', 'attention': 'Attention', 'typing-plan': 'Typing Plans',
