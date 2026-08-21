@@ -12,7 +12,7 @@ const MAX_CHAPTER_MS = 30 * 60000; // split a chapter longer than this into part
 // Assemble one track's clips into a single audio Blob. mp3 → concatenate the ElevenLabs mp3 blobs
 // directly (fast, stays small). Otherwise decode every clip and re-render to one mono 22.05 kHz WAV
 // (handles Piper WAV, mic WebM/Opus, mixed) — universal, no encoder dependency.
-async function assembleTrack(checksum, track, format, tags) {
+export async function assembleTrack(checksum, track, format, tags) {
   const blobs = [];
   for (const it of track.items) {
     const blob = it.kind === 'sec'
@@ -38,6 +38,34 @@ async function assembleTrack(checksum, track, format, tags) {
   return new Blob([encodeWav(rendered.getChannelData(0), SR, tags)], { type: 'audio/wav' });
 }
 
+// Covered chunks in reading order, with each section's intro/title/outro extras woven in
+// (intro → title → chunks → outro), each carrying its play duration + section + voice + top clip id
+// (the clip id is what folder sync diffs against to rewrite only changed tracks). Shared with the
+// AudiobookDialog's download-folder sync engine.
+export function buildExportItems(sections, manifest) {
+  const out = [];
+  for (const sec of sections) {
+    const firstLine = sec.chunks[0]?.startLine;
+    const lastEnd = sec.chunks.length ? sec.chunks[sec.chunks.length - 1].endLine : firstLine;
+    const chunkItems = [];
+    for (const c of sec.chunks) {
+      const clips = entryClips(manifest.lines[c.startLine]);
+      if (!clips.length) continue;
+      chunkItems.push({ startLine: c.startLine, endLine: c.endLine, ms: clips[0].durationMs || 0, sectionTitle: sec.title, voiceId: clips[0].voiceId, clipId: clips[0].id });
+    }
+    const extras = firstLine != null ? (manifest.sections?.[firstLine] || {}) : {};
+    // A section with neither narration nor extras contributes nothing.
+    if (!chunkItems.length && !extras.intro && !extras.title && !extras.outro) continue;
+    out.push(...orderSectionItems(sec.title, chunkItems, extras, firstLine, lastEnd));
+  }
+  return out;
+}
+
+// mp3 fast-path only when every item is an ElevenLabs mp3 clip; any imported music / section extra
+// forces the decode-and-re-render WAV path (robust for mixed formats).
+export const allItemsMp3 = (items) =>
+  items.length > 0 && items.every((it) => it.kind !== 'sec' && (it.voiceId || '').startsWith('el:'));
+
 export default function AudiobookExportWizard({ checksum, fileName, sections, manifest, onClose }) {
   const [mode, setMode] = useState('chapter');
   const [targetMin, setTargetMin] = useState(12);
@@ -46,30 +74,8 @@ export default function AudiobookExportWizard({ checksum, fileName, sections, ma
   const [msg, setMsg] = useState('');
   const abort = useRef(false);
 
-  // Covered chunks in reading order, with each section's intro/title/outro extras woven in
-  // (intro → title → chunks → outro), each carrying its play duration + section + voice.
-  const items = useMemo(() => {
-    const out = [];
-    for (const sec of sections) {
-      const firstLine = sec.chunks[0]?.startLine;
-      const lastEnd = sec.chunks.length ? sec.chunks[sec.chunks.length - 1].endLine : firstLine;
-      const chunkItems = [];
-      for (const c of sec.chunks) {
-        const clips = entryClips(manifest.lines[c.startLine]);
-        if (!clips.length) continue;
-        chunkItems.push({ startLine: c.startLine, endLine: c.endLine, ms: clips[0].durationMs || 0, sectionTitle: sec.title, voiceId: clips[0].voiceId });
-      }
-      const extras = firstLine != null ? (manifest.sections?.[firstLine] || {}) : {};
-      // A section with neither narration nor extras contributes nothing.
-      if (!chunkItems.length && !extras.intro && !extras.title && !extras.outro) continue;
-      out.push(...orderSectionItems(sec.title, chunkItems, extras, firstLine, lastEnd));
-    }
-    return out;
-  }, [sections, manifest]);
-
-  // mp3 fast-path only when every item is an ElevenLabs mp3 clip; any imported music / section extra
-  // forces the decode-and-re-render WAV path (robust for mixed formats).
-  const allMp3 = items.length > 0 && items.every((it) => it.kind !== 'sec' && (it.voiceId || '').startsWith('el:'));
+  const items = useMemo(() => buildExportItems(sections, manifest), [sections, manifest]);
+  const allMp3 = allItemsMp3(items);
   const format = allMp3 && !forceWav ? 'mp3' : 'wav';
   const ext = format;
   const tracks = useMemo(() => planTracks(items, { mode, targetMs: targetMin * 60000, maxMs: mode === 'duration' ? targetMin * 60000 : MAX_CHAPTER_MS }), [items, mode, targetMin]);

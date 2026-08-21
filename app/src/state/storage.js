@@ -206,6 +206,19 @@ export async function putCachedTranslation(key, text) {
   try { await db.put('translations', text, key); } catch { /* quota — cache only */ }
 }
 
+// Audiobook download folders: [{ id, name, autoSync, handle, books: { checksum: syncState } }].
+// The DIRECTORY HANDLES are structured-cloned into IndexedDB (they can't be JSON'd), so this lives
+// under its own key in the `global` store rather than inside settings — and it is device-local by
+// nature: a folder on this machine means nothing on another device.
+export async function getAbFolders() {
+  const db = await getDB();
+  return (await db.get('global', 'abFolders')) || [];
+}
+export async function setAbFolders(list) {
+  const db = await getDB();
+  await db.put('global', list || [], 'abFolders');
+}
+
 export async function loadGlobal() {
   const db = await getDB();
   const data = (await db.get('global', 'settings')) || defaultGlobalSettings();

@@ -4908,6 +4908,18 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 }
 .ab-run-pill.idle { background: color-mix(in srgb, var(--divider) 40%, transparent); color: var(--status-fg); }
 .ab-view { display: flex; flex-direction: column; gap: 8px; }
+/* Download folders */
+.ab-folder { border: 1px solid var(--divider); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.ab-folder-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ab-folder-head .inline-check { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.ab-perm { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.ab-perm.p-granted { background: #2e7d32; }
+.ab-perm.p-prompt { background: #b3651a; }
+.ab-perm.p-missing { background: #b0413e; }
+.ab-fbook { display: flex; align-items: center; gap: 8px; font-size: 12px; padding-left: 17px; }
+.ab-fbook-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
+.ab-fbook-meta { color: var(--status-fg); }
+.ab-fbook-add select { max-width: 280px; font-size: 12px; }
 /* Breadcrumb for the drilled-into book — the console itself has no "current book". */
 .ab-crumb { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
 .ab-queue-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
