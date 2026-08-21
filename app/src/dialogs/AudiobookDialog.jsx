@@ -8,8 +8,12 @@ import {
   addAudioClip, deleteAudioClipById, deleteAudioChunk, reorderAudioClips,
   audiobookSize, clearAudiobook, exportAudiobook, importAudiobook, appendAppLog,
   setSectionExtra, deleteSectionExtra, getSectionExtraBlob,
-  allAudiobookManifests, setAudiobookMeta, loadDocPayload, allFiles,
+  allAudiobookManifests, setAudiobookMeta, loadDocPayload, allFiles, getAbFolders, setAbFolders,
 } from '../state/storage.js';
+import { planTracks, trackFileName, buildM3u, sanitizeFilename } from '../features/audiobookExport.js';
+import {
+  diffSync, addFolder, removeFolder, patchFolder, assignBook, unassignBook, setFolderBook, foldersForBook,
+} from '../features/audiobookSync.js';
 import { defaultVoiceForLang, piperSupported, installedVoices, voiceLabel, createPiperEngine } from '../features/piperTts.js';
 import { elevenVoices, elevenSynth, elevenConfigured } from '../features/elevenLabs.js';
 import { audiobookChunks, readerDocFromText } from '../document/readerDocument.js';
@@ -20,7 +24,7 @@ import {
 } from '../features/audiobookQueue.js';
 import { getTocEntries } from '../document/toc.js';
 import { saveBlobToFile, pickFile, readFileText } from '../features/fileSystem.js';
-import AudiobookExportWizard from './AudiobookExportWizard.jsx';
+import AudiobookExportWizard, { buildExportItems, allItemsMp3, assembleTrack } from './AudiobookExportWizard.jsx';
 import RecordClipWizard from './RecordClipWizard.jsx';
 import ReadThroughWizard from './ReadThroughWizard.jsx';
 import { sessionConsistency } from '../features/narrationQuality.js';
@@ -64,6 +68,21 @@ function ClipWave({ checksum, line, clipId }) {
     return () => { alive = false; };
   }, [checksum, line, clipId]);
   return <canvas ref={ref} className="clip-wave" width={200} height={30} />;
+}
+
+// Group a book's chunks into ToC sections (front matter first) — each with its own coverage.
+// Module-scope because BOTH the book editor and the folder-sync engine plan tracks with it.
+function sectionsOf(tabLike, fileName, chunks) {
+  const entries = getTocEntries(tabLike) || [];
+  if (!entries.length) return [{ id: 'all', title: fileName || 'Document', chunks }];
+  const secs = entries.map((e, i) => ({ id: 't' + i, title: e.title, start: e.wordIndex, chunks: [] }));
+  const lead = { id: 'lead', title: 'Front matter', start: -1, chunks: [] };
+  for (const c of chunks) {
+    let target = lead;
+    for (let i = secs.length - 1; i >= 0; i--) { if (c.startWordIndex >= secs[i].start) { target = secs[i]; break; } }
+    target.chunks.push(c);
+  }
+  return [lead, ...secs].filter((s) => s.chunks.length);
 }
 
 // Audiobook Manager: narration clips per natural CHUNK (sentence/paragraph), grouped by the book's
@@ -135,22 +154,142 @@ export default function AudiobookDialog({ onClose }) {
   const commitQueue = (q) => { setQueue(q); updateGlobal({ abQueue: q }); };
   const liveQueue = (q) => { setQueue(q); queueRef.current = q; };
 
-  const chunks = useMemo(() => (sel ? audiobookChunks(sel.doc) : []), [sel]);
+  // ── download folders (device-local: a directory on THIS machine; handles live in IndexedDB) ──
+  const [folders, setFolders] = useState([]);
+  const foldersRef = useRef(folders);
+  foldersRef.current = folders;
+  const [perm, setPerm] = useState({});     // folder id → 'granted' | 'prompt' | 'missing'
+  const [fsync, setFsync] = useState(null); // { folder, book, done, total, label } while writing tracks
+  const syncStopRef = useRef(false);
+  const canPickDir = typeof window.showDirectoryPicker === 'function';
+  const commitFolders = (list) => { setFolders(list); foldersRef.current = list; setAbFolders(list); };
 
-  // Group chunks into ToC sections (front matter first) — each with its own coverage.
-  const sections = useMemo(() => {
-    if (!sel) return [];
-    const entries = getTocEntries(sel.tabLike) || [];
-    if (!entries.length) return [{ id: 'all', title: sel.fileName || 'Document', chunks }];
-    const secs = entries.map((e, i) => ({ id: 't' + i, title: e.title, start: e.wordIndex, chunks: [] }));
-    const lead = { id: 'lead', title: 'Front matter', start: -1, chunks: [] };
-    for (const c of chunks) {
-      let target = lead;
-      for (let i = secs.length - 1; i >= 0; i--) { if (c.startWordIndex >= secs[i].start) { target = secs[i]; break; } }
-      target.chunks.push(c);
+  async function permOf(f) {
+    const h = f.handle;
+    // A handle that went through a JSON backup round-trip is an empty object — 'missing', re-pick.
+    if (!h || typeof h.getDirectoryHandle !== 'function') return 'missing';
+    try { return typeof h.queryPermission === 'function' ? await h.queryPermission({ mode: 'readwrite' }) : 'granted'; }
+    catch { return 'missing'; }
+  }
+  async function refreshPerms(list) {
+    const out = {};
+    for (const f of list) out[f.id] = await permOf(f);
+    setPerm(out);
+  }
+  useEffect(() => { getAbFolders().then((list) => { setFolders(list); foldersRef.current = list; refreshPerms(list); }); /* eslint-disable-next-line */ }, []);
+
+  // Pick a directory — as a NEW folder, or as the replacement handle for a dead one.
+  async function pickFolder(existingId = null) {
+    try {
+      const handle = await window.showDirectoryPicker({ id: 'tachyread-ab-sync', mode: 'readwrite' });
+      for (const f of foldersRef.current) {
+        if (f.id !== existingId && typeof f.handle?.isSameEntry === 'function'
+            && await f.handle.isSameEntry(handle).catch(() => false)) {
+          setMsg(`“${handle.name}” is already registered as a download folder.`);
+          return;
+        }
+      }
+      if (existingId) commitFolders(patchFolder(foldersRef.current, existingId, { handle, name: handle.name }));
+      else {
+        commitFolders(addFolder(foldersRef.current, { id: `fld${seq}-${handle.name}`, name: handle.name, handle }));
+        setSeq((n) => n + 1);
+      }
+      refreshPerms(foldersRef.current);
+    } catch (e) { if (e?.name !== 'AbortError') setMsg('Could not open a folder: ' + (e?.message || e)); }
+  }
+  async function reconnectFolder(f) {
+    // A dead handle can't be re-permissioned — only re-picked (its book assignments are kept).
+    if (!f.handle || typeof f.handle.requestPermission !== 'function') return pickFolder(f.id);
+    try { await f.handle.requestPermission({ mode: 'readwrite' }); } catch { /* denied */ }
+    refreshPerms(foldersRef.current);
+  }
+
+  // Write one book's tracks into one folder — INCREMENTALLY. A track is rewritten only when the
+  // clips it is assembled from changed (diffSync on clip ids), so regenerating one chapter rewrites
+  // one file, not the shelf. Layout: <folder>/<book>/NN Title.ext + a playlist.
+  async function syncBookToFolder(folder, cs, { quiet = false } = {}) {
+    const stateRec = folder.books?.[cs];
+    try {
+      const book = await resolveBook(cs);
+      if (!book) throw new Error('saved text unavailable');
+      const man = await getAudiobookManifest(cs);
+      const list = audiobookChunks(book.doc);
+      const items = buildExportItems(sectionsOf(book.tabLike, book.fileName, list), man);
+      if (!items.length) { if (!quiet) setMsg(`“${book.fileName}” has no generated audio to sync yet.`); return 0; }
+      const format = allItemsMp3(items) ? 'mp3' : 'wav';
+      const tracks = planTracks(items);
+      const names = tracks.map((t) => trackFileName(t, tracks.length, format));
+      // A format flip renames every file, so treat it as a first sync rather than diffing across it.
+      const prevMap = stateRec && stateRec.format === format ? stateRec.tracks || {} : {};
+      const { write, remove, next } = diffSync(tracks, names, prevMap);
+      const album = sanitizeFilename((book.fileName || 'Audiobook').replace(/\.[a-z0-9]+$/i, ''));
+      if (write.length || remove.length) {
+        const dir = await folder.handle.getDirectoryHandle(album, { create: true });
+        for (let k = 0; k < write.length; k++) {
+          if (syncStopRef.current) return 0;
+          const i = write[k];
+          setFsync({ folder: folder.name, book: book.fileName, done: k, total: write.length, label: tracks[i].title });
+          const tags = { title: tracks[i].title, album, artist: 'Tachyread', track: i + 1, trackTotal: tracks.length };
+          const blob = await assembleTrack(cs, tracks[i], format, tags);
+          if (!blob) continue;
+          const fh = await dir.getFileHandle(names[i], { create: true });
+          const w = await fh.createWritable(); await w.write(blob); await w.close();
+        }
+        for (const n of remove) { try { await dir.removeEntry(n); } catch { /* already gone */ } }
+        const fh = await dir.getFileHandle(`${album}.m3u`, { create: true });
+        const w = await fh.createWritable();
+        await w.write(new Blob([buildM3u(tracks, names, album)], { type: 'audio/x-mpegurl' }));
+        await w.close();
+      }
+      commitFolders(setFolderBook(foldersRef.current, folder.id, cs, { fileName: book.fileName, tracks: next, format, syncedAt: Date.now() }));
+      return write.length;
+    } catch (e) {
+      if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') {
+        setMsg(`📁 “${folder.name}” needs reconnecting before it can be written — use Reconnect in the Folders view.`);
+        refreshPerms(foldersRef.current);
+      } else if (!quiet) setMsg(`Sync to “${folder.name}” failed: ${e?.message || e}`);
+      appendAppLog('audiobook-sync', `${folder.name}/${cs}: ${e?.message || e}`);
+      return 0;
+    } finally { setFsync(null); }
+  }
+
+  async function syncFolder(folder) {
+    syncStopRef.current = false;
+    let wrote = 0;
+    const books = Object.keys(folder.books || {});
+    for (const cs of books) {
+      // Re-find each pass: the previous book's sync just stamped a fresh record onto this folder.
+      const f = foldersRef.current.find((x) => x.id === folder.id);
+      if (!f || syncStopRef.current) break;
+      wrote += await syncBookToFolder(f, cs);
     }
-    return [lead, ...secs].filter((s) => s.chunks.length);
-  }, [sel, chunks]);
+    setMsg(wrote
+      ? `📁 “${folder.name}”: wrote ${wrote} track file(s) across ${books.length} book(s).`
+      : `📁 “${folder.name}” is up to date — nothing needed rewriting.`);
+  }
+  async function syncOneBook(folderId, cs) {
+    syncStopRef.current = false;
+    const f = foldersRef.current.find((x) => x.id === folderId);
+    if (!f) return;
+    const wrote = await syncBookToFolder(f, cs);
+    if (wrote) setMsg(`📁 “${f.name}”: wrote ${wrote} track file(s).`);
+  }
+
+  // The generation hook: once a queue job lands new clips, push that book to every auto-sync
+  // folder holding it. Quiet per book (a long queue shouldn't spam); failures still surface.
+  async function autoSyncBook(cs) {
+    for (const f of foldersForBook(foldersRef.current, cs, { auto: true })) {
+      if ((await permOf(f)) !== 'granted') {
+        setMsg(`📁 “${f.name}” needs reconnecting (Folders view) before auto-sync can write.`);
+        continue;
+      }
+      syncStopRef.current = false;
+      await syncBookToFolder(f, cs, { quiet: true });
+    }
+  }
+
+  const chunks = useMemo(() => (sel ? audiobookChunks(sel.doc) : []), [sel]);
+  const sections = useMemo(() => (sel ? sectionsOf(sel.tabLike, sel.fileName, chunks) : []), [sel, chunks]);
 
   async function refresh() {
     if (!checksum) return;
@@ -429,6 +568,10 @@ export default function AudiobookDialog({ onClose }) {
         const job = nextQueued(queueRef.current);
         if (!job) break;
         await runOneJob(job);
+        // Auto-sync BETWEEN jobs: whatever this job just generated lands in its download folders
+        // before the next book starts hogging the synthesis engine.
+        const fin = queueRef.current.find((j) => j.id === job.id);
+        if (fin && fin.ok > 0) await autoSyncBook(job.checksum);
       }
     } finally {
       drainingRef.current = false;
@@ -442,7 +585,7 @@ export default function AudiobookDialog({ onClose }) {
   // unmounted component (clips would still be written, but nothing would show progress or be able
   // to stop it). Dock this dialog as a tab if you want a long run to grind while you read; the
   // queue itself is persisted either way, so reopening picks up exactly where it left off.
-  useEffect(() => () => { stopAllRef.current = true; abort.current = true; }, []);
+  useEffect(() => () => { stopAllRef.current = true; abort.current = true; syncStopRef.current = true; }, []);
   // Stop just the running job; the queue carries on with the next book.
   function skipCurrent() { abort.current = true; }
 
@@ -490,6 +633,7 @@ export default function AudiobookDialog({ onClose }) {
   const VIEWS = [
     ['queue', `📋 Queue${totals.queued + totals.running ? ` (${totals.queued + totals.running})` : ''}`, 'The work list — every book waiting to be narrated'],
     ['library', `📚 Library${library.length ? ` (${library.length})` : ''}`, 'Every book’s narration coverage, and what to queue next'],
+    ['folders', `📁 Folders${folders.length ? ` (${folders.length})` : ''}`, 'Download folders that receive ready-to-play tracks, kept in sync as narration is generated'],
     ['stats', '📈 Analytics', 'How generation is actually going: throughput, voices, recent runs'],
     // The editor tab exists only while a book is open IN it — the console has no "current book".
     ...(sel ? [['book', `📖 ${sel.fileName.length > 20 ? sel.fileName.slice(0, 19) + '…' : sel.fileName}`, `Chunk-by-chunk editor for “${sel.fileName}”`]] : []),
@@ -574,6 +718,7 @@ export default function AudiobookDialog({ onClose }) {
           ? <span className="ab-run-pill" title={`Generating “${active.fileName}”`}>● {active.fileName.slice(0, 22)}</span>
           : totals.queued > 0 ? <span className="ab-run-pill idle" title="Jobs are waiting — press Start">◌ {totals.queued} waiting</span> : null}
       </div>
+      {msg && <p className="settings-note ab-toolbar-msg">{msg}</p>}
 
       {/* ───────────────────────── QUEUE ───────────────────────── */}
       {view === 'queue' && (
@@ -712,6 +857,86 @@ export default function AudiobookDialog({ onClose }) {
                 ))}
               </div>
             </details>
+          )}
+        </div>
+      )}
+
+      {/* ───────────────────────── FOLDERS ───────────────────────── */}
+      {view === 'folders' && (
+        <div className="ab-view">
+          {!canPickDir ? (
+            <p className="settings-note">
+              This browser can’t grant write access to folders (File System Access API). Use a Chromium
+              browser (Chrome / Edge) to sync audiobooks into download folders — the per-book{' '}
+              <strong>Export</strong> still works everywhere.
+            </p>
+          ) : (
+            <>
+              <div className="ab-queue-head">
+                <button className="toggle-on" disabled={!!fsync} onClick={() => pickFolder()}>➕ Add download folder…</button>
+                <span className="settings-note" style={{ margin: 0 }}>
+                  Each book syncs as ready-to-play tracks + a playlist into <em>folder/book/</em>. Only changed tracks are rewritten.
+                </span>
+              </div>
+
+              {fsync && (
+                <div className="lj-inline">
+                  <div className="imp-bar" style={{ flex: '1 1 160px', maxWidth: 320 }}><div className="imp-fill" style={{ width: `${fsync.total ? (fsync.done / fsync.total) * 100 : 0}%` }} /></div>
+                  <span className="settings-note" style={{ margin: 0 }}>📁 {fsync.folder}: “{fsync.book}” track {fsync.done + 1}/{fsync.total} — {fsync.label}…</span>
+                  <button onClick={() => { syncStopRef.current = true; }}>Stop</button>
+                </div>
+              )}
+
+              {!folders.length && (
+                <p className="settings-note">
+                  No folders yet. Add your phone-sync directory, a NAS share, a cloud-drive folder — each keeps
+                  its own set of books, written as playable tracks the moment generation finishes.
+                </p>
+              )}
+
+              {folders.map((f) => {
+                const st = perm[f.id] || 'prompt';
+                const assigned = Object.keys(f.books || {});
+                const options = [
+                  ...library.map((r) => ({ cs: r.checksum, name: r.fileName })),
+                  ...otherBooks.map((b) => ({ cs: b.checksum, name: b.fileName || 'Document' })),
+                ].filter((o) => !f.books?.[o.cs]);
+                return (
+                  <div key={f.id} className="ab-folder">
+                    <div className="ab-folder-head">
+                      <span className={`ab-perm p-${st}`} title={st === 'granted' ? 'Connected — this folder can be written' : st === 'missing' ? 'The saved folder handle is gone (moved, deleted, or restored from a backup) — Reconnect picks it again, keeping its books' : 'The browser needs you to re-allow access — press Reconnect'} />
+                      <strong title={f.name}>📁 {f.name}</strong>
+                      <label className="inline-check" title="After a generation job finishes, write this folder’s copy of that book without being asked">
+                        <input type="checkbox" checked={f.autoSync !== false} onChange={(e) => commitFolders(patchFolder(folders, f.id, { autoSync: e.target.checked }))} /> Auto-sync
+                      </label>
+                      <span className="grow" />
+                      {st !== 'granted' && <button onClick={() => reconnectFolder(f)} title="Re-allow access to this folder">🔓 Reconnect</button>}
+                      <button disabled={!assigned.length || !!fsync} onClick={() => syncFolder(f)} title="Write anything missing or changed, for every book in this folder">⟳ Sync now</button>
+                      <button className="grab-trash" onClick={() => commitFolders(removeFolder(folders, f.id))} title="Forget this folder — files already written stay on disk">✕</button>
+                    </div>
+                    {assigned.map((cs) => {
+                      const b = f.books[cs];
+                      const n = Object.keys(b.tracks || {}).length;
+                      return (
+                        <div key={cs} className="ab-fbook">
+                          <span className="ab-fbook-name" title={b.fileName}>📖 {b.fileName}</span>
+                          <span className="ab-fbook-meta">{b.syncedAt ? `${n} track(s) · synced ${fmtWhen(b.syncedAt)}` : 'never synced'}</span>
+                          <span className="grow" />
+                          <button disabled={!!fsync} onClick={() => syncOneBook(f.id, cs)} title="Sync just this book">⟳</button>
+                          <button className="grab-trash" onClick={() => commitFolders(unassignBook(folders, f.id, cs))} title="Stop syncing this book here — its files stay on disk">✕</button>
+                        </div>
+                      );
+                    })}
+                    <div className="ab-fbook ab-fbook-add">
+                      <select value="" onChange={(e) => { const cs = e.target.value; if (!cs) return; const o = options.find((x) => x.cs === cs); commitFolders(assignBook(foldersRef.current, f.id, cs, o && o.name)); }}>
+                        <option value="">➕ Add a book to this folder…</option>
+                        {options.map((o) => <option key={o.cs} value={o.cs}>{o.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
       )}
@@ -886,7 +1111,6 @@ export default function AudiobookDialog({ onClose }) {
               </>}
         </div>
       </details>
-      {msg && <p className="settings-note ab-toolbar-msg">{msg}</p>}
       </div>
 
       {/* ToC-grouped chunk list */}
