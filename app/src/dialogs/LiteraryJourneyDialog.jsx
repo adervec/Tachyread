@@ -2595,6 +2595,19 @@ function AnalyticsView({ books, dayAgg = [], ai = null, splitTypes = false, onSp
 }
 
 // ── AI / Cowork view ─────────────────────────────────────────────────────────────────────────────
+// The shared AI-cowork-sync panel (https://adervec.github.io/cowork.js) — the same chrome every app and
+// CoworkSyncHub show. Loaded from the maker portal; until it loads (or offline) the cowork group renders
+// exactly as before, so nothing depends on it.
+function usePanelReady() {
+  const [ready, setReady] = useState(() => !!(window.customElements && customElements.get('cowork-panel')));
+  useEffect(() => {
+    if (ready || !window.customElements) return undefined;
+    let on = true;
+    customElements.whenDefined('cowork-panel').then(() => { if (on) setReady(true); });
+    return () => { on = false; };
+  }, [ready]);
+  return ready;
+}
 async function writeToDir(dir, name, text) {
   const fh = await dir.getFileHandle(name, { create: true });
   const w = await fh.createWritable(); await w.write(text); await w.close();
@@ -2618,6 +2631,10 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
   const [customText, setCustomText] = useState(ai?.customText ?? '');
   const [dir, setDir] = useState(null);
   const [dirPath, setDirPath] = useState(ai?.coworkDirPath || '');
+  const panelReady = usePanelReady();
+  const panelRef = useRef(null);
+  // when the folder reply was last read in, so the shared panel can say "answered" (device-local)
+  const [lastRead, setLastRead] = useState(() => { try { return +localStorage.getItem('tr-cowork-lastread') || 0; } catch { return 0; } });
   const [pasted, setPasted] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -2689,8 +2706,8 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
 
   // Run everything checked in the tree, in transport order: API first (its apply saves the ai
   // record), then re-read the record and fold in the cowork write + cloud syncs + run stamps.
-  async function runSelected() {
-    const ids = [...sel].filter((id) => actionById(id));
+  async function runSelected(onlyCowork) {
+    const ids = [...sel].filter((id) => actionById(id)).filter((id) => onlyCowork !== true || id.startsWith('cw-'));
     if (!ids.length) { setMsg('Nothing checked — tick at least one action in the tree.'); return; }
     setBusy(true); setMsg('Running selected actions…');
     const now = Date.now();
@@ -2752,7 +2769,11 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
     try {
       const t = await readFromDir(dir, 'journey-cowork-response.json');
       if (!t) { setMsg('No journey-cowork-response.json in the folder yet.'); }
-      else await applyOutput(parseAiOutput(t), t);
+      else {
+        await applyOutput(parseAiOutput(t), t);
+        const n = Date.now(); setLastRead(n);
+        try { localStorage.setItem('tr-cowork-lastread', String(n)); } catch { /* quota */ }
+      }
     } catch (e) { setMsg('Read failed: ' + (e?.message || e)); }
     setBusy(false);
   }
@@ -2770,6 +2791,37 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
     catch (e) { setMsg('Could not parse that reply: ' + (e?.message || e)); }
     setBusy(false);
   }
+
+  // the shared panel: our cowork state in, its header buttons back as `cowork-action` events
+  useEffect(() => {
+    const p = panelRef.current;
+    if (!p || !panelReady) return;
+    p.setAttribute('mode', 'data'); // attribute, not a JSX prop: React 19 would assign a property
+    const req = Math.max(0, ...Object.entries(actionRuns)
+      .filter(([id, r]) => id.startsWith('cw-') && r && r.ok).map(([, r]) => r.at || 0)) / 1000;
+    const rep = lastRead / 1000;
+    p.data = {
+      app: 'tachyread', folder: coworkTarget || 'no folder connected',
+      channels: [{ channel: 'journey', request_mtime: req, reply_mtime: rep, pending: !!req && rep < req, answered: !!req && rep >= req }],
+      actions: viewer ? [] : [
+        { id: 'connect', label: dir ? 'Change folder' : 'Connect folder', primary: !dir },
+        ...(dir ? [{ id: 'push', label: 'Send requests', primary: true }, { id: 'poll', label: 'Check for replies' }] : []),
+      ],
+      channelActions: [],
+    };
+  }, [panelReady, dir, coworkTarget, actionRuns, lastRead, viewer]);
+  useEffect(() => {
+    const p = panelRef.current;
+    if (!p) return undefined;
+    const h = (ev) => {
+      const a = ev.detail?.action;
+      if (a === 'connect') chooseFolder();
+      else if (a === 'push') runSelected(true);
+      else if (a === 'poll') readResponse();
+    };
+    p.addEventListener('cowork-action', h);
+    return () => p.removeEventListener('cowork-action', h);
+  });
 
   const targetOf = (g) => (g.kind === 'cowork' ? (coworkTarget || 'no folder chosen')
     : g.kind === 'api' ? model
@@ -2800,8 +2852,8 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
         if (g.needsKey && !keyOk) return null; // no key → the whole group vanishes, no nagging note
         const onCount = g.actions.filter((a) => sel.has(a.id)).length;
         const allOn = onCount === g.actions.length;
-        return (
-          <div key={g.id} className="cwt-group">
+        const groupEl = (
+          <div className="cwt-group">
             <label className="cwt-ghead">
               <input
                 type="checkbox" disabled={viewer} checked={allOn}
@@ -2844,7 +2896,7 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
             )}
             {g.id === 'cowork' && (
               <div className="lj-inline cwt-foot">
-                <button onClick={chooseFolder} disabled={viewer}>{dir ? `📁 ${dir.name}` : '📁 Choose cowork folder…'}</button>
+                {!panelReady && <button onClick={chooseFolder} disabled={viewer}>{dir ? `📁 ${dir.name}` : '📁 Choose cowork folder…'}</button>}
                 <input
                   className="cwt-path" type="text" disabled={viewer}
                   placeholder="Full folder path (annotation — shown in history; browsers can't read real paths)"
@@ -2854,10 +2906,13 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
             )}
           </div>
         );
+        return g.id === 'cowork'
+          ? <cowork-panel key={g.id} ref={panelRef} class="cwt-panel">{groupEl}</cowork-panel>
+          : <Fragment key={g.id}>{groupEl}</Fragment>;
       })}
       {!viewer && (
         <div className="lj-inline">
-          <button className="toggle-on" disabled={busy || sel.size === 0} onClick={runSelected}>▶ Run selected ({[...sel].filter((id) => actionById(id)).length})</button>
+          <button className="toggle-on" disabled={busy || sel.size === 0} onClick={() => runSelected()}>▶ Run selected ({[...sel].filter((id) => actionById(id)).length})</button>
           {dir && <button disabled={busy} onClick={readResponse}>📥 Read response</button>}
           <span className="settings-note">Scheduled actions run automatically — on the sync machine only.</span>
         </div>
