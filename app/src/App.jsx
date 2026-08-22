@@ -611,7 +611,7 @@ function AppInner() {
           if (hash) {
             addReadSection(hash, { title: e.title, words: span.end - span.start, file: tab.doc.fileName });
             // maker-portal character sheet: one 'read' per finished section (same-origin localStorage, stays local)
-            try { const k = 'portal-activity', a = JSON.parse(localStorage.getItem(k) || '[]'); a.push([Math.round(Date.now() / 1000), 'Tachyread', 'read', Math.max(1, Math.round((span.end - span.start) / 2500))]); localStorage.setItem(k, JSON.stringify(a.slice(-2000))); } catch (_) { /* quota — ignore */ }
+            try { const k = 'portal-activity', a = JSON.parse(localStorage.getItem(k) || '[]'); a.push([Math.round(Date.now() / 1000), 'Tachyread', 'read', Math.max(1, Math.round((span.end - span.start) / 2500))]); localStorage.setItem(k, JSON.stringify(a.slice(-2000))); } catch { /* quota — ignore */ }
           }
         }
       });
