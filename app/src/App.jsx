@@ -608,7 +608,11 @@ function AppInner() {
           changed = true;
           // Fingerprint the finished section's content so a successive edition can recognize it.
           const hash = sectionChecksum(tab.doc.words, span.start, span.end);
-          if (hash) addReadSection(hash, { title: e.title, words: span.end - span.start, file: tab.doc.fileName });
+          if (hash) {
+            addReadSection(hash, { title: e.title, words: span.end - span.start, file: tab.doc.fileName });
+            // maker-portal character sheet: one 'read' per finished section (same-origin localStorage, stays local)
+            try { const k = 'portal-activity', a = JSON.parse(localStorage.getItem(k) || '[]'); a.push([Math.round(Date.now() / 1000), 'Tachyread', 'read', Math.max(1, Math.round((span.end - span.start) / 2500))]); localStorage.setItem(k, JSON.stringify(a.slice(-2000))); } catch { /* quota — ignore */ }
+          }
         }
       });
       if (changed) patchSettings(tab.id, { tocReadStats: stats });
