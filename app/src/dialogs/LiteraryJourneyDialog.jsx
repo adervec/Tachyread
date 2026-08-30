@@ -1286,7 +1286,12 @@ function CoverBatchButton({ books, legacyOf, apiKey, model, onSaveBook, onReload
 // Inline add/edit card for one book.
 function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {}, fileStats = {}, groups = [], crossNotes = [], apiKey, aiModel, onSaveCross, onDeleteCross, onBind, onProgress, onSave, onCancel, onDelete }) {
   const [b, setB] = useState(book);
-  useEffect(() => { setB(book); }, [book]);
+  // Re-sync only when a DIFFERENT record is being edited. Depending on `book`'s identity blanked the
+  // form mid-typing: "+ Add book" passes a fresh `{ id: '', title: '', ... }` literal, so every
+  // parent re-render (this dialog subscribes to app context, which ticks while you read) looked like
+  // a new record and reset every field.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setB(book); }, [book.id]);
   const status = readStatus(b);
   const set = (p) => setB({ ...b, ...p });
   // Dirty tracking: which fields differ from the record as loaded. Changed fields highlight, and
