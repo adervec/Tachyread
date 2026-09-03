@@ -89,6 +89,18 @@ export function moveJob(queue, id, delta) {
   return q;
 }
 
+// Jump to the front or the back of the list in one go. "Front" means straight after the running
+// job when there is one — a queued job can never overtake work that is already synthesising.
+export function moveJobTo(queue, id, where) {
+  const q = arr(queue);
+  const j = q.find((x) => x.id === id);
+  if (!j || j.status === 'running') return q;
+  const rest = q.filter((x) => x.id !== id);
+  if (where === 'bottom') return [...rest, j];
+  rest.splice(rest.findIndex((x) => x.status === 'running') + 1, 0, j);
+  return rest;
+}
+
 export function clearFinished(queue) {
   return arr(queue).filter((j) => !isFinished(j));
 }
@@ -189,6 +201,7 @@ export function bookRows(manifests, nameByChecksum = {}) {
     return {
       checksum: m.checksum,
       fileName: nameByChecksum[m.checksum] || m.fileName || 'Document',
+      words: num(m?.words),
       chunks,
       chunksWithAudio,
       coverage: chunks > 0 ? Math.min(1, chunksWithAudio / chunks) : null,
@@ -205,6 +218,17 @@ function clipList(entry) {
   if (Array.isArray(entry.clips)) return entry.clips;
   if (entry.durationMs != null || entry.source || entry.voiceId) return [entry];
   return [];
+}
+
+// Column sort for the library table. Blanks (an unknown coverage, a book with no audio) go LAST in
+// either direction — they are the rows you least want at the top of "sort by coverage".
+export function sortRows(rows, key, dir = 1) {
+  const blank = (v) => v == null || v === '' || Number.isNaN(v);
+  return [...arr(rows)].sort((a, b) => {
+    const x = a?.[key], y = b?.[key];
+    if (blank(x) || blank(y)) return blank(x) - blank(y);
+    return (typeof x === 'string' ? x.localeCompare(String(y), undefined, { sensitivity: 'base' }) : x - y) * dir;
+  });
 }
 
 export function libraryTotals(rows) {

@@ -4893,8 +4893,8 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 /* Audiobook Manager: one sticky toolbar holding every action, so Generate and Delete stay
    reachable however far down a long book you have scrolled. Groups are native <details>. */
 /* ── Audiobook command centre ──────────────────────────────────────────────────────────────────
-   Narration is batch work across a shelf of books, so the dialog is a singleton console with three
-   views (Queue / Library / Analytics) plus a book editor you drill into from the Library. */
+   Narration is batch work across a shelf of books, so the dialog is a singleton console with four
+   views (Queue / Library / Folders / Analytics) plus a book editor you drill into from the Library. */
 .ab-views {
   display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
   padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid var(--divider);
@@ -4916,10 +4916,9 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .ab-perm.p-granted { background: #2e7d32; }
 .ab-perm.p-prompt { background: #b3651a; }
 .ab-perm.p-missing { background: #b0413e; }
-.ab-fbook { display: flex; align-items: center; gap: 8px; font-size: 12px; padding-left: 17px; }
-.ab-fbook-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
-.ab-fbook-meta { color: var(--status-fg); }
+.ab-fbook-add { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ab-fbook-add select { max-width: 280px; font-size: 12px; }
+.ab-fbook-add button { font-size: 12px; padding: 2px 8px; }
 /* Breadcrumb for the drilled-into book — the console itself has no "current book". */
 .ab-crumb { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
 .ab-queue-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -4935,48 +4934,18 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .ab-stat b { font-size: 17px; line-height: 1.1; font-family: Consolas, monospace; }
 .ab-stat span { font-size: 10.5px; color: var(--status-fg); }
 
-/* Queue rows. Status is carried by a coloured left edge AND a glyph, so it survives a mono theme. */
-.ab-jobs { display: flex; flex-direction: column; gap: 4px; }
-.ab-job {
-  display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px;
-  border: 1px solid var(--divider); border-left-width: 3px; border-radius: 7px;
-}
-.ab-job.st-running { border-left-color: var(--toggle-active-bg); background: color-mix(in srgb, var(--toggle-active-bg) 8%, transparent); }
-.ab-job.st-done { border-left-color: #2e7d32; opacity: 0.75; }
-.ab-job.st-error { border-left-color: #b0413e; }
-.ab-job.st-stopped { border-left-color: #b3651a; opacity: 0.8; }
-.ab-job-icon { font-size: 13px; line-height: 1.5; flex: 0 0 auto; }
-.ab-job-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.ab-job-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12px; }
-.ab-job-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22em; }
-.ab-job-kind, .ab-job-voice { font-size: 10.5px; color: var(--status-fg); }
-.ab-job-bar { height: 4px; }
-.ab-job-meta { font-size: 10.5px; color: var(--status-fg); }
+/* Every list in the console is a table (queue, library, folder books, clips, analytics): one
+   scroll box, one header style, sortable where a column is worth sorting. */
+.ab-scroll { max-height: 52vh; overflow: auto; }
+.ab-job-bar, .ab-lib-bar { height: 4px; }
 .ab-job-fail { color: #b0413e; }
-.ab-job-acts { display: flex; gap: 2px; flex: 0 0 auto; }
-.ab-job-acts button { padding: 1px 6px; font-size: 12px; }
-
-/* Library rows: one book each, coverage bar + what it is made of + what to queue. */
-.ab-lib { display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow: auto; }
-.ab-lib-row {
-  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
-  border: 1px solid var(--divider); border-radius: 7px;
-}
-.ab-lib-row.current { border-color: var(--toggle-active-bg); }
-.ab-lib-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.ab-lib-title { display: flex; align-items: baseline; gap: 6px; font-size: 12px; }
-.ab-lib-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ab-lib-tag {
-  font-size: 9.5px; padding: 0 5px; border-radius: 8px; flex: 0 0 auto;
+  font-size: 9.5px; padding: 0 5px; margin-left: 5px; border-radius: 8px; vertical-align: middle;
   background: color-mix(in srgb, var(--divider) 45%, transparent); color: var(--status-fg);
 }
 .ab-lib-tag.done { background: #2e7d32; color: #fff; }
-.ab-lib-bar { height: 4px; }
-.ab-lib-meta { font-size: 10.5px; color: var(--status-fg); }
-.ab-lib-acts { display: flex; gap: 3px; flex: 0 0 auto; }
-.ab-lib-acts button { font-size: 11px; padding: 3px 7px; }
-
-/* Analytics tables. */
+.ab-filter { font-size: 12px; max-width: 150px; }
+.ab-queue-head .inline-check { display: flex; align-items: center; gap: 4px; font-size: 12px; }
 .ab-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .ab-table th {
   text-align: right; padding: 3px 6px; white-space: nowrap;
@@ -4989,12 +4958,34 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 /* A bar beside the number, because "133 vs 500 chars/s" only lands as a picture. */
 .ab-rate-bar { display: inline-block; width: 52px; height: 4px; margin-left: 6px; border-radius: 2px; background: var(--track-bg); vertical-align: middle; }
 .ab-rate-bar > span { display: block; height: 100%; border-radius: 2px; background: var(--toggle-active-bg); }
+/* Cells shared by the list tables. Names read left even mid-row; bars sit beside their number. */
+.ab-table .ab-td-name { text-align: left; max-width: 18em; overflow: hidden; text-overflow: ellipsis; }
+.ab-table .ab-td-bar { min-width: 96px; }
+.ab-table .ab-td-bar .imp-bar { display: inline-block; width: 56px; vertical-align: middle; margin-right: 6px; }
+.ab-table .ab-td-folders select { font-size: 11px; padding: 0 2px; margin-left: 4px; max-width: 9em; }
+.ab-table .ab-actions { white-space: nowrap; text-align: right; }
+.ab-table .ab-actions button { padding: 1px 6px; font-size: 11.5px; }
+.ab-table .ab-actions button + button { margin-left: 2px; }
+.ab-table .ab-dim { color: var(--status-fg); }
+.ab-table .ab-st { width: 1%; font-size: 13px; }
+.ab-table .clip-pri { color: #d9a441; font-weight: 700; text-align: center; }
+.ab-table .clip-wave { display: inline-block; width: 110px; height: 22px; vertical-align: middle; }
+.ab-sort { background: none; border: 0; padding: 0; margin: 0; color: inherit; font: inherit; cursor: pointer; }
+.ab-sort:hover { color: var(--menu-fg); text-decoration: underline; }
+.ab-table th[aria-sort] .ab-sort { color: var(--menu-fg); }
+/* Queue rows: status tints the row AND is spelled out by the glyph, so it survives a mono theme. */
+.ab-table tr.st-running td { background: color-mix(in srgb, var(--toggle-active-bg) 8%, transparent); }
+.ab-table tr.st-done td, .ab-table tr.st-stopped td { opacity: 0.75; }
+.ab-table tr.st-error .ab-st { color: #b0413e; }
+.ab-table tr.st-done .ab-st { color: #2e7d32; }
+.ab-table tr.st-stopped .ab-st { color: #b3651a; }
+.ab-table tr.ab-err-row td { white-space: normal; text-align: left; color: #b0413e; font-size: 10.5px; padding-top: 0; }
+.ab-table tr.current td { background: color-mix(in srgb, var(--toggle-active-bg) 6%, transparent); }
+.ab-table tr.ab-top td { background: color-mix(in srgb, #2e9d4f 9%, transparent); }
 
 @media (max-width: 860px), (pointer: coarse) and (max-height: 860px) {
   .ab-view-tab { font-size: 13px; padding: 6px 10px; }
-  .ab-lib-row, .ab-job { flex-wrap: wrap; }
-  .ab-lib-acts, .ab-job-acts { width: 100%; justify-content: flex-end; }
-  .ab-lib-acts button, .ab-job-acts button { min-height: 30px; }
+  .ab-table .ab-actions button { min-height: 30px; }
 }
 
 .ab-toolbar {

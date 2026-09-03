@@ -3,9 +3,9 @@
 // Run: node src/features/audiobookQueue.test.mjs
 import assert from 'node:assert/strict';
 import {
-  JOB_KINDS, makeJob, addJob, removeJob, updateJob, moveJob, clearFinished, isFinished,
+  JOB_KINDS, makeJob, addJob, removeJob, updateJob, moveJob, moveJobTo, clearFinished, isFinished,
   nextQueued, runningJob, queueTotals, queueEtaSeconds, addRun, runThroughput, throughputByVoice,
-  bookRows, libraryTotals,
+  bookRows, libraryTotals, sortRows,
 } from './audiobookQueue.js';
 
 // Catalog sanity.
@@ -173,3 +173,29 @@ assert.deepEqual(bookRows(null), []);
 assert.equal(libraryTotals([]).books, 0);
 
 console.log('audiobookQueue: all cases pass');
+
+// ── jump to front / back (the table's ⤒ ⤓ buttons) ──
+{
+  const q3 = [{ ...job('d'), status: 'done' }, { ...job('r'), status: 'running' }, job('a'), job('b'), job('c')];
+  const cs = (q) => q.map((j) => j.checksum);
+  assert.deepEqual(cs(moveJobTo(q3, q3[4].id, 'top')), ['d', 'r', 'c', 'a', 'b'], 'top lands right after the running job');
+  assert.deepEqual(cs(moveJobTo(q3, q3[2].id, 'bottom')), ['d', 'r', 'b', 'c', 'a']);
+  assert.deepEqual(cs(moveJobTo(q3, q3[1].id, 'bottom')), ['d', 'r', 'a', 'b', 'c'], 'the running job is pinned');
+  assert.deepEqual(cs(moveJobTo(q3, 'nope', 'top')), ['d', 'r', 'a', 'b', 'c'], 'unknown id is a no-op');
+  const q4 = [job('a'), job('b')];
+  assert.deepEqual(cs(moveJobTo(q4, q4[1].id, 'top')), ['b', 'a'], 'no running job → the very front');
+  assert.deepEqual(cs(q4), ['a', 'b'], 'input untouched');
+}
+
+// ── library column sort ──
+{
+  const rows = [{ fileName: 'beta', coverage: 0.5 }, { fileName: 'Alpha', coverage: null }, { fileName: 'gamma', coverage: 1 }];
+  const names = (r) => r.map((x) => x.fileName);
+  assert.deepEqual(names(sortRows(rows, 'fileName', 1)), ['Alpha', 'beta', 'gamma'], 'case-insensitive');
+  assert.deepEqual(names(sortRows(rows, 'fileName', -1)), ['gamma', 'beta', 'Alpha']);
+  assert.deepEqual(names(sortRows(rows, 'coverage', -1)), ['gamma', 'beta', 'Alpha'], 'unknown coverage last');
+  assert.deepEqual(names(sortRows(rows, 'coverage', 1)), ['beta', 'gamma', 'Alpha'], '...in either direction');
+  assert.equal(rows[0].fileName, 'beta', 'input untouched');
+  assert.deepEqual(sortRows(null, 'x'), []);
+}
+console.log('audiobookQueue: table helpers pass');

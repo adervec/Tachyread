@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { totalChars, chunkChars, etaSeconds, chunkHealth, fmtEta, previewText } from '../features/ttsProgress.js';
 import Dialog from './Dialog.jsx';
 import { fmtDateTime } from '../features/dateFmt.js';
@@ -18,9 +18,9 @@ import { defaultVoiceForLang, piperSupported, installedVoices, voiceLabel, creat
 import { elevenVoices, elevenSynth, elevenConfigured } from '../features/elevenLabs.js';
 import { audiobookChunks, readerDocFromText } from '../document/readerDocument.js';
 import {
-  JOB_KIND_LABEL, makeJob, addJob, removeJob, updateJob, moveJob, clearFinished,
+  JOB_KIND_LABEL, makeJob, addJob, removeJob, updateJob, moveJob, moveJobTo, clearFinished,
   isFinished, nextQueued, runningJob, queueTotals, queueEtaSeconds, addRun, runThroughput,
-  throughputByVoice, bookRows, libraryTotals,
+  throughputByVoice, bookRows, libraryTotals, sortRows,
 } from '../features/audiobookQueue.js';
 import { getTocEntries } from '../document/toc.js';
 import { saveBlobToFile, pickFile, readFileText } from '../features/fileSystem.js';
@@ -143,6 +143,10 @@ export default function AudiobookDialog({ onClose }) {
   const [library, setLibrary] = useState([]);      // bookRows(), every book with a manifest
   const [otherBooks, setOtherBooks] = useState([]); // known files with no audio yet
   const [libBusy, setLibBusy] = useState(false);
+  // Library table controls: column sort, a name filter, and whether never-narrated books show.
+  const [libSort, setLibSort] = useState({ key: 'lastAt', dir: -1 });
+  const [libQ, setLibQ] = useState('');
+  const [showNoAudio, setShowNoAudio] = useState(false);
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const drainingRef = useRef(false);   // a drain loop is live
@@ -274,6 +278,31 @@ export default function AudiobookDialog({ onClose }) {
     const wrote = await syncBookToFolder(f, cs);
     if (wrote) setMsg(`📁 “${f.name}”: wrote ${wrote} track file(s).`);
   }
+  // Forget what was written so the next sync rewrites every track — for a folder emptied by hand.
+  async function resyncBook(folderId, cs) {
+    const f = foldersRef.current.find((x) => x.id === folderId);
+    if (!f?.books?.[cs]) return;
+    commitFolders(setFolderBook(foldersRef.current, folderId, cs, { ...f.books[cs], tracks: {} }));
+    await syncOneBook(folderId, cs);
+  }
+  // Assignment is bookkeeping only; the tracks land on the next Sync now / auto-sync.
+  function addToFolders(cs, name, ids) {
+    let list = foldersRef.current;
+    for (const id of ids) list = assignBook(list, id, cs, name);
+    commitFolders(list);
+    setMsg(`📁 “${name}” added to ${ids.length} folder(s) — Sync now, or the next generation, writes its tracks.`);
+  }
+  function addAllToFolder(f, options) {
+    let list = foldersRef.current;
+    for (const o of options) list = assignBook(list, f.id, o.cs, o.name);
+    commitFolders(list);
+    setMsg(`📁 Added ${options.length} book(s) to “${f.name}”.`);
+  }
+  function removeAllFromFolder(f) {
+    let list = foldersRef.current;
+    for (const cs of Object.keys(f.books || {})) list = unassignBook(list, f.id, cs);
+    commitFolders(list);
+  }
 
   // The generation hook: once a queue job lands new clips, push that book to every auto-sync
   // folder holding it. Quiet per book (a long queue shouldn't spam); failures still surface.
@@ -366,28 +395,52 @@ export default function AudiobookDialog({ onClose }) {
   }
 
   // ── queue ──
-  async function enqueue(cs, kind, { start = true, lines = null } = {}) {
+  // `quiet` is for the bulk buttons: they report once at the end instead of flashing N messages.
+  async function enqueue(cs, kind, { start = true, lines = null, quiet = false } = {}) {
     const book = await resolveBook(cs);
-    if (!book) { setMsg('That book’s saved text is no longer available — open it once and it will be restored.'); return false; }
+    if (!book) { if (!quiet) setMsg('That book’s saved text is no longer available — open it once and it will be restored.'); return false; }
     const list = audiobookChunks(book.doc);
     // Stamp the chunk count so the library can show coverage without re-parsing every book.
     await setAudiobookMeta(cs, { chunks: list.length, fileName: book.fileName, words: book.doc.words.length });
     const man = await getAudiobookManifest(cs);
     const targets = lines ? list.filter((c) => lines.includes(c.startLine)) : targetsFor(kind, list, man, voiceId);
-    if (!targets.length) { setMsg(`Nothing to do for “${book.fileName}” — that pass matches no chunks.`); refreshLibrary(); return false; }
+    if (!targets.length) { if (!quiet) { setMsg(`Nothing to do for “${book.fileName}” — that pass matches no chunks.`); refreshLibrary(); } return false; }
     const job = makeJob({
       checksum: cs, fileName: book.fileName, kind, voiceId, voiceLabel: labelVoice(voiceId), lines,
       total: targets.length, charsTotal: totalChars(targets), seq, queuedAt: Date.now(),
     });
     setSeq((n) => n + 1);
     const q = addJob(queueRef.current, job);
-    if (q === queueRef.current) { setMsg(`“${book.fileName}” is already waiting for that pass.`); return false; }
+    if (q === queueRef.current) { if (!quiet) setMsg(`“${book.fileName}” is already waiting for that pass.`); return false; }
     commitQueue(q);
     queueRef.current = q;
-    setMsg(`➕ Queued ${targets.length} chunk(s) of “${book.fileName}” (${labelVoice(voiceId)}).`);
-    refreshLibrary();
+    if (!quiet) { setMsg(`➕ Queued ${targets.length} chunk(s) of “${book.fileName}” (${labelVoice(voiceId)}).`); refreshLibrary(); }
     if (start) drainQueue();
     return true;
+  }
+
+  // Bulk: one pass for every book showing in the Library table — the filter and the "no narration"
+  // toggle decide the set, so what you see is what gets queued. Started once, at the end.
+  async function enqueueAll(kind) {
+    let n = 0;
+    for (const r of libRows) {
+      if (r.noAudio && kind !== 'fill') continue; // nothing to match or re-render in a silent book
+      if (await enqueue(r.checksum, kind, { start: false, quiet: true })) n++;
+    }
+    setMsg(n
+      ? `➕ Queued ${kind === 'fill' ? 'a gaps pass' : 'a voice match'} for ${n} book(s) (${labelVoice(voiceId)}).`
+      : 'Nothing to queue — every book already matches that pass or is waiting for it.');
+    refreshLibrary();
+    if (n) drainQueue();
+  }
+
+  // Put a finished job back through enqueue rather than flipping its status: the pass is re-planned
+  // against the manifest as it is NOW, so a retried "gaps" job covers only what still has no audio.
+  async function requeue(j) {
+    const q = removeJob(queueRef.current, j.id);
+    commitQueue(q);
+    queueRef.current = q;
+    await enqueue(j.checksum, j.kind, { lines: j.lines });
   }
 
   const patchJob = (id, patch) => { const q = updateJob(queueRef.current, id, patch); liveQueue(q); return q; };
@@ -630,6 +683,35 @@ export default function AudiobookDialog({ onClose }) {
   const queueEta = queueEtaSeconds(queue, thr.msPerChar);
   const active = runningJob(queue);
 
+  // One table for the whole shelf: narrated books (bookRows) plus, when asked, the ones with no
+  // audio yet — normalised to the same row shape so sorting, filtering and the bulk buttons treat
+  // them alike. A book with no manifest has nothing to measure, so its numbers are blank, not 0.
+  // ponytail: recomputed per render — a shelf is hundreds of rows at most, and the compiler
+  // refused to keep a manual memo here.
+  const libQuery = libQ.trim().toLowerCase();
+  const libRows = sortRows(
+    [
+      ...library,
+      ...(showNoAudio ? otherBooks.map((f) => ({
+        checksum: f.checksum, fileName: f.fileName || 'Document', words: f.totalWords || 0, noAudio: true,
+        chunks: null, chunksWithAudio: null, coverage: null, clips: null, bytes: null, durationMs: null, lastAt: null, mic: 0, voices: [],
+      })) : []),
+    ].filter((r) => !libQuery || (r.fileName || '').toLowerCase().includes(libQuery)),
+    libSort.key, libSort.dir,
+  );
+  // A sortable column header. Names sort A→Z first; every numeric column starts biggest-first.
+  const sortTh = (key, label, title) => {
+    const on = libSort.key === key;
+    return (
+      <th aria-sort={on ? (libSort.dir > 0 ? 'ascending' : 'descending') : undefined}>
+        <button className="ab-sort" title={title || `Sort by ${label}`}
+          onClick={() => setLibSort((s) => ({ key, dir: s.key === key ? -s.dir : (key === 'fileName' ? 1 : -1) }))}>
+          {label}{on ? (libSort.dir > 0 ? ' ▴' : ' ▾') : ''}
+        </button>
+      </th>
+    );
+  };
+
   const VIEWS = [
     ['queue', `📋 Queue${totals.queued + totals.running ? ` (${totals.queued + totals.running})` : ''}`, 'The work list — every book waiting to be narrated'],
     ['library', `📚 Library${library.length ? ` (${library.length})` : ''}`, 'Every book’s narration coverage, and what to queue next'],
@@ -700,7 +782,7 @@ export default function AudiobookDialog({ onClose }) {
   const canTTS = piperSupported() || elVoices.length > 0;
 
   return (
-    <Dialog title="Audiobook Command Centre" onClose={() => { stopPlay(); onClose(); }} width={860}>
+    <Dialog title="Audiobook Command Centre" onClose={() => { stopPlay(); onClose(); }} width={960}>
       <div className="ab-views" role="tablist" aria-label="Audiobook views">
         {VIEWS.map(([id, label, help]) => (
           <button
@@ -750,35 +832,50 @@ export default function AudiobookDialog({ onClose }) {
               leave them to grind; one generates at a time, and the rest wait their turn.
             </p>
           ) : (
-            <div className="ab-jobs">
-              {queue.map((j, i) => {
-                const pctJ = j.charsTotal ? Math.round((j.charsDone / j.charsTotal) * 100) : 0;
-                const ICON = { queued: '◌', running: '●', done: '✓', error: '⚠', stopped: '■' };
-                return (
-                  <div key={j.id} className={`ab-job st-${j.status}`}>
-                    <span className="ab-job-icon" title={j.status}>{ICON[j.status] || '·'}</span>
-                    <div className="ab-job-main">
-                      <div className="ab-job-title">
-                        <strong title={j.fileName}>{j.fileName}</strong>
-                        <span className="ab-job-kind">{j.lines ? `1 chunk @ line ${j.lines[0] + 1}` : JOB_KIND_LABEL[j.kind] || j.kind}</span>
-                        <span className="ab-job-voice" title="Voice this job was queued with">{j.voiceLabel}</span>
-                      </div>
-                      <div className="imp-bar ab-job-bar" title={`${pctJ}%`}><div className="imp-fill" style={{ width: `${pctJ}%` }} /></div>
-                      <div className="ab-job-meta">
-                        {j.done}/{j.total} chunk(s)
-                        {j.failed > 0 && <> · <span className="ab-job-fail">{j.failed} failed</span></>}
-                        {j.status === 'done' && j.finishedAt ? <> · finished {fmtWhen(j.finishedAt)}</> : null}
-                        {j.error ? <> · {j.error}</> : null}
-                      </div>
-                    </div>
-                    <div className="ab-job-acts">
-                      <button disabled={i === 0 || j.status === 'running'} onClick={() => commitQueue(moveJob(queue, j.id, -1))} title="Do this one sooner">↑</button>
-                      <button disabled={i === queue.length - 1 || j.status === 'running'} onClick={() => commitQueue(moveJob(queue, j.id, 1))} title="Do this one later">↓</button>
-                      <button className="grab-trash" onClick={() => { if (j.status === 'running') skipCurrent(); commitQueue(removeJob(queue, j.id)); }} title={j.status === 'running' ? 'Abandon this job and drop it from the queue' : 'Remove from the queue'}>✕</button>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="ab-scroll">
+              <table className="ab-table ab-queue-table">
+                <thead>
+                  <tr>
+                    <th title="Status"></th><th>Book</th><th>Pass</th><th>Voice</th><th>Progress</th><th>Chunks</th>
+                    <th>Chars</th><th title="Time left at the measured rate">ETA</th><th>Queued</th><th>Finished</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {queue.map((j, i) => {
+                    const pctJ = j.charsTotal ? Math.round((j.charsDone / j.charsTotal) * 100) : 0;
+                    const ICON = { queued: '◌', running: '●', done: '✓', error: '⚠', stopped: '■' };
+                    const fin = isFinished(j);
+                    const eta = !fin && thr.msPerChar ? (Math.max(0, j.charsTotal - j.charsDone) * thr.msPerChar) / 1000 : null;
+                    const pinned = j.status === 'running';
+                    return (
+                      <Fragment key={j.id}>
+                        <tr className={`st-${j.status}`}>
+                          <td className="ab-st" title={j.status}>{ICON[j.status] || '·'}</td>
+                          <td className="ab-td-name" title={j.fileName}>{j.fileName}</td>
+                          <td className="ab-td-name">{j.lines ? `1 chunk @ line ${j.lines[0] + 1}` : JOB_KIND_LABEL[j.kind] || j.kind}</td>
+                          <td className="ab-td-name" title={`Voice this job was queued with: ${j.voiceLabel}`}>{j.voiceLabel}</td>
+                          <td className="ab-td-bar"><div className="imp-bar ab-job-bar" title={`${pctJ}%`}><div className="imp-fill" style={{ width: `${pctJ}%` }} /></div>{pctJ}%</td>
+                          <td>{j.done}/{j.total}{j.failed > 0 && <> · <span className="ab-job-fail">{j.failed}✗</span></>}</td>
+                          <td>{(j.charsDone || 0).toLocaleString()}/{(j.charsTotal || 0).toLocaleString()}</td>
+                          <td>{eta != null ? fmtEta(eta) : '—'}</td>
+                          <td>{j.queuedAt ? fmtWhen(j.queuedAt) : '—'}</td>
+                          <td>{j.finishedAt ? fmtWhen(j.finishedAt) : '—'}</td>
+                          <td className="ab-actions">
+                            <button disabled={i === 0 || pinned} onClick={() => commitQueue(moveJobTo(queue, j.id, 'top'))} title="Do this one next">⤒</button>
+                            <button disabled={i === 0 || pinned} onClick={() => commitQueue(moveJob(queue, j.id, -1))} title="Do this one sooner">↑</button>
+                            <button disabled={i === queue.length - 1 || pinned} onClick={() => commitQueue(moveJob(queue, j.id, 1))} title="Do this one later">↓</button>
+                            <button disabled={i === queue.length - 1 || pinned} onClick={() => commitQueue(moveJobTo(queue, j.id, 'bottom'))} title="Do this one last">⤓</button>
+                            {fin && <button disabled={!canTTS} onClick={() => requeue(j)} title="Queue this pass again — re-planned against what the book has now">↻ Re-queue</button>}
+                            <button onClick={() => openBook(j.checksum)} title="Open this book’s chunk-by-chunk editor">📖</button>
+                            <button className="grab-trash" onClick={() => { if (pinned) skipCurrent(); commitQueue(removeJob(queue, j.id)); }} title={pinned ? 'Abandon this job and drop it from the queue' : 'Remove from the queue'}>✕</button>
+                          </td>
+                        </tr>
+                        {j.error && <tr className="ab-err-row"><td></td><td colSpan={10}>⚠ {j.error}</td></tr>}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
           {!canTTS && <p className="settings-note">No voice engine available: install an offline Piper voice, or add an ElevenLabs key in Audio Settings.</p>}
@@ -790,8 +887,13 @@ export default function AudiobookDialog({ onClose }) {
         <div className="ab-view">
           <div className="ab-queue-head">
             {voicePicker()}
-            <span className="settings-note" style={{ margin: 0 }}>Queue a pass for any book — it does not have to be open.</span>
+            <input type="search" className="ab-filter" placeholder="Filter books…" aria-label="Filter books by name" value={libQ} onChange={(e) => setLibQ(e.target.value)} />
+            <label className="inline-check" title="Also list every known book that has no narration at all">
+              <input type="checkbox" checked={showNoAudio} onChange={(e) => setShowNoAudio(e.target.checked)} /> No narration yet ({otherBooks.length})
+            </label>
             <span className="grow" />
+            <button disabled={!canTTS || !libRows.length} onClick={() => enqueueAll('fill')} title="Queue a gaps pass for every book in the table below — any book, open or not">🎙 Gaps · all ({libRows.length})</button>
+            <button disabled={!canTTS || !libRows.some((r) => !r.noAudio)} onClick={() => enqueueAll('othervoice')} title="Queue a voice-match pass for every narrated book in the table below">🎚 Match · all</button>
             <button onClick={refreshLibrary} disabled={libBusy} title="Re-read every book's manifest">{libBusy ? '…' : '↻ Refresh'}</button>
           </div>
 
@@ -802,62 +904,75 @@ export default function AudiobookDialog({ onClose }) {
             <div className="ab-stat"><b>{fmtEta(libTotals.durationMs / 1000)}</b><span>of narration</span></div>
           </div>
 
-          {!library.length && <p className="settings-note">No book has any narration yet. Pick one below to start.</p>}
-          <div className="ab-lib">
-            {library.map((r) => {
-              const cpct = r.coverage == null ? null : Math.round(r.coverage * 100);
-              return (
-                <div key={r.checksum} className={`ab-lib-row${r.checksum === checksum ? ' current' : ''}`}>
-                  <div className="ab-lib-main">
-                    <div className="ab-lib-title">
-                      <strong title={r.fileName}>{r.fileName}</strong>
-                      {openChecksums.has(r.checksum) && <span className="ab-lib-tag" title="This book is open in a reading tab">open</span>}
-                      {cpct === 100 && <span className="ab-lib-tag done">complete</span>}
-                    </div>
-                    <div className="imp-bar ab-lib-bar" title={cpct == null ? 'Chunk count unknown until this book is queued or opened' : `${cpct}%`}>
-                      <div className="imp-fill" style={{ width: `${cpct ?? 0}%` }} />
-                    </div>
-                    <div className="ab-lib-meta">
-                      {cpct == null
-                        ? <>{r.chunksWithAudio} chunk(s) with audio · total unknown</>
-                        : <>{r.chunksWithAudio}/{r.chunks} chunk(s) · <strong>{cpct}%</strong></>}
-                      {' · '}{r.clips} clip(s) · {fmtBytes(r.bytes)} · {fmtEta(r.durationMs / 1000)}
-                      {r.mic > 0 && <> · 🎤 {r.mic} recorded</>}
-                      {r.voices.length > 0 && <> · {r.voices.slice(0, 2).map((v) => labelVoice(v.voice)).join(', ')}</>}
-                      {r.lastAt ? <> · last {fmtWhen(r.lastAt)}</> : null}
-                    </div>
-                  </div>
-                  <div className="ab-lib-acts">
-                    <button disabled={!canTTS} onClick={() => enqueue(r.checksum, 'fill')} title="Queue every chunk that has no audio yet">🎙 Gaps</button>
-                    <button disabled={!canTTS} onClick={() => enqueue(r.checksum, 'othervoice')} title="Queue only the chunks whose audio uses a different voice from the one selected">🎚 Match</button>
-                    <button disabled={!canTTS} onClick={() => enqueue(r.checksum, 'all')} title="Queue a fresh render of every chunk that is not one of your recordings">↻ All</button>
-                    <button onClick={() => openBook(r.checksum)} title="Open this book’s chunk-by-chunk editor: per-chunk clips, your own recordings, section music and export">📖 Chunks</button>
-                    {!openChecksums.has(r.checksum) && <button onClick={() => openRecent(r.checksum)} title="Open this book in a reading tab">📂</button>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {otherBooks.length > 0 && (
-            <details className="ab-group">
-              <summary>➕ Books with no narration yet ({otherBooks.length})</summary>
-              <div className="ab-lib">
-                {otherBooks.map((f) => (
-                  <div key={f.checksum} className="ab-lib-row">
-                    <div className="ab-lib-main">
-                      <div className="ab-lib-title"><strong title={f.fileName}>{f.fileName || 'Document'}</strong></div>
-                      <div className="ab-lib-meta">{(f.totalWords || 0).toLocaleString()} words · no audio yet</div>
-                    </div>
-                    <div className="ab-lib-acts">
-                      <button className="toggle-on" disabled={!canTTS} onClick={() => enqueue(f.checksum, 'fill')} title="Queue the whole book for narration">🎙 Narrate</button>
-                      <button onClick={() => openBook(f.checksum)} title="Open this book’s chunk-by-chunk editor">📖 Chunks</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </details>
+          {!library.length && !showNoAudio && <p className="settings-note">No book has any narration yet. Tick <strong>No narration yet</strong> to list your books and pick one.</p>}
+          {libRows.length > 0 && (
+            <div className="ab-scroll">
+              <table className="ab-table ab-lib-table">
+                <thead>
+                  <tr>
+                    {sortTh('fileName', 'Book')}
+                    {sortTh('coverage', 'Coverage', 'Sort by share of chunks narrated')}
+                    {sortTh('chunksWithAudio', 'Chunks', 'Sort by chunks with audio')}
+                    {sortTh('clips', 'Clips')}
+                    {sortTh('bytes', 'Size')}
+                    {sortTh('durationMs', 'Length', 'Sort by narration length')}
+                    {sortTh('words', 'Words')}
+                    <th>Voices</th>
+                    <th>Folders</th>
+                    {sortTh('lastAt', 'Last', 'Sort by when audio was last added')}
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {libRows.map((r) => {
+                    const cpct = r.coverage == null ? null : Math.round(r.coverage * 100);
+                    const inFolders = foldersForBook(folders, r.checksum);
+                    const missing = folders.filter((f) => !f.books?.[r.checksum]);
+                    return (
+                      <tr key={r.checksum} className={r.checksum === checksum ? 'current' : ''}>
+                        <td className="ab-td-name" title={r.fileName}>
+                          <strong>{r.fileName}</strong>
+                          {openChecksums.has(r.checksum) && <span className="ab-lib-tag" title="This book is open in a reading tab">open</span>}
+                          {cpct === 100 && <span className="ab-lib-tag done">complete</span>}
+                        </td>
+                        <td className="ab-td-bar" title={r.noAudio ? 'No audio yet' : cpct == null ? 'Chunk count unknown until this book is queued or opened' : `${cpct}%`}>
+                          {r.noAudio ? <span className="ab-dim">none</span> : <><div className="imp-bar ab-lib-bar"><div className="imp-fill" style={{ width: `${cpct ?? 0}%` }} /></div>{cpct == null ? '?' : `${cpct}%`}</>}
+                        </td>
+                        <td>{r.noAudio ? '—' : `${r.chunksWithAudio} / ${cpct == null ? '?' : r.chunks}`}</td>
+                        <td>{r.noAudio ? '—' : r.clips}{r.mic > 0 && <span title={`${r.mic} recorded by you`}> · 🎤{r.mic}</span>}</td>
+                        <td>{r.noAudio ? '—' : fmtBytes(r.bytes)}</td>
+                        <td>{r.noAudio ? '—' : fmtEta(r.durationMs / 1000)}</td>
+                        <td>{r.words ? r.words.toLocaleString() : '—'}</td>
+                        <td className="ab-td-name" title={r.voices.map((v) => `${labelVoice(v.voice)} ×${v.n}`).join('\n')}>
+                          {r.voices.slice(0, 2).map((v) => labelVoice(v.voice)).join(', ')}{r.voices.length > 2 ? ` +${r.voices.length - 2}` : ''}{!r.voices.length && '—'}
+                        </td>
+                        <td className="ab-td-name ab-td-folders" title={inFolders.map((f) => f.name).join('\n')}>
+                          {inFolders.map((f) => f.name).join(', ') || (folders.length ? '' : '—')}
+                          {missing.length > 0 && (
+                            <select value="" aria-label={`Add “${r.fileName}” to a download folder`} title="Add this book to a download folder (or every folder at once)"
+                              onChange={(e) => { const v = e.target.value; if (v) addToFolders(r.checksum, r.fileName, v === '*' ? missing.map((f) => f.id) : [v]); }}>
+                              <option value="">📁 +</option>
+                              {missing.length > 1 && <option value="*">All folders ({missing.length})</option>}
+                              {missing.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                            </select>
+                          )}
+                        </td>
+                        <td>{r.lastAt ? fmtWhen(r.lastAt) : '—'}</td>
+                        <td className="ab-actions">
+                          <button className={r.noAudio ? 'toggle-on' : ''} disabled={!canTTS} onClick={() => enqueue(r.checksum, 'fill')} title={r.noAudio ? 'Queue the whole book for narration' : 'Queue every chunk that has no audio yet'}>{r.noAudio ? '🎙 Narrate' : '🎙 Gaps'}</button>
+                          <button disabled={!canTTS || r.noAudio} onClick={() => enqueue(r.checksum, 'othervoice')} title="Queue only the chunks whose audio uses a different voice from the one selected">🎚 Match</button>
+                          <button disabled={!canTTS || r.noAudio} onClick={() => enqueue(r.checksum, 'all')} title="Queue a fresh render of every chunk that is not one of your recordings">↻ All</button>
+                          <button onClick={() => openBook(r.checksum)} title="Open this book’s chunk-by-chunk editor: per-chunk clips, your own recordings, section music and export">📖 Chunks</button>
+                          {!openChecksums.has(r.checksum) && <button onClick={() => openRecent(r.checksum)} title="Open this book in a reading tab">📂</button>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
+          {libQ && !libRows.length && <p className="settings-note">No book matches “{libQ}”.</p>}
         </div>
       )}
 
@@ -914,24 +1029,38 @@ export default function AudiobookDialog({ onClose }) {
                       <button disabled={!assigned.length || !!fsync} onClick={() => syncFolder(f)} title="Write anything missing or changed, for every book in this folder">⟳ Sync now</button>
                       <button className="grab-trash" onClick={() => commitFolders(removeFolder(folders, f.id))} title="Forget this folder — files already written stay on disk">✕</button>
                     </div>
-                    {assigned.map((cs) => {
-                      const b = f.books[cs];
-                      const n = Object.keys(b.tracks || {}).length;
-                      return (
-                        <div key={cs} className="ab-fbook">
-                          <span className="ab-fbook-name" title={b.fileName}>📖 {b.fileName}</span>
-                          <span className="ab-fbook-meta">{b.syncedAt ? `${n} track(s) · synced ${fmtWhen(b.syncedAt)}` : 'never synced'}</span>
-                          <span className="grow" />
-                          <button disabled={!!fsync} onClick={() => syncOneBook(f.id, cs)} title="Sync just this book">⟳</button>
-                          <button className="grab-trash" onClick={() => commitFolders(unassignBook(folders, f.id, cs))} title="Stop syncing this book here — its files stay on disk">✕</button>
-                        </div>
-                      );
-                    })}
-                    <div className="ab-fbook ab-fbook-add">
-                      <select value="" onChange={(e) => { const cs = e.target.value; if (!cs) return; const o = options.find((x) => x.cs === cs); commitFolders(assignBook(foldersRef.current, f.id, cs, o && o.name)); }}>
+                    {assigned.length > 0 && (
+                      <table className="ab-table ab-folder-table">
+                        <thead><tr><th>Book</th><th>Tracks</th><th>Format</th><th>Synced</th><th></th></tr></thead>
+                        <tbody>
+                          {assigned.map((cs) => {
+                            const b = f.books[cs];
+                            const n = Object.keys(b.tracks || {}).length;
+                            return (
+                              <tr key={cs}>
+                                <td className="ab-td-name" title={b.fileName}>📖 {b.fileName}</td>
+                                <td>{b.syncedAt ? n : '—'}</td>
+                                <td>{b.syncedAt && b.format ? b.format.toUpperCase() : '—'}</td>
+                                <td>{b.syncedAt ? fmtWhen(b.syncedAt) : 'never'}</td>
+                                <td className="ab-actions">
+                                  <button disabled={!!fsync} onClick={() => syncOneBook(f.id, cs)} title="Write anything missing or changed for this book">⟳ Sync</button>
+                                  <button disabled={!!fsync || !b.syncedAt} onClick={() => resyncBook(f.id, cs)} title="Rewrite every track of this book from scratch — for a folder that was emptied by hand">⟲ Rewrite</button>
+                                  <button onClick={() => openBook(cs)} title="Open this book’s chunk-by-chunk editor">📖</button>
+                                  <button className="grab-trash" onClick={() => commitFolders(unassignBook(folders, f.id, cs))} title="Stop syncing this book here — its files stay on disk">✕</button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                    <div className="ab-fbook-add">
+                      <select value="" aria-label={`Add a book to ${f.name}`} onChange={(e) => { const cs = e.target.value; if (!cs) return; const o = options.find((x) => x.cs === cs); commitFolders(assignBook(foldersRef.current, f.id, cs, o && o.name)); }}>
                         <option value="">➕ Add a book to this folder…</option>
                         {options.map((o) => <option key={o.cs} value={o.cs}>{o.name}</option>)}
                       </select>
+                      <button disabled={!options.length} onClick={() => addAllToFolder(f, options)} title="Add every book not already in this folder">➕ Add all ({options.length})</button>
+                      {assigned.length > 1 && <button className="grab-trash" onClick={() => removeAllFromFolder(f)} title="Stop syncing every book here — files already written stay on disk">✕ Remove all ({assigned.length})</button>}
                     </div>
                   </div>
                 );
@@ -1246,31 +1375,52 @@ export default function AudiobookDialog({ onClose }) {
           [ids[i], ids[j]] = [ids[j], ids[i]];
           await reorderAudioClips(checksum, li, ids); await refresh();
         };
+        // Straight to the front of its own kind: recordings outrank renders, so a render can only
+        // become the top RENDER, never jump above a recording.
+        const toFront = async (id) => {
+          const ids = cl.map((c) => c.id); const i = ids.indexOf(id);
+          let j = i;
+          while (j > 0 && cl[j - 1].source === cl[i].source) j--;
+          if (j === i) return;
+          ids.splice(i, 1); ids.splice(j, 0, id);
+          await reorderAudioClips(checksum, li, ids); await refresh();
+        };
+        const firstOfKind = (i) => i === 0 || cl[i - 1].source !== cl[i].source;
         return (
-          <Dialog title={`Clips — chunk ${li + 1}`} onClose={() => setClipMgr(null)} width={560} buttons={<button onClick={() => setClipMgr(null)}>Close</button>}>
+          <Dialog title={`Clips — chunk ${li + 1}`} onClose={() => setClipMgr(null)} width={680} buttons={<button onClick={() => setClipMgr(null)}>Close</button>}>
             <p className="settings-note" style={{ marginTop: 0 }}>The top clip plays. Recordings (🎤) always outrank Piper renders. Reorder or delete stale clips.</p>
-            {cl.map((c, i) => (
-              <div key={c.id} className={`clip-card${i === 0 ? ' active' : ''}`}>
-                <div className="clip-card-main">
-                  <span className="clip-pri">{i === 0 ? '★' : i + 1}</span>
-                  <span className="clip-src">{c.source === 'mic' ? '🎤 recording' : (c.voiceId?.startsWith('el:') ? labelVoice(c.voiceId) : `🤖 ${voiceLabel(c.voiceId)}`)}</span>
-                  <span className="clip-meta">{fmtDur(c.durationMs)} · {fmtBytes(c.sizeBytes)} · {fmtWhen(c.createdAt)}</span>
-                  {c.quality && (
-                    <span
-                      className={`rtw-score s${c.quality.score >= 85 ? 'good' : c.quality.score >= 65 ? 'ok' : 'bad'}`}
-                      title={`${c.quality.wpm != null ? c.quality.wpm + ' wpm · ' : ''}${c.quality.rmsDb} dB RMS · peak ${c.quality.peakDb} dB · volume CV ${c.quality.volumeCv}${c.quality.clippingPct ? ` · clipping ${c.quality.clippingPct}%` : ''}`}
-                    >★ {c.quality.score}</span>
-                  )}
-                </div>
-                <div className="clip-card-row">
-                  <ClipWave checksum={checksum} line={li} clipId={c.id} />
-                  <button className={playingKey === `${li}:${c.id}` ? 'toggle-on' : ''} onClick={() => playClip(li, c.id)}>{playingKey === `${li}:${c.id}` ? '■' : '▶'}</button>
-                  <button disabled={i === 0 || c.source !== cl[i - 1]?.source} onClick={() => move(c.id, -1)} title="Higher priority">↑</button>
-                  <button disabled={i === cl.length - 1 || c.source !== cl[i + 1]?.source} onClick={() => move(c.id, 1)} title="Lower priority">↓</button>
-                  <button className="grab-trash" onClick={async () => { if (playingKey === `${li}:${c.id}`) stopPlay(); await deleteAudioClipById(checksum, li, c.id); await refresh(); if (clipsFor(li).length === 0) setClipMgr(null); }}>🗑</button>
-                </div>
-              </div>
-            ))}
+            {cl.length > 0 && (
+              <table className="ab-table ab-clip-table">
+                <thead><tr><th>#</th><th>Source</th><th>Wave</th><th>Length</th><th>Size</th><th>Added</th><th title="Narration-quality score for recorded takes">Quality</th><th></th></tr></thead>
+                <tbody>
+                  {cl.map((c, i) => (
+                    <tr key={c.id} className={i === 0 ? 'ab-top' : ''}>
+                      <td className="clip-pri">{i === 0 ? '★' : i + 1}</td>
+                      <td className="ab-td-name">{c.source === 'mic' ? '🎤 recording' : (c.voiceId?.startsWith('el:') ? labelVoice(c.voiceId) : `🤖 ${voiceLabel(c.voiceId)}`)}</td>
+                      <td><ClipWave checksum={checksum} line={li} clipId={c.id} /></td>
+                      <td>{fmtDur(c.durationMs)}</td>
+                      <td>{fmtBytes(c.sizeBytes)}</td>
+                      <td>{fmtWhen(c.createdAt)}</td>
+                      <td>
+                        {c.quality ? (
+                          <span
+                            className={`rtw-score s${c.quality.score >= 85 ? 'good' : c.quality.score >= 65 ? 'ok' : 'bad'}`}
+                            title={`${c.quality.wpm != null ? c.quality.wpm + ' wpm · ' : ''}${c.quality.rmsDb} dB RMS · peak ${c.quality.peakDb} dB · volume CV ${c.quality.volumeCv}${c.quality.clippingPct ? ` · clipping ${c.quality.clippingPct}%` : ''}`}
+                          >★ {c.quality.score}</span>
+                        ) : '—'}
+                      </td>
+                      <td className="ab-actions">
+                        <button className={playingKey === `${li}:${c.id}` ? 'toggle-on' : ''} onClick={() => playClip(li, c.id)} title={playingKey === `${li}:${c.id}` ? 'Stop' : 'Play'}>{playingKey === `${li}:${c.id}` ? '■' : '▶'}</button>
+                        <button disabled={firstOfKind(i)} onClick={() => toFront(c.id)} title="Make this the top clip of its kind">⤒</button>
+                        <button disabled={i === 0 || c.source !== cl[i - 1]?.source} onClick={() => move(c.id, -1)} title="Higher priority">↑</button>
+                        <button disabled={i === cl.length - 1 || c.source !== cl[i + 1]?.source} onClick={() => move(c.id, 1)} title="Lower priority">↓</button>
+                        <button className="grab-trash" onClick={async () => { if (playingKey === `${li}:${c.id}`) stopPlay(); await deleteAudioClipById(checksum, li, c.id); await refresh(); if (clipsFor(li).length === 0) setClipMgr(null); }} title="Delete this clip">🗑</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
             {cl.length === 0 && <p className="settings-note">No clips.</p>}
             <div className="data-row" style={{ marginTop: 8 }}>
               <button className="toggle-on" onClick={() => setRecWiz(clipMgr)}>🎙 Record / import a clip…</button>
