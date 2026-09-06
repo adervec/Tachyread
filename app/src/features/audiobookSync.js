@@ -3,6 +3,19 @@
 // after a (re)generation. Pure (no File System Access, no IndexedDB) so it is node-testable; the
 // directory handles ride along inside folder records untouched. The browser-side engine that
 // assembles and writes the files lives in AudiobookDialog.
+import { readStatus } from './journeyLibrary.js';
+
+// A download folder is partitioned by Trackyread status — <folder>/<shelf>/<book>/ — so a player
+// shows Reading / Finished / … shelves. Fixed on-disk names (not STATUS_LABEL) so a relabel in the
+// tracker never moves every book. ponytail: whole-document bindings only; a document tracked only
+// through section bindings (an anthology) counts as untracked.
+export const SHELF_DIR = { reading: 'Reading', queue: 'On deck', toread: 'To read', finished: 'Finished', abandoned: 'Abandoned' };
+export const UNTRACKED_DIR = 'Untracked';
+export function shelfFor(binding, books, checksum) {
+  const id = binding?.[checksum];
+  const b = id && (books || []).find((x) => x?.id === id);
+  return b ? SHELF_DIR[readStatus(b)] : UNTRACKED_DIR;
+}
 
 // Identity of one planned track: the ordered clip ids it would be assembled from. A regenerated
 // chunk gets a NEW top clip id, so its track's signature changes and only that file is rewritten.

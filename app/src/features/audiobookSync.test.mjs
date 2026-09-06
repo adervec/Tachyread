@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import {
   trackSig, diffSync, addFolder, removeFolder, patchFolder, assignBook, unassignBook,
-  setFolderBook, foldersForBook,
+  setFolderBook, foldersForBook, shelfFor, UNTRACKED_DIR,
 } from './audiobookSync.js';
 
 // ── signatures ──
@@ -84,5 +84,20 @@ fs = patchFolder(fs, 'f2', { autoSync: true });
 assert.equal(fs[1].autoSync, true);
 fs = removeFolder(fs, 'f1');
 assert.deepEqual(fs.map((f) => f.id), ['f2']);
+
+// ── shelves: one sub-folder per Trackyread status, plus one for the untracked ──
+const books = [
+  { id: 'b1', inProgress: true }, { id: 'b2', completion: true }, { id: 'b3', shelf: 'queue' },
+  { id: 'b4', shelf: 'abandoned' }, { id: 'b5' },
+];
+const binding = { aaa: 'b1', bbb: 'b2', ccc: 'b3', ddd: 'b4', eee: 'b5', fff: 'gone' };
+assert.equal(shelfFor(binding, books, 'aaa'), 'Reading');
+assert.equal(shelfFor(binding, books, 'bbb'), 'Finished');
+assert.equal(shelfFor(binding, books, 'ccc'), 'On deck');
+assert.equal(shelfFor(binding, books, 'ddd'), 'Abandoned');
+assert.equal(shelfFor(binding, books, 'eee'), 'To read');
+assert.equal(shelfFor(binding, books, 'fff'), UNTRACKED_DIR, 'bound to a book that no longer exists');
+assert.equal(shelfFor(binding, books, 'zzz'), UNTRACKED_DIR, 'no binding');
+assert.equal(shelfFor(null, null, 'aaa'), UNTRACKED_DIR, 'no tracker data at all');
 
 console.log('audiobookSync: all cases pass');
