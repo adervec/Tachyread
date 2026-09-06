@@ -9,10 +9,11 @@ import {
   audiobookSize, clearAudiobook, exportAudiobook, importAudiobook, appendAppLog,
   setSectionExtra, deleteSectionExtra, getSectionExtraBlob,
   allAudiobookManifests, setAudiobookMeta, loadDocPayload, allFiles, getAbFolders, setAbFolders,
+  getBinding, getLibraryBooks,
 } from '../state/storage.js';
 import { planTracks, trackFileName, buildM3u, sanitizeFilename } from '../features/audiobookExport.js';
 import {
-  diffSync, addFolder, removeFolder, patchFolder, assignBook, unassignBook, setFolderBook, foldersForBook,
+  diffSync, addFolder, removeFolder, patchFolder, assignBook, unassignBook, setFolderBook, foldersForBook, shelfFor,
 } from '../features/audiobookSync.js';
 import { defaultVoiceForLang, piperSupported, installedVoices, voiceLabel, createPiperEngine } from '../features/piperTts.js';
 import { elevenVoices, elevenSynth, elevenConfigured } from '../features/elevenLabs.js';
@@ -36,6 +37,19 @@ const estMs = (blob) => (/mpe?g|mp3/i.test(blob.type)
 const fmtBytes = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 const fmtDur = (ms) => `${(Math.round((ms || 0) / 100) / 10).toFixed(1)}s`;
 const fmtWhen = (ts) => (ts ? fmtDateTime(ts) : '—');
+
+// Remove what an earlier sync wrote at <root>/<shelf>/<album> (no shelf = the pre-shelf flat layout):
+// only OUR files, then the directories if that emptied them — non-recursive, so anything added by
+// hand keeps its directory alive.
+async function dropAlbum(root, shelf, album, names) {
+  try {
+    const parent = shelf ? await root.getDirectoryHandle(shelf) : root;
+    const dir = await parent.getDirectoryHandle(album);
+    for (const n of names) { try { await dir.removeEntry(n); } catch { /* already gone */ } }
+    await parent.removeEntry(album);
+    if (shelf) await root.removeEntry(shelf);
+  } catch { /* not there, or something else lives in it — leave it */ }
+}
 
 // A tiny oscilloscope of one clip's waveform (decodes the WAV blob → downsamples → draws).
 function ClipWave({ checksum, line, clipId }) {
@@ -163,6 +177,13 @@ export default function AudiobookDialog({ onClose }) {
   const foldersRef = useRef(folders);
   foldersRef.current = folders;
   const [perm, setPerm] = useState({});     // folder id → 'granted' | 'prompt' | 'missing'
+  const [trk, setTrk] = useState({ binding: {}, books: [] }); // Trackyread links + books, for the Shelf column
+  useEffect(() => {
+    const load = () => Promise.all([getBinding(), getLibraryBooks()]).then(([binding, books]) => setTrk({ binding, books })).catch(() => {});
+    load();
+    window.addEventListener('tachyread-bindings-changed', load);
+    return () => window.removeEventListener('tachyread-bindings-changed', load);
+  }, []);
   const [fsync, setFsync] = useState(null); // { folder, book, done, total, label } while writing tracks
   const syncStopRef = useRef(false);
   const canPickDir = typeof window.showDirectoryPicker === 'function';
@@ -210,7 +231,8 @@ export default function AudiobookDialog({ onClose }) {
 
   // Write one book's tracks into one folder — INCREMENTALLY. A track is rewritten only when the
   // clips it is assembled from changed (diffSync on clip ids), so regenerating one chapter rewrites
-  // one file, not the shelf. Layout: <folder>/<book>/NN Title.ext + a playlist.
+  // one file, not the shelf. Layout: <folder>/<Trackyread shelf>/<book>/NN Title.ext + a playlist;
+  // a status change moves the book (rewrite into the new shelf, then drop the old copy).
   async function syncBookToFolder(folder, cs, { quiet = false } = {}) {
     const stateRec = folder.books?.[cs];
     try {
@@ -223,12 +245,17 @@ export default function AudiobookDialog({ onClose }) {
       const format = allItemsMp3(items) ? 'mp3' : 'wav';
       const tracks = planTracks(items);
       const names = tracks.map((t) => trackFileName(t, tracks.length, format));
-      // A format flip renames every file, so treat it as a first sync rather than diffing across it.
-      const prevMap = stateRec && stateRec.format === format ? stateRec.tracks || {} : {};
+      // Fresh tracker state every time: a book finished while the queue was running still lands right.
+      const shelf = shelfFor(await getBinding(), await getLibraryBooks(), cs);
+      // A shelf change is a move; a format flip renames every file. Either way it's a first sync
+      // rather than a diff across it. ponytail: a move reassembles instead of copying the old files —
+      // it happens once per status change; copy them across if that ever feels slow.
+      const moved = !!stateRec?.syncedAt && stateRec.shelf !== shelf;
+      const prevMap = stateRec && stateRec.format === format && !moved ? stateRec.tracks || {} : {};
       const { write, remove, next } = diffSync(tracks, names, prevMap);
       const album = sanitizeFilename((book.fileName || 'Audiobook').replace(/\.[a-z0-9]+$/i, ''));
       if (write.length || remove.length) {
-        const dir = await folder.handle.getDirectoryHandle(album, { create: true });
+        const dir = await (await folder.handle.getDirectoryHandle(shelf, { create: true })).getDirectoryHandle(album, { create: true });
         for (let k = 0; k < write.length; k++) {
           if (syncStopRef.current) return 0;
           const i = write[k];
@@ -245,7 +272,8 @@ export default function AudiobookDialog({ onClose }) {
         await w.write(new Blob([buildM3u(tracks, names, album)], { type: 'audio/x-mpegurl' }));
         await w.close();
       }
-      commitFolders(setFolderBook(foldersRef.current, folder.id, cs, { fileName: book.fileName, tracks: next, format, syncedAt: Date.now() }));
+      if (moved) await dropAlbum(folder.handle, stateRec.shelf, album, [...Object.keys(stateRec.tracks || {}), `${album}.m3u`]);
+      commitFolders(setFolderBook(foldersRef.current, folder.id, cs, { fileName: book.fileName, tracks: next, format, shelf, syncedAt: Date.now() }));
       return write.length;
     } catch (e) {
       if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') {
@@ -990,7 +1018,9 @@ export default function AudiobookDialog({ onClose }) {
               <div className="ab-queue-head">
                 <button className="toggle-on" disabled={!!fsync} onClick={() => pickFolder()}>➕ Add download folder…</button>
                 <span className="settings-note" style={{ margin: 0 }}>
-                  Each book syncs as ready-to-play tracks + a playlist into <em>folder/book/</em>. Only changed tracks are rewritten.
+                  Each book syncs as ready-to-play tracks + a playlist into <em>folder/shelf/book/</em>, where the shelf is its
+                  Trackyread status (Reading, On deck, To read, Finished, Abandoned — or Untracked). Only changed tracks are
+                  rewritten; a status change moves the book on its next sync.
                 </span>
               </div>
 
@@ -1031,14 +1061,16 @@ export default function AudiobookDialog({ onClose }) {
                     </div>
                     {assigned.length > 0 && (
                       <table className="ab-table ab-folder-table">
-                        <thead><tr><th>Book</th><th>Tracks</th><th>Format</th><th>Synced</th><th></th></tr></thead>
+                        <thead><tr><th>Book</th><th>Shelf</th><th>Tracks</th><th>Format</th><th>Synced</th><th></th></tr></thead>
                         <tbody>
                           {assigned.map((cs) => {
                             const b = f.books[cs];
                             const n = Object.keys(b.tracks || {}).length;
+                            const live = shelfFor(trk.binding, trk.books, cs);
                             return (
                               <tr key={cs}>
                                 <td className="ab-td-name" title={b.fileName}>📖 {b.fileName}</td>
+                                <td className="ab-td-shelf" title="Sub-folder, from the book’s Trackyread status — a change moves it on the next sync">{b.syncedAt && b.shelf !== live ? `${b.shelf || '—'} → ${live}` : live}</td>
                                 <td>{b.syncedAt ? n : '—'}</td>
                                 <td>{b.syncedAt && b.format ? b.format.toUpperCase() : '—'}</td>
                                 <td>{b.syncedAt ? fmtWhen(b.syncedAt) : 'never'}</td>
