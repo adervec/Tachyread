@@ -32,6 +32,7 @@ import {
 } from '../features/journeyAnalytics.js';
 import { findDuplicates, finishedDateIssues } from '../features/journeyCleanup.js';
 import { normTitle } from '../document/tocWizard.js';
+import { planBulkLinks, matchScore, newBookFor } from '../features/bulkLink.js';
 import { groupForChecksum, masterOf, makeGroup } from '../features/bookGroups.js';
 import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordCount } from '../features/readingTime.js';
 import { olFetch, bookCoverUrl } from '../features/openLibrary.js';
@@ -2194,43 +2195,49 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
     return books.filter((b) => `${b.title || ''} ${b.author || ''}`.toLowerCase().includes(s)).slice(0, 8);
   }, [q, books]);
 
-  // Bulk-link scan: every opened file with NO tracker link, split into fuzzy matches against
-  // existing books vs. strangers — the strangers are typically AI-generated one-offs, so the bulk
-  // action creates them as 'ai-gen' books and links them in one pass.
-  const [bulk, setBulk] = useState(null); // { matched:[{cs,fileName,book}], fresh:[{cs,title}], sel:Set, mSel:Set }
+  // Bulk-link scan: every opened file with NO tracker link, scored against the library
+  // (features/bulkLink.js). Each row carries its own target — an existing book, a new book of a
+  // chosen type, or skip — so a wrong guess is a dropdown away from right. Weak matches default to
+  // skip: a wrong link the user accepts is worse than a file left for later.
+  const [bulk, setBulk] = useState(null); // rows from planBulkLinks, each with a live `target`
+  const [pick, setPick] = useState(null); // { cs, q } — the row whose library search box is open
+  const fileOf = {};                      // book id → checksum already linked to it
+  for (const [cs, id] of Object.entries(bindMap || {})) fileOf[id] = cs;
+  const tierCount = { strong: 0, weak: 0, none: 0 };
+  let nLink = 0, nNew = 0;
+  for (const r of bulk || []) {
+    tierCount[r.tier]++;
+    if (r.target.startsWith('new:')) nNew++; else if (r.target !== 'skip') nLink++;
+  }
+  const pickMatches = pick?.q.trim()
+    ? books.filter((b) => `${b.title || ''} ${b.author || ''}`.toLowerCase().includes(pick.q.trim().toLowerCase())).slice(0, 8)
+    : [];
   function scanUnlinked() {
-    const matched = [], fresh = [];
-    for (const [cs, f] of Object.entries(fileStats)) {
-      if (bindMap[cs] || !f.fileName) continue;
-      const title = String(f.fileName).replace(/\.[a-z0-9]+$/i, '');
-      const sugg = suggestFor(title);
-      if (sugg) matched.push({ cs, fileName: f.fileName, book: sugg });
-      else fresh.push({ cs, title });
-    }
-    setBulk({ matched, fresh, sel: new Set(fresh.map((x) => x.cs)), mSel: new Set(matched.map((m) => m.cs)) });
-    if (!matched.length && !fresh.length) { setBulk(null); setMsg('Every opened file is already linked. ✅'); }
+    const files = Object.entries(fileStats).filter(([cs, f]) => !bindMap?.[cs] && f.fileName)
+      .map(([cs, f]) => ({ cs, fileName: f.fileName, words: f.words || 0, coverage: f.coverage || 0 }));
+    const rows = planBulkLinks(files, books);
+    setBulk(rows.length ? rows : null); setPick(null);
+    if (!rows.length) setMsg('Every opened file is already linked. ✅');
   }
-  async function linkAllMatched() {
-    let n = 0;
-    for (const m of bulk.matched) {
-      if (!bulk.mSel.has(m.cs)) continue;
-      await onBind(m.cs, m.book.id);
-      n++;
-    }
-    setMsg(`Linked ${n} file(s) to their matching books.`);
-    setBulk(null);
+  const setTarget = (cs, target) => setBulk((rows) => rows.map((r) => (r.cs === cs ? { ...r, target } : r)));
+  // A book found by search joins the row's candidates (so the dropdown can show it) and becomes its target.
+  function chooseBook(row, book) {
+    setBulk((rows) => rows.map((r) => (r.cs !== row.cs ? r : {
+      ...r, target: book.id,
+      cands: [{ book, score: matchScore(r.fileName, book) }, ...r.cands.filter((c) => c.book.id !== book.id)],
+    })));
+    setPick(null);
   }
-  async function createAiGenBooks() {
-    let n = 0;
-    for (const x of bulk.fresh) {
-      if (!bulk.sel.has(x.cs)) continue;
-      const book = { id: deriveId({ title: x.title }), title: x.title, type: 'ai-gen', tags: ['ai-gen'], recBy: 'Claude' };
-      await onSaveBook(book);
-      await onBind(x.cs, book.id);
-      n++;
+  async function applyBulk() {
+    let linked = 0, created = 0;
+    for (const r of bulk) {
+      if (r.target === 'skip') continue;
+      let id = r.target;
+      if (id.startsWith('new:')) { const book = newBookFor(r, id.slice(4)); await onSaveBook(book); id = book.id; created++; } else linked++;
+      await onBind(r.cs, id);
     }
-    setMsg(`Created ${n} AI-generated book(s) and linked their files.`);
-    setBulk(null);
+    setMsg(`Linked ${linked} file(s) to existing books and created ${created} new book(s).`);
+    setBulk(null); setPick(null);
   }
 
   return (
@@ -2314,27 +2321,71 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
       {msg && !anth && <p className="settings-note">{msg}</p>}
 
       <div className="rh-section-h">Unlinked files — bulk link</div>
-      <p className="settings-note">Find every opened file with no tracker book. Fuzzy matches link to their existing books; the rest (typically AI-generated one-offs) can be created as <b>AI-generated</b> books and linked in one pass.</p>
-      <div className="lj-inline"><button onClick={scanUnlinked}>🔍 Scan opened files</button></div>
+      <p className="settings-note">
+        Find every opened file with no tracker book. Each gets a best guess — an existing book when the title <em>and</em> length
+        really fit, a new <b>AI-generated</b> book when nothing comes close, or <b>leave unlinked</b> when it is only a partial
+        match — and every guess is a dropdown away from being changed before anything is written.
+      </p>
+      <div className="lj-inline">
+        <button onClick={scanUnlinked}>🔍 Scan opened files</button>
+        {bulk && <span className="settings-note" style={{ margin: 0 }}>{bulk.length} unlinked · {tierCount.strong} sure · {tierCount.weak} to review · {tierCount.none} new</span>}
+      </div>
       {bulk && (
         <div className="lj-cleanup">
-          {bulk.matched.length > 0 && (
-            <details open><summary><b>{bulk.matched.length}</b> match existing books</summary>
-              <ul className="lj-clean-list">{bulk.matched.map((m) => (
-                <li key={m.cs}><label className="inline-check"><input type="checkbox" checked={bulk.mSel.has(m.cs)} onChange={(e) => setBulk((b) => { const mSel = new Set(b.mSel); e.target.checked ? mSel.add(m.cs) : mSel.delete(m.cs); return { ...b, mSel }; })} /> {m.fileName} → <b>{m.book.title}</b></label></li>
-              ))}</ul>
-              <button className="toggle-on" disabled={!bulk.mSel.size} onClick={linkAllMatched}>🔗 Link {bulk.mSel.size} selected</button>
-            </details>
-          )}
-          {bulk.fresh.length > 0 && (
-            <details open><summary><b>{bulk.fresh.length}</b> with no matching book — create as AI-generated</summary>
-              <ul className="lj-clean-list">{bulk.fresh.map((x) => (
-                <li key={x.cs}><label className="inline-check"><input type="checkbox" checked={bulk.sel.has(x.cs)} onChange={(e) => setBulk((b) => { const sel = new Set(b.sel); e.target.checked ? sel.add(x.cs) : sel.delete(x.cs); return { ...b, sel }; })} /> {x.title}</label></li>
-              ))}</ul>
-              <button className="toggle-on" disabled={![...bulk.sel].length} onClick={createAiGenBooks}>＋ Create {[...bulk.sel].length} as AI-generated + link</button>
-            </details>
-          )}
-          <div className="lj-inline"><button onClick={() => setBulk(null)}>Dismiss</button></div>
+          <div className="lj-tablewrap">
+            <table className="lj-table lj-bulk">
+              <thead><tr><th>File</th><th>Words</th><th>Read</th><th>Match</th><th>Link to</th><th></th></tr></thead>
+              <tbody>
+                {bulk.map((r) => {
+                  const toBook = r.target !== 'skip' && !r.target.startsWith('new:');
+                  const dupe = toBook && bulk.some((o) => o !== r && o.target === r.target);
+                  const taken = toBook ? fileOf[r.target] : null;
+                  return (
+                    <Fragment key={r.cs}>
+                      <tr className={r.target === 'skip' ? 'skip' : ''}>
+                        <td className="lj-bulk-name" title={r.fileName}>{r.title}</td>
+                        <td>{r.words ? r.words.toLocaleString() : '—'}</td>
+                        <td>{Math.round(r.coverage * 100)}%</td>
+                        <td><span className={`lj-tier t-${r.tier}`} title={r.why}>{r.tier === 'strong' ? '✓ sure' : r.tier === 'weak' ? '? review' : '– none'}</span></td>
+                        <td>
+                          <select value={r.target} onChange={(e) => setTarget(r.cs, e.target.value)} aria-label={`Link ${r.title} to`}>
+                            <option value="skip">— leave unlinked</option>
+                            <optgroup label="Create a new tracker book">
+                              <option value="new:ai-gen">＋ AI-generated</option>
+                              <option value="new:long">＋ Long-form book</option>
+                              <option value="new:short">＋ Short-form</option>
+                              <option value="new:article">＋ Article</option>
+                            </optgroup>
+                            {r.cands.length > 0 && (
+                              <optgroup label="Existing books">
+                                {r.cands.map((c) => <option key={c.book.id} value={c.book.id}>{Math.round(c.score * 100)}% · {c.book.title}{c.book.author ? ` — ${c.book.author}` : ''}{fileOf[c.book.id] ? ' 🔗' : ''}</option>)}
+                              </optgroup>
+                            )}
+                          </select>
+                          {dupe && <span className="lj-bulk-warn" title="Another row targets the same book. A book keeps one linked file, so only the last one applied stays linked — group editions under Settings → Book Groups instead.">⚠ twice</span>}
+                          {taken && !dupe && <span className="lj-bulk-warn" title={`Already linked to “${nameOf(taken)}” — applying moves that link to this file (group editions under Settings → Book Groups instead)`}>⚠ relink</span>}
+                        </td>
+                        <td className="lj-bulk-acts"><button onClick={() => setPick(pick?.cs === r.cs ? null : { cs: r.cs, q: '' })} title="Search the whole library for the right book">🔍</button></td>
+                      </tr>
+                      {pick?.cs === r.cs && (
+                        <tr className="lj-bulk-pickrow"><td colSpan={6}>
+                          <span className="lj-anth-pick">
+                            <input autoFocus placeholder="Search title or author…" value={pick.q} onChange={(e) => setPick({ cs: r.cs, q: e.target.value })} aria-label="Search books" />
+                            {pickMatches.map((b) => <button key={b.id} onClick={() => chooseBook(r, b)}>{b.title}{b.author ? ` — ${b.author}` : ''}</button>)}
+                            {pick.q.trim() && !pickMatches.length && <em className="settings-note" style={{ margin: 0 }}>no book matches</em>}
+                          </span>
+                        </td></tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="lj-inline">
+            <button className="toggle-on" disabled={!nLink && !nNew} onClick={applyBulk}>✓ Apply — link {nLink}, create {nNew}</button>
+            <button onClick={() => { setBulk(null); setPick(null); }}>Dismiss</button>
+          </div>
         </div>
       )}
 
