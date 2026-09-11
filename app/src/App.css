@@ -4314,6 +4314,18 @@
 .lj-table td { padding: 5px 6px; border-bottom: 1px solid var(--divider); vertical-align: middle; white-space: nowrap; }
 .lj-table tbody tr { cursor: pointer; }
 .lj-table tbody tr:hover { background: color-mix(in srgb, var(--accent, #3a86ff) 6%, transparent); }
+/* Bulk-link table (Groups & links view): one row per unlinked file, its target in a dropdown. */
+.lj-bulk tbody tr { cursor: default; }
+.lj-bulk tr.skip td { opacity: 0.55; }
+.lj-bulk .lj-bulk-name { max-width: 22em; overflow: hidden; text-overflow: ellipsis; }
+.lj-bulk select { max-width: 340px; font-size: 12px; }
+.lj-bulk .lj-bulk-warn { margin-left: 6px; font-size: 11px; color: #c98a00; white-space: nowrap; }
+.lj-bulk .lj-bulk-acts button { padding: 2px 7px; font-size: 12px; }
+.lj-bulk .lj-bulk-pickrow td { white-space: normal; }
+.lj-tier { font-size: 11px; font-weight: 600; white-space: nowrap; }
+.lj-tier.t-strong { color: var(--toggle-active-bg); }
+.lj-tier.t-weak { color: #c98a00; }
+.lj-tier.t-none { color: var(--status-fg); }
 .lj-table tbody tr.on { background: color-mix(in srgb, var(--accent, #3a86ff) 12%, transparent); }
 .lj-table .lj-td-title { white-space: normal; min-width: 180px; }
 .lj-table .lj-td-title b { margin-right: 6px; }
