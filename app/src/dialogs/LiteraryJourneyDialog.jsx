@@ -2201,6 +2201,7 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
   // skip: a wrong link the user accepts is worse than a file left for later.
   const [bulk, setBulk] = useState(null); // rows from planBulkLinks, each with a live `target`
   const [pick, setPick] = useState(null); // { cs, q } — the row whose library search box is open
+  const [busy, setBusy] = useState(null); // { done, total, label } while applying — the table is read-only then
   const fileOf = {};                      // book id → checksum already linked to it
   for (const [cs, id] of Object.entries(bindMap || {})) fileOf[id] = cs;
   const tierCount = { strong: 0, weak: 0, none: 0 };
@@ -2228,16 +2229,36 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
     })));
     setPick(null);
   }
+  // Apply one row at a time, stamping each with what happened as it happens: saving a book and
+  // re-reading the library takes a moment per row, and the old version did all of it silently.
+  // A row that throws is marked and the rest still run — half a shelf linked beats none.
   async function applyBulk() {
-    let linked = 0, created = 0;
-    for (const r of bulk) {
-      if (r.target === 'skip') continue;
-      let id = r.target;
-      if (id.startsWith('new:')) { const book = newBookFor(r, id.slice(4)); await onSaveBook(book); id = book.id; created++; } else linked++;
-      await onBind(r.cs, id);
+    const todo = (bulk || []).filter((r) => r.target !== 'skip');
+    if (!todo.length || busy) return;
+    setPick(null);
+    const mark = (cs, patch) => setBulk((rows) => rows.map((x) => (x.cs === cs ? { ...x, ...patch } : x)));
+    let linked = 0, created = 0, failed = 0;
+    for (let i = 0; i < todo.length; i++) {
+      const r = todo[i];
+      const making = r.target.startsWith('new:');
+      const to = making ? r.title : (r.cands.find((c) => c.book.id === r.target)?.book.title || r.target);
+      setBusy({ done: i, total: todo.length, label: `${making ? 'Creating' : 'Linking'} “${r.title}”${making ? '' : ` → ${to}`}` });
+      mark(r.cs, { state: 'busy' });
+      try {
+        let id = r.target;
+        if (making) { const book = newBookFor(r, id.slice(4)); await onSaveBook(book); id = book.id; created++; } else linked++;
+        await onBind(r.cs, id);
+        mark(r.cs, { state: making ? 'created' : 'linked', outcome: making ? `created “${to}”` : `linked to “${to}”`, target: 'skip' });
+      } catch (e) {
+        failed++;
+        if (making) created--; else linked--;
+        mark(r.cs, { state: 'failed', outcome: `failed: ${e?.message || e}` });
+      }
     }
-    setMsg(`Linked ${linked} file(s) to existing books and created ${created} new book(s).`);
-    setBulk(null); setPick(null);
+    setBusy(null);
+    setMsg(`Linked ${linked} file(s) to existing books and created ${created} new book(s).${failed ? ` ${failed} failed — see the table.` : ''}`);
+    // Everything worked → the table has nothing left to say. A failure keeps it up, marked.
+    if (!failed) { setBulk(null); setPick(null); }
   }
 
   return (
@@ -2327,7 +2348,7 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
         match — and every guess is a dropdown away from being changed before anything is written.
       </p>
       <div className="lj-inline">
-        <button onClick={scanUnlinked}>🔍 Scan opened files</button>
+        <button disabled={!!busy} onClick={scanUnlinked}>🔍 Scan opened files</button>
         {bulk && <span className="settings-note" style={{ margin: 0 }}>{bulk.length} unlinked · {tierCount.strong} sure · {tierCount.weak} to review · {tierCount.none} new</span>}
       </div>
       {bulk && (
@@ -2342,13 +2363,16 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
                   const taken = toBook ? fileOf[r.target] : null;
                   return (
                     <Fragment key={r.cs}>
-                      <tr className={r.target === 'skip' ? 'skip' : ''}>
+                      <tr className={`${r.state ? `st-${r.state}` : ''} ${!r.state && r.target === 'skip' ? 'skip' : ''}`.trim()}>
                         <td className="lj-bulk-name" title={r.fileName}>{r.title}</td>
                         <td>{r.words ? r.words.toLocaleString() : '—'}</td>
                         <td>{Math.round(r.coverage * 100)}%</td>
-                        <td><span className={`lj-tier t-${r.tier}`} title={r.why}>{r.tier === 'strong' ? '✓ sure' : r.tier === 'weak' ? '? review' : '– none'}</span></td>
+                        <td>{r.state
+                          ? <span className={`lj-tier t-${r.state}`} title={r.outcome || ''}>{r.state === 'busy' ? '⟳ working…' : r.state === 'linked' ? '✓ linked' : r.state === 'created' ? '✓ created' : '✕ failed'}</span>
+                          : <span className={`lj-tier t-${r.tier}`} title={r.why}>{r.tier === 'strong' ? '✓ sure' : r.tier === 'weak' ? '? review' : '– none'}</span>}</td>
                         <td>
-                          <select value={r.target} onChange={(e) => setTarget(r.cs, e.target.value)} aria-label={`Link ${r.title} to`}>
+                          {r.state === 'linked' || r.state === 'created' ? <span className="lj-bulk-done">{r.outcome}</span> : (
+                          <select disabled={!!busy} value={r.target} onChange={(e) => setTarget(r.cs, e.target.value)} aria-label={`Link ${r.title} to`}>
                             <option value="skip">— leave unlinked</option>
                             <optgroup label="Create a new tracker book">
                               <option value="new:ai-gen">＋ AI-generated</option>
@@ -2361,11 +2385,12 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
                                 {r.cands.map((c) => <option key={c.book.id} value={c.book.id}>{Math.round(c.score * 100)}% · {c.book.title}{c.book.author ? ` — ${c.book.author}` : ''}{fileOf[c.book.id] ? ' 🔗' : ''}</option>)}
                               </optgroup>
                             )}
-                          </select>
-                          {dupe && <span className="lj-bulk-warn" title="Another row targets the same book. A book keeps one linked file, so only the last one applied stays linked — group editions under Settings → Book Groups instead.">⚠ twice</span>}
-                          {taken && !dupe && <span className="lj-bulk-warn" title={`Already linked to “${nameOf(taken)}” — applying moves that link to this file (group editions under Settings → Book Groups instead)`}>⚠ relink</span>}
+                          </select>)}
+                          {r.state === 'failed' && <span className="lj-bulk-warn" title={r.outcome}>⚠ {r.outcome}</span>}
+                          {dupe && !r.state && <span className="lj-bulk-warn" title="Another row targets the same book. A book keeps one linked file, so only the last one applied stays linked — group editions under Settings → Book Groups instead.">⚠ twice</span>}
+                          {taken && !dupe && !r.state && <span className="lj-bulk-warn" title={`Already linked to “${nameOf(taken)}” — applying moves that link to this file (group editions under Settings → Book Groups instead)`}>⚠ relink</span>}
                         </td>
-                        <td className="lj-bulk-acts"><button onClick={() => setPick(pick?.cs === r.cs ? null : { cs: r.cs, q: '' })} title="Search the whole library for the right book">🔍</button></td>
+                        <td className="lj-bulk-acts">{r.state !== 'linked' && r.state !== 'created' && <button disabled={!!busy} onClick={() => setPick(pick?.cs === r.cs ? null : { cs: r.cs, q: '' })} title="Search the whole library for the right book">🔍</button>}</td>
                       </tr>
                       {pick?.cs === r.cs && (
                         <tr className="lj-bulk-pickrow"><td colSpan={6}>
@@ -2382,9 +2407,15 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
               </tbody>
             </table>
           </div>
+          {busy && (
+            <div className="lj-inline">
+              <div className="imp-bar" style={{ flex: '1 1 160px', maxWidth: 320 }}><div className="imp-fill" style={{ width: `${(busy.done / busy.total) * 100}%` }} /></div>
+              <span className="settings-note" style={{ margin: 0 }}>{busy.done + 1}/{busy.total} — {busy.label}…</span>
+            </div>
+          )}
           <div className="lj-inline">
-            <button className="toggle-on" disabled={!nLink && !nNew} onClick={applyBulk}>✓ Apply — link {nLink}, create {nNew}</button>
-            <button onClick={() => { setBulk(null); setPick(null); }}>Dismiss</button>
+            <button className="toggle-on" disabled={!!busy || (!nLink && !nNew)} onClick={applyBulk}>{busy ? `⟳ Applying ${busy.done}/${busy.total}…` : `✓ Apply — link ${nLink}, create ${nNew}`}</button>
+            <button disabled={!!busy} onClick={() => { setBulk(null); setPick(null); }}>Dismiss</button>
           </div>
         </div>
       )}

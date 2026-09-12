@@ -4323,9 +4323,15 @@
 .lj-bulk .lj-bulk-acts button { padding: 2px 7px; font-size: 12px; }
 .lj-bulk .lj-bulk-pickrow td { white-space: normal; }
 .lj-tier { font-size: 11px; font-weight: 600; white-space: nowrap; }
-.lj-tier.t-strong { color: var(--toggle-active-bg); }
-.lj-tier.t-weak { color: #c98a00; }
+.lj-tier.t-strong, .lj-tier.t-linked, .lj-tier.t-created { color: var(--toggle-active-bg); }
+.lj-tier.t-weak, .lj-tier.t-busy { color: #c98a00; }
 .lj-tier.t-none { color: var(--status-fg); }
+.lj-tier.t-failed { color: #d14; }
+/* While Apply runs: the row being written, then what each row ended up as. */
+.lj-bulk tr.st-busy { background: color-mix(in srgb, var(--accent, #3a86ff) 10%, transparent); }
+.lj-bulk tr.st-linked td, .lj-bulk tr.st-created td { opacity: 0.75; }
+.lj-bulk tr.st-failed { background: color-mix(in srgb, #d14 10%, transparent); }
+.lj-bulk .lj-bulk-done { font-size: 12px; color: var(--status-fg); }
 .lj-table tbody tr.on { background: color-mix(in srgb, var(--accent, #3a86ff) 12%, transparent); }
 .lj-table .lj-td-title { white-space: normal; min-width: 180px; }
 .lj-table .lj-td-title b { margin-right: 6px; }
