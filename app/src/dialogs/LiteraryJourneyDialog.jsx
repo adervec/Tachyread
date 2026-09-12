@@ -278,6 +278,13 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     if (checksum) await setBinding(checksum, bookId);
     setBindMap(await getBinding());
   }
+  // Links also change from the Reading History tab (its per-file unlink), so pick those up here
+  // rather than letting the Groups view show a link that is already gone.
+  useEffect(() => {
+    const load = () => getBinding().then(setBindMap).catch(() => {});
+    window.addEventListener('tachyread-bindings-changed', load);
+    return () => window.removeEventListener('tachyread-bindings-changed', load);
+  }, []);
 
   // Link-flow (from the "This Book in Trackyread" menu item): best library match for the file name.
   const linkSuggestion = useMemo(() => {
