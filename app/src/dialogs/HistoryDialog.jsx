@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
-import { allFiles, allDocMeta, allFocusSessions, getBinding, getLibraryBooks } from '../state/storage.js';
+import { allFiles, allDocMeta, allFocusSessions, getBinding, setBinding, getLibraryBooks } from '../state/storage.js';
 import { fmtDate } from '../features/dateFmt.js';
 import { MAX_REAL_WPM } from '../engine/readingTracker.js';
 
@@ -96,7 +96,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
   const [focus, setFocus] = useState(null);
   const [tab, setTab] = useState('overview'); // overview | calendar | library (the "Files" table)
   const [selected, setSelected] = useState(null); // checksum of the book being inspected
-  const [shelfFilter, setShelfFilter] = useState('all');
+  const [shelfFilter, setShelfFilter] = useState(() => new Set()); // shelf ids to show; empty = every shelf
   const [fq, setFq] = useState(''); // Files table: File-column text filter
   const [linkFilter, setLinkFilter] = useState('all'); // all | linked | unlinked
   const [fsort, setFsort] = useState({ key: 'recent', dir: 1 }); // Files table header sort
@@ -130,6 +130,18 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
     const total = watched + away;
     return { sessions: focus.length, watchedSecs: Math.round(watched / 1000), focusPct: total > 0 ? (watched / total) * 100 : 0, distractions };
   }, [focus]);
+
+  // Cut a file loose from its tracker book. Reversible in one click (the chip turns back into
+  // "○ link…"), so it just does it — and setBinding tells the rest of the app the link is gone.
+  async function unlink(checksum) {
+    await setBinding(checksum, null);
+    setLinkMap((m) => { const next = { ...m }; delete next[checksum]; return next; });
+  }
+  const toggleShelf = (id) => setShelfFilter((f) => {
+    const next = new Set(f);
+    if (!next.delete(id)) next.add(id);
+    return next;
+  });
 
   const shelves = state.global.readingList?.shelves || {};
   function setShelf(checksum, shelf) {
@@ -261,7 +273,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
   const libraryBooks = useMemo(() => {
     if (!model) return [];
     let list = model.books;
-    if (shelfFilter !== 'all') list = list.filter((b) => b.shelf === shelfFilter);
+    if (shelfFilter.size) list = list.filter((b) => shelfFilter.has(b.shelf));
     if (linkFilter !== 'all') list = list.filter((b) => !!linkMap[b.checksum] === (linkFilter === 'linked'));
     const q = fq.trim().toLowerCase();
     if (q) list = list.filter((b) => `${b.name} ${linkMap[b.checksum]?.title || ''}`.toLowerCase().includes(q));
@@ -395,10 +407,16 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
                     </tr>
                     <tr className="lj-filter-row">
                       <th>
-                        <select value={shelfFilter} onChange={(e) => setShelfFilter(e.target.value)} title="Filter by shelf">
-                          <option value="all">all</option>
-                          {SHELVES.map((s) => <option key={s.id} value={s.id}>{s.icon}</option>)}
-                        </select>
+                        <span className="rh-shelf-filter" title="Filter by shelf — tick as many as you like; none ticked shows every shelf">
+                          {SHELVES.map((s) => (
+                            <button
+                              key={s.id} type="button" aria-pressed={shelfFilter.has(s.id)}
+                              className={shelfFilter.has(s.id) ? 'on' : ''}
+                              title={`${s.label} — ${shelfFilter.has(s.id) ? 'showing, click to drop' : 'click to add to the filter'}`}
+                              onClick={() => toggleShelf(s.id)}
+                            >{s.icon}</button>
+                          ))}
+                        </span>
                       </th>
                       <th><input placeholder="filter…" value={fq} onChange={(e) => setFq(e.target.value)} /></th>
                       <th>
@@ -419,7 +437,12 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
                           {linkMap[b.checksum]
-                            ? <button className="rh-link-chip on" title={`Open “${linkMap[b.checksum].title}” in the Trackyread library`} onClick={() => openBook(linkMap[b.checksum].id)}>🔗 {linkMap[b.checksum].title}</button>
+                            ? (
+                              <span className="rh-link-cell">
+                                <button className="rh-link-chip on" title={`Open “${linkMap[b.checksum].title}” in the Trackyread library`} onClick={() => openBook(linkMap[b.checksum].id)}>🔗 {linkMap[b.checksum].title}</button>
+                                <button className="rh-unlink" aria-label={`Unlink ${b.name} from ${linkMap[b.checksum].title}`} title={`Unlink this file from “${linkMap[b.checksum].title}” — the book and its reading history both stay, only the link goes`} onClick={() => unlink(b.checksum)}>✕</button>
+                              </span>
+                            )
                             : <button className="rh-link-chip" title="Link this file to a Trackyread book" onClick={() => linkFile(b.checksum, b.name)}>○ link…</button>}
                         </td>
                         <td>
@@ -462,7 +485,12 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
               </h3>
               <p className="rh-detail-link">
                 {linkMap[selBook.checksum]
-                  ? <span className="rh-link-chip on" title="This file is linked to a book in your Trackyread tracker">🔗 Linked to Trackyread: <b>{linkMap[selBook.checksum].title}</b></span>
+                  ? (
+                    <span className="rh-link-cell">
+                      <span className="rh-link-chip on" title="This file is linked to a book in your Trackyread tracker">🔗 Linked to Trackyread: <b>{linkMap[selBook.checksum].title}</b></span>
+                      <button className="rh-unlink" aria-label={`Unlink this file from ${linkMap[selBook.checksum].title}`} title={`Unlink this file from “${linkMap[selBook.checksum].title}” — the book and its reading history both stay, only the link goes`} onClick={() => unlink(selBook.checksum)}>✕</button>
+                    </span>
+                  )
                   : <span className="rh-link-chip" title="Link this file from the Trackyread Library (open a book → Linked document)">○ Not linked to Trackyread</span>}
               </p>
 

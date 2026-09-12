@@ -4465,6 +4465,14 @@
 .lj-clean-list li { margin: 2px 0; }
 
 /* Trackyread link chip in the reading-history view */
+/* Files table: the link chip plus its unlink ✕, and the multi-select shelf filter. */
+.rh-link-cell { display: inline-flex; align-items: center; gap: 4px; }
+.rh-unlink { background: transparent; border: none; cursor: pointer; font-size: 11px; line-height: 1; padding: 2px 4px; border-radius: 4px; color: var(--status-fg); }
+.rh-unlink:hover { background: color-mix(in srgb, #d14 18%, transparent); color: inherit; }
+.rh-shelf-filter { display: inline-flex; gap: 1px; }
+.rh-shelf-filter button { background: transparent; border: 1px solid transparent; border-radius: 4px; cursor: pointer; font-size: 11px; line-height: 1; padding: 2px 3px; opacity: 0.4; }
+.rh-shelf-filter button:hover { opacity: 0.8; }
+.rh-shelf-filter button.on { opacity: 1; border-color: var(--toggle-active-bg); background: color-mix(in srgb, var(--toggle-active-bg) 16%, transparent); }
 .rh-link-chip { font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 10px; white-space: nowrap; opacity: 0.6; border: 1px solid var(--divider); }
 .rh-link-chip.on { opacity: 1; color: var(--toggle-active-bg); border-color: var(--toggle-active-bg); }
 /* In the Files table the chip is a live button (go to / link the Trackyread book). */
