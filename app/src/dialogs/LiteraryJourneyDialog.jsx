@@ -33,6 +33,7 @@ import {
 import { findDuplicates, finishedDateIssues } from '../features/journeyCleanup.js';
 import { normTitle } from '../document/tocWizard.js';
 import { planBulkLinks, matchScore, newBookFor } from '../features/bulkLink.js';
+import { getSearchDirs, addSearchDir, removeSearchDir, findFile, pickerSupported } from '../features/fileLocator.js';
 import { groupForChecksum, masterOf, makeGroup } from '../features/bookGroups.js';
 import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordCount } from '../features/readingTime.js';
 import { olFetch, bookCoverUrl } from '../features/openLibrary.js';
@@ -1926,7 +1927,46 @@ function ConstellationView({ books, ai }) {
 // The on-deck list (books shelved 'queue') with time estimates, plus a compact browser to pull books
 // out of the vast to-read recommendation pile into the queue. Reshelving is one tap.
 function QueueView({ books, onShelve, onOpen, fileStats = {}, bindMap = {}, openChecksums = [] }) {
+  const { openRecent, openFiles, closeDialog } = useApp();
   const [wpm, setWpm] = useState(250);
+  // Opening the actual document from the queue. The text itself never syncs between devices (far too
+  // big), so a book read on another machine has no local copy — hence the designated search folders.
+  const [dirs, setDirs] = useState([]);
+  const [finding, setFinding] = useState(null); // book id being opened
+  const [findMsg, setFindMsg] = useState('');
+  useEffect(() => { getSearchDirs().then(setDirs).catch(() => {}); }, []);
+  const csOf = useMemo(() => {
+    const m = {};
+    for (const [cs, id] of Object.entries(bindMap)) if (!m[id]) m[id] = cs;
+    return m;
+  }, [bindMap]);
+  async function addDir() {
+    try { setDirs(await addSearchDir(await window.showDirectoryPicker({ id: 'tachyread-library-dirs', mode: 'read' }))); setFindMsg(''); } catch (e) { if (e?.name !== 'AbortError') setFindMsg(`Could not add that folder: ${e?.message || e}`); }
+  }
+  // Local copy → already-open tab → the designated folders. Only the last step can be slow, and it
+  // runs straight off this click so a folder whose permission lapsed can ask for it back.
+  async function openTheFile(b) {
+    const cs = csOf[b.id];
+    if (!cs || finding) return;
+    const name = fileStats[cs]?.fileName || b.title;
+    setFinding(b.id); setFindMsg('');
+    try {
+      if (openChecksums.includes(cs) || (await loadDocPayload(cs))?.fullText) {
+        if (await openRecent(cs)) { closeDialog?.(); return; }
+      }
+      if (!dirs.length) {
+        setFindMsg(`“${name}” isn’t saved on this device. Add the folder your documents live in and it can be opened from there.`);
+        return;
+      }
+      setFindMsg(`Looking for “${name}” in ${dirs.length} folder(s)…`);
+      const hit = await findFile(dirs, name);
+      if (!hit) { setFindMsg(`“${name}” isn’t on this device and isn’t in ${dirs.map((d) => d.name).join(', ')}. Add another folder, or open it once with File → Open.`); return; }
+      openFiles([await hit.handle.getFile()]);
+      closeDialog?.();
+    } catch (e) {
+      setFindMsg(`Could not open “${name}”: ${e?.message || e}`);
+    } finally { setFinding(null); }
+  }
   const [q, setQ] = useState('');
   const [recBy, setRecBy] = useState('all');
   const [cat, setCat] = useState('all'); // separate queue per content category
@@ -1996,6 +2036,21 @@ function QueueView({ books, onShelve, onOpen, fileStats = {}, bindMap = {}, open
           if (pool.length) onOpen(pool[Math.floor(Math.random() * pool.length)].id);
         }}>🎲 Surprise me</button>
       </div>
+      <div className="lj-inline lj-findfolders">
+        <span className="settings-note" style={{ margin: 0 }} title="A document's text never leaves the device it was opened on — only your reading record syncs. Name the folders your files live in and ▶ can find them on any device.">
+          📁 Where your documents live{dirs.length ? ':' : ' — none set yet, so ▶ only opens books this device has already read.'}
+        </span>
+        {dirs.map((d) => (
+          <span key={d.name} className="lj-dirchip">
+            📁 {d.name}
+            <button title={`Stop searching “${d.name}”`} onClick={async () => setDirs(await removeSearchDir(d))}>✕</button>
+          </span>
+        ))}
+        {pickerSupported()
+          ? <button onClick={addDir} title="Pick a folder to search when a queued book has no copy on this device">➕ Add folder…</button>
+          : <span className="settings-note" style={{ margin: 0 }}>Choosing folders needs a Chromium browser (Chrome, Edge, Brave).</span>}
+      </div>
+      {findMsg && <p className="settings-note lj-findmsg">{findMsg}</p>}
       {queue.count === 0 ? <p className="settings-note">Nothing queued in this category yet. Pull items from the recommendations below, or tap 📋 on any Library row.</p> : (
         <ol className="lj-queue-list">
           {queue.items.map(({ book: b, hours, etc }, i) => (
@@ -2004,6 +2059,15 @@ function QueueView({ books, onShelve, onOpen, fileStats = {}, bindMap = {}, open
               <span className="lj-queue-main"><b>{b.title}</b><em>{b.author}{b.genre ? ` · ${b.genre}` : ''}{b.recScore ? ` · ★${b.recScore}` : ''}{recommender(b) !== 'Claude' ? ` · ✦${recommender(b)}` : ''}</em></span>
               <span className="lj-queue-est">{hours != null ? `~${hours} h` : '—'}{etc ? <><br /><span className="lj-queue-etc" title="Projected finish if read in order at your recent pace">done ~{etc}</span></> : ''}</span>
               <span className="lj-queue-acts">
+                {csOf[b.id] && (
+                  <button
+                    className="lj-queue-read" disabled={finding === b.id}
+                    title={openChecksums.includes(csOf[b.id])
+                      ? 'Already open — jump to it'
+                      : `Read “${fileStats[csOf[b.id]]?.fileName || b.title}” — from this device’s copy, or from your search folders when it was read elsewhere`}
+                    onClick={() => openTheFile(b)}
+                  >{finding === b.id ? '⟳' : '▶'}</button>
+                )}
                 <button onClick={() => onShelve(b, 'reading')}>Start</button>
                 <button title="Remove from queue" onClick={() => onShelve(b, 'toread')}>✕</button>
                 <button title="Open in Library" onClick={() => onOpen(b.id)}>↗</button>

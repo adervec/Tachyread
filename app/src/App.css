@@ -4588,6 +4588,14 @@ button.rh-link-chip:hover { opacity: 1; background: color-mix(in srgb, var(--acc
 .lj-queue-etc { color: var(--nav-session-read-fg); }
 .lj-queue-acts { display: flex; gap: 4px; }
 .lj-queue-acts button { font-size: 11px; padding: 3px 7px; }
+/* Reading a queued book from disk: the ▶ per item, and the folders searched when the file is
+   not on this device (its text never syncs — only the reading record does). */
+.lj-queue-acts .lj-queue-read { color: var(--toggle-active-bg); font-weight: 600; }
+.lj-findfolders { flex-wrap: wrap; gap: 6px; margin: 4px 0 2px; }
+.lj-dirchip { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; padding: 1px 4px 1px 7px; border: 1px solid var(--divider); border-radius: 10px; white-space: nowrap; }
+.lj-dirchip button { background: transparent; border: none; cursor: pointer; font-size: 10px; padding: 1px 3px; border-radius: 4px; color: var(--status-fg); }
+.lj-dirchip button:hover { background: color-mix(in srgb, #d14 18%, transparent); color: inherit; }
+.lj-findmsg { margin: 2px 0 6px; }
 
 /* Timeline + replay */
 .lj-replay-card { display: flex; gap: 12px; align-items: stretch; margin: 6px 0; flex-wrap: wrap; }
