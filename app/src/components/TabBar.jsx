@@ -2,8 +2,9 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { groupForChecksum, masterOf } from '../features/bookGroups.js';
 import { finishedNotRereading } from '../features/recentFilter.js';
-import { getBinding, getLibraryBook, getLibraryBooks, getPresencePeers } from '../state/storage.js';
+import { getBinding, getLibraryBook, getLibraryBooks, getPresencePeers, saveLibraryBook, setBinding } from '../state/storage.js';
 import { readStatus } from '../features/journeyLibrary.js';
+import { bookFromOpenedDoc } from '../features/trackyreadAdd.js';
 import { bookCoverSrc, proceduralCover } from '../features/bookCovers.js';
 import { bookCoverUrl } from '../features/openLibrary.js';
 import { presenceByChecksum, presenceLabel } from '../features/presence.js';
@@ -22,7 +23,7 @@ const PANEL_LABELS = {
 };
 
 export default function TabBar() {
-  const { state, setActiveTab, closeTab, closeTabs, closeAllTabs, setActivePanel, closePanel, reorderTabs, updateGlobal } = useApp();
+  const { state, setActiveTab, closeTab, closeTabs, closeAllTabs, setActivePanel, closePanel, reorderTabs, updateGlobal, setStatus, openDialog } = useApp();
   const { panels, activePanelId, tabs } = state;
   const groups = state.global.bookGroups || [];
   const multiRow = !!state.global.tabBarMultiRow;
@@ -133,6 +134,22 @@ export default function TabBar() {
     );
   };
 
+  // Track a tab's document from its own right-click menu, without a detour through the tracker: the
+  // same one-tap add as the open-a-document nudge, so a tab you meant to track is two clicks away.
+  async function addTabToTrackyread(tab, open) {
+    const cs = tab.lazy ? tab.settings?.contentChecksum : tab.doc?.contentChecksum;
+    if (!cs) return;
+    const fileName = (tab.lazy ? tab.settings?.fileName : tab.doc?.fileName) || 'Document';
+    const words = tab.lazy ? (tab.settings?.totalWords || 0) : (tab.doc?.words.length || 0);
+    const book = bookFromOpenedDoc({ fileName, words });
+    try {
+      await saveLibraryBook(book);
+      await setBinding(cs, book.id); // fires tachyread-bindings-changed → this bar's dot refreshes
+      setStatus?.(`Added “${book.title}” to Trackyread.`);
+      if (open) openDialog?.({ kind: 'literary-journey', tab: 'library', focusBookId: book.id });
+    } catch (e) { setStatus?.('Could not add to Trackyread: ' + (e?.message || e)); }
+  }
+
   // Build the right-click menu's actions from the tab it was opened on. Left/right are relative to
   // that tab's position among the document tabs; each entry is disabled when it would close nothing.
   const renderMenu = () => {
@@ -148,7 +165,15 @@ export default function TabBar() {
       const rec = { ...t.settings, totalWords: t.lazy ? (t.settings?.totalWords || 0) : t.doc.words.length };
       return finishedNotRereading(rec, shelves[cs]);
     }).map((t) => t.id);
+    const menuTab = tabs[i];
+    const menuCs = menuTab.lazy ? menuTab.settings?.contentChecksum : menuTab.doc?.contentChecksum;
+    const untracked = !!menuCs && !bindings[menuCs];
     const items = [
+      ...(untracked ? [
+        { label: '＋ Add to Trackyread', fn: () => addTabToTrackyread(menuTab, false) },
+        { label: '＋ Add to Trackyread & open it', fn: () => addTabToTrackyread(menuTab, true) },
+        { sep: true },
+      ] : []),
       { label: 'Close', fn: () => closeTab(menu.tabId) },
       { label: 'Close others', n: otherIds.length, fn: () => closeTabs(otherIds) },
       { label: 'Close to the left', n: leftIds.length, fn: () => closeTabs(leftIds) },

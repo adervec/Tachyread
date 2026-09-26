@@ -20,6 +20,8 @@ const MENUS = {
     { label: 'Open TXT...', shortcut: 'Ctrl+O', action: 'open-txt', icon: '📄'},
     { label: 'Open Document (PDF, EPUB, HTML, DOCX, MD)...', shortcut: 'Ctrl+D', action: 'open-doc', icon: '📚'},
     { label: 'Open HTML (choose content region)...', action: 'open-html-pick', icon: '🌐'},
+    { label: 'Open Untracked Only (skip what is in Trackyread)...', action: 'open-untracked', icon: '🆕'},
+    { label: 'Open Unfinished Only (skip what is finished)...', action: 'open-unfinished', icon: '📖'},
     { label: 'Bulk Add from Folder...', action: 'bulk-add', icon: '📂'},
     { label: 'Open from Clipboard', shortcut: 'Ctrl+B', action: 'open-clip', icon: '📋'},
     { label: 'Grab Text (OCR)...', shortcut: 'Ctrl+Shift+G', action: 'grab', icon: '📸'},
