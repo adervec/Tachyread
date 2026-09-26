@@ -2,7 +2,8 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { groupForChecksum, masterOf } from '../features/bookGroups.js';
 import { finishedNotRereading } from '../features/recentFilter.js';
-import { getBinding, getLibraryBooks, getPresencePeers } from '../state/storage.js';
+import { getBinding, getLibraryBook, getLibraryBooks, getPresencePeers } from '../state/storage.js';
+import { readStatus } from '../features/journeyLibrary.js';
 import { bookCoverSrc, proceduralCover } from '../features/bookCovers.js';
 import { bookCoverUrl } from '../features/openLibrary.js';
 import { presenceByChecksum, presenceLabel } from '../features/presence.js';
@@ -50,6 +51,28 @@ export default function TabBar() {
     return () => { live = false; window.removeEventListener('tachyread-bindings-changed', load); };
   }, []);
   const hasBindings = Object.keys(bindings).length > 0;
+
+  // …and which of the OPEN tabs' books are finished, so their dot becomes a ★. Only those few books
+  // are read, and the state is replaced only when the set really changes — a library import fires a
+  // change event per book and must not thrash the tab bar.
+  const [finishedBooks, setFinishedBooks] = useState(() => new Set());
+  const finishedKey = useRef('');
+  const boundKey = [...new Set(tabs.map((t) => bindings[t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum]).filter(Boolean))].sort().join(',');
+  useEffect(() => {
+    let live = true;
+    const load = async () => {
+      const done = [];
+      for (const id of boundKey ? boundKey.split(',') : []) {
+        const b = await getLibraryBook(id).catch(() => null);
+        if (b && !b.deleted && readStatus(b) === 'finished') done.push(id);
+      }
+      const key = done.join(',');
+      if (live && key !== finishedKey.current) { finishedKey.current = key; setFinishedBooks(new Set(done)); }
+    };
+    load();
+    window.addEventListener('tachyread-library-changed', load);
+    return () => { live = false; window.removeEventListener('tachyread-library-changed', load); };
+  }, [boundKey]);
 
   // Cross-device presence: checksum → other devices that have it open (from the last sync pull).
   // Reloaded when a sync merges new presence (tachyread-presence-changed).
@@ -214,10 +237,14 @@ export default function TabBar() {
               />
             )}
             {hasBindings && (
-              <span
-                className={`tab-track ${cs && bindings[cs] ? 'in' : 'out'}`}
-                title={cs && bindings[cs] ? 'Tracked in Trackyread' : 'Not in Trackyread'}
-              />
+              cs && finishedBooks.has(bindings[cs])
+                ? <span className="tab-track done" title="Finished in Trackyread" aria-label="Finished in Trackyread" role="img">★</span>
+                : (
+                  <span
+                    className={`tab-track ${cs && bindings[cs] ? 'in' : 'out'}`}
+                    title={cs && bindings[cs] ? 'Tracked in Trackyread' : 'Not in Trackyread'}
+                  />
+                )
             )}
             {cs && presence[cs]?.length > 0 && (
               <span className="tab-elsewhere" title={`Also open on ${presenceLabel(presence[cs])} (as of the last sync)`} aria-label="Also open on another device">🖥</span>
