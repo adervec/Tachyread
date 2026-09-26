@@ -635,6 +635,14 @@ export async function getLibraryBooks(includeDeleted = false) {
   return out;
 }
 
+// One book by id — for callers that need a couple of specific books (the tab bar's ★) and would
+// otherwise read the whole shelf to find them.
+export async function getLibraryBook(id) {
+  if (!id) return null;
+  const db = await getDB();
+  return (await db.get('library', `book:${id}`)) || null;
+}
+
 export async function saveLibraryBook(book) {
   if (!book?.id) return null;
   const db = await getDB();
@@ -819,6 +827,9 @@ export async function markLibraryChanged() {
     const db = await getDB();
     await db.put('library', { at: Date.now() }, 'changedAt');
   } catch { /* bookkeeping only */ }
+  // Anything showing tracker state outside the tracker (the tab bar's ★) needs to hear about a
+  // status change. Listeners must tolerate a burst — an import fires this per book.
+  if (typeof window !== 'undefined') { try { window.dispatchEvent(new Event('tachyread-library-changed')); } catch { /* non-DOM */ } }
 }
 export async function getLibraryChangedAt() {
   const db = await getDB();

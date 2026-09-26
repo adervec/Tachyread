@@ -272,6 +272,11 @@
 .tab-bar .tab .tab-track { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
 .tab-bar .tab .tab-track.in { background: var(--toggle-active-bg); }
 .tab-bar .tab .tab-track.out { background: transparent; box-shadow: inset 0 0 0 1px var(--status-fg); opacity: 0.55; }
+/* Finished in Trackyread: the dot becomes a star. */
+.tab-bar .tab .tab-track.done {
+  width: auto; height: auto; border-radius: 0; background: none;
+  font-size: 10px; line-height: 7px; color: var(--toggle-active-bg);
+}
 .tab-bar .tab .name .tab-grp-mark { font-size: 9px; vertical-align: super; margin-left: 1px; color: var(--toggle-active-bg); font-weight: 700; }
 /* Discrete "also open on another device" indicator (cross-device presence). */
 .tab-bar .tab .tab-elsewhere { flex: 0 0 auto; font-size: 10px; margin-right: 5px; opacity: 0.75; line-height: 1; cursor: help; filter: grayscale(0.3); }
