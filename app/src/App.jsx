@@ -2128,6 +2128,22 @@ function AppInner() {
     } catch (err) { setStatus('Could not add to Trackyread: ' + (err?.message || err)); }
   }
 
+  // The bar's ☁ when no Google account is on this device yet: sign in only — no upload, no download.
+  // Must run straight off the click, since Google's popup needs the gesture.
+  async function doDriveSignIn() {
+    const cfg = state.global.sync;
+    const p = cfg && getSyncProvider(cfg.provider);
+    if (!p || p.id !== 'googleDrive') return openDialog({ kind: 'data' });
+    const gate = p.available(cfg);
+    if (gate !== true) return setStatus(gate?.reason || 'Google Drive sync isn’t available here.');
+    setStatus('Opening Google sign-in…');
+    try {
+      await p.connect(cfg);
+      updateGlobal({ sync: { ...cfg, profile: getDriveProfile() } });
+      setStatus('Signed in to Google — ☁ now syncs this device.');
+    } catch (e) { setStatus('Google sign-in failed: ' + (e?.message || e)); }
+  }
+
   // One-click backup to the configured sync target (menu-bar ☁ Sync). Routes the user to setup when
   // the target isn't ready, otherwise pushes the backup and stamps lastSync.
   async function doSyncNow() {
@@ -2259,6 +2275,7 @@ function AppInner() {
   function handleMenuAction(action) {
     if (action.startsWith('open-recent:')) return openRecent(action.slice(12));
     if (action === 'sync-now') return doSyncNow();
+    if (action === 'drive-signin') return doDriveSignIn();
     if (action === 'save-tab' && activeTab) return doSaveTab();
     if (action === 'open-clip') return openClipboard();
     if (action === 'grab') return openDialog({ kind: 'grab' });
