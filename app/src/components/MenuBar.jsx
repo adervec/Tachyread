@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
+import { driveClientId } from '../features/sync/syncProviders.js';
+import { fmtDateTime } from '../features/dateFmt.js';
 import { THEME_CATEGORIES } from '../state/themes.js';
 import { countOffDefaultSettings, defaultFileSettings } from '../state/settings.js';
 import { useIsCompact } from '../state/device.js';
@@ -237,6 +239,32 @@ export default function MenuBar({ onFileOpen, onAction }) {
   const isCompact = useIsCompact();
   const themeName =
     activeTab?.settings?.themeName || (activeTab?.settings?.darkMode ? 'Dark' : 'Light');
+
+  // Google Drive sign-in / sync, on the bar itself — signing in used to mean a trip through
+  // File → Backup & Data. Shown wherever Drive can work (this origin is authorized, or a fork
+  // supplied its own client id). `profile` is the account persisted at the last sign-in, so the
+  // render stays pure; the token itself lives in memory only and a click re-auths silently.
+  const sync = state.global.sync || {};
+  const driveHere = !!driveClientId(sync);
+  const driveChosen = sync.provider === 'googleDrive';
+  const account = (driveChosen && sync.profile) || null;
+  const gsyncTitle = !driveChosen
+    ? 'Google Drive sync isn’t set up yet — click to choose it under Backup & Data'
+    : account
+      ? `Google Drive — signed in as ${account.name}${account.email ? ` (${account.email})` : ''}${sync.lastSync ? ` · last sync ${fmtDateTime(sync.lastSync)}` : ''}. Click to sync now.`
+      : 'Sign in with Google — your data goes to a private Drive folder only this app can see';
+  const gsync = driveHere ? (
+    <button
+      className={`menu-font-btn menu-gsync${account ? ' on' : ''}`}
+      title={gsyncTitle}
+      aria-label={account ? `Google Drive, signed in as ${account.name}. Sync now.` : 'Sign in with Google'}
+      onClick={() => onAction(!driveChosen ? 'data' : account ? 'sync-now' : 'drive-signin')}
+    >
+      {account?.picture
+        ? <img className="gsync-pfp gsync-pfp-sm" src={account.picture} alt="" referrerPolicy="no-referrer" />
+        : <span aria-hidden="true">☁</span>}
+    </button>
+  ) : null;
   const [openMenu, setOpenMenu] = useState(null);
   const [sub, setSub] = useState(null); // mobile drawer: which submenu is drilled into (null = top level)
   const ref = useRef(null);
@@ -330,6 +358,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
           ☰ Menu
         </button>
         <div className="grow" />
+        {gsync}
         <FontQuickPick activeTab={activeTab} patchSettings={patchSettings} global={state.global} updateGlobal={updateGlobal} />
         <button
           className="menu-font-btn"
@@ -491,6 +520,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
       </div>
       <div className="grow" />
       <div className="right-toggles">
+        {gsync}
         <button
           className="menu-font-btn"
           disabled={!activeTab}
