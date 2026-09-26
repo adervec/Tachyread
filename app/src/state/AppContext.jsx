@@ -607,13 +607,25 @@ export function AppProvider({ children }) {
     saveSession({ open, active }).catch(() => {});
   }, [state.tabs, state.activeTabId]);
 
-  const openFile = useCallback(async (file) => {
+  // `skipIf(doc)` (File → Open untracked / unfinished only) gets the parsed document and returns a
+  // reason to drop it, or null. A checksum is needed to judge it, and only a parse yields one — so
+  // the document is read, then dropped without ever becoming a tab.
+  const openFile = useCallback(async (file, { skipIf = null } = {}) => {
     dispatch({ type: 'SET_STATUS', text: `Parsing ${file.name}…` });
     // Import wizard: stream parser phases into state.importing; end on a summary card with the
     // detected structure + suggested next steps (or clear on failure).
     dispatch({ type: 'SET_IMPORT', payload: { fileName: file.name, phase: 'Reading file' } });
     try {
       const doc = await parseFile(file, (p) => dispatch({ type: 'SET_IMPORT', payload: { fileName: file.name, ...p } }));
+      if (skipIf) {
+        if (!doc.contentChecksum) await attachChecksum(doc);
+        const why = await skipIf(doc);
+        if (why) {
+          dispatch({ type: 'SET_IMPORT', payload: null });
+          dispatch({ type: 'SET_STATUS', text: `“${file.name}” is ${why} — not opened.` });
+          return;
+        }
+      }
       dispatch({ type: 'SET_IMPORT', payload: { fileName: file.name, phase: 'Opening tab' } });
       await openDoc(doc);
       const exactToc = !!doc.tocEntries?.length;
@@ -640,17 +652,22 @@ export function AppProvider({ children }) {
   // Open one or many files. A single file keeps the full import wizard (structure summary + suggested
   // processing). Multiple files open as their own tabs behind one combined progress bar — no per-file
   // summary card to click through — then activate the first opened tab.
-  const openFiles = useCallback(async (fileList) => {
+  const openFiles = useCallback(async (fileList, { skipIf = null } = {}) => {
     const files = (fileList instanceof File ? [fileList] : [...(fileList || [])]).filter(Boolean);
     if (files.length === 0) return;
-    if (files.length === 1) { await openFile(files[0]); return; }
-    let firstTab = null, opened = 0;
+    if (files.length === 1) { await openFile(files[0], { skipIf }); return; }
+    let firstTab = null, opened = 0, skipped = 0, why = '';
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
       const prog = (p) => dispatch({ type: 'SET_IMPORT', payload: { fileName: f.name, phase: `${i + 1}/${files.length} · ${(p && p.phase) || f.name}`, done: i, total: files.length } });
       prog(null);
       try {
         const doc = await parseFile(f, prog);
+        if (skipIf) {
+          if (!doc.contentChecksum) await attachChecksum(doc);
+          const reason = await skipIf(doc);
+          if (reason) { skipped++; why = reason; continue; }
+        }
         const tab = await openDoc(doc, { silent: true });
         if (!firstTab) firstTab = tab;
         opened++;
@@ -658,7 +675,10 @@ export function AppProvider({ children }) {
     }
     dispatch({ type: 'SET_IMPORT', payload: null });
     if (firstTab) dispatch({ type: 'SET_ACTIVE_TAB', id: firstTab.id });
-    dispatch({ type: 'SET_STATUS', text: `Opened ${opened} of ${files.length} document${files.length === 1 ? '' : 's'}.` });
+    dispatch({
+      type: 'SET_STATUS',
+      text: `Opened ${opened} of ${files.length} document${files.length === 1 ? '' : 's'}.${skipped ? ` Skipped ${skipped} ${why}.` : ''}`,
+    });
   }, [openFile, openDoc]);
 
   const openClipboard = useCallback(async () => {

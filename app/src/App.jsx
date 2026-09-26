@@ -71,6 +71,10 @@ import { fmtTime, fmtDateTime } from './features/dateFmt.js';
 import { startCoworkScheduler } from './features/coworkScheduler.js';
 import { promptInstall, installState, installHelp, runningStandalone } from './features/pwaInstall.js';
 import { revealFile, rememberFile, revealSupported } from './features/revealFile.js';
+import { openFilterContext, skipOpen } from './features/openFilter.js';
+
+// Everything the document parsers handle — shared by Ctrl+D and the filtered File-menu opens.
+const DOC_EXTS = '.docx,.pdf,.epub,.txt,.md,.markdown,.html,.htm';
 import { detectKeyboard, setActiveKeyboard, upsertKeyboard } from './features/keyboards.js';
 import DictationDialog from './dialogs/DictationDialog.jsx';
 import AttentionDialog from './dialogs/AttentionDialog.jsx';
@@ -1742,7 +1746,7 @@ function AppInner() {
       if (ctrl && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); k.cycleTabs(e.key === 'PageUp' ? -1 : 1); return; }
       if (ctrl && !shift) {
         if (key === 'o') { e.preventDefault(); k.triggerOpen('.txt,.md,.csv,.log'); return; }
-        if (key === 'd') { e.preventDefault(); k.triggerOpen('.docx,.pdf,.epub,.txt,.md,.markdown,.html,.htm'); return; }
+        if (key === 'd') { e.preventDefault(); k.triggerOpen(DOC_EXTS); return; }
         if (key === 'b') { e.preventDefault(); k.openClipboard(); return; }
         if (key === 'f') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'find' }); return; }
         if (key === 'g') { e.preventDefault(); if (k.activeTab) k.openDialog({ kind: 'goto' }); return; }
@@ -1792,7 +1796,15 @@ function AppInner() {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  async function triggerOpen(accept) {
+  // `only` = 'untracked' | 'unfinished' (File menu): the picker is the same, but each document is
+  // judged after it parses and dropped if it fails — so a folder of mostly-done reading can be
+  // opened wholesale and only the ones still needing attention become tabs.
+  async function triggerOpen(accept, only = null) {
+    let skipIf = null;
+    if (only) {
+      const infoFor = await openFilterContext(state.global.readingList?.shelves || {});
+      skipIf = async (doc) => skipOpen(only, await infoFor(doc.contentChecksum));
+    }
     // Prefer the File System Access picker: it hands back handles, which is what lets
     // File → Show File Location reopen the OS dialog in that document's folder later.
     if (revealSupported()) {
@@ -1805,7 +1817,7 @@ function AppInner() {
           ...(exts.length ? { types: [{ description: 'Documents', accept: { 'application/octet-stream': exts } }] } : {}),
         });
         for (const h of picked) await rememberFile(h);
-        openFiles(await Promise.all(picked.map((h) => h.getFile())));
+        openFiles(await Promise.all(picked.map((h) => h.getFile())), { skipIf });
         return;
       } catch (e) {
         if (e?.name === 'AbortError') return;  // user cancelled
@@ -1816,7 +1828,7 @@ function AppInner() {
     input.type = 'file';
     input.multiple = true;
     input.accept = accept;
-    input.onchange = () => input.files?.length && openFiles(input.files);
+    input.onchange = () => input.files?.length && openFiles(input.files, { skipIf });
     input.click();
   }
 
@@ -2390,6 +2402,8 @@ function AppInner() {
     if (action === 'cursor-manager') return openDialog({ kind: 'cursor-manager' });
     if (action === 'crosshairs') return openDialog({ kind: 'crosshairs' });
     if (action === 'bulk-add') return openDialog({ kind: 'bulk-add' });
+    if (action === 'open-untracked') return triggerOpen(DOC_EXTS, 'untracked');
+    if (action === 'open-unfinished') return triggerOpen(DOC_EXTS, 'unfinished');
     if (action === 'install-pwa') {
       // The browser owns installability; this just surfaces its prompt (and explains when there
       // isn't one — already installed, or a browser that doesn't offer it).
