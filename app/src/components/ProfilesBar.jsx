@@ -10,7 +10,8 @@ const BUILTIN_PREFIX = '__builtin:'; // <select> values for built-ins, so they c
 // the 'tab' or 'app' list; `capture()` returns the data to save; `apply(data)` loads one.
 // Every kind also offers read-only BUILT-IN presets optimized per device class (desktop / phone /
 // tablet — see features/builtinProfiles.js): loadable partial patches that can't be edited.
-export default function ProfilesBar({ kind, profiles, onChange, capture, apply }) {
+// `applyAll(data)` (Tab Settings only, with 2+ tabs open) loads the picked profile into every open tab.
+export default function ProfilesBar({ kind, profiles, onChange, capture, apply, applyAll = null, allCount = 0 }) {
   const all = profiles && typeof profiles === 'object' ? profiles : { tab: [], app: [] };
   const list = all[kind] || [];
   const builtins = builtinProfiles(kind);
@@ -113,6 +114,17 @@ export default function ProfilesBar({ kind, profiles, onChange, capture, apply }
           ? (selBuiltin ? 'This preset is already in effect' : 'These settings already match this profile')
           : (selBuiltin ? 'Apply this built-in device preset (only the settings it covers change)' : 'Apply this profile\'s settings')}
       >Load</button>
+      {applyAll && (
+        <button
+          disabled={!selProfile && !selBuiltin}
+          onClick={() => {
+            const name = selBuiltin ? selBuiltin.name : sel;
+            if (!window.confirm(`Load “${name}” into all ${allCount} open tabs? Each tab’s current settings are replaced (reading positions are kept).`)) return;
+            applyAll(selBuiltin ? selBuiltin.data : selProfile.data);
+          }}
+          title={`Apply this profile to every open tab (${allCount}), not just this one`}
+        >Load in all tabs ({allCount})</button>
+      )}
       <button disabled={!!matching} onClick={saveAs} title={matching ? `These settings are already saved as “${matching.name}”` : 'Save the current settings as a new profile'}>Save as…</button>
       <button disabled={!selProfile || selMatchesCurrent} onClick={update} title={selBuiltin ? 'Built-in presets can\'t be changed — use Save as… to make your own copy' : selMatchesCurrent ? 'This profile already holds these exact settings' : 'Overwrite this profile with the current settings'}>Update</button>
       <button disabled={!selProfile} onClick={rename} title={selBuiltin ? 'Built-in presets can\'t be renamed' : 'Rename this profile'}>Rename</button>

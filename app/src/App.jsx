@@ -97,7 +97,7 @@ import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal, allFiles } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal, allFiles, loadFile, saveFile } from './state/storage.js';
 import { activitySummary } from './features/activitySummary.js';
 import { dockMiniIds } from './features/dockMini.js';
 import { cameraOffPatch } from './features/cameraOff.js';
@@ -2128,6 +2128,22 @@ function AppInner() {
     } catch (err) { setStatus('Could not add to Trackyread: ' + (err?.message || err)); }
   }
 
+  // Tab Settings → Profiles → "Load in all tabs". A lazy (not yet loaded) tab's settings live in its
+  // stored record until it opens — patching only its placeholder would be lost on load — so those
+  // records are written directly; loaded tabs go through the normal patch + persist path.
+  async function applyProfileToAllTabs(data) {
+    let n = 0;
+    for (const t of state.tabs) {
+      patchSettings(t.id, data);
+      if (t.lazy && t.checksum) {
+        const rec = await loadFile(t.checksum).catch(() => null);
+        if (rec) await saveFile({ ...rec, ...data, contentChecksum: rec.contentChecksum || t.checksum, updatedAt: Date.now() }).catch(() => {});
+      }
+      n++;
+    }
+    setStatus(`Applied the profile to all ${n} open tab${n === 1 ? '' : 's'}.`);
+  }
+
   // The bar's ☁ when no Google account is on this device yet: sign in only — no upload, no download.
   // Must run straight off the click, since Google's popup needs the gesture.
   async function doDriveSignIn() {
@@ -3239,6 +3255,8 @@ function AppInner() {
           diffAgainst={{ other: state.global.fileDefaults || {}, label: 'Differs from your defaults:', resettable: true }}
           profiles={state.global.settingsProfiles}
           onProfilesChange={(p) => updateGlobal({ settingsProfiles: p })}
+          tabCount={state.tabs.length}
+          onApplyAll={applyProfileToAllTabs}
         />
       )}
       {dialog?.kind === 'typing-settings' && dlgTab && (

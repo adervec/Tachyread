@@ -131,7 +131,7 @@ function Section({ children }) {
 // 'rightPaneFontSize' → 'right pane font size' for the difference chips.
 const prettyKey = (k) => k.replace(/([A-Z])/g, ' $1').toLowerCase().trim();
 
-export default function SettingsDialog({ settings, onPatch, onClose, title = 'Tab Settings', matchCurrent, onResetFactory, onOpenFontManager, diffAgainst, profiles, onProfilesChange }) {
+export default function SettingsDialog({ settings, onPatch, onClose, title = 'Tab Settings', matchCurrent, onResetFactory, onOpenFontManager, diffAgainst, profiles, onProfilesChange, tabCount = 0, onApplyAll }) {
   const [s, setS] = useState(settings);
   const metroRef = useRef(null);
 
@@ -220,6 +220,8 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={onProfilesChange}
           capture={() => tabDefaultsFrom(s)}
           apply={(data) => { setS({ ...s, ...data }); onPatch(data); }}
+          applyAll={onApplyAll && tabCount > 1 ? (data) => { setS({ ...s, ...data }); onApplyAll(data); } : null}
+          allCount={tabCount}
         />
       )}
       {matchCurrent && (
