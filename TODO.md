@@ -44,3 +44,16 @@ Notes for whoever builds it, checked against the code:
 - Books already carry free-form tags, so a queue could also be a saved filter, like "tag is sci-fi and not finished", that fills itself.
 - Checking for a local copy is cheap. Searching the folders is slow, so file presence should be checked on demand or cached, not on every render.
 - Queues are tracker data, so they need to ride the same cloud sync as the library.
+
+## "Next in queue" when a book is finished
+
+When I finish a queued book, the finished popup should offer to open the next unfinished item in that
+queue whose file is available, or jump to it if it's already open in a tab.
+
+Notes for whoever builds it, checked against the code:
+
+- The popup is the book-finished dialog. Its save marks the file finished and, when the file is linked, marks the tracker book finished too.
+- Marking a book finished moves it off the queue, so "next" should be worked out from the queue order as it stood.
+- The queue's ▶ button already opens a book from an open tab, this device's copy, or the search folders. That logic lives inside the Queue view and would need lifting into a shared helper so the popup can reuse it.
+- "Available" should skip items with no findable file, and say how many it skipped, rather than offer something that can't open.
+- Today there's one queue. Once named queues exist, a book in several queues needs the popup to offer each one, or the one it was opened from.
