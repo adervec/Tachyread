@@ -57,3 +57,28 @@ Notes for whoever builds it, checked against the code:
 - The queue's ▶ button already opens a book from an open tab, this device's copy, or the search folders. That logic lives inside the Queue view and would need lifting into a shared helper so the popup can reuse it.
 - "Available" should skip items with no findable file, and say how many it skipped, rather than offer something that can't open.
 - Today there's one queue. Once named queues exist, a book in several queues needs the popup to offer each one, or the one it was opened from.
+
+## Typing practice gets laggy after a while
+
+A long typing run slows down until keystrokes feel delayed.
+
+Not profiled yet. Suspects from reading the code, to check first:
+
+- The live metrics re-score keystroke rhythm over every interval since the run began, and they run on each display tick. That array grows with every key, so the work per tick grows all run.
+- The per-word results list is copied on every completed word and never trimmed.
+- Every tick re-renders the whole typing run, including the trend chart. The chart is capped at about 600 points but rebuilds its SVG path each tick.
+- Endless mode pre-builds a 5,000-word passage instead of topping it up.
+
+A browser performance profile of a ten-minute run should show which of these it is.
+
+## Gibberish typing drill
+
+A drill of random characters from across the whole keyboard, so practice can't lean on knowing the words.
+
+Notes for whoever builds it, checked against the code:
+
+- The row drills already generate gibberish, but each only uses one keyboard row's characters.
+- A new drill is one entry in the typing-modes list plus one line in the passage builder, using the existing random-word generator with a full-keyboard character set.
+- Worth offering options for mixed case, digits and symbols.
+- The typing difficulty data already scores each character, so the drill could weight towards the keys I'm weakest on.
+- Side note: the "Numbers & symbols" drill only uses digits plus - and =, so it barely covers symbols.
