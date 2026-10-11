@@ -82,3 +82,15 @@ Notes for whoever builds it, checked against the code:
 - Worth offering options for mixed case, digits and symbols.
 - The typing difficulty data already scores each character, so the drill could weight towards the keys I'm weakest on.
 - Side note: the "Numbers & symbols" drill only uses digits plus - and =, so it barely covers symbols.
+
+## Clean up the Audiobook Manager for narrating it myself
+
+When I read a book aloud myself, the Audiobook Manager layout is confusing and needs a cleanup. Most of all, I want to read the full text of the chunks before and after the one I'm on.
+
+Notes for whoever builds it, checked against the code:
+
+- There are two ways to record: the read-through wizard (one mic session for the whole book) and a per-chunk record dialog opened from the chunk table's 🎙 Rec… button.
+- The read-through wizard already shows the previous and next chunk, but cut to two faded lines each. Full text could be a toggle to expand them, or a scrollable column showing several chunks either side.
+- The per-chunk record dialog shows only its own chunk, cut at 220 characters, with no neighbours at all.
+- In the chunk table, clicking a preview opens that one chunk's full text in a popup, with no way to step to the previous or next chunk.
+- The manager mixes generated narration (queue, voices, passes) with your own recordings in the same tabs and tables. A "narrating myself" view that hides the voice-generation controls would remove much of the clutter.
