@@ -108,3 +108,17 @@ Notes for whoever builds it, checked against both codebases:
 - Its analysis code has no dependencies and sits in its own folder, so it could be copied across or shared. Depth is judged against a voice profile (male, female or neutral pitch centre), so Tachyread would need that one setting too.
 - Tachyread already writes a narration log into a folder SpeechImprover watches, where each session counts as speech training. Richer per-take metrics could ride that same log, with its version number bumped.
 - Doing a frequency analysis on every take is heavier than the current volume-only pass. It might need to run after the take is saved rather than live.
+
+## Typing WPM and sound for corrected words
+
+Words I mistype and then fix should count properly in WPM, and finishing a fixed word should play its own sound. At the moment it plays the "word failed" sound.
+
+Notes for whoever builds it, checked against the code:
+
+- Net WPM is (characters typed ÷ 5 − errors) per minute. Every wrong keystroke is counted as an error the moment it's typed, and nothing takes it back when it's fixed. So a fixed word is penalised exactly like one left wrong.
+- The typed-character count also includes the wrong keystrokes and the retypes, so gross WPM counts effort, not finished text.
+- The usual convention (Monkeytype and similar) is that net WPM counts only the characters of correctly finished words, so time spent fixing slows you down without counting as an error. Accuracy is where the fixed mistakes still show up.
+- A word only counts as perfect if no wrong key was pressed in it. Anything else plays the "word error" sound, whether it ended up correct or not.
+- The fix is a third outcome, "corrected": the word matches the target but had a mistake on the way. Give it its own sound setting next to "word perfect" and "word error", with its own default. It should keep resetting the clean line, sentence and paragraph streaks, as it does now.
+- Results are stored per word as perfect or not. Storing the corrected state too would let the results screen show perfect, corrected and wrong counts. Problem-word mining could treat corrected words as near-misses.
+- One-word mode already treats a fixed word as perfect. Once there are three outcomes, decide whether it should report "corrected" instead.
