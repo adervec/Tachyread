@@ -122,3 +122,17 @@ Notes for whoever builds it, checked against the code:
 - The fix is a third outcome, "corrected": the word matches the target but had a mistake on the way. Give it its own sound setting next to "word perfect" and "word error", with its own default. It should keep resetting the clean line, sentence and paragraph streaks, as it does now.
 - Results are stored per word as perfect or not. Storing the corrected state too would let the results screen show perfect, corrected and wrong counts. Problem-word mining could treat corrected words as near-misses.
 - One-word mode already treats a fixed word as perfect. Once there are three outcomes, decide whether it should report "corrected" instead.
+
+## Split grades for long typing runs
+
+After a long typing run, keep the overall grade as it is now. Also split the run into halves, thirds and quarters, and show each part's averages and grade. Add a differential grade too: how much I sped up or slowed down from start to finish.
+
+Notes for whoever builds it, checked against the code:
+
+- The grade today is a letter from net WPM alone: A at 90 and above, B 70, C 50, D 35, F below that.
+- The results chart is fed by samples taken every tick, but those are running totals since the start, not per-part numbers. A part's own WPM is the difference between the totals at its two ends.
+- The sample list only keeps the most recent ~600 points, so on a long run the start has already been dropped. A split needs its own unbounded record of time and characters, kept small: one entry every few seconds or per word.
+- Per-word results already carry each word's time, so splitting by words (each part has the same number of words) is possible without new tracking. Splitting by time needs the record above.
+- Each part should show net WPM, gross WPM, accuracy and its grade. The differential could be last part minus first, or the slope across all parts, shown as a signed number with its own grade scale, for example holding pace within ±5% counts as an A.
+- "Pretty long" needs a threshold, such as only showing quarters after a few minutes and halves after one minute, so short runs don't get noisy splits.
+- Ties into the typing-lag todo: the new record must stay cheap per tick.
