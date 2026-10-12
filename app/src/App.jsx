@@ -96,7 +96,7 @@ import { playButtonView } from './features/playButtonMode.js';
 import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, speechRecognitionSupported } from './features/speechRecognition.js';
-import { alignSpoken } from './features/speakAlign.js';
+import { alignOrResync } from './features/speakAlign.js';
 import VoiceFeedback from './components/VoiceFeedback.jsx';
 import { recordClip } from './features/audioRecorder.js';
 import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal, allFiles, loadFile, saveFile } from './state/storage.js';
@@ -503,6 +503,8 @@ function AppInner() {
   const recognizerRef = useRef(null);
   const speakRef = useRef(null);      // latest tab + stepWord for the long-lived recogniser callbacks
   const spokenWordsRef = useRef(0);   // words advanced by reading aloud this session → live pace
+  // What the reading-aloud card shows: recogniser status/error, the phrase heard, the last move.
+  const [speakInfo, setSpeakInfo] = useState({});
   const audioRecRef = useRef({ rec: null, lineIndex: -1 });
   const audioCtrlRef = useRef(null);
   const clapRef = useRef(null);
@@ -1911,27 +1913,60 @@ function AppInner() {
       return undefined;
     }
     spokenWordsRef.current = 0;
+    const lang = docLang.bcp || navigator.language || 'en-US';
+    setSpeakInfo({ status: 'starting', lang });
     let stopped = false;
+    let restartTimer = 0, silentTimer = 0, lastResultAt = 0;
     const r = createRecognizer({
-      lang: docLang.bcp,
+      lang,
       onResult: ({ transcript, confidence, isFinal }) => {
         const { tab, stepWord: step } = speakRef.current;
         const cfg = tab?.settings.speaking || {};
-        if (!tab?.doc || (!isFinal && cfg.allowPartial === false)) return;
+        if (!tab?.doc) return;
         const minConf = cfg.confidence === 'High' ? 0.8 : cfg.confidence === 'Low' ? 0.3 : 0.55;
-        if (confidence > 0 && confidence < minConf) return; // Chrome reports 0 for interim results
-        const wi = tab.settings.wordIndex;
-        const to = alignSpoken(tab.doc.words, wi, transcript, { window: cfg.window, skip: cfg.skip, fuzz: cfg.fuzz, minRun: cfg.minRun });
-        if (to != null) { spokenWordsRef.current += to - wi; step(to - wi, { src: 'speak' }); }
+        const lowConf = confidence > 0 && confidence < minConf; // Chrome reports 0 for interim results
+        let move = null;
+        if ((isFinal || cfg.allowPartial !== false) && !lowConf) {
+          const wi = tab.settings.wordIndex;
+          const hit = alignOrResync(tab.doc.words, wi, transcript, { window: cfg.window, skip: cfg.skip, fuzz: cfg.fuzz, minRun: cfg.minRun });
+          if (hit) {
+            spokenWordsRef.current += hit.to - wi;
+            step(hit.to - wi, { src: 'speak' });
+            move = `+${hit.to - wi} word${hit.to - wi === 1 ? '' : 's'}${hit.resync ? ' (found your place)' : ''}`;
+          } else if (isFinal) move = 'no match near your place';
+        } else if (lowConf) move = `too unsure (${Math.round(confidence * 100)}%)`;
+        lastResultAt = Date.now();
+        setSpeakInfo((si) => ({ ...si, status: 'listening', error: null, heard: transcript, final: isFinal, move: move || si.move }));
       },
-      onError: (err) => { if (err !== 'no-speech' && err !== 'aborted') console.warn('Speech recognition error', err); },
+      onError: (err) => {
+        if (err === 'no-speech' || err === 'aborted') return; // silence / our own stop — not a problem
+        // These won't fix themselves by retrying; stop and say why.
+        if (['not-allowed', 'service-not-allowed', 'language-not-supported', 'audio-capture'].includes(err)) stopped = true;
+        setSpeakInfo((si) => ({ ...si, error: err }));
+      },
     });
     if (!r) return undefined;
-    r.onend = () => { if (!stopped) { try { r.start(); } catch { /* already starting */ } } }; // Chrome ends sessions on silence
-    try { r.start(); } catch { /* ignore */ }
+    r.onstart = () => setSpeakInfo((si) => ({ ...si, status: 'listening' }));
+    // Speech detected but no words back after a while = the online speech service isn't answering
+    // (the commonest silent failure) — say so instead of looking stuck.
+    r.onspeechstart = () => {
+      const at = Date.now();
+      clearTimeout(silentTimer);
+      silentTimer = setTimeout(() => { if (!stopped && lastResultAt < at) setSpeakInfo((si) => ({ ...si, error: 'no-words' })); }, 8000);
+    };
+    // Chrome ends a session after silence or ~a minute; carry on (briefly delayed so a failing
+    // service can't spin).
+    r.onend = () => {
+      if (stopped) return;
+      setSpeakInfo((si) => ({ ...si, status: 'restarting' }));
+      restartTimer = setTimeout(() => { if (!stopped) { try { r.start(); } catch { /* already starting */ } } }, 250);
+    };
+    try { r.start(); } catch (e) { setSpeakInfo((si) => ({ ...si, error: e?.message || 'start failed' })); }
     recognizerRef.current = r;
     return () => {
       stopped = true;
+      clearTimeout(restartTimer);
+      clearTimeout(silentTimer);
       try { r.stop(); } catch { /* ignore */ }
       recognizerRef.current = null;
     };
@@ -3213,12 +3248,20 @@ function AppInner() {
             <div className="progress-row"><div className="progress-bar" /><div className="progress-meta">— / —</div></div>
           </div>
         )}
-        {speakingOn && activeTab?.settings.speaking?.feedback !== false && (
-          <VoiceFeedback wordsRef={spokenWordsRef} profile={state.global.voiceProfile || 'neutral'} />
-        )}
         </div>
         )}
       </div>
+      {/* Reading-aloud card — every layout (it portals itself over the page). */}
+      {speakingOn && activeTab?.doc && (
+        <VoiceFeedback
+          info={speakInfo}
+          nextWords={activeTab.doc.words.slice(activeTab.settings.wordIndex, activeTab.settings.wordIndex + 8).join(' ')}
+          onStop={toggleSpeaking}
+          showScores={activeTab.settings.speaking?.feedback !== false}
+          wordsRef={spokenWordsRef}
+          profile={state.global.voiceProfile || 'neutral'}
+        />
+      )}
       <div className="app-status">
         {state.global.showPerfMeter && <PerfMonitor />}
         <StatusText text={state.appStatus} seq={state.appStatusSeq} />

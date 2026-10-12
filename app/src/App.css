@@ -5097,17 +5097,29 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   .ab-toolbar { max-height: 42vh; }
 }
 
-/* Live voice feedback while advancing by reading aloud (components/VoiceFeedback.jsx). */
+/* Reading-aloud card (components/VoiceFeedback.jsx): heard text, status, optional voice scores.
+   Starts top-right, clear of the controls bar; draggable by its grip. */
 .vf-card {
-  position: fixed; right: 16px; bottom: 96px; z-index: 60; width: 250px; max-width: calc(100vw - 32px);
+  position: fixed; right: 16px; top: 120px; z-index: 4900; width: 270px; /* over floating chips, under dialogs (5000) */ max-width: calc(100vw - 32px);
   background: var(--menu-bg); color: var(--menu-fg); border: 1px solid var(--input-border); border-radius: 10px;
-  box-shadow: var(--shadow); padding: 8px 10px; font-size: 12px;
+  box-shadow: var(--shadow); padding: 6px 10px 8px; font-size: 12px;
 }
-.vf-head { display: flex; align-items: center; gap: 8px; }
-.vf-head b { font-size: 15px; font-family: Consolas, monospace; }
-.vf-trend { flex: 1; height: 22px; }
+.vf-head { display: flex; align-items: center; gap: 6px; }
+.vf-grip { cursor: grab; touch-action: none; padding: 0 4px; font-size: 14px; line-height: 1; background: transparent; border: none; color: var(--status-fg); }
+.vf-grip:active { cursor: grabbing; }
+.vf-title { white-space: nowrap; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.vf-title b { font-size: 14px; font-family: Consolas, monospace; }
+.vf-trend { flex: 0 0 64px; height: 20px; }
 .vf-trend path { fill: none; stroke: var(--toggle-active-bg); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.vf-toggle { padding: 0 6px; }
+.vf-btn { padding: 0 6px; }
+.vf-status { margin-top: 4px; color: var(--status-fg); }
+.vf-status.err { color: var(--ox-bright, #c0392b); line-height: 1.35; }
+.vf-lang { opacity: 0.8; }
+.vf-move.ok { color: #2e9d4f; }
+.vf-heard { margin-top: 4px; padding: 5px 7px; border-radius: 6px; min-height: 1.4em; line-height: 1.35;
+  background: color-mix(in srgb, var(--menu-fg) 7%, transparent); max-height: 5.5em; overflow-y: auto; }
+.vf-dim, .vf-next { color: var(--status-fg); }
+.vf-next { margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vf-bars { display: grid; gap: 3px; margin-top: 6px; }
 .vf-bar { display: grid; grid-template-columns: 74px 1fr 24px; align-items: center; gap: 6px; }
 .vf-lbl { color: var(--status-fg); }
@@ -5115,4 +5127,4 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .vf-fill { display: block; height: 100%; background: var(--toggle-active-bg); }
 .vf-num { text-align: right; font-variant-numeric: tabular-nums; }
 .vf-note { margin-top: 6px; color: var(--status-fg); line-height: 1.35; }
-@media (max-width: 520px) { .vf-card { left: 16px; right: 16px; width: auto; bottom: 120px; } }
+@media (max-width: 520px) { .vf-card { left: 16px; right: 16px; width: auto; top: 96px; } }

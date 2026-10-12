@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { alignSpoken, wordsMatch, normWord } from './speakAlign.js';
+import { alignSpoken, alignOrResync, wordsMatch, normWord } from './speakAlign.js';
 
 const doc = 'It was the best of times, it was the worst of times; it was the age of wisdom.'.split(' ');
 //            0   1   2    3    4  5      6  7   8    9    10  11     12 13  14  15  16  17
@@ -31,4 +31,9 @@ assert.equal(normWord('Times,'), 'times');
 // An exact word later in the look-ahead wins over a near-identical earlier one.
 const ids = 'w1 w2 w3 w4 w5 w6 w7 w8'.split(' ').map((w) => 'item' + w);
 assert.equal(alignSpoken(ids, 0, 'itemw1 itemw3 itemw4'), 4);
+// Re-sync: reading from further down the page re-finds the place, but only on a longer run.
+const lh = 'The old lighthouse keeper climbed the narrow stairs every evening and carried a lantern with a small notebook where he wrote down the weather while ships passed far out at sea'.split(' ');
+assert.deepEqual(alignOrResync(lh, 0, 'the old lighthouse'), { to: 3, resync: false });
+assert.deepEqual(alignOrResync(lh, 0, 'he wrote down the weather'), { to: 24, resync: true });
+assert.equal(alignOrResync(lh, 0, 'wrote down'), null, 'two far words are not enough to jump');
 console.log('speakAlign: all cases pass');
