@@ -128,3 +128,34 @@ export function speakParams(cfg = {}) {
   const p = old ? SPEAK_DEFAULTS : c;
   return { window: p.window, skip: p.skip, fuzz: p.fuzz, minRun: p.minRun };
 }
+
+// Score a narration take against its text: the longest in-order run of matching words (fuzzy, so a
+// misheard "keep her" for "keeper" can still pair up word-for-word where it fits).
+//   accuracy     — share of the words you SAID that were the text's words (no ad-libs/misreads)
+//   completeness — share of the text's words you said (nothing skipped)
+//   done         — Set of text word indexes matched, and `upTo` the furthest one + 1 — for live
+//                  "words completed" highlighting.
+// Returns null when there's nothing to compare. ponytail: O(text × heard) LCS; fine for chunk-
+// sized text (a few hundred words), not for whole books.
+export function scoreReading(text, heard, fuzz = SPEAK_DEFAULTS.fuzz) {
+  const T = [], owner = [];
+  String(text || '').split(/\s+/).forEach((w, i) => { for (const p of partsOf(w)) { T.push(p); owner.push(i); } });
+  const H = String(heard || '').split(/\s+/).flatMap(partsOf);
+  if (!T.length || !H.length) return null;
+  const m = T.length, n = H.length;
+  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+  for (let i = m - 1; i >= 0; i--) {
+    for (let j = n - 1; j >= 0; j--) {
+      dp[i][j] = wordsMatch(H[j], T[i], fuzz) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const done = new Set();
+  let upTo = 0;
+  for (let i = 0, j = 0; i < m && j < n;) {
+    if (wordsMatch(H[j], T[i], fuzz) && dp[i][j] === dp[i + 1][j + 1] + 1) { done.add(owner[i]); upTo = owner[i] + 1; i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+    else j++;
+  }
+  const hits = dp[0][0];
+  return { accuracy: Math.round((hits / n) * 100), completeness: Math.round((hits / m) * 100), done, upTo };
+}

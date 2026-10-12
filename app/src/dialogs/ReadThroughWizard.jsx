@@ -8,8 +8,9 @@ import {
 } from '../features/readThrough.js';
 import { takeQuality, sessionConsistency, buildNarrationLog } from '../features/narrationQuality.js';
 import { scoreSamples } from '../features/voice/voiceScore.js';
+import { scoreReading } from '../features/speakAlign.js';
 import { useApp } from '../state/AppContext.jsx';
-import ChunkContext, { ContextPicker, useContextSize } from './ChunkContext.jsx';
+import ChunkContext, { ContextPicker, ReadableText, useContextSize } from './ChunkContext.jsx';
 import { setKeepAwake } from '../features/wakeLock.js';
 
 // Read the whole book aloud in ONE sitting: a single mic session, chunk text on screen, and the
@@ -31,7 +32,7 @@ function micErr(e) {
   return 'Could not open the microphone: ' + (e?.message || e);
 }
 
-export default function ReadThroughWizard({ checksum, docName = '', chunks, isCovered, onClose, onDone }) {
+export default function ReadThroughWizard({ checksum, docName = '', chunks, isCovered, onClose, onDone, onTake, readMark }) {
   const voiceProfile = useApp().state.global.voiceProfile || 'neutral';
   const [ctxN, setCtxN] = useContextSize();
   const [phase, setPhase] = useState('setup'); // setup | requesting | reading | done
@@ -60,6 +61,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
   const speechMsRef = useRef(0);        // accumulated speech in this take
   const committingRef = useRef(false);
   const recogRef = useRef(null);        // webkitSpeechRecognition while the session runs
+  const sttFullRef = useRef('');        // everything heard for the current take (commit scores it)
   const deadAirRef = useRef(0);         // session total of removed dead air (ms)
   const takesRef = useRef([]);          // quality of every committed take → session log + consistency
   const sessionStartRef = useRef(0);
@@ -72,6 +74,8 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
 
   const uncoveredCount = useMemo(() => sessionQueue(chunks, isCovered, true).length, [chunks, isCovered]);
   const chunk = queue.length && qi < queue.length ? chunks[queue[qi]] : null;
+  // Live: which of this chunk's words you've said so far (green), any you skipped past (flagged).
+  const liveRead = useMemo(() => (chunk && stt.full ? scoreReading(chunk.text, stt.full) : null), [chunk, stt.full]);
 
   // Live speech-to-text: shows WHAT the recognizer heard, so a misread line is obvious before the
   // take commits. Display-only — assignment stays sequential; recognition never drives the cursor.
@@ -91,7 +95,9 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
           if (e.results[i].isFinal) fin += t + ' ';
           else interim += t;
         }
-        setStt({ final: fin.trim().split(/\s+/).slice(-24).join(' '), interim: interim.trim() });
+        // `full` = everything heard for this take (cleared on commit) → live progress + scoring.
+        setStt({ final: fin.trim().split(/\s+/).slice(-24).join(' '), interim: interim.trim(), full: `${fin} ${interim}`.trim() });
+        sttFullRef.current = `${fin} ${interim}`.trim();
       };
       r.onend = () => { if (recogRef.current === r) { try { r.start(); } catch { /* tab closing */ } } };
       r.onerror = () => { /* no-speech / network hiccups — onend restarts it */ };
@@ -104,7 +110,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
     recogRef.current = null; // clear FIRST so onend doesn't resurrect it
     try { r?.stop(); } catch { /* already stopped */ }
   }
-  function clearStt() { setStt({ final: '', interim: '' }); try { recogRef.current?.abort(); } catch { /* restarts via onend */ } }
+  function clearStt() { sttFullRef.current = ''; setStt({ final: '', interim: '', full: '' }); try { recogRef.current?.abort(); } catch { /* restarts via onend */ } }
 
   function resetTake() {
     takeRef.current = [];
@@ -219,7 +225,10 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
         setCleaned(removedMs);
         const q0 = takeQuality(clean, sr, { threshold: th, words: wordCountOf(ch) });
         // + SpeechImprover-style voice scores (depth, clarity, expressiveness…) on the same samples.
-        const q = q0 && { ...q0, voice: scoreSamples(clean, sr, { words: wordCountOf(ch), profile: voiceProfile }) };
+        // + accuracy (said words that were the text) / completeness (text words said) from the
+        // recogniser's transcript of this take — absent when speech recognition isn't available.
+        const rd = scoreReading(ch.text, sttFullRef.current);
+        const q = q0 && { ...q0, voice: scoreSamples(clean, sr, { words: wordCountOf(ch), profile: voiceProfile }), ...(rd ? { accuracy: rd.accuracy, completeness: rd.completeness } : {}) };
         const blob = new Blob([encodeWav(clean, sr)], { type: 'audio/wav' });
         // tips are live coaching, not archive material — the stored clip keeps only the numbers
         await addAudioClip(checksum, ch.startLine, blob, {
@@ -233,6 +242,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
           writeLog(logDir); // fire-and-forget; failures surface in logNote
         }
         setSaved((n) => n + 1);
+        onTake?.({ chunk: ch, wpm: q?.wpm });
         clearStt();
         advance();
       }
@@ -365,11 +375,19 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
               </span>
             )}
             <span className="settings-note" style={{ margin: 0 }}>{saved} saved · {skipped} skipped</span>
+            {readMark?.(chunk) && <span className="ab-readmark" title="You've read this chunk as text before">📖 read before</span>}
             <ContextPicker n={ctxN} onChange={setCtxN} />
           </div>
           <div className="rcw-meter"><div className="rcw-meter-fill" ref={meterRef} /></div>
           {/* The chunk being read, with its neighbours IN BOOK ORDER (full text unless “peek”). */}
-          <ChunkContext chunks={chunks} chunk={chunk} n={ctxN} className="rtw-ctx" currentClass="rtw-text" dim={onBreak} />
+          <ChunkContext chunks={chunks} chunk={chunk} n={ctxN} className="rtw-ctx" currentClass="rtw-text" dim={onBreak}
+            current={<ReadableText text={chunk.text} done={liveRead?.done} upTo={liveRead?.upTo || 0} />} />
+          {liveRead && (
+            <div className="rtw-progress" title="From the speech recogniser: words of this chunk said so far">
+              <div className="imp-bar"><div className="imp-fill" style={{ width: `${liveRead.completeness}%` }} /></div>
+              <span>{liveRead.completeness}% said · {liveRead.accuracy}% accurate</span>
+            </div>
+          )}
           {STT && !onBreak && (
             <div className="rtw-stt" title="What the speech recognizer is hearing — a misread line shows up here before you commit the take">
               <span className="rtw-stt-tag">🎧 heard</span>
@@ -388,6 +406,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
             <div className="rtw-quality">
               <span className={`rtw-score s${lastQ.score >= 85 ? 'good' : lastQ.score >= 65 ? 'ok' : 'bad'}`}>★ {lastQ.score}</span>
               <span>{lastQ.wpm != null ? `${lastQ.wpm} wpm` : '— wpm'} · {lastQ.rmsDb} dB · steadiness {lastQ.volumeCv}</span>
+              {lastQ.accuracy != null && <span title="Accuracy: words you said that were the text · Completeness: text words you said">· 🎯 {lastQ.accuracy}% accurate · ✓ {lastQ.completeness}% complete</span>}
               {cleaned >= 500 && <span title="Leading/trailing silence trimmed and long mid-take pauses compressed">· ✂ {(cleaned / 1000).toFixed(1)}s dead air removed</span>}
               {consistency && <span title="Pace and level consistency across this session's takes">· session {consistency.label} ({consistency.score})</span>}
               {lastQ.tips.length > 0 && <div className="rtw-tips">{lastQ.tips.join(' ')}</div>}

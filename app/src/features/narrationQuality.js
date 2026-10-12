@@ -124,3 +124,22 @@ export function buildNarrationLog({ docName = '', startedAt, takes = [] }) {
 // Validation for anything reading a log back (SpeechImprover mirrors this check).
 export const isNarrationLog = (o) =>
   !!o && o.protocol === NARRATION_PROTOCOL && o.version === NARRATION_VERSION && Array.isArray(o.takes);
+
+// Who narrated a book's chunks and how well: `tops` = each chunk's top clip (or null). Human =
+// your own recording (source 'mic'), bot = a generated voice. Averages are over your recordings
+// that carry each score. → { human, bot, none, total, avg: { score, accuracy, completeness, voice } }
+export function narrationMix(tops) {
+  const out = { human: 0, bot: 0, none: 0, total: tops.length, avg: {} };
+  const sums = {};
+  const add = (k, v) => { if (v != null && isFinite(v)) { (sums[k] ||= []).push(v); } };
+  for (const c of tops) {
+    if (!c) { out.none++; continue; }
+    if (c.source === 'mic') {
+      out.human++;
+      add('score', c.quality?.score); add('accuracy', c.quality?.accuracy);
+      add('completeness', c.quality?.completeness); add('voice', c.quality?.voice?.overall);
+    } else out.bot++;
+  }
+  for (const [k, xs] of Object.entries(sums)) out.avg[k] = Math.round(xs.reduce((a, x) => a + x, 0) / xs.length);
+  return out;
+}

@@ -398,14 +398,14 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
   // and credit the implied active time (words ÷ wpm) to lifetime + today — for finishing a section you
   // covered elsewhere at a known speed (e.g. the audiobook at 1.5×). Already-read words keep their real
   // recorded pace. Crediting the time is the point: it keeps lifetime WPM honest instead of spiking.
-  function markRangeReadAtPace(from, to, pace) {
+  function markRangeReadAtPace(from, to, pace, srcKind = 'marked') {
     const a = Math.max(0, from | 0);
     const b = Math.min(wordCount, to | 0);
     const p = Math.min(MAX_REAL_WPM, Math.max(1, Math.round(pace) || 1));
     let added = 0;
     for (let i = a; i < b; i++) {
       if (!mask[i]) { mask[i] = 1; readCount++; wpm[i] = Math.min(65535, p); added++; }
-      if (!srcTrace[i]) srcTrace[i] = READ_SRC.marked;
+      if (!srcTrace[i]) srcTrace[i] = READ_SRC[srcKind] || READ_SRC.marked;
     }
     if (added <= 0) return { added: 0, ms: 0 };
     const ms = Math.round((added / p) * 60000);
@@ -648,6 +648,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
       return effTotal > 0 ? Math.max(0, Math.min(1, effRead / effTotal)) : 1;
     },
     isRead: (i) => !!mask[i],
+    srcAt: (i) => srcTrace[i] || 0, // how word i was first read (READ_SRC code; 0 = unread/untagged)
     get sessionNewWords() {
       return sessionNewWords;
     },

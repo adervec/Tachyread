@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { alignSpoken, alignOrResync, alignDetail, wordsMatch, normWord, partsOf, STRICTNESS, strictnessOf, speakParams, SPEAK_DEFAULTS } from './speakAlign.js';
+import { alignSpoken, alignOrResync, alignDetail, wordsMatch, normWord, partsOf, STRICTNESS, strictnessOf, speakParams, SPEAK_DEFAULTS, scoreReading } from './speakAlign.js';
 
 const doc = 'It was the best of times, it was the worst of times; it was the age of wisdom.'.split(' ');
 //            0   1   2    3    4  5      6  7   8    9    10  11     12 13  14  15  16  17
@@ -61,4 +61,19 @@ assert.equal(strictnessOf({ window: 99 }), null);
 // First-release defaults migrate to today's; real customisations are kept.
 assert.deepEqual(speakParams({ window: 6, skip: 2, fuzz: 0.7, minRun: 2, enabled: true }), SPEAK_DEFAULTS);
 assert.equal(speakParams({ window: 6, skip: 2, fuzz: 0.8, minRun: 2 }).fuzz, 0.8);
+// Narration scores: accuracy = said words that were right, completeness = text words said.
+const chunk = 'The old lighthouse keeper — tired — climbed the 7 narrow stairs.';
+const perfect = scoreReading(chunk, 'the old lighthouse keeper tired climbed the seven narrow stairs');
+assert.equal(perfect.accuracy, 100); assert.equal(perfect.completeness, 100);
+const skipped = scoreReading(chunk, 'the old lighthouse keeper climbed the stairs');
+assert.equal(skipped.accuracy, 100, 'everything said was right');
+assert.equal(skipped.completeness, 70, '7 of 10 text words');
+const adlib = scoreReading(chunk, 'so the old lighthouse keeper you know tired climbed the seven narrow stairs');
+assert.equal(adlib.completeness, 100);
+assert.equal(adlib.accuracy, 77, '10 of 13 said words were the text');
+// Live progress: matched word indexes and how far along.
+const half = scoreReading(chunk, 'the old lighthouse keeper');
+assert.deepEqual([...half.done], [0, 1, 2, 3]);
+assert.equal(half.upTo, 4);
+assert.equal(scoreReading(chunk, ''), null);
 console.log('speakAlign: all cases pass');
