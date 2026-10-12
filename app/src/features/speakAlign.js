@@ -62,3 +62,15 @@ export function alignSpoken(docWords, idx, heard, opts = {}) {
   }
   return best != null && best > idx ? best : null;
 }
+
+// Normal alignment near the reader; failing that, a wider search (you started reading somewhere
+// else on the page) that needs a longer matching run, so a lost position re-finds itself without
+// letting a couple of common words yank it far ahead.
+export const RESYNC_WINDOW = 80;
+export function alignOrResync(docWords, idx, heard, opts = {}) {
+  const near = alignSpoken(docWords, idx, heard, opts);
+  if (near != null) return { to: near, resync: false };
+  const minRun = Math.max(3, (opts.minRun ?? SPEAK_DEFAULTS.minRun) + 2);
+  const far = alignSpoken(docWords, idx, heard, { ...opts, window: RESYNC_WINDOW, minRun });
+  return far != null ? { to: far, resync: true } : null;
+}
