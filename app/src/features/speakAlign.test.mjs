@@ -16,12 +16,13 @@ assert.equal(alignSpoken(doc, 4, 'of tymes it was'), 8);
 assert.equal(alignSpoken(doc, 0, 'uh hmm'), null);
 assert.equal(alignSpoken(doc, 0, 'best'), null, 'one word is below the minimum run');
 // Stale words from earlier in the phrase are ignored; only the new ones count.
-assert.equal(alignSpoken(doc, 4, 'it was the best of times'), 6);
+assert.equal(alignSpoken(doc, 4, 'it was the best of times it was', { fromHeard: 4 }), 8);
 // Starting further ahead than the window doesn't jump there.
 assert.equal(alignSpoken(doc, 0, 'age of wisdom'), null);
-assert.equal(alignSpoken(doc, 0, 'age of wisdom', { window: 20 }), 18);
+assert.equal(alignSpoken(doc, 0, 'age of wisdom', { window: 20 }), null, '3 words 15 ahead is a jump, not reading — re-sync needs a longer run');
 // minRun 1 is the loosest setting.
-assert.equal(alignSpoken(doc, 0, 'it', { minRun: 1 }), 1);
+assert.equal(alignSpoken(doc, 0, 'it was', { minRun: 1 }), 2);
+assert.equal(alignSpoken(doc, 0, 'it', { minRun: 1 }), null, 'a lone short word is half a match');
 // Never moves backwards.
 assert.equal(alignSpoken(doc, 16, 'it was the best of'), null);
 
@@ -76,4 +77,23 @@ const half = scoreReading(chunk, 'the old lighthouse keeper');
 assert.deepEqual([...half.done], [0, 1, 2, 3]);
 assert.equal(half.upTo, 4);
 assert.equal(scoreReading(chunk, ''), null);
+// No racing: a growing phrase re-sent by the recogniser only aligns its NEW words.
+const grow = 'the old lighthouse keeper climbed the narrow stairs';
+const first = alignDetail(ms, 0, 'the old lighthouse keeper climbed');
+assert.equal(first.to, 5); assert.equal(first.usedHeard, 5);
+const next = alignDetail(ms, 5, grow, { fromHeard: first.usedHeard });
+assert.equal(next.to, 8, 'only "the narrow stairs" counts');
+assert.ok(next.pairs.slice(0, 5).every((p) => p.stale));
+assert.equal(alignDetail(ms, 8, grow, { fromHeard: next.usedHeard }), null, 'nothing new → no move');
+// One right word can't carry it through a sentence, even at the most forgiving setting.
+const { label: _l, ...vf } = STRICTNESS[1]; // eslint-disable-line no-unused-vars
+assert.equal(alignSpoken(ms, 0, 'stairs', vf), null, 'one word 8 ahead');
+const { label: _b, ...bal } = STRICTNESS[3]; // eslint-disable-line no-unused-vars
+assert.equal(alignSpoken(ms, 0, 'mumble the mumble mumble mumble stairs every', bal), null, 'sparse matches far ahead (balanced)');
+// Very strict still follows clean reading.
+const { label: _v, ...vs } = STRICTNESS[5]; // eslint-disable-line no-unused-vars
+assert.equal(alignSpoken(ms, 0, 'the old lighthouse keeper', vs), 4);
+assert.equal(alignSpoken(ms, 0, 'the old like house keeper', vs), null, 'very strict needs it dense');
+// Tabs tuned before density existed get their preset's density.
+assert.equal(speakParams({ window: 4, skip: 0, fuzz: 0.9, minRun: 3 }).density, 0.8);
 console.log('speakAlign: all cases pass');

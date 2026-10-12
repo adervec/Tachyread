@@ -6,19 +6,21 @@
 //            matched nothing widens this by one (you said SOMETHING for that text word)
 //   fuzz   — how alike a heard word must be to the text word (0–1, 1 = exact)
 //   minRun — matched words needed before anything moves
+//   density — matched words per word moved: a jump over N words needs ≥ density·N matches, so one
+//            right word can't carry the position through a whole sentence
 // Punctuation never matters: text tokens are split on it ("stairs—every" is two words, a lone "—"
 // is nothing), and common sound-alikes / digits are folded together ("two" = "to" = "2").
 
-export const SPEAK_DEFAULTS = { window: 10, skip: 3, fuzz: 0.6, minRun: 2 };
+export const SPEAK_DEFAULTS = { window: 10, skip: 3, fuzz: 0.6, minRun: 2, density: 0.4 };
 
 // One "Strictness" slider (on the reading-aloud card) sets all four at once.
 export const STRICTNESS = [
   null,
-  { label: 'very forgiving', window: 14, skip: 5, fuzz: 0.5, minRun: 1 },
-  { label: 'forgiving', window: 10, skip: 3, fuzz: 0.6, minRun: 2 },
-  { label: 'balanced', window: 8, skip: 2, fuzz: 0.7, minRun: 2 },
-  { label: 'strict', window: 6, skip: 1, fuzz: 0.8, minRun: 3 },
-  { label: 'very strict', window: 4, skip: 0, fuzz: 0.9, minRun: 3 },
+  { label: 'very forgiving', window: 14, skip: 5, fuzz: 0.5, minRun: 1, density: 0.3 },
+  { label: 'forgiving', window: 10, skip: 3, fuzz: 0.6, minRun: 2, density: 0.4 },
+  { label: 'balanced', window: 8, skip: 2, fuzz: 0.7, minRun: 2, density: 0.5 },
+  { label: 'strict', window: 6, skip: 1, fuzz: 0.8, minRun: 3, density: 0.65 },
+  { label: 'very strict', window: 4, skip: 0, fuzz: 0.9, minRun: 3, density: 0.8 },
 ];
 export function strictnessOf(cfg = {}) {
   const c = { ...SPEAK_DEFAULTS, ...cfg };
@@ -63,9 +65,13 @@ export function wordsMatch(heard, text, fuzz = SPEAK_DEFAULTS.fuzz) {
 
 // Full alignment with a trace for the card: { to, start, matched, pairs: [{ w, i (doc word index or
 // null), stale }] } or null. `idx` = the reader's current word.
+// `fromHeard`: heard parts already used by an earlier move (the recogniser re-sends the whole phrase
+// as it grows) — those are shown but never aligned again. The result's `usedHeard` is the new mark.
 export function alignDetail(docWords, idx, heard, opts = {}) {
-  const { window, skip, fuzz, minRun } = { ...SPEAK_DEFAULTS, ...opts };
-  const H = String(heard || '').split(/\s+/).flatMap(partsOf);
+  const { window, skip, fuzz, minRun, density, fromHeard = 0 } = { ...SPEAK_DEFAULTS, ...opts };
+  const all = String(heard || '').split(/\s+/).flatMap(partsOf);
+  const used = Math.min(fromHeard, all.length);
+  const H = all.slice(used);
   if (!H.length) return null;
   // The text ahead as a flat stream of spoken parts, each remembering its word.
   const D = [], owner = [];
@@ -76,26 +82,37 @@ export function alignDetail(docWords, idx, heard, opts = {}) {
     if (i === Math.min(docWords.length, idx + window) - 1) windowEnd = D.length;
   }
   if (!windowEnd) windowEnd = D.length;
+  // Evidence: short common words ("the", "and", "a") count half — they match almost anywhere, so
+  // on their own they can't move the text or re-find a place. W = running evidence of the text.
+  const weight = (w) => (w.length <= 3 ? 0.5 : 1);
+  const W = [0];
+  for (const p of D) W.push(W[W.length - 1] + weight(p));
   // Prefer the match that STARTS nearest the reader, then the one reaching furthest: in repetitive
   // text, stale words from earlier in the phrase would otherwise align further down and jump ahead.
   let best = null;
   for (let h0 = 0; h0 < H.length; h0++) {
     for (let s = 0; s < windowEnd; s++) {
       if (!wordsMatch(H[h0], D[s], fuzz)) continue;
-      const pairs = H.slice(0, h0).map((w) => ({ w, i: null, stale: true }));
+      const pairs = all.slice(0, used + h0).map((w) => ({ w, i: null, stale: true }));
       pairs.push({ w: H[h0], i: owner[s] });
-      let d = s + 1, matched = 1, miss = 0;
+      let d = s + 1, matched = weight(D[s]), miss = 0, lastH = h0;
       for (let h = h0 + 1; h < H.length; h++) {
-        const top = Math.min(D.length - 1, d + skip + miss);
+        // Each unmatched heard word lets the text run one further (you said SOMETHING for it),
+        // capped so a string of non-matches can't open the look-ahead up indefinitely.
+        const top = Math.min(D.length - 1, d + skip + Math.min(miss, skip + 1));
         // An exact match anywhere in the look-ahead beats an earlier near-miss ("sixth" vs "fifth").
         let hit = -1;
         for (let j = d; j <= top; j++) if (D[j] === H[h]) { hit = j; break; }
         if (hit < 0) for (let j = d; j <= top; j++) if (wordsMatch(H[h], D[j], fuzz)) { hit = j; break; }
-        if (hit >= 0) { d = hit + 1; matched++; miss = 0; pairs.push({ w: H[h], i: owner[hit] }); }
+        if (hit >= 0) { d = hit + 1; matched += weight(D[hit]); miss = 0; lastH = h; pairs.push({ w: H[h], i: owner[hit] }); }
         else { miss++; pairs.push({ w: H[h], i: null }); }
       }
       const to = owner[d - 1] + 1;
-      if (matched >= minRun && (!best || s < best.s || (s === best.s && to > best.to))) best = { s, to, start: owner[s], matched, pairs };
+      // Enough evidence for the distance moved (from the reader's place, or from where a re-sync
+      // picked up): one right word can't carry it through a sentence.
+      const moved = W[d] - (opts.resync ? W[s] : 0); // text evidence passed over, same weighting
+      if (matched < minRun || matched < density * moved) continue;
+      if (!best || s < best.s || (s === best.s && to > best.to)) best = { s, to, start: owner[s], matched, pairs, usedHeard: used + lastH + 1 };
     }
   }
   if (!best || best.to <= idx) return null;
@@ -115,7 +132,7 @@ export function alignOrResync(docWords, idx, heard, opts = {}) {
   const near = alignDetail(docWords, idx, heard, opts);
   if (near) return { ...near, resync: false };
   const minRun = Math.max(3, (opts.minRun ?? SPEAK_DEFAULTS.minRun) + 2);
-  const far = alignDetail(docWords, idx, heard, { ...opts, window: RESYNC_WINDOW, minRun });
+  const far = alignDetail(docWords, idx, heard, { ...opts, window: RESYNC_WINDOW, minRun, resync: true });
   return far ? { ...far, resync: true } : null;
 }
 
@@ -126,7 +143,9 @@ export function speakParams(cfg = {}) {
   const c = { ...SPEAK_DEFAULTS, ...cfg };
   const old = Object.keys(FIRST_DEFAULTS).every((k) => c[k] === FIRST_DEFAULTS[k]);
   const p = old ? SPEAK_DEFAULTS : c;
-  return { window: p.window, skip: p.skip, fuzz: p.fuzz, minRun: p.minRun };
+  // Tabs tuned by the card before `density` existed get their preset's density.
+  const density = old ? SPEAK_DEFAULTS.density : (cfg.density ?? STRICTNESS[strictnessOf(p) || 0]?.density ?? SPEAK_DEFAULTS.density);
+  return { window: p.window, skip: p.skip, fuzz: p.fuzz, minRun: p.minRun, density };
 }
 
 // Score a narration take against its text: the longest in-order run of matching words (fuzzy, so a

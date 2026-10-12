@@ -15,7 +15,7 @@ export function createRecognizer({ onResult, onError, lang = 'en-US', continuous
     const last = ev.results[ev.results.length - 1];
     const transcript = last[0].transcript.trim();
     const confidence = last[0].confidence;
-    onResult?.({ transcript, confidence, isFinal: last.isFinal });
+    onResult?.({ transcript, confidence, isFinal: last.isFinal, index: ev.results.length - 1 }); // index: which phrase (grows while interim)
   };
   r.onerror = (ev) => onError?.(ev.error);
   return r;
