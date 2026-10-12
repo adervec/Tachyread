@@ -4257,6 +4257,14 @@
 .lj-queue-cats { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 6px; }
 .lj-qcat { font-size: 12px; padding: 4px 10px; border: 1px solid var(--divider); border-radius: 14px; background: transparent; cursor: pointer; color: inherit; }
 .lj-qcat.on { border-color: var(--toggle-active-bg); color: var(--toggle-active-bg); font-weight: 700; }
+/* Named queues: picker row, inline name form, stats tiles, file-presence icon. */
+.lj-queue-pick { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 2px 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--divider); }
+.lj-q-new { display: inline-flex; gap: 4px; align-items: center; }
+.lj-q-new input { font-size: 12px; padding: 3px 6px; min-width: 0; width: 180px; }
+.lj-qstats { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin: 6px 0; }
+.lj-where { display: inline-block; width: 1.4em; text-align: center; }
+.lj-q-add { font-size: 11px; padding: 1px 2px; max-width: 90px; }
+.lj-queue-item.done { opacity: 0.6; }
 
 /* All-notes manager (Trackyread → Notes) */
 .an-list { display: flex; flex-direction: column; gap: 8px; max-height: 62vh; overflow-y: auto; }

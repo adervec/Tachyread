@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
-import { getBinding, setBinding, getLibraryBooks, saveLibraryBook } from '../state/storage.js';
+import { getBinding, setBinding, getLibraryBooks, saveLibraryBook, getLibraryRef } from '../state/storage.js';
 import { deriveId, setReadStatus } from '../features/journeyLibrary.js';
 import { normTitle } from '../document/tocWizard.js';
+import { useApp } from '../state/AppContext.jsx';
+import { queueWithEstimates } from '../features/journeyAnalytics.js';
+import { queueBooks, nextInQueue } from '../features/readingQueues.js';
+import { getSearchDirs } from '../features/fileLocator.js';
+import { fileWhere, openBookFile } from '../features/openBook.js';
 
 function fmtTime(secs) {
   if (!secs) return '0s';
@@ -52,7 +57,7 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
       const [map, books] = await Promise.all([getBinding(), getLibraryBooks()]);
       if (!alive) return;
       const boundBook = books.find((b) => b.id === map[checksum]) || null;
-      setLib({ books, boundBook });
+      setLib({ books, boundBook, map: map || {} });
     })();
     return () => { alive = false; };
   }, [checksum]);
@@ -83,6 +88,38 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
       .slice(0, 8);
   }, [lib, search, suggestions]);
 
+  // "Up next": for On deck and every named queue holding this book, the first unfinished item whose
+  // file can actually be opened (open tab, saved copy, or found in the search folders). Worked out
+  // from the queues as they stand now, before this book is marked finished.
+  const { state: appState, openRecent, openFiles } = useApp();
+  const openChecksums = useMemo(() => appState.tabs.map((t) => (t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum)).filter(Boolean), [appState.tabs]);
+  const linkedId = lib?.boundBook?.id || (choice.mode === 'existing' ? choice.bookId : null);
+  const [upNext, setUpNext] = useState(null); // null = working it out → [{ label, book, cs, name, skipped }]
+  const [dirs, setDirs] = useState([]);
+  const [openMsg, setOpenMsg] = useState('');
+  useEffect(() => {
+    if (!lib) return undefined;
+    let alive = true;
+    (async () => {
+      const [named, ds] = await Promise.all([getLibraryRef('queues').catch(() => null), getSearchDirs().catch(() => [])]);
+      const live = lib.books.filter((b) => !b.deleted);
+      const csOf = {};
+      for (const [cs, id] of Object.entries(lib.map)) if (!csOf[id]) csOf[id] = cs;
+      const nameOf = (b) => b.title;
+      const available = async (b) => ['open', 'local', 'folder'].includes((await fileWhere(csOf[b.id], nameOf(b), { openChecksums, dirs: ds, search: true })).where);
+      const lists = [['On deck', queueWithEstimates(live).items.map((i) => i.book)]];
+      for (const q of Array.isArray(named) ? named : []) if (linkedId && q.ids.includes(linkedId)) lists.push([q.name, queueBooks(q, live)]);
+      const out = [];
+      for (const [label, order] of lists) {
+        const { book, skipped } = await nextInQueue(order.filter((b) => csOf[b.id] !== checksum), linkedId, available);
+        if (book || skipped) out.push({ label, book, cs: book && csOf[book.id], skipped });
+      }
+      if (alive) { setDirs(ds); setUpNext(out); }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lib, linkedId, checksum]);
+
   const coverage = tr ? tr.coverage() * 100 : 0;
   const activeSecs = tr ? Math.round(tr.lifetimeActiveMs / 1000) : 0;
   const effWpm = tr ? tr.lifetimeWpm() : 0;
@@ -108,14 +145,23 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
     } catch { /* linking is best-effort — the completion is still recorded */ }
   }
 
-  async function save() {
+  async function record() {
     onPatch({
       rating,
       notes,
       completions: [...completions, { date: new Date().toISOString(), coveragePct: Math.round(coverage), activeSecs, wpm: effWpm, rating }],
     });
     await applyTrackyread();
+  }
+  async function save() {
+    await record();
     onClose();
+  }
+  // Save, then open the next queue item (jumps to its tab when it's already open).
+  async function saveAndOpen(n) {
+    await record();
+    const r = await openBookFile({ cs: n.cs, name: n.book.title, openChecksums, dirs, openRecent, openFiles }).catch((e) => ({ ok: false, msg: e?.message || String(e) }));
+    if (r.ok) onClose(); else setOpenMsg(`Saved — but ${r.msg}`);
   }
 
   return (
@@ -184,6 +230,19 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
           </label>
         </div>
       )}
+
+      {(upNext === null || upNext.length > 0) && <div className="field-section">Up next</div>}
+      {upNext === null
+        ? <p className="settings-note" style={{ marginTop: 0 }}>Looking for the next book in your queues…</p>
+        : upNext.map((n) => (
+          <div key={n.label} className="bf-next">
+            {n.book
+              ? <button className="toggle-on" onClick={() => saveAndOpen(n)}>Save &amp; open “{n.book.title}”</button>
+              : <span className="settings-note">Nothing in {n.label} can be opened on this device.</span>}
+            <span className="settings-note"> {n.book ? `next in ${n.label}` : ''}{n.skipped ? ` · skipped ${n.skipped} whose file isn’t on this device` : ''}</span>
+          </div>
+        ))}
+      {openMsg && <p className="settings-note">{openMsg}</p>}
 
       {coverage < 90 && (
         <p className="settings-note">

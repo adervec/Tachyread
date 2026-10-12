@@ -864,6 +864,7 @@ export async function exportLibraryData(opts = {}) {
     genres: (await db.get('library', 'refs:genres'))?.data || null,
     subgenres: (await db.get('library', 'refs:subgenres'))?.data || null,
     goals: (await db.get('library', 'refs:goals'))?.data || null,
+    queues: (await db.get('library', 'refs:queues'))?.data || null, // named reading queues
     crossNotes: (await db.get('library', 'crossNotes'))?.list || null,
     ai: includeAi ? (await db.get('library', 'ai')) || null : null,
     binding: includeBinding ? (await db.get('library', 'binding'))?.map || null : null,
@@ -897,7 +898,7 @@ export async function importLibraryData(bundle, opts = {}) {
     else if ((incoming.updatedAt || 0) >= (existing.updatedAt || 0)) { await store.put(incoming, key); merged++; }
   }
   const stamp = bundle.generatedAt || Date.now();
-  for (const [k, val] of [['meta', bundle.meta], ['refs:authors', bundle.authors], ['refs:genres', bundle.genres], ['refs:subgenres', bundle.subgenres], ['refs:goals', bundle.goals]]) {
+  for (const [k, val] of [['meta', bundle.meta], ['refs:authors', bundle.authors], ['refs:genres', bundle.genres], ['refs:subgenres', bundle.subgenres], ['refs:goals', bundle.goals], ['refs:queues', bundle.queues]]) {
     if (val == null) continue;
     const existing = await store.get(k);
     if (!existing || stamp >= (existing.updatedAt || 0)) await store.put({ data: val, updatedAt: stamp }, k);
