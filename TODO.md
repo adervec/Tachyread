@@ -165,3 +165,22 @@ Fix:
 
 - Clear the ghost flag when the cycle returns to "shown", and only draw skipped tokens as ghosts while punctuation is hidden.
 - Then decide how a standalone `&` should behave with punctuation shown. Today it silently vanishes. It could be shown as normal text that's never required, or become typeable.
+
+## Advance the text by reading it aloud, with live voice feedback
+
+An option to move through the text by reading it aloud. It can't be on at the same time as voice commands. Strictness should be set with a slider or two: missing one word shouldn't stop everything, but random grunting shouldn't advance it either. While it's on, show live feedback on voice quality like SpeechImprover does (richness, depth, pacing and so on) as a running average plus a trend. The feedback is only for watching; nothing needs saving.
+
+Notes for whoever builds it, checked against the code:
+
+- Half of this exists. There's a "Speaking mode" in the per-tab settings, and the help text describes it as advancing when you read aloud. It uses the browser's speech recognition, which works in Chrome and Edge only.
+- No menu item or button turns it on. The code only ever switches it off when another mode starts, so it's effectively unreachable today.
+- Its matching is too loose and too strict at once. It compares the latest recognised phrase against only the one current word, and counts it as matching if either contains the other. So a short sound like "a" can match many words, but reading a whole sentence quickly never moves more than one word per result.
+- Its only strictness setting is a Low/Medium/High confidence cut-off on the recogniser's score.
+- Better matching: align the recognised words against a window of upcoming text, and jump to the furthest point that lines up. Sliders for:
+  - how many words can be skipped or misheard before it stops following (lookahead window);
+  - how close a word must sound to count (fuzzy match threshold);
+  - minimum words matched in a row before it moves (stops grunts and single stray words advancing it);
+  - the existing confidence cut-off.
+- Mutually exclusive with voice commands: both listen through speech recognition, and a spoken command would be read as text. Turning one on should turn the other off, the same way typing and read-aloud already switch speaking off.
+- The live voice feedback overlaps the "voice-quality analysis on recorded chunks" todo. SpeechImprover already has a live analyser built for exactly this (pitch, depth, projection, expressiveness from the mic). The same shared analysis code would serve both todos. Pace can come straight from the matched words per minute, with no transcript scoring needed.
+- Keep the mic analysis light: it runs alongside the recogniser for the whole reading session, so it should sample a few times a second rather than every audio block, and drop old data as it goes.
