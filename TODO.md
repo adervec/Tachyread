@@ -136,3 +136,16 @@ Notes for whoever builds it, checked against the code:
 - Each part should show net WPM, gross WPM, accuracy and its grade. The differential could be last part minus first, or the slope across all parts, shown as a signed number with its own grade scale, for example holding pace within ±5% counts as an A.
 - "Pretty long" needs a threshold, such as only showing quarters after a few minutes and halves after one minute, so short runs don't get noisy splits.
 - Ties into the typing-lag todo: the new record must stay cheap per tick.
+
+## "Pain" effect on a refused key in stop-on-error typing
+
+With "Stop on error" on, a wrong key should trigger a clear "pain" effect so the mistake is felt right away, not just quietly refused.
+
+Notes for whoever builds it, checked against the code:
+
+- In stop-on-error mode, a wrong key is counted as an error and then thrown away, so the typed text never changes. That's why it's easy to miss. The only feedback is the "wrong character" sound, and that's off by default.
+- The refusal happens in one place, so one hook there can fire the effect.
+- Candidate effects, best as a small choice (off, subtle, strong): a short red flash or vignette on the typing area, a quick horizontal shake of the current word, the missed target letter flashing red, and a phone vibration where supported.
+- A pattern to copy already exists: setback mode flashes a short-lived penalty banner when a mistake costs progress, using a timer and a CSS animation that turns off under reduced motion.
+- Accessibility: the shake must turn off for reduced-motion users (keep the colour flash), and the flash should stay away from fast strobing. Mashing the same wrong key shouldn't stack flashes, so restart the animation rather than layering it.
+- Could default to a stronger "wrong" sound in this mode only, since the sound setting is shared with the other modes.
