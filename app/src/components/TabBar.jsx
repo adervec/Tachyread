@@ -2,8 +2,9 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { groupForChecksum, masterOf } from '../features/bookGroups.js';
 import { finishedNotRereading } from '../features/recentFilter.js';
-import { getBinding, getLibraryBook, getLibraryBooks, getPresencePeers, saveLibraryBook, setBinding } from '../state/storage.js';
-import { readStatus } from '../features/journeyLibrary.js';
+import { getBinding, getLibraryBook, getLibraryBooks, getPresencePeers, loadFile, saveLibraryBook, setBinding } from '../state/storage.js';
+import { contentType, readStatus } from '../features/journeyLibrary.js';
+import { sortTabIds, tabInfo, TAB_SORT_KEYS } from '../features/tabSort.js';
 import { bookFromOpenedDoc } from '../features/trackyreadAdd.js';
 import { bookCoverSrc, proceduralCover } from '../features/bookCovers.js';
 import { bookCoverUrl } from '../features/openLibrary.js';
@@ -23,7 +24,7 @@ const PANEL_LABELS = {
 };
 
 export default function TabBar() {
-  const { state, setActiveTab, closeTab, closeTabs, closeAllTabs, setActivePanel, closePanel, reorderTabs, updateGlobal, setStatus, openDialog } = useApp();
+  const { state, setActiveTab, closeTab, closeTabs, closeAllTabs, setActivePanel, closePanel, reorderTabs, sortTabs, updateGlobal, setStatus, openDialog } = useApp();
   const { panels, activePanelId, tabs } = state;
   const groups = state.global.bookGroups || [];
   const multiRow = !!state.global.tabBarMultiRow;
@@ -139,7 +140,7 @@ export default function TabBar() {
   async function addTabToTrackyread(tab, open) {
     const cs = tab.lazy ? tab.settings?.contentChecksum : tab.doc?.contentChecksum;
     if (!cs) return;
-    const fileName = (tab.lazy ? tab.settings?.fileName : tab.doc?.fileName) || 'Document';
+    const fileName = (tab.lazy ? tab.fileName : tab.doc?.fileName) || 'Document';
     const words = tab.lazy ? (tab.settings?.totalWords || 0) : (tab.doc?.words.length || 0);
     const book = bookFromOpenedDoc({ fileName, words });
     try {
@@ -148,6 +149,26 @@ export default function TabBar() {
       setStatus?.(`Added “${book.title}” to Trackyread.`);
       if (open) openDialog?.({ kind: 'literary-journey', tab: 'library', focusBookId: book.id });
     } catch (e) { setStatus?.('Could not add to Trackyread: ' + (e?.message || e)); }
+  }
+
+  // Sort the whole strip by one key. Reads each tab's SAVED record (lazy tabs carry only a shell),
+  // with the live settings on top for loaded tabs, plus its Trackyread book for status/type.
+  async function sortBy(key, dir) {
+    const recent = state.global.recentFiles || [];
+    const entries = await Promise.all(tabs.map(async (t) => {
+      const cs = t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum;
+      const saved = cs ? await loadFile(cs).catch(() => null) : null;
+      const rec = { ...(saved || {}), ...(t.lazy ? {} : t.settings), totalWords: t.lazy ? (saved?.totalWords || t.settings?.totalWords) : t.doc.words.length };
+      const book = bindings[cs] ? await getLibraryBook(bindings[cs]).catch(() => null) : null;
+      const live = book && !book.deleted ? book : null;
+      return { id: t.id, info: tabInfo({
+        fileName: t.lazy ? t.fileName : t.doc.fileName, rec, book: live,
+        status: live && readStatus(live), type: live && contentType(live),
+        opened: recent.find((r) => r.checksum === cs)?.lastOpened ?? null,
+      }) };
+    }));
+    sortTabs(sortTabIds(entries, key, dir));
+    setStatus?.(`Tabs sorted by ${TAB_SORT_KEYS[key][0].toLowerCase()} (${TAB_SORT_KEYS[key][dir === 'desc' ? 3 : 2]}).`);
   }
 
   // Build the right-click menu's actions from the tab it was opened on. Left/right are relative to
@@ -168,7 +189,28 @@ export default function TabBar() {
     const menuTab = tabs[i];
     const menuCs = menuTab.lazy ? menuTab.settings?.contentChecksum : menuTab.doc?.contentChecksum;
     const untracked = !!menuCs && !bindings[menuCs];
+    // Sort submenu: one row per key, each with its two directions.
+    if (menu.sort) {
+      return (
+        <>
+          <div className="word-menu-backdrop" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
+          <div className="word-menu tab-sort-menu" style={{ left: menu.x, top: menu.y }} role="menu" aria-label="Sort tabs">
+            <div className="item" onClick={() => setMenu({ ...menu, sort: false })}>‹ Back</div>
+            <div className="sep" />
+            {Object.entries(TAB_SORT_KEYS).map(([k, [label, , a, b]]) => (
+              <div key={k} className="tab-sort-row">
+                <span>{label}</span>
+                <button type="button" onClick={() => { sortBy(k, 'asc'); setMenu(null); }}>{a}</button>
+                <button type="button" onClick={() => { sortBy(k, 'desc'); setMenu(null); }}>{b}</button>
+              </div>
+            ))}
+          </div>
+        </>
+      );
+    }
     const items = [
+      { label: 'Sort tabs ›', n: tabs.length > 1 ? undefined : 0, keep: true, fn: () => setMenu({ ...menu, sort: true }) },
+      { sep: true },
       ...(untracked ? [
         { label: '＋ Add to Trackyread', fn: () => addTabToTrackyread(menuTab, false) },
         { label: '＋ Add to Trackyread & open it', fn: () => addTabToTrackyread(menuTab, true) },
@@ -194,7 +236,7 @@ export default function TabBar() {
               <div
                 key={it.label}
                 className={`item${it.n === 0 ? ' disabled' : ''}`}
-                onClick={it.n === 0 ? undefined : () => { it.fn(); setMenu(null); }}
+                onClick={it.n === 0 ? undefined : () => { it.fn(); if (!it.keep) setMenu(null); }}
               >
                 {it.label}
               </div>

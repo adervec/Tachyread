@@ -155,6 +155,13 @@ function reducer(state, action) {
       tabs.splice(to, 0, moved);
       return { ...state, tabs };
     }
+    // Whole-strip reorder (tab sort). Ids not listed keep their relative order at the end.
+    case 'SORT_TABS': {
+      const byId = new Map(state.tabs.map((t) => [t.id, t]));
+      const tabs = action.ids.map((id) => byId.get(id)).filter(Boolean);
+      for (const t of state.tabs) if (!action.ids.includes(t.id)) tabs.push(t);
+      return { ...state, tabs };
+    }
     case 'SET_ACTIVE_TAB':
       // Going to read a document minimizes any focused dialog overlay (its tab stays in the strip).
       return { ...state, activeTabId: action.id, activePanelId: null };
@@ -727,6 +734,7 @@ export function AppProvider({ children }) {
   }, []);
   const closePanel = useCallback((id) => dispatch({ type: 'CLOSE_PANEL', id }), []);
   const reorderTabs = useCallback((fromId, toId) => dispatch({ type: 'REORDER_TABS', fromId, toId }), []);
+  const sortTabs = useCallback((ids) => dispatch({ type: 'SORT_TABS', ids }), []);
 
   const updateGlobal = useCallback(async (patch) => {
     // A write that lands BEFORE stored settings hydrate must not use the in-memory defaults as its
@@ -767,6 +775,7 @@ export function AppProvider({ children }) {
     setActivePanel,
     closePanel,
     reorderTabs,
+    sortTabs,
     updateGlobal,
     flushReadState,
   };
