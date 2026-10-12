@@ -2429,6 +2429,25 @@
 .ab-sec-cov { font-size: 11px; color: var(--status-fg); font-variant-numeric: tabular-nums; }
 .ab-sec-cov.full { color: #2e9d4f; }
 .ab-sec-bar { flex: 0 0 80px; height: 5px; }
+/* Narration mix: your recordings (green) vs generated voice (blue) vs nothing (track). */
+.ab-mix { display: flex; overflow: hidden; border-radius: 3px; background: color-mix(in srgb, var(--menu-fg) 12%, transparent); }
+.ab-mix > span { display: block; height: 100%; }
+.ab-mix-human, .ab-mix-legend i.ab-mix-human { background: #2e9d4f; }
+.ab-mix-bot, .ab-mix-legend i.ab-mix-bot { background: #4a90d9; }
+.ab-mix-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 5px; font-size: 12px; color: var(--status-fg); }
+.ab-mix-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: -1px; background: color-mix(in srgb, var(--menu-fg) 12%, transparent); }
+.ab-sec-q { font-size: 11px; color: var(--status-fg); white-space: nowrap; }
+.ab-scores { white-space: nowrap; font-size: 11px; }
+.ab-readmark { opacity: 0.55; font-size: 11px; white-space: nowrap; } /* chunk already read as text */
+.ab-sc { display: inline-flex; gap: 5px; font-variant-numeric: tabular-nums; }
+.ab-sc .sgood { color: #2e9d4f; } .ab-sc .sok { color: #d98324; } .ab-sc .sbad { color: #c0392b; }
+/* Readable narration text: pivot letter marked; words said turn green, skipped ones flagged. */
+.rd-orp { color: #d0451b; font-weight: 700; }
+.rd-w.said { color: #2e9d4f; }
+.rd-w.said .rd-orp { color: inherit; }
+.rd-w.missed { text-decoration: underline wavy #c0392b; text-underline-offset: 3px; }
+.rtw-progress { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; font-size: 12px; color: var(--status-fg); margin: -2px 0 8px; }
+.rtw-progress .imp-bar { height: 5px; }
 .ab-table { margin: 0; width: 100%; }
 .ab-table td { padding: 3px 8px; vertical-align: middle; }
 .ab-table .ab-lines { font-variant-numeric: tabular-nums; color: var(--status-fg); white-space: nowrap; width: 1%; }

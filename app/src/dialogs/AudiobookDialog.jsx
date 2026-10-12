@@ -30,7 +30,8 @@ import { saveBlobToFile, pickFile, readFileText } from '../features/fileSystem.j
 import AudiobookExportWizard, { buildExportItems, allItemsMp3, assembleTrack } from './AudiobookExportWizard.jsx';
 import RecordClipWizard from './RecordClipWizard.jsx';
 import ReadThroughWizard from './ReadThroughWizard.jsx';
-import { sessionConsistency } from '../features/narrationQuality.js';
+import { sessionConsistency, narrationMix } from '../features/narrationQuality.js';
+import { bookTracker, chunkRange, creditNarration, textReadShare } from '../features/narrationRead.js';
 
 // Rough clip duration from the blob: mp3 (~128 kbps, ElevenLabs) vs 16-bit 22.05 kHz WAV (Piper).
 const estMs = (blob) => (/mpe?g|mp3/i.test(blob.type)
@@ -706,6 +707,49 @@ export default function AudiobookDialog({ onClose }) {
   const covered = (secChunks) => secChunks.filter((c) => clipsFor(c.startLine).length).length;
   const totalCovered = chunks.filter((c) => clipsFor(c.startLine).length).length;
   const pct = chunks.length ? Math.round((totalCovered / chunks.length) * 100) : 0;
+  // Who narrated what, and how well (your recordings' quality / accuracy / completeness / voice).
+  // Reading progress for this book (open tab's tracker, or the saved one): chunks you've already
+  // read as TEXT get a subtle 📖 — familiar enough to narrate well. Reloaded after each take.
+  const [readTr, setReadTr] = useState(null);
+  const [readVer, setReadVer] = useState(0);
+  useEffect(() => {
+    let live = true;
+    if (sel?.doc) bookTracker(sel.doc, state.tabs).then(({ tracker }) => { if (live) setReadTr(tracker); }).catch(() => {});
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel, readVer]);
+  const readShareOf = (chunk) => (readTr && sel?.doc ? textReadShare(readTr, chunkRange(sel.doc, chunk)) : 0);
+  const readMark = (chunk) => readShareOf(chunk) >= 0.8;
+  // A saved narration take counts as having read that chunk (coverage, time, history, Trackyread).
+  const credit = (chunk, wpm) => creditNarration({ doc: sel?.doc, chunk, wpm, tabs: state.tabs, incognito: state.incognito })
+    .then(() => setReadVer((v) => v + 1)).catch(() => {});
+  const mixOf = (secChunks) => narrationMix(secChunks.map((c) => clipsFor(c.startLine)[0] || null));
+  // Stacked bar: your recordings, generated voice, nothing yet.
+  const mixBar = (m, className = '') => (
+    <div className={`ab-mix ${className}`} role="img" aria-label={`${m.human} by you, ${m.bot} by a generated voice, ${m.none} without audio`}
+      title={`🎤 ${m.human} by you · 🤖 ${m.bot} generated · ${m.none} missing`}>
+      {m.total > 0 && <>
+        <span className="ab-mix-human" style={{ width: `${(m.human / m.total) * 100}%` }} />
+        <span className="ab-mix-bot" style={{ width: `${(m.bot / m.total) * 100}%` }} />
+      </>}
+    </div>
+  );
+  // One chunk's scores, compact: ★ quality · 🎯 accuracy · ✓ completeness · 🗣 voice.
+  const scoreCell = (top) => {
+    if (!top) return null;
+    if (top.source !== 'mic') return <span className="ab-sc-bot" title="Generated voice">🤖</span>;
+    const q = top.quality;
+    if (!q) return <span className="ab-dim" title="Recorded before scoring existed">🎤 —</span>;
+    const band = (v) => (v >= 85 ? 'good' : v >= 65 ? 'ok' : 'bad');
+    return (
+      <span className="ab-sc" title={`Quality ★${q.score}${q.accuracy != null ? ` · accuracy ${q.accuracy}% (words said that were the text) · completeness ${q.completeness}% (text words said)` : ' · accuracy/completeness need speech recognition while recording'}${q.voice ? ` · voice ${q.voice.overall}` : ''}`}>
+        <span className={`s${band(q.score)}`}>★{q.score}</span>
+        {q.accuracy != null && <span className={`s${band(q.accuracy)}`}>🎯{q.accuracy}</span>}
+        {q.completeness != null && <span className={`s${band(q.completeness)}`}>✓{q.completeness}</span>}
+        {q.voice && <span>🗣{q.voice.overall}</span>}
+      </span>
+    );
+  };
   const remote = (state.global.remoteAudiobooks || []).find((r) => r.checksum === checksum);
   const remoteHasMore = remote && remote.chunks > totalCovered;
 
@@ -1201,12 +1245,30 @@ export default function AudiobookDialog({ onClose }) {
           the browser remembers nothing we have to manage. */}
       <div className="ab-toolbar">
       {/* coverage + voice */}
-      <div className="ab-coverage">
-        {totalCovered >= chunks.length && chunks.length
-          ? <span className="ab-cov-done">✓ Fully {selfMode ? 'recorded' : 'generated'} — {chunks.length} chunk(s)</span>
-          : <span><strong>{totalCovered}</strong> / {chunks.length} chunk(s) have audio <strong>({pct}%)</strong></span>}
-        <div className="imp-bar ab-cov-bar" title={`${pct}%`}><div className="imp-fill" style={{ width: `${pct}%` }} /></div>
-      </div>
+      {(() => {
+        const m = mixOf(chunks);
+        return (
+          <div className="ab-coverage">
+            {totalCovered >= chunks.length && chunks.length
+              ? <span className="ab-cov-done">✓ Fully {selfMode ? 'recorded' : 'generated'} — {chunks.length} chunk(s)</span>
+              : <span><strong>{totalCovered}</strong> / {chunks.length} chunk(s) have audio <strong>({pct}%)</strong></span>}
+            {mixBar(m, 'ab-cov-bar')}
+            <div className="ab-mix-legend">
+              <span><i className="ab-mix-human" /> 🎤 {m.human} by you</span>
+              <span><i className="ab-mix-bot" /> 🤖 {m.bot} generated</span>
+              <span><i /> {m.none} missing</span>
+              {m.human > 0 && (
+                <span className="ab-mix-avg" title="Averages over your recordings">
+                  · your takes: {m.avg.score != null ? `★${m.avg.score}` : '—'}
+                  {m.avg.accuracy != null && ` · 🎯 ${m.avg.accuracy}% accurate`}
+                  {m.avg.completeness != null && ` · ✓ ${m.avg.completeness}% complete`}
+                  {m.avg.voice != null && ` · 🗣 ${m.avg.voice}`}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {remoteHasMore && (
         <div className="ab-remote">
@@ -1293,7 +1355,10 @@ export default function AudiobookDialog({ onClose }) {
                 <span className="ab-sec-caret">{open ? '▾' : '▸'}</span>
                 <span className="ab-sec-title">{sec.title}</span>
                 <span className={`ab-sec-cov${cov >= tot ? ' full' : ''}`}>{cov}/{tot} · {spct}%</span>
-                <div className="imp-bar ab-sec-bar"><div className="imp-fill" style={{ width: `${spct}%` }} /></div>
+                {(() => { const m = mixOf(sec.chunks); return <>
+                  {mixBar(m, 'ab-sec-bar')}
+                  {m.avg.score != null && <span className="ab-sec-q" title="Average over your recordings in this section">★{m.avg.score}{m.avg.accuracy != null ? ` 🎯${m.avg.accuracy}` : ''}{m.avg.completeness != null ? ` ✓${m.avg.completeness}` : ''}</span>}
+                </>; })()}
               </div>
               {open && (() => {
                 const firstLine = sec.chunks[0].startLine;
@@ -1338,10 +1403,11 @@ export default function AudiobookDialog({ onClose }) {
                       const isPlaying = playingKey === `${li}`;
                       return (
                         <tr key={li}>
-                          <td className="ab-lines">{lineLabel}</td>
+                          <td className="ab-lines">{lineLabel}{readMark(chunk) && <span className="ab-readmark" title={`You've read this chunk as text (${Math.round(readShareOf(chunk) * 100)}%) — it should be familiar`}> 📖</span>}</td>
                           <td className="ab-preview" title="Click to read the full chunk text" onClick={() => setFullText(chunk)}>{chunk.text.slice(0, 80)}{chunk.text.length > 80 ? '…' : ''}</td>
                           <td className="ab-voice">{top ? (top.source === 'mic' ? '🎤 you' : (top.voiceId?.startsWith('el:') ? <span title={labelVoice(top.voiceId)}>{labelVoice(top.voiceId)}</span> : <span title={voiceLabel(top.voiceId)}>🤖 {voiceLabel(top.voiceId).split(' · ')[0]}</span>)) : ''}{cl.length > 1 ? <span className="ab-clipcount"> ·{cl.length}</span> : ''}</td>
                           <td className="ab-dur">{top ? fmtDur(top.durationMs) : ''}</td>
+                          <td className="ab-scores">{scoreCell(top)}</td>
                           <td className="ab-actions">
                             {top && <button className={isPlaying ? 'toggle-on' : ''} onClick={() => playClip(li)} title={isPlaying ? 'Stop' : 'Play'}>{isPlaying ? '■' : '▶'}</button>}{' '}
                             {!selfMode && (piperSupported() || elVoices.length > 0) && <button onClick={() => setConfirmJob({ kind: 'one', targets: [chunk], sections: [sec.title], words: (chunk.text || '').split(/\s+/).filter(Boolean).length })} title="Generate this chunk">Gen</button>}{' '}
@@ -1469,6 +1535,7 @@ export default function AudiobookDialog({ onClose }) {
                             title={`${c.quality.wpm != null ? c.quality.wpm + ' wpm · ' : ''}${c.quality.rmsDb} dB RMS · peak ${c.quality.peakDb} dB · volume CV ${c.quality.volumeCv}${c.quality.clippingPct ? ` · clipping ${c.quality.clippingPct}%` : ''}`}
                           >★ {c.quality.score}</span>
                         ) : '—'}
+                        {c.quality?.accuracy != null && <span className="ab-voice-badge" title="Accuracy (words said that were the text) · completeness (text words said)"> 🎯{c.quality.accuracy} ✓{c.quality.completeness}</span>}
                         {c.quality?.voice && <span className="ab-voice-badge" title={`Voice: ${voiceLine(c.quality.voice)}`}> 🗣 {c.quality.voice.overall}</span>}
                       </td>
                       <td className="ab-actions">
@@ -1509,6 +1576,8 @@ export default function AudiobookDialog({ onClose }) {
           chunks={chunks}
           isCovered={(c) => clipsFor(c.startLine).length > 0}
           onClose={() => setReadThru(false)}
+          onTake={({ chunk, wpm }) => credit(chunk, wpm)}
+          readMark={readMark}
           onDone={({ saved, skipped }) => { setMsg(`📖 Read-through: ${saved} chunk${saved === 1 ? '' : 's'} recorded${skipped ? `, ${skipped} skipped` : ''}.`); refresh(); }}
         />
       )}
@@ -1519,7 +1588,7 @@ export default function AudiobookDialog({ onClose }) {
           chunk={recWiz}
           chunks={chunks}
           onClose={() => setRecWiz(null)}
-          onSaved={() => { setRecWiz(null); setMsg('🎤 Clip saved.'); refresh(); }}
+          onSaved={({ recorded } = {}) => { if (recorded) credit(recWiz); setRecWiz(null); setMsg(recorded ? '🎤 Clip saved — counted as read.' : '🎤 Clip saved.'); refresh(); }}
         />
       )}
 

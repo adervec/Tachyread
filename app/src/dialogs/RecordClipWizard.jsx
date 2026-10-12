@@ -68,6 +68,7 @@ function Waveform({ buffer, trim }) {
 // `chunks` (the book's full chunk list) adds the neighbouring chunks' text around the one being recorded.
 export default function RecordClipWizard({ checksum, chunk, chunks = null, onClose, onSaved, commit, previewText, dlgTitle }) {
   const voiceProfile = useApp().state.global.voiceProfile || 'neutral';
+  const importedRef = useRef(false);
   const [ctxN, setCtxN] = useContextSize();
   // phase: setup → requesting → recording ↔ paused → decoding → review → saving
   const [phase, setPhase] = useState('setup');
@@ -151,6 +152,7 @@ export default function RecordClipWizard({ checksum, chunk, chunks = null, onClo
     setErr('');
     const f = await pickFile('audio/*');
     if (!f) return;
+    importedRef.current = true; // an imported file isn't you reading the text
     await finishBlob(f);
   }
 
@@ -212,7 +214,7 @@ export default function RecordClipWizard({ checksum, chunk, chunks = null, onClo
     try {
       if (commit) await commit(blob, durationMs);
       else await addAudioClip(checksum, chunk.startLine, blob, { source: 'mic', durationMs, spanEndLine: chunk.endLine, quality: qualityOf(buf, a, b) });
-      onSaved?.();
+      onSaved?.({ recorded: !importedRef.current });
     } catch (e) { setErr('Save failed: ' + (e?.message || e)); setPhase('review'); }
   }
 

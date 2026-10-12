@@ -1917,16 +1917,21 @@ function AppInner() {
     setSpeakInfo({ status: 'starting', lang });
     let stopped = false;
     let restartTimer = 0, silentTimer = 0, lastResultAt = 0;
+    // Heard words already spent on a move, per recogniser phrase: Chrome re-sends the whole phrase
+    // as it grows, and re-aligning those stale words let common ones match far ahead (racing).
+    let phrase = -1, usedHeard = 0;
     const r = createRecognizer({
       lang,
       // No confidence gate: lining up with the actual text is far better evidence than the
       // recogniser's own (often low, and 0 for interim) confidence score.
-      onResult: ({ transcript, isFinal }) => {
+      onResult: ({ transcript, isFinal, index }) => {
         const { tab, stepWord: step } = speakRef.current;
         const cfg = tab?.settings.speaking || {};
         if (!tab?.doc || (!isFinal && cfg.allowPartial === false)) return;
         const wi = tab.settings.wordIndex;
-        const hit = alignOrResync(tab.doc.words, wi, transcript, speakParams(cfg));
+        if (index !== phrase) { phrase = index; usedHeard = 0; }
+        const hit = alignOrResync(tab.doc.words, wi, transcript, { ...speakParams(cfg), fromHeard: usedHeard });
+        if (hit) usedHeard = hit.usedHeard;
         let move = null;
         if (hit) {
           spokenWordsRef.current += hit.to - wi;
