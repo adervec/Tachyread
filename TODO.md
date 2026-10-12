@@ -149,3 +149,19 @@ Notes for whoever builds it, checked against the code:
 - A pattern to copy already exists: setback mode flashes a short-lived penalty banner when a mistake costs progress, using a timer and a CSS animation that turns off under reduced motion.
 - Accessibility: the shake must turn off for reduced-motion users (keep the colour flash), and the flash should stay away from fast strobing. Mashing the same wrong key shouldn't stack flashes, so restart the animation rather than layering it.
 - Could default to a stronger "wrong" sound in this mode only, since the sound setting is shared with the other modes.
+
+## Bug: ampersands stay ghosts after turning ghost punctuation off
+
+After cycling punctuation to ghosts and back to shown, ampersands still appear as dim ghosts.
+
+Likely cause, found by reading the code (not yet reproduced in the app):
+
+- The punctuation button cycles shown → hidden → ghosts → shown. The last step only turns "hide punctuation" back off. It leaves the separate "show ghosts" flag on.
+- A token with no letters or digits, like a standalone `&`, `—` or `*`, is skipped in every punctuation mode, including "shown", because there's nothing in it to type.
+- Skipped tokens are drawn as ghost words whenever the "show ghosts" flag is on. Nothing checks whether punctuation is actually hidden. So once you've passed through ghosts, a standalone `&` keeps rendering as a ghost.
+- Punctuation attached to a word, like `Smith's` or `end.`, is handled by a different path that does check, which is why it looks like only ampersands are affected.
+
+Fix:
+
+- Clear the ghost flag when the cycle returns to "shown", and only draw skipped tokens as ghosts while punctuation is hidden.
+- Then decide how a standalone `&` should behave with punctuation shown. Today it silently vanishes. It could be shown as normal text that's never required, or become typeable.
