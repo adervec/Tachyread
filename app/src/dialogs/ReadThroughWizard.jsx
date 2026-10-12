@@ -7,6 +7,9 @@ import {
   rmsOf, adaptiveThreshold, cleanTake, expectedMs, shouldAdvance, sessionQueue,
 } from '../features/readThrough.js';
 import { takeQuality, sessionConsistency, buildNarrationLog } from '../features/narrationQuality.js';
+import { scoreSamples } from '../features/voice/voiceScore.js';
+import { useApp } from '../state/AppContext.jsx';
+import ChunkContext, { ContextPicker, useContextSize } from './ChunkContext.jsx';
 import { setKeepAwake } from '../features/wakeLock.js';
 
 // Read the whole book aloud in ONE sitting: a single mic session, chunk text on screen, and the
@@ -29,6 +32,8 @@ function micErr(e) {
 }
 
 export default function ReadThroughWizard({ checksum, docName = '', chunks, isCovered, onClose, onDone }) {
+  const voiceProfile = useApp().state.global.voiceProfile || 'neutral';
+  const [ctxN, setCtxN] = useContextSize();
   const [phase, setPhase] = useState('setup'); // setup | requesting | reading | done
   const [err, setErr] = useState('');
   const [onlyUncovered, setOnlyUncovered] = useState(true);
@@ -67,8 +72,6 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
 
   const uncoveredCount = useMemo(() => sessionQueue(chunks, isCovered, true).length, [chunks, isCovered]);
   const chunk = queue.length && qi < queue.length ? chunks[queue[qi]] : null;
-  const nextChunk = queue.length && qi + 1 < queue.length ? chunks[queue[qi + 1]] : null;
-  const prevChunk = queue.length && qi > 0 ? chunks[queue[qi - 1]] : null;
 
   // Live speech-to-text: shows WHAT the recognizer heard, so a misread line is obvious before the
   // take commits. Display-only — assignment stays sequential; recognition never drives the cursor.
@@ -214,7 +217,9 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
         const removedMs = Math.max(0, Math.round((samples.length / sr) * 1000) - durationMs);
         deadAirRef.current += removedMs;
         setCleaned(removedMs);
-        const q = takeQuality(clean, sr, { threshold: th, words: wordCountOf(ch) });
+        const q0 = takeQuality(clean, sr, { threshold: th, words: wordCountOf(ch) });
+        // + SpeechImprover-style voice scores (depth, clarity, expressiveness…) on the same samples.
+        const q = q0 && { ...q0, voice: scoreSamples(clean, sr, { words: wordCountOf(ch), profile: voiceProfile }) };
         const blob = new Blob([encodeWav(clean, sr)], { type: 'audio/wav' });
         // tips are live coaching, not archive material — the stored clip keeps only the numbers
         await addAudioClip(checksum, ch.startLine, blob, {
@@ -360,11 +365,11 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
               </span>
             )}
             <span className="settings-note" style={{ margin: 0 }}>{saved} saved · {skipped} skipped</span>
+            <ContextPicker n={ctxN} onChange={setCtxN} />
           </div>
           <div className="rcw-meter"><div className="rcw-meter-fill" ref={meterRef} /></div>
-          {prevChunk && <div className="rtw-prev" title="Just read">{prevChunk.text}</div>}
-          <div className={`rtw-text${onBreak ? ' dim' : ''}`}>{chunk.text}</div>
-          {nextChunk && <div className="rtw-next" title="Up next">{nextChunk.text}</div>}
+          {/* The chunk being read, with its neighbours IN BOOK ORDER (full text unless “peek”). */}
+          <ChunkContext chunks={chunks} chunk={chunk} n={ctxN} className="rtw-ctx" currentClass="rtw-text" dim={onBreak} />
           {STT && !onBreak && (
             <div className="rtw-stt" title="What the speech recognizer is hearing — a misread line shows up here before you commit the take">
               <span className="rtw-stt-tag">🎧 heard</span>

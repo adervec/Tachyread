@@ -4,6 +4,10 @@ import { getStream } from '../features/audioRecorder.js';
 import { encodeTrimmedWav } from '../features/audioClipEdit.js';
 import { addAudioClip } from '../state/storage.js';
 import { pickFile } from '../features/fileSystem.js';
+import { takeQuality } from '../features/narrationQuality.js';
+import { scoreSamples } from '../features/voice/voiceScore.js';
+import { useApp } from '../state/AppContext.jsx';
+import ChunkContext, { ContextPicker, useContextSize } from './ChunkContext.jsx';
 
 const AC = () => new (window.AudioContext || window.webkitAudioContext)();
 const pickMime = () =>
@@ -61,7 +65,10 @@ function Waveform({ buffer, trim }) {
 // Default target is a narration chunk (addAudioClip). Pass `commit(blob, durationMs)` to redirect the
 // save elsewhere (e.g. a section's intro/outro music or spoken title) — then `chunk` is optional and
 // `previewText` / `dlgTitle` label the dialog.
-export default function RecordClipWizard({ checksum, chunk, onClose, onSaved, commit, previewText, dlgTitle }) {
+// `chunks` (the book's full chunk list) adds the neighbouring chunks' text around the one being recorded.
+export default function RecordClipWizard({ checksum, chunk, chunks = null, onClose, onSaved, commit, previewText, dlgTitle }) {
+  const voiceProfile = useApp().state.global.voiceProfile || 'neutral';
+  const [ctxN, setCtxN] = useContextSize();
   // phase: setup → requesting → recording ↔ paused → decoding → review → saving
   const [phase, setPhase] = useState('setup');
   const [err, setErr] = useState('');
@@ -177,6 +184,18 @@ export default function RecordClipWizard({ checksum, chunk, onClose, onSaved, co
     previewSrcRef.current = src; setPreviewing(true);
   }
 
+  // The same quality numbers + voice scores a read-through take gets, from the trimmed region (mono).
+  function qualityOf(buf, a, b) {
+    try {
+      const sr = buf.sampleRate, s0 = Math.floor(a * sr), s1 = Math.min(buf.length, Math.ceil(b * sr));
+      const mono = new Float32Array(Math.max(0, s1 - s0));
+      for (let c = 0; c < buf.numberOfChannels; c++) { const d = buf.getChannelData(c); for (let i = 0; i < mono.length; i++) mono[i] += d[s0 + i] / buf.numberOfChannels; }
+      const words = (chunk?.text || '').split(/\s+/).filter(Boolean).length;
+      const q = takeQuality(mono, sr, { words });
+      return q ? { ...q, tips: undefined, voice: scoreSamples(mono, sr, { words, profile: voiceProfile }) } : null;
+    } catch { return null; } // quality is a bonus; never block saving the clip
+  }
+
   async function save() {
     const buf = buffer; if (!buf) return;
     stopPreview(); setPhase('saving'); setErr('');
@@ -192,7 +211,7 @@ export default function RecordClipWizard({ checksum, chunk, onClose, onSaved, co
     }
     try {
       if (commit) await commit(blob, durationMs);
-      else await addAudioClip(checksum, chunk.startLine, blob, { source: 'mic', durationMs, spanEndLine: chunk.endLine });
+      else await addAudioClip(checksum, chunk.startLine, blob, { source: 'mic', durationMs, spanEndLine: chunk.endLine, quality: qualityOf(buf, a, b) });
       onSaved?.();
     } catch (e) { setErr('Save failed: ' + (e?.message || e)); setPhase('review'); }
   }
@@ -227,7 +246,9 @@ export default function RecordClipWizard({ checksum, chunk, onClose, onSaved, co
 
   return (
     <Dialog title={heading} onClose={() => { stopRec(); onClose(); }} width={600} buttons={footer}>
-      {subject
+      {chunk && chunks
+        ? <><ContextPicker n={ctxN} onChange={setCtxN} /><ChunkContext chunks={chunks} chunk={chunk} n={ctxN} className="rcw-ctx" currentClass="rcw-text" /></>
+        : subject
         ? <p className="rcw-text" title="What this clip narrates">{subject.slice(0, 220)}{subject.length > 220 ? '…' : ''}</p>
         : <p className="settings-note" style={{ marginTop: 0 }}>Import a music file (or record) for this slot — trim it before saving.</p>}
       {err && <p className="rcw-err">⚠ {err}</p>}

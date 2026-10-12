@@ -26,7 +26,7 @@ function formatTime(secs) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', modeIdleFrac = null, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, onJumpToFrontier, onJumpToGap, onOpenBiometric, ghostRace = null, ghostGoal = null, onResetGhost }) {
+export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevWord, onNextWord, onPrevLine, onNextLine, onPrevPara, onNextPara, onPageUp, onPageDown, onRestart, playing, readingMode = 'idle', modeIdleFrac = null, onToggleAudioCtrl, onToggleReadAloud, audioCtrl, readAloud, speaking = false, onToggleSpeaking, onConfirmFinished, onGoalComplete, goalKills, onTocIcon, onToggleFocus, onJumpToCurrent, onJumpToFrontier, onJumpToGap, onOpenBiometric, ghostRace = null, ghostGoal = null, onResetGhost }) {
   const { patchSettings, state, updateGlobal } = useApp();
   const isCompact = useIsCompact();
   // Mobile: the expanded dock shows the FULL controls immediately (no "more" disclosure) —
@@ -366,7 +366,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
           {(() => {
             const g = state.global;
             const camGuardOn = !!(g.webcamAttention || g.webcamDoze || g.webcamAwayAlarm || g.webcamDistanceNudge || g.webcamFocusStats);
-            const bioCount = [audioCtrl, camGuardOn, !!g.handGestures, !!g.eyeGestures?.on].filter(Boolean).length;
+            const bioCount = [audioCtrl, speaking, camGuardOn, !!g.handGestures, !!g.eyeGestures?.on].filter(Boolean).length;
             const row = (icon, label, on, toggle, extra) => (
               <label className="bio-quick-row">
                 <input type="checkbox" checked={on} onChange={toggle} />
@@ -389,6 +389,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
                 {bioOpen && (
                   <div className="bio-quick-pop">
                     {row('🎤', 'Voice / clap commands', !!audioCtrl, onToggleAudioCtrl, !isCompact && <kbd className="key-hint">V</kbd>)}
+                    {onToggleSpeaking && row('🗣', 'Advance by reading aloud (live voice feedback)', !!speaking, onToggleSpeaking)}
                     {row('👀', 'Watching — pause when you look away', !!g.webcamAttention, () => updateGlobal({ webcamAttention: !g.webcamAttention }))}
                     {row('😴', 'Doze detection', !!g.webcamDoze, () => updateGlobal({ webcamDoze: !g.webcamDoze }))}
                     {row('🖐', 'Hand gestures', !!g.handGestures, () => updateGlobal({ handGestures: !g.handGestures }))}

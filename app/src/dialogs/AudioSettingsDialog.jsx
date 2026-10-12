@@ -120,6 +120,14 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
           style={{ width: '100%' }}
         />
       </Field>
+      <Field label="Voice profile">
+        <select value={global.voiceProfile || 'neutral'} onChange={(e) => onPatchGlobal({ voiceProfile: e.target.value })}
+          title="Used by the voice-quality scores on your own recordings and read-aloud: “depth” is judged against a typical pitch for this voice type">
+          <option value="neutral">Neutral</option>
+          <option value="male">Lower voice (male)</option>
+          <option value="female">Higher voice (female)</option>
+        </select>
+      </Field>
       <Field label="Model">
         <select value={global.elevenModel || 'eleven_multilingual_v2'} onChange={(e) => onPatchGlobal({ elevenModel: e.target.value })}>
           {ELEVEN_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}

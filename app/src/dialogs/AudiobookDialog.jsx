@@ -18,6 +18,8 @@ import {
 import { defaultVoiceForLang, piperSupported, installedVoices, voiceLabel, createPiperEngine } from '../features/piperTts.js';
 import { elevenVoices, elevenSynth, elevenConfigured } from '../features/elevenLabs.js';
 import { audiobookChunks, readerDocFromText } from '../document/readerDocument.js';
+import { averageVoice, voiceLine, VOICE_ATTRS } from '../features/voice/voiceScore.js';
+import ChunkContext, { ContextPicker, useContextSize } from './ChunkContext.jsx';
 import {
   JOB_KIND_LABEL, makeJob, addJob, removeJob, updateJob, moveJob, moveJobTo, clearFinished,
   isFinished, nextQueued, runningJob, queueTotals, queueEtaSeconds, addRun, runThroughput,
@@ -141,6 +143,10 @@ export default function AudiobookDialog({ onClose }) {
   const [confirmJob, setConfirmJob] = useState(null); // { kind, targets, sections, words }
   const [clipMgr, setClipMgr] = useState(null); // chunk whose clip manager is open
   const [fullText, setFullText] = useState(null); // chunk whose full text is shown
+  const [ctxN, setCtxN] = useContextSize();        // neighbouring chunks shown around it
+  // "I narrate myself": hides the voice-generation controls so recording your own voice is the
+  // whole screen. Remembered across sessions (app setting).
+  const selfMode = !!state.global.abSelfNarrate;
   const [size, setSize] = useState({ bytes: 0, clips: 0, chunks: 0 });
   const [wipeArm, setWipeArm] = useState(false);
   const [showExport, setShowExport] = useState(false);
@@ -1185,6 +1191,8 @@ export default function AudiobookDialog({ onClose }) {
         <button onClick={() => setView('library')} title="Back to the library list (this book stays open here)">‹ Library</button>
         <strong title={sel.fileName}>{sel.fileName}</strong>
         <span className="grow" />
+        <button className={selfMode ? 'toggle-on' : ''} aria-pressed={selfMode} onClick={() => updateGlobal({ abSelfNarrate: !selfMode })}
+          title="Narrating it yourself? Hide the voice-generation controls and lead with recording">🎤 I narrate myself</button>
         <button onClick={closeBook} title="Close this book’s editor">✕ Close book</button>
       </div>
       {/* Every action lives in ONE sticky toolbar, so the controls stay reachable however far down
@@ -1195,7 +1203,7 @@ export default function AudiobookDialog({ onClose }) {
       {/* coverage + voice */}
       <div className="ab-coverage">
         {totalCovered >= chunks.length && chunks.length
-          ? <span className="ab-cov-done">✓ Fully generated — {chunks.length} chunk(s)</span>
+          ? <span className="ab-cov-done">✓ Fully {selfMode ? 'recorded' : 'generated'} — {chunks.length} chunk(s)</span>
           : <span><strong>{totalCovered}</strong> / {chunks.length} chunk(s) have audio <strong>({pct}%)</strong></span>}
         <div className="imp-bar ab-cov-bar" title={`${pct}%`}><div className="imp-fill" style={{ width: `${pct}%` }} /></div>
       </div>
@@ -1207,7 +1215,7 @@ export default function AudiobookDialog({ onClose }) {
         </div>
       )}
 
-      <details className="ab-group" open>
+      {!selfMode && <details className="ab-group" open>
         <summary>🎙 Generate narration</summary>
       {canTTS ? (
         <div className="ab-genbar">
@@ -1228,9 +1236,9 @@ export default function AudiobookDialog({ onClose }) {
           )}
         </div>
       ) : <p className="settings-note">Offline Piper voice isn’t available in this browser. Add an ElevenLabs key in Audio Settings to generate in the cloud instead.</p>}
-      </details>
+      </details>}
 
-      <details className="ab-group">
+      <details className="ab-group" key={selfMode ? 'self' : 'gen'} open={selfMode || undefined}>
         <summary>📖 Record &amp; export</summary>
       <div className="ab-genbar">
         <button className="toggle-on" onClick={() => setReadThru(true)} title="Narrate it yourself in one sitting: read chunk after chunk, pause to advance — each take is trimmed, cleaned and filed automatically">📖 Read it aloud yourself…</button>
@@ -1336,8 +1344,8 @@ export default function AudiobookDialog({ onClose }) {
                           <td className="ab-dur">{top ? fmtDur(top.durationMs) : ''}</td>
                           <td className="ab-actions">
                             {top && <button className={isPlaying ? 'toggle-on' : ''} onClick={() => playClip(li)} title={isPlaying ? 'Stop' : 'Play'}>{isPlaying ? '■' : '▶'}</button>}{' '}
-                            {(piperSupported() || elVoices.length > 0) && <button onClick={() => setConfirmJob({ kind: 'one', targets: [chunk], sections: [sec.title], words: (chunk.text || '').split(/\s+/).filter(Boolean).length })} title="Generate this chunk">Gen</button>}{' '}
-                            <button onClick={() => setRecWiz(chunk)} title="Record with your mic or import an audio file for this chunk">🎙 Rec…</button>{' '}
+                            {!selfMode && (piperSupported() || elVoices.length > 0) && <button onClick={() => setConfirmJob({ kind: 'one', targets: [chunk], sections: [sec.title], words: (chunk.text || '').split(/\s+/).filter(Boolean).length })} title="Generate this chunk">Gen</button>}{' '}
+                            <button className={selfMode ? 'toggle-on' : ''} onClick={() => setRecWiz(chunk)} title="Record with your mic or import an audio file for this chunk">🎙 Rec…</button>{' '}
                             {cl.length > 0 && <button onClick={() => setClipMgr(chunk)} title="Manage the clips for this chunk">Clips ({cl.length})</button>}
                           </td>
                         </tr>
@@ -1363,6 +1371,15 @@ export default function AudiobookDialog({ onClose }) {
           <p className="settings-note" style={{ margin: '2px 0 0' }}>
             🎙 Narration quality: <strong>★ {avg}</strong> average across {qs.length} recorded take{qs.length === 1 ? '' : 's'}
             {cons && <> · pace &amp; level <strong>{cons.label.toLowerCase()}</strong></>} — per-take details in each chunk’s clip list.
+            {(() => {
+              const v = averageVoice(qs.map((q) => q.voice));
+              return v && (
+                <span className="ab-voice-sum" title={`SpeechImprover-style voice scores (0–100), averaged over ${v.takes} take(s). Estimates from the audio, not clinical measurements.`}>
+                  <br />🗣 Voice <strong>{v.overall}</strong>: {voiceLine(v)}
+                  {v.weakest && <> · work on <strong>{VOICE_ATTRS[v.weakest][0].toLowerCase()}</strong>: {VOICE_ATTRS[v.weakest][3]}</>}
+                </span>
+              );
+            })()}
           </p>
         );
       })()}
@@ -1392,9 +1409,21 @@ export default function AudiobookDialog({ onClose }) {
 
       {/* Full-text preview */}
       {fullText && (
-        <Dialog title={`Chunk ${fullText.startLine + 1}${fullText.endLine > fullText.startLine ? `–${fullText.endLine + 1}` : ''}`} onClose={() => setFullText(null)} width={520} buttons={<button onClick={() => setFullText(null)}>Close</button>}>
-          <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{fullText.text}</p>
-        </Dialog>
+        (() => {
+          const fi = chunks.findIndex((c) => c.startLine === fullText.startLine);
+          return (
+            <Dialog title={`Chunk ${fullText.startLine + 1}${fullText.endLine > fullText.startLine ? `–${fullText.endLine + 1}` : ''}`} onClose={() => setFullText(null)} width={560}
+              buttons={<>
+                <button disabled={fi <= 0} onClick={() => setFullText(chunks[fi - 1])}>◀ Previous chunk</button>
+                <button disabled={fi < 0 || fi >= chunks.length - 1} onClick={() => setFullText(chunks[fi + 1])}>Next chunk ▶</button>
+                <button onClick={() => { setRecWiz(fullText); setFullText(null); }}>🎙 Record this…</button>
+                <button onClick={() => setFullText(null)}>Close</button>
+              </>}>
+              <ContextPicker n={ctxN} onChange={setCtxN} />
+              <ChunkContext chunks={chunks} chunk={fullText} n={ctxN} className="ab-ctx" currentClass="rcw-text" />
+            </Dialog>
+          );
+        })()
       )}
 
       {/* Per-chunk clip manager */}
@@ -1440,6 +1469,7 @@ export default function AudiobookDialog({ onClose }) {
                             title={`${c.quality.wpm != null ? c.quality.wpm + ' wpm · ' : ''}${c.quality.rmsDb} dB RMS · peak ${c.quality.peakDb} dB · volume CV ${c.quality.volumeCv}${c.quality.clippingPct ? ` · clipping ${c.quality.clippingPct}%` : ''}`}
                           >★ {c.quality.score}</span>
                         ) : '—'}
+                        {c.quality?.voice && <span className="ab-voice-badge" title={`Voice: ${voiceLine(c.quality.voice)}`}> 🗣 {c.quality.voice.overall}</span>}
                       </td>
                       <td className="ab-actions">
                         <button className={playingKey === `${li}:${c.id}` ? 'toggle-on' : ''} onClick={() => playClip(li, c.id)} title={playingKey === `${li}:${c.id}` ? 'Stop' : 'Play'}>{playingKey === `${li}:${c.id}` ? '■' : '▶'}</button>
@@ -1487,6 +1517,7 @@ export default function AudiobookDialog({ onClose }) {
         <RecordClipWizard
           checksum={checksum}
           chunk={recWiz}
+          chunks={chunks}
           onClose={() => setRecWiz(null)}
           onSaved={() => { setRecWiz(null); setMsg('🎤 Clip saved.'); refresh(); }}
         />
