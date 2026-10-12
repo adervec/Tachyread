@@ -96,7 +96,7 @@ import { playButtonView } from './features/playButtonMode.js';
 import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, speechRecognitionSupported } from './features/speechRecognition.js';
-import { alignOrResync } from './features/speakAlign.js';
+import { alignOrResync, speakParams } from './features/speakAlign.js';
 import VoiceFeedback from './components/VoiceFeedback.jsx';
 import { recordClip } from './features/audioRecorder.js';
 import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal, allFiles, loadFile, saveFile } from './state/storage.js';
@@ -1919,24 +1919,26 @@ function AppInner() {
     let restartTimer = 0, silentTimer = 0, lastResultAt = 0;
     const r = createRecognizer({
       lang,
-      onResult: ({ transcript, confidence, isFinal }) => {
+      // No confidence gate: lining up with the actual text is far better evidence than the
+      // recogniser's own (often low, and 0 for interim) confidence score.
+      onResult: ({ transcript, isFinal }) => {
         const { tab, stepWord: step } = speakRef.current;
         const cfg = tab?.settings.speaking || {};
-        if (!tab?.doc) return;
-        const minConf = cfg.confidence === 'High' ? 0.8 : cfg.confidence === 'Low' ? 0.3 : 0.55;
-        const lowConf = confidence > 0 && confidence < minConf; // Chrome reports 0 for interim results
+        if (!tab?.doc || (!isFinal && cfg.allowPartial === false)) return;
+        const wi = tab.settings.wordIndex;
+        const hit = alignOrResync(tab.doc.words, wi, transcript, speakParams(cfg));
         let move = null;
-        if ((isFinal || cfg.allowPartial !== false) && !lowConf) {
-          const wi = tab.settings.wordIndex;
-          const hit = alignOrResync(tab.doc.words, wi, transcript, { window: cfg.window, skip: cfg.skip, fuzz: cfg.fuzz, minRun: cfg.minRun });
-          if (hit) {
-            spokenWordsRef.current += hit.to - wi;
-            step(hit.to - wi, { src: 'speak' });
-            move = `+${hit.to - wi} word${hit.to - wi === 1 ? '' : 's'}${hit.resync ? ' (found your place)' : ''}`;
-          } else if (isFinal) move = 'no match near your place';
-        } else if (lowConf) move = `too unsure (${Math.round(confidence * 100)}%)`;
+        if (hit) {
+          spokenWordsRef.current += hit.to - wi;
+          step(hit.to - wi, { src: 'speak' });
+          move = `+${hit.to - wi} word${hit.to - wi === 1 ? '' : 's'}${hit.resync ? ' (found your place)' : ''}`;
+        } else if (isFinal) move = 'no match near your place';
         lastResultAt = Date.now();
-        setSpeakInfo((si) => ({ ...si, status: 'listening', error: null, heard: transcript, final: isFinal, move: move || si.move }));
+        setSpeakInfo((si) => ({
+          ...si, status: 'listening', error: null, heard: transcript, final: isFinal, move: move || si.move,
+          // What the card lines up: heard words vs the text from where you were.
+          trace: hit ? { from: wi, to: hit.to, pairs: hit.pairs } : (isFinal ? { from: wi, to: wi, pairs: null } : si.trace),
+        }));
       },
       onError: (err) => {
         if (err === 'no-speech' || err === 'aborted') return; // silence / our own stop — not a problem
@@ -3255,8 +3257,11 @@ function AppInner() {
       {speakingOn && activeTab?.doc && (
         <VoiceFeedback
           info={speakInfo}
-          nextWords={activeTab.doc.words.slice(activeTab.settings.wordIndex, activeTab.settings.wordIndex + 8).join(' ')}
           onStop={toggleSpeaking}
+          docWords={activeTab.doc.words}
+          wordIndex={activeTab.settings.wordIndex}
+          speakCfg={activeTab.settings.speaking}
+          onTune={(p) => patchSettings(activeTab.id, { speaking: { ...activeTab.settings.speaking, ...p } })}
           showScores={activeTab.settings.speaking?.feedback !== false}
           wordsRef={spokenWordsRef}
           profile={state.global.voiceProfile || 'neutral'}
