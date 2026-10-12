@@ -1914,6 +1914,9 @@
 .word-menu .item { padding: 6px 14px; cursor: pointer; white-space: nowrap; color: var(--menu-fg); }
 .word-menu .item:hover { background: var(--menu-highlight); }
 .word-menu .item.disabled { opacity: 0.4; cursor: default; }
+/* Tab sort submenu: key name + its two directions as buttons. */
+.tab-sort-row { display: grid; grid-template-columns: 1fr auto auto; gap: 4px; align-items: center; padding: 3px 10px 3px 14px; color: var(--menu-fg); white-space: nowrap; }
+.tab-sort-row button { font-size: 11px; padding: 1px 6px; }
 .word-menu .item.disabled:hover { background: transparent; }
 .word-menu .sep { height: 1px; margin: 4px 0; background: var(--divider); }
 
