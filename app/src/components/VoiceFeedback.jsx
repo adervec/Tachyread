@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createLiveAnalyzer } from '../features/voice/liveMetrics.js';
 import { voiceScores, VOICE_ATTRS } from '../features/voice/voiceScore.js';
+import { STRICTNESS, strictnessOf, speakParams } from '../features/speakAlign.js';
 
 // The reading-aloud card: what the speech recogniser is hearing right now, what it expects next and
 // how far it last moved the text (so a stall is visible, not a mystery), plus optional live
@@ -39,7 +40,40 @@ const clampPos = (x, y, el) => {
   return { x: Math.max(0, Math.min(window.innerWidth - w, x)), y: Math.max(0, Math.min(window.innerHeight - h, y)) };
 };
 
-export default function VoiceFeedback({ info = {}, nextWords = '', onStop, showScores = true, wordsRef, profile = 'neutral' }) {
+// Heard words vs the text, side by side: each heard word green when it matched a text word, struck
+// through when it matched nothing, grey when it was already behind you; the text from where you
+// were, with matched words green, words it let you skip dimmed, and the words still ahead plain.
+function Lineup({ info, docWords, wordIndex }) {
+  const tr = info.trace;
+  const matched = new Set((tr?.pairs || []).map((p) => p.i).filter((i) => i != null));
+  const from = tr ? tr.from : wordIndex;
+  const upTo = Math.max(wordIndex, tr?.to ?? 0) + 10;
+  const text = [];
+  for (let i = from; i < Math.min(docWords.length, upTo); i++) {
+    const cls = matched.has(i) ? 'ok' : i < wordIndex ? 'skip' : i === wordIndex ? 'here' : 'ahead';
+    text.push(<span key={i} className={`vf-w ${cls}`}>{docWords[i]}</span>, ' ');
+  }
+  return (
+    <div className="vf-lineup">
+      <div className="vf-row">
+        <span className="vf-k">Heard</span>
+        <span className="vf-heard" title="What the speech recogniser hears">
+          {tr?.pairs
+            ? tr.pairs.map((p, k) => <span key={k} className={`vf-w ${p.stale ? 'stale' : p.i != null ? 'ok' : 'miss'}`}>{p.w} </span>)
+            : info.heard ? (info.final ? info.heard : <i>{info.heard}</i>) : <span className="vf-dim">…nothing yet — read the highlighted text aloud</span>}
+          {tr?.pairs && !info.final && info.heard && <i className="vf-dim"> (listening…)</i>}
+        </span>
+      </div>
+      <div className="vf-row">
+        <span className="vf-k">Text</span>
+        <span className="vf-text" title="Green: matched · dim: skipped over · underlined: where you are now">{text}</span>
+      </div>
+    </div>
+  );
+}
+
+export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0, speakCfg = {}, onTune, onStop, showScores = true, wordsRef, profile = 'neutral' }) {
+  const strict = strictnessOf(speakParams(speakCfg));
   const [v, setV] = useState(null);
   const [trend, setTrend] = useState([]);
   const [micErr, setMicErr] = useState('');
@@ -135,10 +169,16 @@ export default function VoiceFeedback({ info = {}, nextWords = '', onStop, showS
         {errText || STATUS[info.status] || STATUS.starting}{info.lang ? <span className="vf-lang"> · {info.lang}</span> : ''}
         {info.move && !errKey && <span className={`vf-move${info.move.startsWith('+') ? ' ok' : ''}`}> · {info.move}</span>}
       </div>
-      <div className="vf-heard" title="What the speech recogniser hears">
-        {info.heard ? (info.final ? info.heard : <i>{info.heard}</i>) : <span className="vf-dim">…nothing heard yet — read the highlighted text aloud</span>}
-      </div>
-      {open && nextWords && <div className="vf-next" title="The words it expects next">Next: {nextWords}</div>}
+      <Lineup info={info} docWords={docWords} wordIndex={wordIndex} />
+      {onTune && (
+        <label className="vf-strict" title="How exactly you must read: forgiving lets misheard and skipped words through; strict needs longer exact runs">
+          <span>Strictness</span>
+          <input type="range" min={1} max={STRICTNESS.length - 1} step={1} value={strict ?? 3}
+            onChange={(e) => { const { label, ...p } = STRICTNESS[Number(e.target.value)]; onTune(p); }} // eslint-disable-line no-unused-vars
+            aria-valuetext={strict ? STRICTNESS[strict].label : 'custom'} />
+          <span className="vf-strict-v">{strict ? STRICTNESS[strict].label : 'custom (Settings)'}</span>
+        </label>
+      )}
       {open && showScores && (
         <>
           {micErr && <div className="vf-note">{micErr}</div>}
