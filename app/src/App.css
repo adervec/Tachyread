@@ -3196,6 +3196,16 @@
   100% { opacity: 0; transform: translate(-50%, -8px) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) { .tr-penalty { animation: none; } }
+/* Stop-on-error "pain": a red vignette flash over the passage on a refused key. Remounted per
+   refusal (React key), so mashing a wrong key restarts it instead of stacking. Colour only —
+   the strong level's shake is a Web Animation that skips itself under reduced motion. */
+.tr-pain {
+  position: absolute; inset: 0; z-index: 3; pointer-events: none; border-radius: 8px;
+  box-shadow: inset 0 0 28px 6px color-mix(in srgb, #e05252 55%, transparent);
+  animation: trPain 0.35s ease-out forwards;
+}
+.tr-pain.strong { box-shadow: inset 0 0 46px 14px color-mix(in srgb, #e05252 75%, transparent); background: color-mix(in srgb, #e05252 10%, transparent); }
+@keyframes trPain { from { opacity: 1; } to { opacity: 0; } }
 @media (max-width: 760px) {
   .tr-body { flex-direction: column; }
   .tr-side { width: auto; flex: 0 0 auto; flex-direction: row; flex-wrap: wrap; overflow: visible; }
@@ -3369,6 +3379,7 @@
    in their own colour — auto-skipped, never typed. Blind mode keeps them (they're not verdicts). */
 .trc.ghost { color: var(--typing-ghost, #b58cff); opacity: 0.45; }
 .trw.ghostw { color: var(--typing-ghost, #b58cff); opacity: 0.4; }
+.trw.skipw { opacity: 0.4; } /* untypeable standalone symbols ("&") with punctuation shown */
 /* Zero-WIDTH anchor the floating cursor glides to — never shifts layout horizontally, but has a
    real text-height box (dipping slightly below the baseline) so the cursor's measured
    offsetTop/offsetHeight land on the glyphs instead of hanging from the baseline. */
@@ -3478,6 +3489,16 @@
 .tr-grade-D .tr-grade-letter { color: #d98324; }
 .tr-grade-F .tr-grade-letter { color: #c0392b; }
 .tr-results-head { font-size: 15px; }
+.tr-word-outcomes { font-size: 12px; color: var(--status-fg); }
+/* Long-run splits: per-part speed/accuracy/grade + pace-held grade. */
+.tr-splits { width: 100%; max-width: 520px; font-size: 13px; }
+.tr-splits-head { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.tr-split-diff { margin-left: auto; }
+.tr-splits-table { width: 100%; border-collapse: collapse; text-align: center; font-variant-numeric: tabular-nums; }
+.tr-splits-table th { font-weight: 600; color: var(--status-fg); font-size: 11px; }
+.tr-splits-table td, .tr-splits-table th { padding: 2px 6px; border-bottom: 1px solid color-mix(in srgb, var(--menu-fg) 12%, transparent); }
+.tr-splits .g-A { color: #2e9d4f; font-weight: 700; } .tr-splits .g-B { color: #4a90d9; font-weight: 700; }
+.tr-splits .g-D { color: #d98324; font-weight: 700; } .tr-splits .g-F { color: #c0392b; font-weight: 700; }
 .tr-results-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .tr-killfeed { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 11px; color: var(--status-fg); justify-content: center; }
 .tr-kf-label { font-weight: 600; }

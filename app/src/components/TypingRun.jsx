@@ -12,11 +12,12 @@ import { fmtTime } from '../features/dateFmt.js';
 import { allTypingRuns } from '../state/storage.js';
 import { consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress, penaltyRewind } from '../features/typingUpgrades.js';
 import { currentSession, sessionStats, bookForecast } from '../features/typingSession.js';
+import { splitRun, splitsFor } from '../features/typingSplits.js';
 import { typingEyeColor } from '../features/avatarMood.js';
 import Avatar from './Avatar.jsx';
 
 const DEFAULT_SOUNDS = {
-  charCorrect: 'off', charWrong: 'off', wordPerfect: 'click', wordError: 'hiss',
+  charCorrect: 'off', charWrong: 'off', wordPerfect: 'click', wordCorrected: 'wood', wordError: 'hiss',
   linePerfect: 'off', sentencePerfect: 'off', paragraphPerfect: 'off',
 };
 
@@ -48,11 +49,16 @@ const ENDLESS_SECS = 99999;
 // from reflowing onto the next line while it's being typed.
 const OVERTYPE_MAX = 4;
 
-const freshStats = () => ({ start: 0, endAt: 0, chars: 0, correct: 0, errors: 0, words: 0, perfect: 0, errorKeys: {}, keys: {} });
+const freshStats = () => ({ start: 0, endAt: 0, chars: 0, correct: 0, errors: 0, words: 0, perfect: 0, corrected: 0, okChars: 0, errorKeys: {}, keys: {} });
 
 // Pending words further ahead than this aren't rendered — they're below the viewport fold anyway,
 // and skipping their DOM is what keeps long timed/endless passages (up to 600 words) light.
 const PENDING_WINDOW = 160;
+// Committed words far above the active line are dropped from the DOM too: every keystroke's
+// layout read (line scroll, caret) costs time proportional to the rendered passage, so a long
+// run used to slow down word by word (~1.7 → 7.7 ms/key over 1,500 words). Once this many words
+// are committed past the first rendered one, rendering restarts at the line above the active one.
+const TRIM_AFTER = 300;
 
 const charOkWith = (typedCh, targetCh, caseSensitive, bypassSym) =>
   (bypassSym && isExotic(targetCh)) || sameChar(typedCh, targetCh, caseSensitive);
@@ -133,7 +139,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const penaltyWords = Math.max(0, Math.min(9, Number(cfg.penaltyWords) || 0)); // setback mode: words erased per mistyped word
   // Display-only variants of the transforms (the REQUIRED typing is identical either way):
   const wantCaps = !!cfg.showCaps;         // under lowercase: show the capitals as written
-  const wantGhosts = !!cfg.ghostSpecials;  // under no-special: show the stripped chars as dim auto-skipped ghosts
+  // under no-special: show the stripped chars as dim auto-skipped ghosts. Gated on noSpecial so a
+  // stale ghostSpecials flag can't ghost standalone symbol tokens (" & ") once punctuation is shown.
+  const wantGhosts = !!cfg.noSpecial && !!cfg.ghostSpecials;
   const volume = cfg.soundVolume ?? 0.4;
   const sounds = { ...DEFAULT_SOUNDS, ...(cfg.sounds || {}) };
   const tickClock = !!cfg.tickClock;
@@ -268,7 +276,25 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // Setback flash: names how much progress a mistake just cost.
   const [penalty, setPenalty] = useState(null);
   const penaltyTimer = useRef(0);
+  // Stop-on-error "pain": a refused key flashes the passage (and, at 'strong', shakes the word and
+  // buzzes a phone). painAt remounts the flash so repeated mistakes restart it rather than stack.
+  const painFx = cfg.painFx || 'subtle';
+  const [painAt, setPainAt] = useState(0);
+  function pain() {
+    if (painFx === 'off') return;
+    setPainAt(Date.now());
+    if (painFx !== 'strong') return;
+    try { navigator.vibrate?.(40); } catch { /* unsupported */ }
+    if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      activeRef.current?.animate?.([{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }], { duration: 160 });
+    }
+  }
   const lineH = useRef(0);
+  // First passage index rendered (see TRIM_AFTER). `from` falls back to 0 if a setback/back-word
+  // rewinds above it; the next trim pass catches up.
+  const [trim, setTrim] = useState(0);
+  const from = pos < trim ? 0 : trim;
+  const fromRef = useRef(0);
   // Voice-race state. posRef mirrors `pos` so the speech callbacks (which close over a stale render)
   // can read your live typing position; the rest track the racing voice.
   const posRef = useRef(0);
@@ -328,7 +354,10 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     const secs = s.start ? ((s.endAt || Date.now()) - s.start) / 1000 : 0;
     const mins = secs / 60;
     const gross = mins > 0 ? (s.chars / 5) / mins : 0;
-    const net = mins > 0 ? Math.max(0, (s.chars / 5 - s.errors) / mins) : 0;
+    // Net counts only letters of words that ended up right (Monkeytype's convention): fixing a
+    // typo costs the time it took, but a fixed word is no longer scored as an error. Accuracy
+    // still records every wrong key.
+    const net = mins > 0 ? (s.okChars / 5) / mins : 0;
     const acc = s.chars ? (s.correct / s.chars) * 100 : 100;
     return { secs, gross, net, acc };
   }, []);
@@ -341,6 +370,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     if (!s.endAt) s.endAt = Date.now(); // freeze the run clock — the results screen must not keep counting
     const m = metrics();
     const net = Math.round(m.net);
+    // Close the trend on the exact final totals so the last split isn't cut short by up to a tick.
+    trendRef.current = [...trendRef.current, { t: m.secs, gross: m.gross, net: m.net, acc: m.acc, burst: 0, chars: s.chars, ok: s.okChars, correct: s.correct }];
     const run = {
       ts: Date.now(),
       netWpm: net,
@@ -350,6 +381,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       errors: s.errors,
       words: s.words,
       perfect: s.perfect,
+      corrected: s.corrected,
       durationMs: Math.round(m.secs * 1000),
       docName: doc.fileName || 'text',
       errorKeys: { ...s.errorKeys },
@@ -394,8 +426,12 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       const dt = (now - snaps[0].ts) / 1000;
       const burst = dt >= 0.4 ? ((stats.current.chars - snaps[0].chars) / 5) / (dt / 60) : 0;
       setTick((n) => n + 1);
+      const st = stats.current;
       setTrend((tr) => {
-        const next = [...tr.slice(-600), { t: m.secs, gross: m.gross, net: m.net, acc: m.acc, burst }];
+        // Running totals ride along so the results screen can split the run into parts. Past 600
+        // samples every other one is dropped (not the oldest), so a long run keeps its start.
+        let next = [...tr, { t: m.secs, gross: m.gross, net: m.net, acc: m.acc, burst, chars: st.chars, ok: st.okChars, correct: st.correct }];
+        if (next.length > 600) next = next.filter((_, i) => i % 2 === 0 || i === next.length - 1);
         trendRef.current = next;
         return next;
       });
@@ -440,8 +476,21 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       lineH.current = isFinite(lh) && lh > 0 ? lh : 40;
     }
     const lineIdx = Math.round(active.offsetTop / lineH.current);
+    // A trim removes whole lines above AND moves the translate by the same amount — apply that
+    // one without the slide transition so nothing visibly moves.
+    const trimmed = fromRef.current !== from;
+    fromRef.current = from;
+    if (trimmed) lines.style.transition = 'none';
     lines.style.transform = `translateY(${-Math.max(0, lineIdx - 1) * lineH.current}px)`;
-  }, [pos, buf, ticker]);
+    if (trimmed) { void lines.offsetHeight; lines.style.transition = ''; }
+    if (!oneWord && pos - from > TRIM_AFTER && lineIdx >= 2) {
+      // The k-th real word span is passage index from + k (ghost/skip spans are extras).
+      const ws = lines.querySelectorAll('.trw:not(.ghostw):not(.skipw)');
+      for (let k = 0; k < ws.length; k++) {
+        if (Math.round(ws[k].offsetTop / lineH.current) >= lineIdx - 1) { if (k > 0) setTrim(from + k); break; }
+      }
+    }
+  }, [pos, buf, ticker, from, oneWord]);
 
   // Floating cursor (monkeytype-style): a single absolutely-positioned bar that GLIDES to the
   // zero-width anchor rendered at the typing position, instead of a caret that pops per keystroke.
@@ -512,7 +561,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   function resetRunState() {
     clearCount();
     stopRace(); setVoicePos(-1); voiceRef.current = 0; caughtRef.current = false; racedRef.current = false;
-    setPos(0); setBuf(''); setResults([]); setSummary(null); setTrend([]);
+    setPos(0); setTrim(0); setBuf(''); setResults([]); setSummary(null); setTrend([]);
     stats.current = freshStats(); wordErrors.current = 0; lastGiRef.current = null;
     resultsRef.current = []; intervalsRef.current = []; lastKeyTsRef.current = 0; wordStartRef.current = 0;
     setPacePos(-1);
@@ -567,12 +616,16 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     if (oneWord) {
       const exact = typed.length === target.length && [...typed].every((c, j) => charOk(c, target[j]));
       if (!exact) { ping(sounds.wordError); wordErrors.current = 0; setBuf(''); return; }
-      wordErrors.current = 0; // matched exactly → counts as perfect even if chars were corrected
     }
     const perfect = wordErrors.current === 0 && typed.length === target.length;
+    // Corrected: reads right in the end, but a wrong key landed on the way.
+    const corrected = !perfect && wordOk(typed, target);
     const s = stats.current;
     s.words += 1;
-    if (perfect) { s.perfect += 1; ping(sounds.wordPerfect); } else { ping(sounds.wordError); }
+    if (perfect || corrected) s.okChars += target.length;
+    if (perfect) { s.perfect += 1; ping(sounds.wordPerfect); }
+    else if (corrected) { s.corrected += 1; ping(sounds.wordCorrected); }
+    else ping(sounds.wordError);
     // Segment-complete cues: a segment is "clean" only if every word in it was perfect.
     seg.current.line = seg.current.line && perfect;
     seg.current.sent = seg.current.sent && perfect;
@@ -587,7 +640,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     // Per-word time (first char → commit) feeds the problem-word mining ("unusually slow" words).
     const ms = wordStartRef.current ? Date.now() - wordStartRef.current : 0;
     wordStartRef.current = 0;
-    const entry = { typed, perfect, ms };
+    const entry = { typed, perfect, corrected, okLen: perfect || corrected ? target.length : 0, ms };
     resultsRef.current = [...resultsRef.current, entry];
     setResults((r) => [...r, entry]);
     setBuf('');
@@ -597,12 +650,15 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     if (penaltyWords > 0 && !perfect) {
       const back = penaltyRewind(resultsRef.current, pos + 1, penaltyWords);
       if (back.dropped > 0) {
+        const lost = resultsRef.current.slice(back.kept.length);
         resultsRef.current = back.kept;
         setResults(back.kept);
         setPos(back.pos);
         posRef.current = back.pos;
         s.words = Math.max(0, s.words - back.dropped);
         s.perfect = Math.max(0, s.perfect - back.perfectLost);
+        s.corrected -= lost.filter((r) => r.corrected).length;
+        s.okChars -= lost.reduce((a, r) => a + (r.okLen || 0), 0);
         lastGiRef.current = back.pos > 0 ? (prepared[back.pos - 1]?.gi ?? null) : null;
         wordStartRef.current = 0;
         setPenalty({ n: back.dropped, at: Date.now() });
@@ -634,6 +690,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     const s = stats.current;
     s.words = Math.max(0, s.words - 1);
     if (prev?.perfect) s.perfect = Math.max(0, s.perfect - 1);
+    if (prev?.corrected) s.corrected -= 1;
+    s.okChars -= prev?.okLen || 0;
     wordErrors.current = 0;
     lastGiRef.current = prevPos - 1 >= 0 ? (prepared[prevPos - 1]?.gi ?? null) : null;
   }
@@ -710,6 +768,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       s.errors += 1;
       wordErrors.current += 1;
       ping(sounds.charWrong);
+      pain();
       const ch = target[p];
       if (ch) {
         const k = caseSensitive ? ch : ch.toLowerCase();
@@ -755,6 +814,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       if (stopOnError && typed.length < (passage[pos] || '').length) {
         scoreChars(buf.length, typed);
         ping(sounds.charWrong);
+        pain();
         setBuf(typed);
         armIdle();
         return;
@@ -847,7 +907,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const punctState = !noSpecial ? 'shown' : wantGhosts ? 'ghosts 👻' : 'hidden';
   const cyclePunct = () => patchCfg(!noSpecial
     ? { noSpecial: true, ghostSpecials: false }
-    : !wantGhosts ? { noSpecial: true, ghostSpecials: true } : { noSpecial: false });
+    : !wantGhosts ? { noSpecial: true, ghostSpecials: true } : { noSpecial: false, ghostSpecials: false });
   const caseState = !lowercase ? (caseSensitive ? 'match case' : 'any case') : wantCaps ? 'lower · Aa shown' : 'lowercase';
   const cycleCase = () => patchCfg(!lowercase && caseSensitive ? { caseFold: true }
     : !lowercase ? { lowercase: true, caseFold: false, showCaps: false }
@@ -1013,6 +1073,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             <Tile icon="🛑" label="Stop on error" state={stopOnError ? 'on' : 'off'} on={stopOnError}
               onClick={() => patchCfg({ stopOnError: !stopOnError })} disabled={locked}
               title="A wrong key is refused (it still costs an error), and space only commits a complete word — the classic accuracy-discipline mode" />
+            {stopOnError && (
+              <Tile icon="💢" label="Pain effect" state={painFx} on={painFx !== 'off'} disabled={locked}
+                onClick={() => patchCfg({ painFx: painFx === 'off' ? 'subtle' : painFx === 'subtle' ? 'strong' : 'off' })}
+                title="Cycle off → subtle → strong: a refused key flashes the passage red; strong also shakes the word and vibrates phones" />
+            )}
             <Tile icon="🔧" label="Fix errors" state={fixErrors ? 'on' : 'off'} on={fixErrors}
               onClick={() => patchCfg({ fixErrors: !fixErrors, ...(fixErrors ? {} : { confidence: false }) })} disabled={locked}
               title="Mistakes land on screen and backspace works, but space won't advance until the word is typed exactly right — repair before you move on" />
@@ -1055,6 +1120,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             {soundRow('⌨', 'Key ✓', 'charCorrect')}
             {soundRow('✗', 'Key ✗', 'charWrong')}
             {soundRow('✔', 'Word ✓', 'wordPerfect')}
+            {soundRow('🩹', 'Word fixed', 'wordCorrected')}
             {soundRow('⚠', 'Word ✗', 'wordError')}
             {isDocMode && soundRow('↩', 'Line ✓', 'linePerfect')}
             {isDocMode && soundRow('•', 'Sentence ✓', 'sentencePerfect')}
@@ -1074,20 +1140,24 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       <div className={`tr-viewport${ticker ? ' ticker-vp' : ''}`} style={{ display: phase === 'done' ? 'none' : undefined, ...(settings.fontFamily ? { fontFamily: settings.fontFamily } : null) }}>
         {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{count}</div>}
         {escArmed && phase === 'running' && <div className="tr-esc-hint" role="status">Esc again to end the run</div>}
+        {painAt > 0 && stopOnError && phase === 'running' && <div className={`tr-pain ${painFx}`} key={painAt} aria-hidden="true" />}
         {penalty && <div className="tr-penalty" role="status" key={penalty.at}>💥 −{penalty.n} word{penalty.n > 1 ? 's' : ''}</div>}
         <div className={`tr-cursor${phase === 'running' ? '' : ' waiting'}`} ref={caretRef} style={{ opacity: phase === 'done' ? 0 : 1 }} />
         <div className={`tr-lines${oneWord ? ' one-word' : ''}${blind ? ' blind' : ''}${ticker ? ' ticker' : ''}`} ref={linesRef}>
           {/* Sliced, not just skipped inside the loop: a long run's passage is now thousands of
               words and this re-runs on every keystroke. Slicing from 0 keeps `i` a passage index. */}
-          {passage.slice(0, pos + PENDING_WINDOW + 1).map((w, i) => {
+          {passage.slice(from, pos + PENDING_WINDOW + 1).map((w, k) => {
+            const i = from + k;
             if (oneWord && i !== pos) return null; // one-word mode shows only the current word
             if (ticker && i < pos - 12) return null; // ticker: far-committed words have slid off left
             const vc = (i === voicePos ? ' voice' : '') // word the racing voice is speaking…
               + (i === pacePos && phase === 'running' && paceWpmVal > 0 ? ' pace' : ''); // …and the 👻 ghost's word
             // Display-only extras: fully-skipped decorative tokens ahead of this word render as
             // ghost words, and the book's own line breaks can show — the typed words are identical.
-            const preEl = wantGhosts && !oneWord && prepared[i]?.pre
-              ? <span className="trw ghostw">{prepared[i].pre.join(' ')} </span> : null;
+            // With punctuation shown they can't be typed either (no letter/digit), so they read as
+            // plain dimmed text instead of vanishing.
+            const preEl = !oneWord && prepared[i]?.pre && (wantGhosts || !noSpecial)
+              ? <span className={`trw ${wantGhosts ? 'ghostw' : 'skipw'}`}>{prepared[i].pre.join(' ')} </span> : null;
             const brkEl = showBreaks && segEnds
               ? (segEnds.para[i] ? <><br /><br /></> : segEnds.line[i] ? <br /> : null) : null;
             let wordEl;
@@ -1195,6 +1265,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             <strong>{summary.netWpm} net WPM</strong> · {summary.grossWpm} gross · {summary.accuracy}% acc
             {summary.consistency != null ? ` · ${summary.consistency}% consistency` : ''} · {summary.tier}
           </div>
+          {summary.words > 0 && (
+            <div className="tr-word-outcomes">
+              {summary.perfect} perfect · {summary.corrected || 0} fixed · {summary.words - summary.perfect - (summary.corrected || 0)} wrong
+            </div>
+          )}
           {(() => {
             const stk = typingStreak(pastRunsRef.current || [], Date.now());
             return stk.days > 0 && (
@@ -1204,6 +1279,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             );
           })()}
           <RunChart trend={summary.trend} />
+          <RunSplits trend={summary.trend} secs={summary.durationMs / 1000} />
           <div className="tr-results-actions">
             {plan ? (
               <>
@@ -1269,6 +1345,36 @@ function Stat({ v, l, hero }) {
     <div className={`tr-stat${hero ? ' tr-stat-hero' : ''}`}>
       <span className="tr-v">{v}</span>
       <span className="tr-l">{l}</span>
+    </div>
+  );
+}
+
+// Long runs: the same run cut into halves / thirds / quarters — each part's own net, gross,
+// accuracy and grade — plus how well the pace held from the first part to the last.
+function RunSplits({ trend, secs }) {
+  const options = splitsFor(secs);
+  const [n, setN] = useState(options[0] || 2);
+  const sp = options.length ? splitRun(trend, options.includes(n) ? n : options[0]) : null;
+  if (!sp) return null;
+  const name = { 2: 'Halves', 3: 'Thirds', 4: 'Quarters' };
+  return (
+    <div className="tr-splits">
+      <div className="tr-splits-head">
+        {options.map((k) => (
+          <button key={k} type="button" className={k === n ? 'toggle-on' : ''} aria-pressed={k === n} onClick={() => setN(k)}>{name[k]}</button>
+        ))}
+        <span className={`tr-split-diff g-${sp.diffGrade}`} title="Pace held: last part's net WPM against the first's. Within 5% (or faster) is an A.">
+          Pace held <b>{sp.diffGrade}</b> ({sp.diffPct > 0 ? '+' : ''}{sp.diffPct}%)
+        </span>
+      </div>
+      <table className="tr-splits-table">
+        <thead><tr><th>Part</th><th>Net</th><th>Gross</th><th>Acc</th><th>Grade</th></tr></thead>
+        <tbody>
+          {sp.parts.map((p, i) => (
+            <tr key={i}><td>{i + 1}</td><td>{p.net}</td><td>{p.gross}</td><td>{p.acc}%</td><td className={`g-${p.grade}`}>{p.grade}</td></tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

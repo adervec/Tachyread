@@ -33,3 +33,16 @@ assert.equal(buildPassage('passage', { docWords: doc, startIndex: 3990, max: 186
 assert.ok(buildPassage('passage', { docWords: doc, startIndex: 0, max: passageWordsFor('words', 1000) }).length > 600);
 
 console.log('typingPassage: all cases pass');
+
+// Gibberish + numbers drills: every token keeps a letter/digit (symbol-only tokens get dropped by
+// the run's transform), and gibberish really mixes case, digits and symbols.
+{
+  const g = buildPassage('gibberish', { max: 400, seed: 3 });
+  assert.equal(g.length, 400);
+  assert.ok(g.every((w) => /[\p{L}\p{N}]/u.test(w)), 'gibberish token without anything typeable');
+  const all = g.join('');
+  assert.ok(/[a-z]/.test(all) && /[A-Z]/.test(all) && /\d/.test(all) && /[^\w]/.test(all), 'gibberish should mix case, digits and symbols');
+  const n = buildPassage('numbers', { max: 200, seed: 1 });
+  assert.ok(n.every((w) => /\d/.test(w)), 'numbers token without a digit');
+  assert.ok(/[!@#$%^&*()]/.test(n.join('')), 'numbers drill should include shifted symbols');
+}
