@@ -4829,6 +4829,15 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   max-height: 40vh; overflow-y: auto;
 }
 .rtw-text.dim { opacity: 0.35; }
+/* Narration context: the chunk being read with its neighbours (book order) in one scroll box. */
+.ck-wrap { max-height: 55vh; overflow-y: auto; margin: 6px 0 10px; }
+.ck-side { white-space: pre-wrap; line-height: 1.5; opacity: 0.55; font-size: 0.95em; padding: 4px 16px; }
+.ck-side.peek { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ck-current.rcw-text { margin: 4px 0; border-left: 3px solid var(--toggle-active-bg); }
+.ck-wrap .rtw-text { max-height: none; margin: 4px 0; }
+.ck-pick { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--status-fg); }
+.ck-pick select { font-size: 12px; }
+.ab-voice-badge { font-size: 11px; color: var(--status-fg); white-space: nowrap; }
 .rtw-next {
   opacity: 0.45; font-size: 0.95em; padding: 0 16px; margin-bottom: 10px;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -5087,3 +5096,23 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 @media (max-width: 860px), (pointer: coarse) and (max-height: 860px) {
   .ab-toolbar { max-height: 42vh; }
 }
+
+/* Live voice feedback while advancing by reading aloud (components/VoiceFeedback.jsx). */
+.vf-card {
+  position: fixed; right: 16px; bottom: 96px; z-index: 60; width: 250px; max-width: calc(100vw - 32px);
+  background: var(--menu-bg); color: var(--menu-fg); border: 1px solid var(--input-border); border-radius: 10px;
+  box-shadow: var(--shadow); padding: 8px 10px; font-size: 12px;
+}
+.vf-head { display: flex; align-items: center; gap: 8px; }
+.vf-head b { font-size: 15px; font-family: Consolas, monospace; }
+.vf-trend { flex: 1; height: 22px; }
+.vf-trend path { fill: none; stroke: var(--toggle-active-bg); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.vf-toggle { padding: 0 6px; }
+.vf-bars { display: grid; gap: 3px; margin-top: 6px; }
+.vf-bar { display: grid; grid-template-columns: 74px 1fr 24px; align-items: center; gap: 6px; }
+.vf-lbl { color: var(--status-fg); }
+.vf-track { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--menu-fg) 12%, transparent); overflow: hidden; }
+.vf-fill { display: block; height: 100%; background: var(--toggle-active-bg); }
+.vf-num { text-align: right; font-variant-numeric: tabular-nums; }
+.vf-note { margin-top: 6px; color: var(--status-fg); line-height: 1.35; }
+@media (max-width: 520px) { .vf-card { left: 16px; right: 16px; width: auto; bottom: 120px; } }

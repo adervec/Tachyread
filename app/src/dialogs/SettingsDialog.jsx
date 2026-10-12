@@ -10,6 +10,7 @@ import { LINE_SOUNDS, playLineSound } from '../features/clickSound.js';
 import { FACE_STYLES } from '../components/faceDecor3d.js';
 import { STATS_CHIP_ITEMS } from '../components/ReadingStats.jsx';
 import { HIGHLIGHT_ALGOS, HIGHLIGHT_STYLES, highlightAlgoById } from '../features/highlightAlgos.js';
+import { SPEAK_DEFAULTS } from '../features/speakAlign.js';
 
 const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel'];
 // Reading-pointer options archived with its Settings section (see below). Restore alongside it.
@@ -1097,26 +1098,37 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       <p className="settings-note" style={{ margin: '2px 0 0' }}>Spends more time on rare/informative words and less on common ones — your average WPM is unchanged.</p>
 
       {/* Read-aloud voice/rate live in Audio → Audio Settings; typing rules in Typing → Typing Settings. */}
-      <Section>Speaking minigame</Section>
-      <Field label="Speaking — confidence">
-        <select
-          value={s.speaking?.confidence || 'Medium'}
-          onChange={(e) => patch({ speaking: { ...s.speaking, confidence: e.target.value } })}
-        >
-          <option>Low</option>
-          <option>Medium</option>
-          <option>High</option>
-        </select>
-      </Field>
-      <Field label="Speaking — per-word timeout (ms)">
-        <input
-          type="number"
-          min={0}
-          max={60000}
-          value={s.speaking?.perWordTimeoutMs || 0}
-          onChange={(e) => patch({ speaking: { ...s.speaking, perWordTimeoutMs: Number(e.target.value) } })}
-        />
-      </Field>
+      <Section>Advance by reading aloud</Section>
+      <p className="settings-note" style={{ marginTop: 0 }}>Turn it on from the controls bar (Biometric → 🗣). How strict the text follows your voice — loose enough that a missed word doesn’t stop it, strict enough that a grunt can’t move it.</p>
+      {(() => {
+        const sp = { ...SPEAK_DEFAULTS, ...(s.speaking || {}) };
+        const set = (k, v) => patch({ speaking: { ...s.speaking, [k]: v } });
+        const slider = (k, label, min, max, step, fmt, hint) => (
+          <Field label={label}>
+            <input type="range" min={min} max={max} step={step} value={sp[k]} onChange={(e) => set(k, Number(e.target.value))} aria-label={label} title={hint} />
+            <span className="settings-note" style={{ margin: '0 0 0 6px' }}>{fmt(sp[k])}</span>
+          </Field>
+        );
+        return (
+          <>
+            {slider('minRun', 'Words to match before moving', 1, 5, 1, (v) => `${v} word${v > 1 ? 's' : ''}`, 'Higher = random sounds and single stray words can’t move the text')}
+            {slider('fuzz', 'How closely words must match', 0.5, 1, 0.05, (v) => (v >= 1 ? 'exact' : `${Math.round(v * 100)}% alike`), 'Lower = accents and mishearings still count')}
+            {slider('skip', 'Words you may skip between matches', 0, 4, 1, (v) => String(v), 'How many text words can be missed or misheard between two words that were heard')}
+            {slider('window', 'How far ahead you can start reading', 2, 20, 1, (v) => `${v} words`, 'Lets you skip ahead a little without it losing track')}
+            <Field label="Recogniser confidence">
+              <select value={sp.confidence || 'Medium'} onChange={(e) => set('confidence', e.target.value)}>
+                <option>Low</option>
+                <option>Medium</option>
+                <option>High</option>
+              </select>
+            </Field>
+            <Field label="Live voice feedback">
+              <input type="checkbox" checked={sp.feedback !== false} onChange={(e) => set('feedback', e.target.checked)} />
+              <span className="settings-note" style={{ margin: '0 0 0 6px' }}>Depth, clarity, pace… while you read (not recorded)</span>
+            </Field>
+          </>
+        );
+      })()}
       </div>
     </Dialog>
   );

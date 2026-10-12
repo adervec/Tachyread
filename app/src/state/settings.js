@@ -129,7 +129,8 @@ export function defaultFileSettings() {
         linePerfect: 'off', sentencePerfect: 'off', paragraphPerfect: 'off',
       },
     },
-    speaking: { enabled: false, confidence: 'Medium', perWordTimeoutMs: 0, allowPartial: true },
+    // Advance by reading aloud: strictness of the speech→text alignment (see features/speakAlign.js).
+    speaking: { enabled: false, confidence: 'Medium', allowPartial: true, window: 6, skip: 2, fuzz: 0.7, minRun: 2, feedback: true },
     centerOnCurrent: true,
     lineLongPressMs: 450, // hold a line this long to jump to it — just long enough to reject accidental taps (0 = instant click)
     linePaneSplit: false, // split the Lines pane into before / current line / after zones
@@ -276,6 +277,7 @@ export function defaultGlobalSettings() {
     // Bundled open fonts + the device's installed fonts work offline regardless of this setting.
     enableGoogleFonts: false,
     audioCtrlMode: 'Both', // Voice | Claps | Both
+    voiceProfile: 'neutral', // neutral | male | female — centres the voice-quality "depth" score
     fileDefaults: defaultFileSettings(),
     recentFiles: [], // {name, checksum, lastOpened}
     // Named settings profiles (device-local): tab = reusable tab-settings snapshots

@@ -95,7 +95,9 @@ import { createOfflineReadAloud } from './features/offlineReadAloud.js';
 import { playButtonView } from './features/playButtonMode.js';
 import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
-import { createRecognizer, wordMatches, speechRecognitionSupported } from './features/speechRecognition.js';
+import { createRecognizer, speechRecognitionSupported } from './features/speechRecognition.js';
+import { alignSpoken } from './features/speakAlign.js';
+import VoiceFeedback from './components/VoiceFeedback.jsx';
 import { recordClip } from './features/audioRecorder.js';
 import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal, allFiles, loadFile, saveFile } from './state/storage.js';
 import { activitySummary } from './features/activitySummary.js';
@@ -499,6 +501,8 @@ function AppInner() {
   const dialogSlotRef = useRef(null); // mount point (inside .content-area) a docked dialog tab portals into
   const kbdRef = useRef({}); // latest context for the mount-once global key handler (refreshed each render)
   const recognizerRef = useRef(null);
+  const speakRef = useRef(null);      // latest tab + stepWord for the long-lived recogniser callbacks
+  const spokenWordsRef = useRef(0);   // words advanced by reading aloud this session → live pace
   const audioRecRef = useRef({ rec: null, lineIndex: -1 });
   const audioCtrlRef = useRef(null);
   const clapRef = useRef(null);
@@ -1893,47 +1897,46 @@ function AppInner() {
     };
   }, [updateGlobal, state.globalHydrated]);
 
-  // Speaking minigame: webkitSpeechRecognition
+  // Advance by reading aloud: one long-lived recogniser (Chrome/Edge). Each result is aligned against
+  // the text just ahead (features/speakAlign.js) and the position jumps past what was matched. It
+  // used to restart on every word and compare the phrase to ONE word, so a sentence read quickly
+  // moved one word and a short sound could match almost anything.
+  speakRef.current = { tab: activeTab, stepWord };
+  const speakingOn = !!activeTab?.settings.speaking?.enabled;
   useEffect(() => {
-    if (!activeTab || !activeTab.settings.speaking?.enabled) {
-      if (recognizerRef.current) {
-        try { recognizerRef.current.stop(); } catch { /* ignore */ }
-        recognizerRef.current = null;
-      }
-      return;
-    }
+    if (!speakingOn || !activeTab) return undefined;
     if (!speechRecognitionSupported()) {
-      setStatus('Speaking mode requires Chrome/Edge (Web Speech Recognition API).');
+      setStatus('Reading aloud to advance needs Chrome or Edge (Web Speech Recognition).');
       patchSettings(activeTab.id, { speaking: { ...activeTab.settings.speaking, enabled: false } });
-      return;
+      return undefined;
     }
-    const cfg = activeTab.settings.speaking;
-    const minConf = cfg.confidence === 'High' ? 0.8 : cfg.confidence === 'Low' ? 0.3 : 0.55;
+    spokenWordsRef.current = 0;
+    let stopped = false;
     const r = createRecognizer({
       lang: docLang.bcp,
       onResult: ({ transcript, confidence, isFinal }) => {
-        if (!isFinal && !cfg.allowPartial) return;
-        const target = activeTab.doc.words[activeTab.settings.wordIndex] || '';
-        if ((confidence || 0) >= minConf && wordMatches(target, transcript)) {
-          stepWord(1, { src: 'speak' });
-        }
+        const { tab, stepWord: step } = speakRef.current;
+        const cfg = tab?.settings.speaking || {};
+        if (!tab?.doc || (!isFinal && cfg.allowPartial === false)) return;
+        const minConf = cfg.confidence === 'High' ? 0.8 : cfg.confidence === 'Low' ? 0.3 : 0.55;
+        if (confidence > 0 && confidence < minConf) return; // Chrome reports 0 for interim results
+        const wi = tab.settings.wordIndex;
+        const to = alignSpoken(tab.doc.words, wi, transcript, { window: cfg.window, skip: cfg.skip, fuzz: cfg.fuzz, minRun: cfg.minRun });
+        if (to != null) { spokenWordsRef.current += to - wi; step(to - wi, { src: 'speak' }); }
       },
-      onError: (err) => {
-        console.warn('Speech recognition error', err);
-      },
+      onError: (err) => { if (err !== 'no-speech' && err !== 'aborted') console.warn('Speech recognition error', err); },
     });
-    if (r) {
-      try { r.start(); } catch { /* ignore */ }
-      recognizerRef.current = r;
-    }
+    if (!r) return undefined;
+    r.onend = () => { if (!stopped) { try { r.start(); } catch { /* already starting */ } } }; // Chrome ends sessions on silence
+    try { r.start(); } catch { /* ignore */ }
+    recognizerRef.current = r;
     return () => {
-      if (recognizerRef.current) {
-        try { recognizerRef.current.stop(); } catch { /* ignore */ }
-        recognizerRef.current = null;
-      }
+      stopped = true;
+      try { r.stop(); } catch { /* ignore */ }
+      recognizerRef.current = null;
     };
-    // eslint-disable-next-line
-  }, [activeTab?.id, activeTab?.settings.speaking?.enabled, activeTab?.settings.wordIndex, docLang.bcp]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab?.id, speakingOn, docLang.bcp]);
 
   // Audiobook recording: capture per-line clips
   useEffect(() => {
@@ -2583,11 +2586,22 @@ function AppInner() {
     if (on && state.global.scrollAdvances) updateGlobal({ scrollAdvances: false });
   }
   function toggleReadAloud() { if (activeTab) setReadAloud(!activeTab.settings.readAloud); }
+  // Voice commands and reading-aloud-to-advance both listen through speech recognition, and a spoken
+  // command would be read as text — so turning either on turns the other off.
   function setAudioCtrl(on) {
     if (!activeTab) return;
-    patchSettings(activeTab.id, { audioCtrl: on, ...(on ? { readAloud: false } : {}) });
+    patchSettings(activeTab.id, { audioCtrl: on, ...(on ? { readAloud: false, speaking: { ...activeTab.settings.speaking, enabled: false } } : {}) });
   }
   function toggleAudioCtrl() { if (activeTab) setAudioCtrl(!activeTab.settings.audioCtrl); }
+  function toggleSpeaking() {
+    if (!activeTab) return;
+    const on = !activeTab.settings.speaking?.enabled;
+    patchSettings(activeTab.id, {
+      speaking: { ...activeTab.settings.speaking, enabled: on },
+      ...(on ? { audioCtrl: false, readAloud: false, typing: { ...activeTab.settings.typing, enabled: false } } : {}),
+    });
+    if (on) { if (playingRef.current) playPauseRef.current?.(); setStatus('🗣 Read aloud — the text follows your voice.'); }
+  }
   function toggleScrollRead() {
     const on = !state.global.scrollAdvances;
     updateGlobal({ scrollAdvances: on });
@@ -3181,6 +3195,8 @@ function AppInner() {
             onPageDown={() => pageLines(1)}
             onRestart={() => nav('restart')}
             onToggleAudioCtrl={toggleAudioCtrl}
+            speaking={speakingOn}
+            onToggleSpeaking={toggleSpeaking}
             onGoalComplete={onGoalComplete}
             goalKills={goalKills}
             onTocIcon={onTocIcon}
@@ -3196,6 +3212,9 @@ function AppInner() {
           <div className="controls-bar" style={{ opacity: 0.5 }}>
             <div className="progress-row"><div className="progress-bar" /><div className="progress-meta">— / —</div></div>
           </div>
+        )}
+        {speakingOn && activeTab?.settings.speaking?.feedback !== false && (
+          <VoiceFeedback wordsRef={spokenWordsRef} profile={state.global.voiceProfile || 'neutral'} />
         )}
         </div>
         )}
