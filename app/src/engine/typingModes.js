@@ -16,6 +16,7 @@ export const TYPING_MODES = [
   { id: 'topRow', label: 'Top row', kind: 'drill', desc: 'q w e r t y u i o p drill.' },
   { id: 'bottomRow', label: 'Bottom row', kind: 'drill', desc: 'z x c v b n m drill.' },
   { id: 'numbers', label: 'Numbers & symbols', kind: 'drill', desc: 'Number-row and symbol accuracy.' },
+  { id: 'gibberish', label: 'Gibberish', kind: 'drill', desc: 'Random characters from the whole keyboard — no words to lean on.' },
   { id: 'quotes', label: 'Quotes', kind: 'drill', desc: 'Type a short literary quote.' },
   // Amphetype-style review: drill the words the LAST run was missed/slow on (one click from the
   // results screen). Needs `reviewWords` in buildPassage opts; falls back to common words without.
@@ -53,6 +54,8 @@ function shuffled(arr, seed = 0) {
   return a;
 }
 
+const LOWER = 'abcdefghijklmnopqrstuvwxyz';
+
 // Random "words" built from a character set — the Mavis-Beacon-style key drills.
 function drillWords(chars, count, seed = 0) {
   const out = [];
@@ -62,6 +65,12 @@ function drillWords(chars, count, seed = 0) {
     const len = 3 + Math.floor(rnd() * 3); // 3..5 chars
     let w = '';
     for (let j = 0; j < len; j++) w += chars[Math.floor(rnd() * chars.length)];
+    // A token with no letter/digit is dropped by the run's transform (nothing typeable to anchor
+    // it), so symbol-heavy sets swap one char for an alphanumeric to keep every word.
+    if (!/[\p{L}\p{N}]/u.test(w)) {
+      const an = chars.replace(/[^\p{L}\p{N}]/gu, '');
+      if (an) { const k = Math.floor(rnd() * len); w = w.slice(0, k) + an[Math.floor(rnd() * an.length)] + w.slice(k + 1); }
+    }
     out.push(w);
   }
   return out;
@@ -95,7 +104,9 @@ export function buildPassage(mode, { docWords = [], startIndex = 0, max = 600, s
     case 'homeRow': return drillWords('asdfghjkl;', max, seed);
     case 'topRow': return drillWords('qwertyuiop', max, seed);
     case 'bottomRow': return drillWords('zxcvbnm,.', max, seed);
-    case 'numbers': return drillWords('1234567890-=', max, seed);
+    case 'numbers': return drillWords('1234567890!@#$%^&*()-_=+', max, seed);
+    // Lowercase doubled so it still reads mostly like typing, then the rest of the keyboard.
+    case 'gibberish': return drillWords(LOWER + LOWER + LOWER.toUpperCase() + '0123456789' + "!@#$%^&*()-_=+[]{};:'\",.<>/?\\|`~", max, seed);
     case 'quotes': {
       const out = [];
       let i = 0;
