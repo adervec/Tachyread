@@ -1,41 +1,5 @@
 # To do
 
-## Any number of named reading queues
-
-Build as many queues as I like, each with its own name, and see full stats for each one. For example:
-AI lore, AI science, real literature, sci-fi literature.
-
-Each queue should show:
-
-- **Progress**: how many items are done, and how much of the queue's total words have been read.
-- **Analytics**: reading pace on that queue's books, time spent, and finishes over time.
-- **ETA**: a finish date for each item and for the whole queue.
-- **File presence**: whether each book's file is on this device, findable in the search folders, or missing.
-- Anything else that falls out naturally, such as hours left at my reading speed and the next item up.
-
-Notes for whoever builds it, checked against the code:
-
-- Today there is one queue: every book whose Trackyread status is "On deck". The category pills only filter it by the fixed content types.
-- A book has a single status, so a custom queue needs membership kept separately from status. That also lets one book sit in two queues.
-- Order is currently by recommendation score. Custom queues probably want a hand-set order with drag to reorder.
-- The ETA today divides cumulative words by recent words per day across all reading. A per-queue ETA has to decide whether to use the pace on that queue's books or overall pace.
-- Books already carry free-form tags, so a queue could also be a saved filter, like "tag is sci-fi and not finished", that fills itself.
-- Checking for a local copy is cheap. Searching the folders is slow, so file presence should be checked on demand or cached, not on every render.
-- Queues are tracker data, so they need to ride the same cloud sync as the library.
-
-## "Next in queue" when a book is finished
-
-When I finish a queued book, the finished popup should offer to open the next unfinished item in that
-queue whose file is available, or jump to it if it's already open in a tab.
-
-Notes for whoever builds it, checked against the code:
-
-- The popup is the book-finished dialog. Its save marks the file finished and, when the file is linked, marks the tracker book finished too.
-- Marking a book finished moves it off the queue, so "next" should be worked out from the queue order as it stood.
-- The queue's ▶ button already opens a book from an open tab, this device's copy, or the search folders. That logic lives inside the Queue view and would need lifting into a shared helper so the popup can reuse it.
-- "Available" should skip items with no findable file, and say how many it skipped, rather than offer something that can't open.
-- Today there's one queue. Once named queues exist, a book in several queues needs the popup to offer each one, or the one it was opened from.
-
 ## Clean up the Audiobook Manager for narrating it myself
 
 When I read a book aloud myself, the Audiobook Manager layout is confusing and needs a cleanup. Most of all, I want to read the full text of the chunks before and after the one I'm on.
