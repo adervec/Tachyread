@@ -1116,6 +1116,13 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
             {slider('skip', 'Words you may skip between matches', 0, 4, 1, (v) => String(v), 'How many text words can be missed or misheard between two words that were heard')}
             {slider('window', 'How far ahead you can start reading', 2, 20, 1, (v) => `${v} words`, 'Lets you skip ahead a little without it losing track')}
             {slider('density', 'Evidence needed to move', 0.2, 0.9, 0.05, (v) => `${Math.round(v * 100)}% of words moved`, 'Matched words needed per word the text moves — higher stops one right word carrying it through a sentence')}
+            <Field label="Word effect">
+              <select value={sp.wordFx || 'glow'} onChange={(e) => set('wordFx', e.target.value)} title="Words the text moves past flash — brighter the better they were read; skipped ones flash faint red">
+                <option value="glow">Glow</option>
+                <option value="pop">Glow + flash on perfect words</option>
+                <option value="off">Off</option>
+              </select>
+            </Field>
             <Field label="Live voice feedback">
               <input type="checkbox" checked={sp.feedback !== false} onChange={(e) => set('feedback', e.target.checked)} />
               <span className="settings-note" style={{ margin: '0 0 0 6px' }}>Depth, clarity, pace… while you read (not recorded)</span>

@@ -96,7 +96,8 @@ import { playButtonView } from './features/playButtonMode.js';
 import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, speechRecognitionSupported } from './features/speechRecognition.js';
-import { alignOrResync, speakParams } from './features/speakAlign.js';
+import { alignOrResync, speakParams, moveQuality } from './features/speakAlign.js';
+import { playWordFx } from './features/wordFx.js';
 import VoiceFeedback from './components/VoiceFeedback.jsx';
 import { recordClip } from './features/audioRecorder.js';
 import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal, allFiles, loadFile, saveFile } from './state/storage.js';
@@ -1936,6 +1937,8 @@ function AppInner() {
         if (hit) {
           spokenWordsRef.current += hit.to - wi;
           step(hit.to - wi, { src: 'speak' });
+          // Flash the words just passed, brighter the better they were read (setting: glow/pop/off).
+          playWordFx(moveQuality(hit.pairs, wi, hit.to), cfg.wordFx || 'glow');
           move = `+${hit.to - wi} word${hit.to - wi === 1 ? '' : 's'}${hit.resync ? ' (found your place)' : ''}`;
         } else if (isFinal) move = 'no match near your place';
         lastResultAt = Date.now();

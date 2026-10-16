@@ -130,7 +130,7 @@ export function defaultFileSettings() {
       },
     },
     // Advance by reading aloud: strictness of the speech→text alignment (see features/speakAlign.js).
-    speaking: { enabled: false, allowPartial: true, window: 10, skip: 3, fuzz: 0.6, minRun: 2, feedback: true },
+    speaking: { enabled: false, allowPartial: true, window: 10, skip: 3, fuzz: 0.6, minRun: 2, feedback: true, wordFx: 'glow' },
     centerOnCurrent: true,
     lineLongPressMs: 450, // hold a line this long to jump to it — just long enough to reject accidental taps (0 = instant click)
     linePaneSplit: false, // split the Lines pane into before / current line / after zones
