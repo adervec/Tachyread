@@ -4,6 +4,7 @@
 import { openDB } from 'idb';
 import { defaultGlobalSettings, defaultFileSettings, syncableGlobalSettings } from './settings.js';
 import { mergePresence, presenceList } from '../features/presence.js';
+import { writeBackup, readBackup, BACKUP_VERSION } from '../features/backupStream.js';
 
 const DB_NAME = 'Tachyread';
 const DB_VERSION = 12;
@@ -1120,6 +1121,69 @@ export async function exportAllData() {
     }
   } catch { /* storage unavailable */ }
   return out;
+}
+
+// ── Streamed full backup (features/backupStream.js): one record at a time, so a library with
+// audiobook audio never has to fit in one string (the browser caps that at ~512 MB).
+export const AUDIO_STORES = ['audiobook', 'audiobookManifest']; // clips + the manifests that index them
+export async function exportBackup(write, { includeAudio = true } = {}) {
+  const db = await getDB();
+  const local = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('tachyread-') && k !== 'tachyread-instance-lock') local[k] = localStorage.getItem(k);
+    }
+  } catch { /* storage unavailable */ }
+  // Keys first, then each value in its own read — packing a blob awaits, and an IndexedDB
+  // transaction can't stay open across that.
+  const recordsOf = async function* (store, inline) {
+    const keys = await db.getAllKeys(store);
+    for (const key of keys) {
+      const v = await db.get(store, key);
+      if (v === undefined) continue;
+      yield inline ? await packValue(v) : { key, value: await packValue(v) };
+    }
+  };
+  const stores = ALL_STORES
+    .filter(([store]) => db.objectStoreNames.contains(store) && (includeAudio || !AUDIO_STORES.includes(store)))
+    .map(([name, inline]) => ({ name, inline, records: recordsOf(name, inline) }));
+  return writeBackup({ header: { app: 'tachyread', version: BACKUP_VERSION, dbVersion: DB_VERSION, exportedAt: Date.now(), includeAudio, local }, stores, write });
+}
+
+// Restore a streamed backup. Only stores present in the file are replaced — a backup made without
+// audio leaves this device's audio alone. Records are written in small batches (one transaction
+// each) so memory stays flat however big the file is.
+export async function importBackupStream(lines, { replace = true, onProgress } = {}) {
+  const db = await getDB();
+  const known = new Map(ALL_STORES);
+  let batch = [], batchStore = null, written = 0;
+  const flush = async () => {
+    if (!batch.length) return;
+    const tx = db.transaction(batchStore, 'readwrite');
+    for (const [rec, key] of batch) { if (key === undefined) tx.store.put(rec); else tx.store.put(rec, key); }
+    await tx.done;
+    written += batch.length;
+    batch = [];
+    onProgress?.(written);
+  };
+  const header = await readBackup(lines, {
+    onStore: async (name) => {
+      await flush();
+      batchStore = name;
+      if (replace && known.has(name) && db.objectStoreNames.contains(name)) await db.clear(name);
+    },
+    onRecord: async (name, inline, rec) => {
+      if (!known.has(name) || !db.objectStoreNames.contains(name)) return;
+      batch.push(inline ? [unpackValue(rec), undefined] : [unpackValue(rec.value), rec.key]);
+      if (batch.length >= 100) await flush();
+    },
+  });
+  await flush();
+  try {
+    for (const [k, v] of Object.entries(header.local || {})) if (k !== 'tachyread-instance-lock') localStorage.setItem(k, v);
+  } catch { /* storage unavailable */ }
+  return { written, header };
 }
 
 // Per-store record counts for the UI / confirmation, without touching the DB.
