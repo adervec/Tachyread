@@ -3,10 +3,11 @@ import Dialog from './Dialog.jsx';
 import { fmtDateTime } from '../features/dateFmt.js';
 import { useApp } from '../state/AppContext.jsx';
 import {
-  exportAllData, exportSummary, importAllData,
+  exportSummary, importAllData, exportBackup, importBackupStream,
   storeCounts, clearStore, wipeAllData, getAppLog, clearAppLog,
 } from '../state/storage.js';
-import { saveBlobToFile, pickFile, readFileText } from '../features/fileSystem.js';
+import { saveBlobToFile, pickFile, readFileText, fsSaveSupported } from '../features/fileSystem.js';
+import { blobLines, readBackup, isStreamableHeader } from '../features/backupStream.js';
 import { SYNC_PROVIDERS, getSyncProvider, driveOriginAllowed, getDriveProfile } from '../features/sync/syncProviders.js';
 import { backupToProvider, restoreFromProvider, syncWithProvider } from '../features/sync/syncManager.js';
 
@@ -17,6 +18,15 @@ const STORE_LABELS = {
   focusSessions: 'Focus sessions', audiobook: 'Audiobook clips', audiobookManifest: 'Audiobook index',
   global: 'Settings & session', fsHandles: 'Saved folder handles',
 };
+const fmtMB = (chars) => (chars >= 1048576 ? `${(chars / 1048576).toFixed(chars >= 1073741824 ? 0 : 1)} MB` : `${Math.max(1, Math.round(chars / 1024))} KB`);
+// Buffer many small writes into ~1 MB pieces (the file writer is slow per call).
+function bufferedWriter(sink) {
+  let buf = '';
+  return {
+    write: async (str) => { buf += str; if (buf.length >= 1 << 20) { const b = buf; buf = ''; await sink(b); } },
+    flush: async () => { if (buf) { const b = buf; buf = ''; await sink(b); } },
+  };
+}
 const STORE_ORDER = ['files', 'readstate', 'docs', 'grabbed', 'grabSessions', 'typingRuns', 'focusSessions', 'audiobook', 'audiobookManifest'];
 // Stores the Maintenance tab can clear individually (with a friendly label).
 const CLEARABLE = [
@@ -44,9 +54,10 @@ export default function DataDialog({ onClose }) {
   const [msg, setMsg] = useState('');
   const [counts, setCounts] = useState(null);
 
-  const [exportJson, setExportJson] = useState('');
   const [exportInfo, setExportInfo] = useState(null);
+  const [withAudio, setWithAudio] = useState(true);
   const [importText, setImportText] = useState('');
+  const [importFile, setImportFile] = useState(null); // a streamable backup file, restored record by record
   const [pending, setPending] = useState(null); // staged import summary awaiting confirm
   const [wipeArm, setWipeArm] = useState(false);
   const [logEntries, setLogEntries] = useState(null);
@@ -112,27 +123,63 @@ export default function DataDialog({ onClose }) {
   }
 
   // ── file backup / restore ──
+  // Written one record at a time — straight to the file where the browser allows it (no copy of
+  // the whole backup in memory), otherwise gathered as pieces into a Blob and downloaded. Either
+  // way no single string ever holds the whole backup, which is what used to fail on big libraries.
   async function doExport() {
-    setBusy(true); setMsg('Gathering your data…');
+    const name = `tachyread-backup-${new Date().toISOString().slice(0, 10)}${withAudio ? '' : '-no-audio'}.json`;
+    let handle = null;
+    if (fsSaveSupported()) {
+      try {
+        handle = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'Tachyread backup', accept: { 'application/json': ['.json'] } }] });
+      } catch (e) { if (e?.name === 'AbortError') { setMsg('Save canceled.'); return; } }
+    }
+    setBusy(true); setMsg('Writing your backup…'); setExportInfo(null);
     try {
-      const bundle = await exportAllData();
-      const text = JSON.stringify(bundle);
-      const s = exportSummary(bundle);
-      setExportJson(text);
-      setExportInfo({ total: s.total, kb: Math.max(1, Math.round(text.length / 1024)) });
-      const name = `tachyread-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      const res = await saveBlobToFile(new Blob([text], { type: 'application/json' }), name, [
-        { description: 'Tachyread backup', accept: { 'application/json': ['.json'] } },
-      ]);
-      setMsg(res.canceled
-        ? 'Save canceled — the backup JSON is below; you can copy it.'
-        : `Backed up ${s.total} records (${Math.round(text.length / 1024)} KB)${res.method === 'download' ? ' to your downloads.' : ` to ${res.name}.`}`);
+      let sizes, how;
+      if (handle) {
+        const w = await handle.createWritable();
+        const out = bufferedWriter((b) => w.write(b));
+        try { sizes = await exportBackup(out.write, { includeAudio: withAudio }); await out.flush(); await w.close(); }
+        catch (e) { try { await w.abort(); } catch { /* */ } throw e; }
+        how = ` to ${handle.name}`;
+      } else {
+        const parts = [];
+        const out = bufferedWriter(async (b) => { parts.push(b); });
+        sizes = await exportBackup(out.write, { includeAudio: withAudio });
+        await out.flush();
+        const url = URL.createObjectURL(new Blob(parts, { type: 'application/json' }));
+        const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        how = ' to your downloads';
+      }
+      const total = Object.values(sizes).reduce((t, x) => t + x.count, 0);
+      const bytes = Object.values(sizes).reduce((t, x) => t + x.bytes, 0);
+      setExportInfo({ total, bytes, sizes });
+      setMsg(`Backed up ${total.toLocaleString()} records (${fmtMB(bytes)})${how}.`);
     } catch (e) { setMsg('Export failed: ' + (e?.message || e)); }
     setBusy(false);
   }
+  // A streamable backup is restored straight from the file (never read into one string); an older
+  // single-line backup still goes through the text box as before.
   async function loadFromFile() {
     const f = await pickFile('.json,application/json');
     if (!f) return;
+    const head = await f.slice(0, 4 << 20).text();
+    if (isStreamableHeader(head.split('\n')[0])) {
+      setBusy(true); setMsg(`Reading ${f.name}…`); setImportText(''); setPending(null);
+      try {
+        const counts = {};
+        let total = 0;
+        await readBackup(blobLines(f), { onRecord: async (store) => { counts[store] = (counts[store] || 0) + 1; total++; } });
+        setImportFile(f);
+        setPending({ total, counts });
+        setMsg(`Loaded ${f.name} (${fmtMB(f.size)}) — confirm to restore.${counts.audiobook == null ? ' It has no audiobook audio, so the audio on this device is kept.' : ''}`);
+      } catch (e) { setMsg('That file is not a readable Tachyread backup: ' + (e?.message || e)); }
+      setBusy(false);
+      return;
+    }
+    setImportFile(null);
     setImportText(await readFileText(f));
     setMsg(`Loaded ${f.name} — review, then Restore.`);
   }
@@ -146,8 +193,9 @@ export default function DataDialog({ onClose }) {
   async function confirmRestore() {
     setBusy(true); setMsg('Restoring…');
     try {
-      const bundle = JSON.parse(importText);
-      const r = await importAllData(bundle, { replace: true });
+      const r = importFile
+        ? await importBackupStream(blobLines(importFile), { replace: true, onProgress: (n) => setMsg(`Restoring… ${n.toLocaleString()} records`) })
+        : await importAllData(JSON.parse(importText), { replace: true });
       setMsg(`Restored ${r.written} records — reloading…`);
       setTimeout(() => window.location.reload(), 1000);
     } catch (e) { setBusy(false); setPending(null); setMsg('Import failed: ' + (e?.message || e)); }
@@ -206,10 +254,16 @@ export default function DataDialog({ onClose }) {
           </p>
           <div className="data-row">
             <button className="toggle-on" onClick={doExport} disabled={busy}>⬇ Export to file</button>
-            <button onClick={() => navigator.clipboard?.writeText(exportJson).then(() => setMsg('Backup JSON copied to clipboard.')).catch(() => {})} disabled={!exportJson}>Copy JSON</button>
-            {exportInfo && <span className="settings-note" style={{ margin: 0 }}>{exportInfo.total} records · {exportInfo.kb} KB</span>}
+            <label className="settings-note" style={{ margin: 0 }} title="Audiobook clips are usually most of a backup's size. Without them the file is small; restoring it leaves the audio on the device you restore to untouched.">
+              <input type="checkbox" checked={withAudio} onChange={(e) => setWithAudio(e.target.checked)} disabled={busy} /> Include audiobook audio
+            </label>
           </div>
-          {exportJson && <textarea className="data-json" readOnly value={exportJson} rows={5} onFocus={(e) => e.target.select()} />}
+          {exportInfo && (
+            <p className="settings-note data-sizes" title="Approximate size of each part of the backup">
+              What's in it: {Object.entries(exportInfo.sizes).filter(([, x]) => x.count).sort((a, b) => b[1].bytes - a[1].bytes)
+                .map(([k, x]) => `${STORE_LABELS[k] || k} ${fmtMB(x.bytes)} (${x.count.toLocaleString()})`).join(' · ')}
+            </p>
+          )}
 
           <div className="field-section">Restore from a backup</div>
           <p className="settings-note" style={{ color: 'var(--danger, #c0392b)' }}>
@@ -222,11 +276,11 @@ export default function DataDialog({ onClose }) {
             ) : (
               <>
                 <button className="grab-trash" onClick={confirmRestore} disabled={busy}>⚠ Confirm restore — replace {pending.total} records</button>
-                <button onClick={() => setPending(null)} disabled={busy}>Cancel</button>
+                <button onClick={() => { setPending(null); setImportFile(null); }} disabled={busy}>Cancel</button>
               </>
             )}
           </div>
-          <textarea className="data-json" placeholder="…or paste backup JSON here" value={importText} onChange={(e) => { setImportText(e.target.value); setPending(null); }} rows={5} />
+          {!importFile && <textarea className="data-json" placeholder="…or paste backup JSON here" value={importText} onChange={(e) => { setImportText(e.target.value); setPending(null); }} rows={5} />}
         </>
       )}
 
