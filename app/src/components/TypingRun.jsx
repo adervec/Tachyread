@@ -134,6 +134,10 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const raceVoice = !!cfg.raceVoice; // race the TTS voice: it reads the passage; get caught if it passes you
   const stopOnError = !!cfg.stopOnError; // a wrong key is refused (still costs an error) — accuracy discipline
   const confidence = !!cfg.confidence;   // no backspace — errors cost accuracy, not time
+  // Whole-word corrections only: plain Backspace is refused, Ctrl+Backspace (Option on a Mac, or
+  // the on-screen "⌫ word" key) wipes the word you're on — or, on an empty word, reopens and wipes
+  // the previous one — so a mistake means retyping the word, not nibbling a letter.
+  const wordBackOnly = !!cfg.wordBackOnly && !confidence;
   const fixErrors = !!cfg.fixErrors;     // middle ground: errors land, backspace works, but space only advances a CORRECT word
   const blind = !!cfg.blind;             // hide per-char verdicts while running; the numbers tell the tale at the end
   const penaltyWords = Math.max(0, Math.min(9, Number(cfg.penaltyWords) || 0)); // setback mode: words erased per mistyped word
@@ -805,6 +809,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     // Confidence mode: no corrections — a shrinking value (backspace/autocorrect) is ignored and
     // the controlled input snaps back to the buffer.
     if (confidence && val.length < buf.length) return;
+    // Whole-word mode: a partial delete from a phone keyboard / autocorrect is refused too (the
+    // "⌫ word" key below clears the word instead).
+    if (wordBackOnly && val.length < buf.length && val !== '') return;
     if (stopOnError && val.length > buf.length) val = refuseWrong(val);
     const sp = val.search(/\s/);
     if (sp >= 0) {
@@ -838,7 +845,21 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     setBuf(val);
   }
 
+  // Clear the current word (or reopen + clear the previous one when this one is empty).
+  function clearWord() {
+    if (phase !== 'running') return;
+    if (buf) setBuf('');
+    else if (!oneWord && pos > 0) { goBackWord(); setBuf(''); }
+    armIdle();
+    focus();
+  }
   function onKeyDown(e) {
+    if (wordBackOnly && e.key === 'Backspace' && phase === 'running') {
+      e.preventDefault();
+      if (e.ctrlKey || e.altKey || e.metaKey) clearWord();
+      else ping(sounds.charWrong); // single-letter backspace is off in this mode
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -992,6 +1013,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             </>
           )}
           {phase === 'idle' && <button className="toggle-on" onClick={beginCountdown} title="Start the run (Ready·Set·Go)">▶ Start</button>}
+          {phase === 'running' && wordBackOnly && (
+            <button onPointerDown={(e) => e.preventDefault()} onClick={clearWord} title="Wipe the word you're on (same as Ctrl+Backspace)">⌫ word</button>
+          )}
           {phase === 'running'
             ? <button className="toggle-on" onClick={endRun}>■ End run</button>
             : <button onClick={() => onExitDiscard?.(discardCreditWi())} title="Close typing — anything you typed still counts as read; only the reading position stays put">{plan ? 'Exit plan' : 'Discard'}</button>}
@@ -1082,8 +1106,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               onClick={() => patchCfg({ fixErrors: !fixErrors, ...(fixErrors ? {} : { confidence: false }) })} disabled={locked}
               title="Mistakes land on screen and backspace works, but space won't advance until the word is typed exactly right — repair before you move on" />
             <Tile icon="⌫" label="No backspace" state={confidence ? 'on' : 'off'} on={confidence}
-              onClick={() => patchCfg({ confidence: !confidence, ...(confidence ? {} : { fixErrors: false }) })} disabled={locked}
+              onClick={() => patchCfg({ confidence: !confidence, ...(confidence ? {} : { fixErrors: false, wordBackOnly: false }) })} disabled={locked}
               title="Confidence mode — backspace is disabled entirely; errors cost accuracy, not time" />
+            <Tile icon="⌫w" label="Word backspace only" state={wordBackOnly ? 'on' : 'off'} on={wordBackOnly}
+              onClick={() => patchCfg({ wordBackOnly: !wordBackOnly, ...(wordBackOnly ? {} : { confidence: false }) })} disabled={locked}
+              title="Plain Backspace is off; Ctrl+Backspace (Option+Backspace on a Mac, or the ⌫ word key) wipes the whole word so you retype it. Needs a keyboard shortcut or the on-screen key." />
             <Tile icon="🙈" label="Blind" state={blind ? 'on' : 'off'} on={blind}
               onClick={() => patchCfg({ blind: !blind })} disabled={locked}
               title="No per-character verdicts while you type — trust your fingers and let the numbers tell the tale at the end" />
