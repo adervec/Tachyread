@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { alignSpoken, alignOrResync, alignDetail, wordsMatch, normWord, partsOf, STRICTNESS, strictnessOf, speakParams, SPEAK_DEFAULTS, scoreReading } from './speakAlign.js';
+import { alignSpoken, alignOrResync, alignDetail, wordsMatch, normWord, partsOf, STRICTNESS, strictnessOf, speakParams, SPEAK_DEFAULTS, scoreReading, moveQuality } from './speakAlign.js';
 
 const doc = 'It was the best of times, it was the worst of times; it was the age of wisdom.'.split(' ');
 //            0   1   2    3    4  5      6  7   8    9    10  11     12 13  14  15  16  17
@@ -96,4 +96,10 @@ assert.equal(alignSpoken(ms, 0, 'the old lighthouse keeper', vs), 4);
 assert.equal(alignSpoken(ms, 0, 'the old like house keeper', vs), null, 'very strict needs it dense');
 // Tabs tuned before density existed get their preset's density.
 assert.equal(speakParams({ window: 4, skip: 0, fuzz: 0.9, minRun: 3 }).density, 0.8);
+// Word-effect quality: exact 1, fuzzy in between, skipped 0.
+const mv = alignDetail(ms, 0, 'the old lighthose keeper the narrow');
+const mq = new Map(moveQuality(mv.pairs, 0, mv.to));
+assert.equal(mq.get(0), 1); assert.equal(mq.get(1), 1);
+assert.ok(mq.get(2) > 0.8 && mq.get(2) < 1, 'lighthose ≈ lighthouse');
+assert.equal(mq.get(4), 0, '"climbed" skipped');
 console.log('speakAlign: all cases pass');

@@ -142,7 +142,9 @@ function renderWords(line, opts) {
     ].filter(Boolean).join(' ');
     const cwStyle = isCurrentWord && opts.cwFontDelta ? { fontSize: `calc(1em + ${opts.cwFontDelta}pt)` }
       : (isGhostWord && !isCurrentWord && opts.ghostFontDelta ? { fontSize: `calc(1em + ${opts.ghostFontDelta}pt)` } : undefined);
-    elems.push(<span key={runIdx++} className={cls} style={cwStyle}>{inner}</span>);
+    // data-wi: the word's document index — lets transient effects (reading-aloud word flash) find
+    // it without re-rendering the pane.
+    elems.push(<span key={runIdx++} className={cls} style={cwStyle} data-wi={wordIdx}>{inner}</span>);
     wordIdx++;
   }
   return elems;

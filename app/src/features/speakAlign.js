@@ -55,6 +55,9 @@ function lev(a, b) {
   return prev[b.length];
 }
 
+// How alike two normalised words are, 0–1 (1 = identical).
+export const similarity = (a, b) => (a === b ? 1 : !a || !b ? 0 : 1 - lev(a, b) / Math.max(a.length, b.length));
+
 // Short words must match exactly — "a"/"I"/"of" are too easy to hit by accident.
 export function wordsMatch(heard, text, fuzz = SPEAK_DEFAULTS.fuzz) {
   if (!heard || !text) return false;
@@ -94,7 +97,7 @@ export function alignDetail(docWords, idx, heard, opts = {}) {
     for (let s = 0; s < windowEnd; s++) {
       if (!wordsMatch(H[h0], D[s], fuzz)) continue;
       const pairs = all.slice(0, used + h0).map((w) => ({ w, i: null, stale: true }));
-      pairs.push({ w: H[h0], i: owner[s] });
+      pairs.push({ w: H[h0], i: owner[s], q: similarity(H[h0], D[s]) });
       let d = s + 1, matched = weight(D[s]), miss = 0, lastH = h0;
       for (let h = h0 + 1; h < H.length; h++) {
         // Each unmatched heard word lets the text run one further (you said SOMETHING for it),
@@ -104,7 +107,7 @@ export function alignDetail(docWords, idx, heard, opts = {}) {
         let hit = -1;
         for (let j = d; j <= top; j++) if (D[j] === H[h]) { hit = j; break; }
         if (hit < 0) for (let j = d; j <= top; j++) if (wordsMatch(H[h], D[j], fuzz)) { hit = j; break; }
-        if (hit >= 0) { d = hit + 1; matched += weight(D[hit]); miss = 0; lastH = h; pairs.push({ w: H[h], i: owner[hit] }); }
+        if (hit >= 0) { d = hit + 1; matched += weight(D[hit]); miss = 0; lastH = h; pairs.push({ w: H[h], i: owner[hit], q: similarity(H[h], D[hit]) }); }
         else { miss++; pairs.push({ w: H[h], i: null }); }
       }
       const to = owner[d - 1] + 1;
@@ -177,4 +180,14 @@ export function scoreReading(text, heard, fuzz = SPEAK_DEFAULTS.fuzz) {
   }
   const hits = dp[0][0];
   return { accuracy: Math.round((hits / n) * 100), completeness: Math.round((hits / m) * 100), done, upTo };
+}
+
+// How well each text word passed in a move [from, to) was read, for the word effect: the best
+// match quality among heard words paired with it (1 = exact), 0 for words skipped over.
+export function moveQuality(pairs, from, to) {
+  const best = new Map();
+  for (const p of pairs || []) if (p.i != null) best.set(p.i, Math.max(best.get(p.i) || 0, p.q ?? 1));
+  const out = [];
+  for (let i = from; i < to; i++) out.push([i, best.get(i) || 0]);
+  return out;
 }

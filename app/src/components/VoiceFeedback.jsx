@@ -179,6 +179,17 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
           <span className="vf-strict-v">{strict ? STRICTNESS[strict].label : 'custom (Settings)'}</span>
         </label>
       )}
+      {onTune && open && (
+        <label className="vf-strict" title="Words the text moves past flash — brighter the better they were read; skipped ones flash faint red">
+          <span>Word effect</span>
+          <select value={speakCfg.wordFx || 'glow'} onChange={(e) => onTune({ wordFx: e.target.value })}>
+            <option value="glow">glow</option>
+            <option value="pop">glow + flash perfect</option>
+            <option value="off">off</option>
+          </select>
+          <span />
+        </label>
+      )}
       {open && showScores && (
         <>
           {micErr && <div className="vf-note">{micErr}</div>}
