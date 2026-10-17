@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { newQueue, addToQueue, removeFromQueue, moveInQueue, moveToInQueue, queueBooks, queueStats, nextInQueue, sortQueueIds, deckMigration, addToDeck, recentPace, candidateRows, filterCandidates } from './readingQueues.js';
+import { newQueue, addToQueue, removeFromQueue, moveInQueue, moveToInQueue, queueBooks, queueStats, nextInQueue, sortQueueIds, deckMigration, addToDeck, deleteQueue, liveQueues, recentPace, candidateRows, filterCandidates } from './readingQueues.js';
 
 const now = Date.parse('2026-10-11T12:00:00Z');
 const day = (n) => new Date(now - n * 86400000).toISOString().slice(0, 10);
@@ -63,6 +63,12 @@ assert.equal(deckMigration(mig, deckBooks), null);
 assert.equal(deckMigration([], [books[1]]), null, 'nothing on deck → no queue');
 assert.deepEqual(addToDeck(mig, deckBooks, 'b')[0].ids, ['y', 'x', 'b'], 'shelving on deck joins the deck queue');
 assert.deepEqual(addToDeck([], deckBooks, 'x')[0].ids, ['y', 'x'], 'no deck queue yet → made from the whole deck');
+// Deleting On deck sticks: no re-migration; the other queue is untouched; re-shelving revives it with one book.
+const two = [...mig, { ...newQueue('Other', 3), ids: ['b'] }];
+const del = deleteQueue(two, mig[0].id);
+assert.deepEqual(liveQueues(del).map((q) => q.name), ['Other']);
+assert.equal(deckMigration(del, deckBooks), null);
+assert.deepEqual(liveQueues(addToDeck(del, deckBooks, 'x')).map((q) => [q.name, q.ids]), [['On deck', ['x']], ['Other', ['b']]]);
 
 // Recent pace: recent days dominate; zero days count; wpm from active time.
 const pace = recentPace([
@@ -91,7 +97,8 @@ assert.deepEqual(filterCandidates(rows, { state: 'finished' }).rows.map((r) => r
 assert.deepEqual(filterCandidates(rows, { state: 'started' }).rows.map((r) => r.book.id), ['p']);
 assert.deepEqual(filterCandidates(rows, { state: 'unstarted' }).rows.map((r) => r.book.id), ['r']);
 assert.deepEqual(filterCandidates(rows, { cols: { title: '^d', author: 'herb' } }).rows.map((r) => r.book.id), ['p']);
-assert.deepEqual(filterCandidates(rows, { cols: { file: '^gothic/' } }).rows.map((r) => r.book.id), ['r']);
+assert.deepEqual(filterCandidates(rows, { cols: { folder: '^gothic$' } }).rows.map((r) => r.book.id), ['r']);
+assert.deepEqual(filterCandidates(rows, { cols: { file: '^dracula' } }).rows.map((r) => r.book.id), ['r']);
 const bad = filterCandidates(rows, { cols: { title: '(1897' } });
 assert.deepEqual([bad.rows.map((r) => r.book.id), bad.bad], [['r'], ['title']]);
 console.log('readingQueues: all cases pass');

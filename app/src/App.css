@@ -4322,11 +4322,11 @@
 .lj-cand-add { padding: 0 6px; font-size: 13px; line-height: 1.3; }
 .lj-cand .link-btn { color: inherit; text-decoration: none; }
 .lj-cand .link-btn:hover { text-decoration: underline; }
-.lj-cand col.c-add { width: 30px; } .lj-cand col.c-title { width: 22%; } .lj-cand col.c-author { width: 14%; }
-.lj-cand col.c-genre { width: 11%; } .lj-cand col.c-type { width: 8%; } .lj-cand col.c-status { width: 8%; }
-.lj-cand col.c-file { width: 17%; } .lj-cand col.c-prog { width: 11%; } .lj-cand col.c-size { width: 56px; }
+.lj-cand col.c-add { width: 30px; } .lj-cand col.c-title { width: 20%; } .lj-cand col.c-author { width: 12%; }
+.lj-cand col.c-genre { width: 9%; } .lj-cand col.c-type { width: 7%; } .lj-cand col.c-status { width: 7%; }
+.lj-cand col.c-folder { width: 13%; } .lj-cand col.c-file { width: 13%; } .lj-cand col.c-prog { width: 11%; } .lj-cand col.c-size { width: 56px; }
 .lj-cand-box { min-width: 0; }
-@media (max-width: 900px) { .lj-cand { width: 760px; } }
+@media (max-width: 900px) { .lj-cand { width: 860px; } }
 @media (max-width: 600px) {
   .lj-q-pane .lj-queue-item { grid-template-columns: 24px 1fr auto; }
   .lj-q-pane .lj-queue-acts { grid-column: 2 / -1; justify-content: flex-start; }
