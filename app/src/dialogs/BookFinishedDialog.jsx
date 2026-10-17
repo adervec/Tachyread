@@ -4,7 +4,6 @@ import { getBinding, setBinding, getLibraryBooks, saveLibraryBook, getLibraryRef
 import { deriveId, setReadStatus } from '../features/journeyLibrary.js';
 import { normTitle } from '../document/tocWizard.js';
 import { useApp } from '../state/AppContext.jsx';
-import { queueWithEstimates } from '../features/journeyAnalytics.js';
 import { queueBooks, nextInQueue } from '../features/readingQueues.js';
 import { getSearchDirs } from '../features/fileLocator.js';
 import { fileWhere, openBookFile } from '../features/openBook.js';
@@ -88,7 +87,7 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
       .slice(0, 8);
   }, [lib, search, suggestions]);
 
-  // "Up next": for On deck and every named queue holding this book, the first unfinished item whose
+  // "Up next": for every queue holding this book, the first unfinished item whose
   // file can actually be opened (open tab, saved copy, or found in the search folders). Worked out
   // from the queues as they stand now, before this book is marked finished.
   const { state: appState, openRecent, openFiles } = useApp();
@@ -107,7 +106,7 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
       for (const [cs, id] of Object.entries(lib.map)) if (!csOf[id]) csOf[id] = cs;
       const nameOf = (b) => b.title;
       const available = async (b) => ['open', 'local', 'folder'].includes((await fileWhere(csOf[b.id], nameOf(b), { openChecksums, dirs: ds, search: true })).where);
-      const lists = [['On deck', queueWithEstimates(live).items.map((i) => i.book)]];
+      const lists = [];
       for (const q of Array.isArray(named) ? named : []) if (linkedId && q.ids.includes(linkedId)) lists.push([q.name, queueBooks(q, live)]);
       const out = [];
       for (const [label, order] of lists) {

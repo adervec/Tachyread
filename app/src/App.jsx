@@ -96,11 +96,12 @@ import { playButtonView } from './features/playButtonMode.js';
 import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, speechRecognitionSupported } from './features/speechRecognition.js';
-import { alignOrResync, speakParams, moveQuality } from './features/speakAlign.js';
+import { alignOrResync, speakParams, moveQuality, strictnessOf } from './features/speakAlign.js';
+import { speechSession, keepSession } from './features/speechLog.js';
 import { playWordFx } from './features/wordFx.js';
 import VoiceFeedback from './components/VoiceFeedback.jsx';
 import { recordClip } from './features/audioRecorder.js';
-import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal, allFiles, loadFile, saveFile } from './state/storage.js';
+import { saveAudioClip, clearSession, saveSession, saveTypingRun, saveFocusSession, getAudiobookManifest, entryClips, applySyncedPosition, getPendingSyncConflicts, clearPendingSyncConflicts, addReadSection, getBinding, setBinding, saveLibraryBook, setSelfPresence, loadGlobal, saveGlobal, allFiles, loadFile, saveFile, appendSpeechLog } from './state/storage.js';
 import { activitySummary } from './features/activitySummary.js';
 import { dockMiniIds } from './features/dockMini.js';
 import { cameraOffPatch } from './features/cameraOff.js';
@@ -503,6 +504,7 @@ function AppInner() {
   const kbdRef = useRef({}); // latest context for the mount-once global key handler (refreshed each render)
   const recognizerRef = useRef(null);
   const speakRef = useRef(null);      // latest tab + stepWord for the long-lived recogniser callbacks
+  const speechSessRef = useRef(null);  // the reading-aloud session being logged (VoiceFeedback feeds it voice scores)
   const spokenWordsRef = useRef(0);   // words advanced by reading aloud this session → live pace
   // What the reading-aloud card shows: recogniser status/error, the phrase heard, the last move.
   const [speakInfo, setSpeakInfo] = useState({});
@@ -1915,6 +1917,12 @@ function AppInner() {
     }
     spokenWordsRef.current = 0;
     const lang = docLang.bcp || navigator.language || 'en-US';
+    // This session's compact quality record (features/speechLog.js), saved when it ends.
+    const sess = speechSession({
+      cs: activeTab.doc?.contentChecksum, name: activeTab.doc?.fileName, lang,
+      strict: strictnessOf(speakParams(activeTab.settings.speaking || {})), from: activeTab.settings.wordIndex,
+    });
+    speechSessRef.current = sess;
     setSpeakInfo({ status: 'starting', lang });
     let stopped = false;
     let restartTimer = 0, silentTimer = 0, lastResultAt = 0;
@@ -1938,9 +1946,11 @@ function AppInner() {
           spokenWordsRef.current += hit.to - wi;
           step(hit.to - wi, { src: 'speak' });
           // Flash the words just passed, brighter the better they were read (setting: glow/pop/off).
-          playWordFx(moveQuality(hit.pairs, wi, hit.to), cfg.wordFx || 'glow');
+          const qs = moveQuality(hit.pairs, wi, hit.to);
+          playWordFx(qs, cfg.wordFx || 'glow');
+          sess.move(qs, hit.to);
           move = `+${hit.to - wi} word${hit.to - wi === 1 ? '' : 's'}${hit.resync ? ' (found your place)' : ''}`;
-        } else if (isFinal) move = 'no match near your place';
+        } else if (isFinal) { move = 'no match near your place'; sess.miss(); }
         lastResultAt = Date.now();
         setSpeakInfo((si) => ({
           ...si, status: 'listening', error: null, heard: transcript, final: isFinal, move: move || si.move,
@@ -1979,6 +1989,9 @@ function AppInner() {
       clearTimeout(silentTimer);
       try { r.stop(); } catch { /* ignore */ }
       recognizerRef.current = null;
+      speechSessRef.current = null;
+      const rec = sess.finish();
+      if (keepSession(rec)) appendSpeechLog(rec);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab?.id, speakingOn, docLang.bcp]);
@@ -3272,6 +3285,7 @@ function AppInner() {
           onTune={(p) => patchSettings(activeTab.id, { speaking: { ...activeTab.settings.speaking, ...p } })}
           showScores={activeTab.settings.speaking?.feedback !== false}
           wordsRef={spokenWordsRef}
+          sessionRef={speechSessRef}
           profile={state.global.voiceProfile || 'neutral'}
         />
       )}

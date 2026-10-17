@@ -23,6 +23,14 @@ const PANEL_LABELS = {
   'crosshairs': 'Crosshairs',
 };
 
+// COMPLETION, not cursor position (0–100). A lazy tab has no tracker, so it falls back to the
+// persisted read count (the same number the tracker would report).
+function tabPct(tab) {
+  const total = tab.lazy ? (tab.settings.totalWords || 0) : tab.doc.words.length;
+  if (tab.lazy) return total ? Math.min(100, ((tab.settings.persistentWordsRead || 0) / total) * 100) : 0;
+  return tab.tracker ? tab.tracker.coverageExcluding(tab.settings.skipRanges) * 100 : 0;
+}
+
 export default function TabBar() {
   const { state, setActiveTab, closeTab, closeTabs, closeAllTabs, setActivePanel, closePanel, reorderTabs, sortTabs, updateGlobal, setStatus, openDialog } = useApp();
   const { panels, activePanelId, tabs } = state;
@@ -186,6 +194,11 @@ export default function TabBar() {
       const rec = { ...t.settings, totalWords: t.lazy ? (t.settings?.totalWords || 0) : t.doc.words.length };
       return finishedNotRereading(rec, shelves[cs]);
     }).map((t) => t.id);
+    // Tracked = bound to a Trackyread book. Untouched = under 2% read (same completion the tab's bar shows).
+    const csOf = (t) => (t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum);
+    const trackedIds = tabs.filter((t) => bindings[csOf(t)]).map((t) => t.id);
+    const untrackedIds = tabs.filter((t) => !bindings[csOf(t)]).map((t) => t.id);
+    const untouchedIds = tabs.filter((t) => tabPct(t) < 2).map((t) => t.id);
     const menuTab = tabs[i];
     const menuCs = menuTab.lazy ? menuTab.settings?.contentChecksum : menuTab.doc?.contentChecksum;
     const untracked = !!menuCs && !bindings[menuCs];
@@ -221,6 +234,9 @@ export default function TabBar() {
       { label: 'Close to the left', n: leftIds.length, fn: () => closeTabs(leftIds) },
       { label: 'Close to the right', n: rightIds.length, fn: () => closeTabs(rightIds) },
       { label: 'Close finished', n: finishedIds.length, fn: () => closeTabs(finishedIds) },
+      { label: 'Close untouched', n: untouchedIds.length, fn: () => closeTabs(untouchedIds) },
+      { label: 'Close tracked', n: trackedIds.length, fn: () => closeTabs(trackedIds) },
+      { label: 'Close untracked', n: untrackedIds.length, fn: () => closeTabs(untrackedIds) },
       { label: 'Close all', n: tabs.length, fn: () => closeAllTabs() },
       { sep: true },
       { label: multiRow ? '✓ Multi-row tabs' : 'Multi-row tabs', fn: () => updateGlobal({ tabBarMultiRow: !multiRow }) },
@@ -257,13 +273,9 @@ export default function TabBar() {
         // Lazy (restored, not-yet-opened) tabs have no parsed doc — read name/progress from the
         // lightweight placeholder fields instead.
         const fileName = tab.lazy ? tab.fileName : tab.doc.fileName;
-        const total = tab.lazy ? (tab.settings.totalWords || 0) : tab.doc.words.length;
         // COMPLETION, not cursor position: read the 1st, 2nd and 4th quarters of a book and this
-        // sits at 75%, where the cursor alone would claim 100%. A lazy tab has no tracker, so it
-        // falls back to the persisted read count (the same number the tracker would report).
-        const pct = tab.lazy
-          ? (total ? Math.min(100, ((tab.settings.persistentWordsRead || 0) / total) * 100) : 0)
-          : (tab.tracker ? tab.tracker.coverageExcluding(tab.settings.skipRanges) * 100 : 0);
+        // sits at 75%, where the cursor alone would claim 100%.
+        const pct = tabPct(tab);
         // If this file is part of a NAMED book group, the tab shows the group name with a marker:
         // ★ for the master (canonical) copy, or a number for each of the other editions.
         const cs = tab.lazy ? tab.settings?.contentChecksum : tab.doc?.contentChecksum;

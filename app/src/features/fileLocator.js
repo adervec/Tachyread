@@ -61,25 +61,26 @@ export function nameScore(want, got) {
 }
 
 // Breadth-first so a copy sitting at the top of the folder beats one buried in an archive, and an
-// exact name beats a re-format found at the same depth. Returns { handle, dir, score, scanned }.
+// exact name beats a re-format found at the same depth. Returns { handle, dir, score, scanned, path }
+// (path relative to `dir`, e.g. 'SF/dune.epub').
 export async function findFileIn(dir, fileName, { maxDepth = 4, budget = 4000 } = {}) {
-  let queue = [{ dir, depth: 0 }];
+  let queue = [{ dir, depth: 0, path: '' }];
   let scanned = 0;
   let best = null;
   while (queue.length && scanned < budget) {
     const next = [];
-    for (const { dir: d, depth } of queue) {
+    for (const { dir: d, depth, path } of queue) {
       let entries;
       try { entries = d.entries(); } catch { continue; }
       try {
         for await (const [name, handle] of entries) {
           if (++scanned > budget) break;
           if (handle.kind === 'directory') {
-            if (depth + 1 <= maxDepth && !name.startsWith('.')) next.push({ dir: handle, depth: depth + 1 });
+            if (depth + 1 <= maxDepth && !name.startsWith('.')) next.push({ dir: handle, depth: depth + 1, path: `${path}${name}/` });
             continue;
           }
           const score = nameScore(fileName, name);
-          if (score > (best?.score || 0)) best = { handle, dir: d, score, scanned };
+          if (score > (best?.score || 0)) best = { handle, dir: d, score, scanned, path: path + name };
         }
       } catch { /* a folder we can't read — skip it, keep searching the rest */ }
       if (best?.score === 2) return { ...best, scanned };
@@ -95,8 +96,19 @@ export async function findFile(dirs, fileName, opts) {
   for (const d of dirs || []) {
     if (!await ensureRead(d)) continue;
     const hit = await findFileIn(d, fileName, opts);
-    if (hit && hit.score > (best?.score || 0)) best = { ...hit, root: d };
+    if (hit && hit.score > (best?.score || 0)) best = { ...hit, root: d, path: `${d.name}/${hit.path}` };
     if (best?.score === 2) break;
   }
   return best;
+}
+
+// Where each linked file was last found (checksum → 'Folder/sub/file.epub'), so the queue's file
+// column and path filter can show real locations. Device-local (paths differ per device).
+const PATHS_KEY = 'tachyread-found-paths';
+export function foundPaths() {
+  try { return JSON.parse(localStorage.getItem(PATHS_KEY) || '{}') || {}; } catch { return {}; }
+}
+export function rememberPath(cs, path) {
+  if (!cs || !path) return;
+  try { localStorage.setItem(PATHS_KEY, JSON.stringify({ ...foundPaths(), [cs]: path })); } catch { /* private mode */ }
 }
