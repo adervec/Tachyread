@@ -241,7 +241,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
     const dailyHistory = tracker.dailyArray().map((d) => ({ date: d.date, wordsRead: d.words, activeTimeSecs: Math.round(d.ms / 1000) }));
     await saveFile({
       ...(storedTab?.settings || {}), contentChecksum: storedChecksum,
-      persistentWordsRead: tracker.readCount, persistentActiveTimeSecs: Math.round(tracker.lifetimeActiveMs / 1000), dailyHistory,
+      persistentWordsRead: tracker.readCount, persistentPacedWords: tracker.pacedCount, persistentActiveTimeSecs: Math.round(tracker.lifetimeActiveMs / 1000), dailyHistory,
     }).catch(() => {});
   }
 

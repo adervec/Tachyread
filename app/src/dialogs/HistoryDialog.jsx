@@ -169,6 +169,9 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
       }
       const totalWords = f.totalWords || 0;
       const wordsRead = f.persistentWordsRead || 0;
+      // WPM divides only words actually read here (not sections ticked as read elsewhere). Older
+      // records without the field fall back to coverage.
+      const pacedWords = f.persistentPacedWords ?? wordsRead;
       const activeSecs = f.persistentActiveTimeSecs || 0;
       const dDates = daily.filter((d) => (d.wordsRead || 0) > 0 || (d.activeTimeSecs || 0) > 0);
       const tocStats = f.tocReadStats || {};
@@ -186,7 +189,8 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
         daily,
         posFrac: totalWords ? Math.min(1, (f.wordIndex || 0) / totalWords) : 0,
         readFrac: totalWords ? Math.min(1, wordsRead / totalWords) : 0,
-        avgWpm: wpmOf(wordsRead, activeSecs),
+        pacedWords,
+        avgWpm: wpmOf(pacedWords, activeSecs),
         daysRead: dDates.length,
         firstRead: dDates[0]?.date || null,
         lastRead: dDates.length ? dDates[dDates.length - 1].date : null,
@@ -205,6 +209,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
     const dateSet = new Set(byDay.keys());
     const totalWordsRead = books.reduce((a, b) => a + b.wordsRead, 0);
     const totalSecs = books.reduce((a, b) => a + b.activeSecs, 0);
+    const totalPaced = books.reduce((a, b) => a + b.pacedWords, 0);
     const finished = books.filter((b) => b.shelf === 'finished');
     const withPace = books.filter((b) => b.avgWpm > 0 && b.wordsRead > 500);
     const bestDay = [...byDay.entries()].sort((a, b) => b[1].words - a[1].words)[0] || null;
@@ -216,7 +221,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
       agg: {
         totalWordsRead,
         totalSecs,
-        avgWpm: wpmOf(totalWordsRead, totalSecs),
+        avgWpm: wpmOf(totalPaced, totalSecs),
         booksOpened: books.length,
         booksFinished: finished.length,
         daysRead: dateSet.size,
