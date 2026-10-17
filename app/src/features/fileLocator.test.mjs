@@ -1,7 +1,7 @@
 // Self-check for the missing-file search: name matching, and the budgeted breadth-first walk.
 // Run: node src/features/fileLocator.test.mjs
 import assert from 'node:assert/strict';
-import { nameScore, stem, findFileIn } from './fileLocator.js';
+import { nameScore, stem, findFileIn, indexFolders } from './fileLocator.js';
 
 // ── name matching ──
 assert.equal(nameScore('Great Expectations.epub', 'Great Expectations.epub'), 2, 'same name');
@@ -55,3 +55,14 @@ assert.equal((await findFileIn(angry, 'x.txt')).score, 2, 'an unreadable folder 
 assert.equal(await findFileIn(dirOf({}), 'x.txt'), null, 'empty folder');
 
 console.log('fileLocator: all cases pass');
+
+// ── folder index: one walk records every wanted file's path; exact name beats another format ──
+{
+  const idx = await indexFolders([dirOf(tree, 'Lib'), dirOf({ 'Dune.epub': null }, 'Other')], [
+    { cs: 'ge', name: 'Great Expectations.epub' }, { cs: 'dune', name: 'Dune.epub' }, { cs: 'emma', name: 'Emma.epub' }, { cs: 'gt', name: 'Great Expectations.pdf' },
+  ]);
+  assert.deepEqual(idx.paths, { ge: 'Lib/Books/Great Expectations.epub', gt: 'Lib/Books/Great Expectations.epub', dune: 'Other/Dune.epub' });
+  assert.equal(idx.found, 3);
+  const denied = { ...dirOf(tree, 'Locked'), queryPermission: async () => 'prompt' };
+  assert.equal((await indexFolders([denied], [{ cs: 'ge', name: 'Great Expectations.epub' }])).skipped, 1, 'no silent permission → skipped, not prompted');
+}

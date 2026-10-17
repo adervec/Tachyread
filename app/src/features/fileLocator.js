@@ -102,6 +102,47 @@ export async function findFile(dirs, fileName, opts) {
   return best;
 }
 
+// One walk over every search folder that records where each wanted file lives — the browser never
+// says which folder a file was opened from, so this is how the queue's Folder column gets filled.
+// wanted: [{ cs, name }]. Exact names win over another format of the same book; first found (by
+// folder order, then depth) wins among equals. Returns { [cs]: 'Root/sub/file.epub' } plus counts.
+// ponytail: budgeted, not a full crawl — raise `budget` if huge libraries come up short.
+export async function indexFolders(dirs, wanted, { maxDepth = 8, budget = 60000, ask = false } = {}) {
+  const byName = new Map(), byStem = new Map();
+  for (const w of wanted || []) {
+    if (!w?.cs || !w.name) continue;
+    const n = norm(w.name), st = stem(w.name);
+    if (!byName.has(n)) byName.set(n, []); byName.get(n).push(w.cs);
+    if (!byStem.has(st)) byStem.set(st, []); byStem.get(st).push(w.cs);
+  }
+  const paths = {}, score = {};
+  let scanned = 0, skipped = 0;
+  for (const root of dirs || []) {
+    if (ask ? !await ensureRead(root) : (typeof root.queryPermission === 'function' && await root.queryPermission({ mode: 'read' }) !== 'granted')) { skipped++; continue; }
+    let queue = [{ dir: root, depth: 0, path: '' }];
+    while (queue.length && scanned < budget) {
+      const next = [];
+      for (const { dir, depth, path } of queue) {
+        try {
+          for await (const [name, h] of dir.entries()) {
+            if (++scanned > budget) break;
+            if (h.kind === 'directory') { if (depth + 1 <= maxDepth && !name.startsWith('.')) next.push({ dir: h, depth: depth + 1, path: `${path}${name}/` }); continue; }
+            const exact = byName.get(norm(name)) || [], alt = byStem.get(stem(name)) || [];
+            for (const [list, sc] of [[exact, 2], [alt, 1]]) {
+              for (const cs of list) if ((score[cs] || 0) < sc) { score[cs] = sc; paths[cs] = `${root.name}/${path}${name}`; }
+            }
+          }
+        } catch { /* unreadable folder — skip it */ }
+      }
+      queue = next;
+    }
+  }
+  return { paths, found: Object.keys(paths).length, scanned, skipped };
+}
+export function rememberPaths(map) {
+  try { localStorage.setItem(PATHS_KEY, JSON.stringify({ ...foundPaths(), ...map })); } catch { /* private mode */ }
+}
+
 // Where each linked file was last found (checksum → 'Folder/sub/file.epub'), so the queue's file
 // column and path filter can show real locations. Device-local (paths differ per device).
 const PATHS_KEY = 'tachyread-found-paths';
