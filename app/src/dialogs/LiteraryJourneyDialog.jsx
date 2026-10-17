@@ -242,6 +242,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
         activeSecs: f.persistentActiveTimeSecs || 0,
         words: f.totalWords || 0,
         coverage: f.totalWords ? Math.min(1, (f.persistentWordsRead || 0) / f.totalWords) : 0,
+        pacedWords: f.persistentPacedWords ?? (f.persistentWordsRead || 0), // for WPM: ticked-as-read words excluded
       };
     }
     setFileStats(stats);
@@ -2080,7 +2081,7 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
 // View-only dashboard: every queue's progress and what's left, plus totals across all of them.
 function QueuesDashboard({ queues, books, wpm, pace, fileStats, csOf, onPick }) {
   const { rows, total } = useMemo(() => queuesOverview(queues, books, {
-    wpm, wordsPerDay: pace.wordsPerDay, fileOf: (b) => fileStats[csOf[b.id]] || null,
+    wpm, wordsPerDay: pace.wordsPerDay, fileOf: (b) => fileStats[csOf[b.id]] || null, isLinked: (b) => !!csOf[b.id],
   }), [queues, books, wpm, pace, fileStats, csOf]);
   const maxLeft = Math.max(1, ...rows.map((r) => r.st.wordsLeft));
   return (
@@ -2095,9 +2096,9 @@ function QueuesDashboard({ queues, books, wpm, pace, fileStats, csOf, onPick }) 
       </div>
       <div className="lj-q-box lj-qdash-box">
         <table className="lj-cand lj-qdash-table">
-          <thead><tr><th>Queue</th><th>Finished</th><th>Words read</th><th>Words left</th><th>Hours left</th><th>Done by*</th><th>Up next</th></tr></thead>
+          <thead><tr><th>Queue</th><th>Finished</th><th>Words read</th><th>Words left</th><th>Hours left</th><th>Done by*</th><th title="The same, counting only books that have a linked document">Linked files only</th><th>Up next</th></tr></thead>
           <tbody>
-            {rows.map(({ queue: q, st }) => (
+            {rows.map(({ queue: q, st, linked }) => (
               <tr key={q.id}>
                 <td><button className="link-btn" onClick={() => onPick(q.id)} title="Open this queue">{q.name}</button></td>
                 <td><Bar cls="fin" pct={st.count ? st.done / st.count : 0} label={`${st.done} of ${st.count} finished`} /><span className="lj-cand-pct lj-qdash-n">{st.done}/{st.count}</span></td>
@@ -2105,6 +2106,9 @@ function QueuesDashboard({ queues, books, wpm, pace, fileStats, csOf, onPick }) 
                 <td title={`${st.wordsLeft.toLocaleString()} words`}><span className="lj-qdash-left"><i style={{ width: `${(st.wordsLeft / maxLeft) * 100}%` }} /></span>{Math.round(st.wordsLeft / 1000)}k</td>
                 <td>{st.hoursLeft} h</td>
                 <td>{st.eta || '—'}</td>
+                <td title={`${linked.count} of ${st.count} books have a linked document`}>{linked.count
+                  ? <><Bar cls="fin" pct={linked.done / linked.count} label={`${linked.done} of ${linked.count} linked books finished`} /><span className="lj-qdash-linked">{linked.done}/{linked.count} · {linked.pctWords}% · {linked.hoursLeft} h</span></>
+                  : <span className="settings-note">none linked</span>}</td>
                 <td title={st.next?.title || ''}>{st.next?.title || (st.count ? '✓ all finished' : 'empty')}</td>
               </tr>
             ))}
@@ -2122,6 +2126,10 @@ const WHERE = { open: ['📂', 'Open in a tab'], local: ['💾', 'Saved on this 
 function NamedQueue({ queue, others = [], books, wpm, setWpm, pace, fileStats, csOf, pctOf, openChecksums, dirs, finding, openTheFile, findMsg, onChange, onDelete, onEdit, onBulk, onOpen, folders }) {
   const qBooks = useMemo(() => queueBooks(queue, books), [queue, books]);
   const st = useMemo(() => queueStats(qBooks, {
+    wpm, fileOf: (b) => fileStats[csOf[b.id]] || null, wordsPerDay: pace.wordsPerDay,
+  }), [qBooks, wpm, fileStats, csOf, pace]);
+  // The same over just the books with a linked document (the ones the app can actually open/track).
+  const lst = useMemo(() => queueStats(qBooks.filter((b) => csOf[b.id]), {
     wpm, fileOf: (b) => fileStats[csOf[b.id]] || null, wordsPerDay: pace.wordsPerDay,
   }), [qBooks, wpm, fileStats, csOf, pace]);
   const [renaming, setRenaming] = useState(null);
@@ -2197,6 +2205,16 @@ function NamedQueue({ queue, others = [], books, wpm, setWpm, pace, fileStats, c
               <b>{st.eta || '—'}</b><span>{st.eta ? `ETA at ~${st.wordsPerDay.toLocaleString()} words/day lately` : 'ETA needs some recent reading'}</span>
             </div>
             <div className="ab-stat"><b>{st.hoursSpent} h</b><span>spent{st.readingWpm ? ` · ~${st.readingWpm} wpm on these` : ''}</span></div>
+          </div>
+          <div className="lj-qlinked" title="The same stats counting only books that have a linked document">
+            <span className="lj-qlinked-h">🔗 Linked files only · {lst.count} of {st.count}</span>
+            {lst.count ? <>
+              <span className="lj-qlinked-s"><Bar cls="fin" pct={lst.done / lst.count} label={`${lst.done} of ${lst.count} linked books finished`} />{lst.done}/{lst.count} finished</span>
+              <span className="lj-qlinked-s"><Bar pct={lst.pctWords / 100} />{lst.pctWords}% read</span>
+              <span className="lj-qlinked-s">{lst.hoursLeft} h left</span>
+              <span className="lj-qlinked-s">{lst.eta ? `done ~${lst.eta}` : 'ETA —'}</span>
+              <span className="lj-qlinked-s">{lst.hoursSpent} h spent{lst.readingWpm ? ` · ~${lst.readingWpm} wpm` : ''}</span>
+            </> : <span className="settings-note" style={{ margin: 0 }}>none of these books has a linked document yet</span>}
           </div>
         </>
       )}

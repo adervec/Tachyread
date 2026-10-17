@@ -225,7 +225,7 @@ export function queueStats(qBooks, { wpm = 250, fileOf = () => null, wordsPerDay
     pctWords: wordsTotal ? Math.round((wordsRead / wordsTotal) * 100) : 0,
     hoursLeft: Math.round((wordsLeft / wpm / 60) * 10) / 10,
     hoursSpent: Math.round((secs / 3600) * 10) / 10,
-    readingWpm: secs > 60 ? Math.round(qBooks.reduce((a, b) => a + (fileOf(b)?.coverage || 0) * (fileOf(b)?.words || 0), 0) / (secs / 60)) : null,
+    readingWpm: secs > 60 ? Math.round(qBooks.reduce((a, b) => a + (fileOf(b)?.pacedWords ?? (fileOf(b)?.coverage || 0) * (fileOf(b)?.words || 0)), 0) / (secs / 60)) : null,
     wordsPerDay, pctById,
     etaById: Object.fromEntries(etas.map((e) => [e.id, e.eta])),
     eta: etas.length ? etas.at(-1).eta : null,
@@ -249,8 +249,12 @@ export async function nextInQueue(order, finishedId, available) {
 
 // The view-only dashboard: every live queue's stats, plus totals over all of them (books are in one
 // queue each, so the totals don't double count). The overall ETA is everything left at your pace.
+// `isLinked(book)` (optional) adds `linked` stats per row: the same, over books with a linked file.
 export function queuesOverview(queues, books, opts = {}) {
-  const rows = liveQueues(queues).map((q) => ({ queue: q, st: queueStats(queueBooks(q, books), opts) }));
+  const rows = liveQueues(queues).map((q) => {
+    const qb = queueBooks(q, books);
+    return { queue: q, st: queueStats(qb, opts), linked: opts.isLinked ? queueStats(qb.filter(opts.isLinked), opts) : null };
+  });
   const sum = (k) => rows.reduce((a, r) => a + r.st[k], 0);
   const wordsLeft = sum('wordsLeft'), wpd = opts.wordsPerDay, now = opts.now ?? Date.now();
   return {

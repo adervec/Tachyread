@@ -144,8 +144,8 @@ const r13 = t13.markRangeReadAtPace(10, 20, 5000); // absurd manual pace → cap
 assert.equal(t13.rangeStats(10, 20).wpm, 2000, 'manual pace capped at 2000');
 assert.ok(r13.ms >= Math.round((10 / 2000) * 60000), 'time credited at the capped pace');
 const t14 = createReadingTracker({ wordCount: 100000, lifetimeActiveMs: 2000 });
-t14.markRangeRead(0, 100000); // bulk coverage with ~no time → derived wpm would explode
-assert.equal(t14.lifetimeWpm(), 2000, 'lifetime wpm clamps to the possible ceiling');
+t14.markRangeRead(0, 100000); // bulk ticked coverage with ~no time — used to clamp WPM to 2000
+assert.equal(t14.lifetimeWpm(), 0, 'ticked-only words never count toward lifetime WPM');
 
 // "Reading now" decays through a pause: the open dwell counts as wordless active time (capped at
 // the idle grace), so the readout sags during a pause instead of freezing at its pre-pause value.
@@ -162,4 +162,27 @@ assert.equal(d15.scrolling, false);
 assert.equal(d15.wpm, t15.recentWpm(T + 50 * 200 + 8000), 'detail wpm matches recentWpm');
 const d3 = t3.recentWpmDetail(T + 150000);
 assert.equal(d3.windowSecs, 120, 'scroll mode averages over the long window');
+
+// Ticking a section read (read elsewhere, maybe years ago) must not move lifetime WPM either way.
+const t16 = createReadingTracker({ wordCount: 1000 });
+t16.recordMove(0, 0, T);
+for (let i = 1; i <= 100; i++) t16.recordMove(i - 1, i, T + i * 200); // 100 words at 300 wpm
+const before = t16.lifetimeWpm();
+t16.markRangeRead(500, 900); // tick 400 words — no time
+assert.equal(t16.coverage(), 0.5, 'ticked words count for coverage');
+assert.equal(t16.lifetimeWpm(), before, `WPM unchanged by ticking (${before} → ${t16.lifetimeWpm()})`);
+assert.equal(t16.pacedCount, 100);
+// Actually reading 20 ticked words later counts them as real reading at their pace (no downward drag).
+t16.recordMove(100, 500, T + 20200); // jump straight there (no credit)
+for (let i = 501; i <= 520; i++) t16.recordMove(i - 1, i, T + 20200 + (i - 500) * 200);
+const after = t16.lifetimeWpm();
+assert(after >= before - 15 && after <= before + 15, `re-reading ticked text keeps WPM near ${before}, got ${after}`);
+assert.equal(t16.pacedCount, 120);
+assert.equal(t16.coverage(), 0.5, 'coverage did not double count');
+// The free count survives a save/load round trip, and unticking removes it.
+const t16b = createReadingTracker({ wordCount: 1000, maskB64: t16.serializeMask(), wpmB64: t16.serializeWpm(), srcB64: t16.serializeSrc(), lifetimeActiveMs: t16.lifetimeActiveMs });
+assert.equal(t16b.pacedCount, 120);
+t16b.unmarkRangeRead(600, 900);
+assert.equal(t16b.pacedCount, 120);
+assert.equal(t16b.readCount, 200); // 0–100 read + 500–600 left ticked
 console.log('ok');

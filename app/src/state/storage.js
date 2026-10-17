@@ -1257,7 +1257,7 @@ export async function importAllData(bundle, { replace = true } = {}) {
 
 // Reading-progress fields lifted out of a FileSettings record (cosmetic per-file prefs stay local).
 const PROGRESS_FILE_FIELDS = [
-  'wordIndex', 'totalWords', 'persistentWordsRead', 'persistentActiveTimeSecs',
+  'wordIndex', 'totalWords', 'persistentWordsRead', 'persistentPacedWords', 'persistentActiveTimeSecs',
   'persistentTotalTimeSecs', 'dailyHistory', 'completions', 'rating', 'tocReadStats',
   'posUpdatedAt', 'posDevice', // when + where the reading position last moved (newest-wins merge)
 ];
@@ -1448,6 +1448,7 @@ export async function importProgressData(bundle) {
     if (!cur.fileName && inc.name) cur.fileName = inc.name; // names travel with progress
     if (!cur.totalWords) cur.totalWords = inc.totalWords || 0;
     cur.persistentWordsRead = Math.max(cur.persistentWordsRead || 0, inc.persistentWordsRead || 0);
+    if (cur.persistentPacedWords != null || inc.persistentPacedWords != null) cur.persistentPacedWords = Math.max(cur.persistentPacedWords || 0, inc.persistentPacedWords || 0);
     cur.persistentActiveTimeSecs = Math.max(cur.persistentActiveTimeSecs || 0, inc.persistentActiveTimeSecs || 0);
     cur.persistentTotalTimeSecs = Math.max(cur.persistentTotalTimeSecs || 0, inc.persistentTotalTimeSecs || 0);
     cur.dailyHistory = mergeDailyHistory(cur.dailyHistory, inc.dailyHistory);

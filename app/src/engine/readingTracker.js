@@ -200,6 +200,13 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
   const paraTs = decodeU32(paraTsB64, paraCount);
   const sessionMask = new Uint8Array(wordCount); // words touched this session (transient)
   let readCount = popcount(mask);
+  // "Free" words: ticked read (ToC checkbox, section scan, edition catch-up) with no time and no pace —
+  // read elsewhere, maybe years ago. They count for coverage but NOT for WPM (which would otherwise
+  // spike: words with no minutes). Actually reading one later turns it into normal reading.
+  const MARKED = READ_SRC.marked;
+  const isFree = (i) => mask[i] === 1 && srcTrace[i] === MARKED && !wpm[i];
+  let freeCount = 0;
+  for (let i = 0; i < wordCount; i++) if (isFree(i)) freeCount++;
   let sessionNewWords = 0;
   let sessionActiveMs = 0;
   let lifetimeMs = lifetimeActiveMs;
@@ -236,18 +243,24 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
   }
 
   // Mark [from,to) as read at the given pace; record per-word wpm + session flag + first-read source.
+  // Returns { added: newly covered words, fresh: added + ticked-only words now actually read (these
+  // count as today's reading and toward WPM, though coverage already had them) }.
   function markReading(from, to, pace, srcCode = 0) {
-    let added = 0;
+    let added = 0, unfreed = 0;
     for (let i = Math.max(0, from); i < Math.min(wordCount, to); i++) {
       if (!mask[i]) {
         mask[i] = 1;
         added++;
+      } else if (isFree(i)) {
+        unfreed++;
+        freeCount--;
+        srcTrace[i] = 0; // it was only ticked — record how it was really read
       }
       if (pace > 0 && pace <= MAX_REAL_WPM) wpm[i] = pace; // impossible paces are noise, not reading
       if (srcCode && !srcTrace[i]) srcTrace[i] = srcCode; // how it was FIRST read; re-reads keep it
       sessionMask[i] = 1;
     }
-    return added;
+    return { added, fresh: added + unfreed };
   }
 
   function trim(now) {
@@ -267,14 +280,15 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
 
     const d = next - prev;
     let processed = 0;
-    let newWords = 0;
+    let newWords = 0, freshWords = 0;
 
     if (d > 0) {
       const msPerWord = activeMs > 0 ? activeMs / d : Infinity;
       const isSkim = d <= SKIP_WORDS && activeMs > 0 && msPerWord < MIN_MS_PER_WORD;
       if (d <= SKIP_WORDS && !isSkim) {
         const pace = activeMs > 0 ? Math.round((60000 * d) / activeMs) : 0;
-        newWords = markReading(prev, next, pace, READ_SRC[srcKind] || 0);
+        const r = markReading(prev, next, pace, READ_SRC[srcKind] || 0);
+        newWords = r.added; freshWords = r.fresh;
         processed = d;
       }
     } else {
@@ -292,9 +306,9 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
 
     sessionActiveMs += activeMs;
     lifetimeMs += activeMs;
-    sessionNewWords += newWords;
+    sessionNewWords += freshWords;
     readCount += newWords;
-    if (activeMs > 0 || newWords > 0) bumpDay(newWords, activeMs);
+    if (activeMs > 0 || freshWords > 0) bumpDay(freshWords, activeMs);
     if (activeMs > 0 || processed > 0) events.push({ ts: now, processed, activeMs });
     trim(now);
     dirty = true;
@@ -314,12 +328,13 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     if (!g) return;
     const d = g.to - g.from;
     const ms = g.ms;
-    let newWords = 0;
+    let newWords = 0, freshWords = 0;
     let processed = 0;
     if (d > 0) {
       if (ms > 0 && (60000 * d) / ms <= SCROLL_MAX_WPM) {
         const pace = Math.round((60000 * d) / ms);
-        newWords = markReading(g.from, g.to, pace, READ_SRC.scroll);
+        const r = markReading(g.from, g.to, pace, READ_SRC.scroll);
+        newWords = r.added; freshWords = r.fresh;
         stampParas(g.from, g.to, now);
         processed = d;
         lastScroll = { ts: now, pace };
@@ -330,9 +345,9 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     }
     sessionActiveMs += ms;
     lifetimeMs += ms;
-    sessionNewWords += newWords;
+    sessionNewWords += freshWords;
     readCount += newWords;
-    if (ms > 0 || newWords > 0) bumpDay(newWords, ms);
+    if (ms > 0 || freshWords > 0) bumpDay(freshWords, ms);
     if (ms > 0 || processed > 0) events.push({ ts: now, processed, activeMs: ms });
     trim(now);
     dirty = true;
@@ -372,8 +387,10 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
   function markPrefixRead(n) {
     const to = Math.min(wordCount, Math.max(0, n | 0));
     for (let i = 0; i < to; i++) {
+      const was = isFree(i);
       if (!mask[i]) { mask[i] = 1; readCount++; }
-      if (!srcTrace[i]) srcTrace[i] = READ_SRC.marked;
+      if (!srcTrace[i]) srcTrace[i] = MARKED;
+      if (isFree(i) !== was) freeCount += was ? -1 : 1;
     }
     if (to > 0) dirty = true;
   }
@@ -388,10 +405,13 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     const b = Math.min(wordCount, to | 0);
     const code = READ_SRC[srcKind] || READ_SRC.marked;
     for (let i = a; i < b; i++) {
+      const was = isFree(i);
       if (!mask[i]) { mask[i] = 1; readCount++; sessionMask[i] = 1; }
       if (!srcTrace[i]) srcTrace[i] = code;
+      if (isFree(i) !== was) freeCount += was ? -1 : 1;
     }
-    if (b > a) { stampParas(a, b, Date.now()); dirty = true; }
+    // A ticked section wasn't read NOW (maybe years ago) — don't date its paragraphs to today.
+    if (b > a) { if (code !== MARKED) stampParas(a, b, Date.now()); dirty = true; }
   }
 
   // Impute reading of a span's UNREAD words at a chosen pace: mark them read, tag their per-word wpm,
@@ -404,8 +424,10 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     const p = Math.min(MAX_REAL_WPM, Math.max(1, Math.round(pace) || 1));
     let added = 0;
     for (let i = a; i < b; i++) {
+      const was = isFree(i);
       if (!mask[i]) { mask[i] = 1; readCount++; wpm[i] = Math.min(65535, p); added++; }
-      if (!srcTrace[i]) srcTrace[i] = READ_SRC[srcKind] || READ_SRC.marked;
+      if (!srcTrace[i]) srcTrace[i] = READ_SRC[srcKind] || MARKED;
+      if (isFree(i) !== was) freeCount += was ? -1 : 1;
     }
     if (added <= 0) return { added: 0, ms: 0 };
     const ms = Math.round((added / p) * 60000);
@@ -423,6 +445,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     const a = Math.max(0, from | 0);
     const b = Math.min(wordCount, to | 0);
     for (let i = a; i < b; i++) {
+      if (isFree(i)) freeCount--;
       if (mask[i]) { mask[i] = 0; readCount--; }
       wpm[i] = 0;
       srcTrace[i] = 0;
@@ -629,7 +652,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
       flushScroll(now);
       return wpmFrom(sessionNewWords, sessionActiveMs);
     },
-    lifetimeWpm: () => wpmFrom(readCount, lifetimeMs),
+    lifetimeWpm: () => wpmFrom(readCount - freeCount, lifetimeMs), // ticked-only words have no minutes — left out
     coverage: () => (wordCount ? readCount / wordCount : 0),
     // Completion fraction with some word ranges excluded from BOTH numerator and denominator —
     // front/back matter flagged "skip" doesn't count toward % read (but reading it still credits
@@ -657,6 +680,10 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     },
     get lifetimeActiveMs() {
       return lifetimeMs;
+    },
+    // Words actually read here (coverage minus ticked-only) — the WPM numerator.
+    get pacedCount() {
+      return readCount - freeCount;
     },
     get readCount() {
       return readCount;

@@ -126,4 +126,6 @@ assert.deepEqual(moveInTodo(mix, 'u2', 0), ['f1', 'f2', 'u2', 'u1']);
 const ov = queuesOverview([{ id: 'q1', name: 'One', ids: ['a', 'b'] }, { id: 'q2', name: 'Two', ids: ['d'] }, { id: 'x', deleted: true, ids: ['c'] }], books, { wpm: 250, wordsPerDay: 10000, now });
 assert.deepEqual([ov.total.queues, ov.total.count, ov.total.done, ov.total.wordsLeft], [2, 3, 1, 60000]);
 assert.equal(ov.total.eta, day(-6));
+const ovl = queuesOverview([{ id: 'q1', name: 'One', ids: ['a', 'b'] }], books, { isLinked: (b) => b.id === 'b', now });
+assert.deepEqual([ovl.rows[0].linked.count, ovl.rows[0].linked.wordsTotal], [1, 20000], 'linked-only stats cover just the linked books');
 console.log('readingQueues: all cases pass');
