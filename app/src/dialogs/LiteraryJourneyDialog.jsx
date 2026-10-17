@@ -33,7 +33,7 @@ import {
 import { findDuplicates, finishedDateIssues } from '../features/journeyCleanup.js';
 import { normTitle } from '../document/tocWizard.js';
 import { planBulkLinks, matchScore, newBookFor } from '../features/bulkLink.js';
-import { getSearchDirs, addSearchDir, removeSearchDir, pickerSupported, foundPaths } from '../features/fileLocator.js';
+import { getSearchDirs, addSearchDir, removeSearchDir, pickerSupported, foundPaths, indexFolders, rememberPaths } from '../features/fileLocator.js';
 import { openBookFile, fileWhere } from '../features/openBook.js';
 import { newQueue, addToQueue, addToDeck, deleteQueue, liveQueues, dedupeQueues, moveQueue, splitFinished, moveInTodo, queuesOverview, removeFromQueue, setQueueIds, queueBooks, queueStats, QUEUE_SORTS, sortQueueIds, deckMigration, recentPace, CAND_COLS, CAND_STATES, candidateRows, filterCandidates } from '../features/readingQueues.js';
 import { groupForChecksum, masterOf, makeGroup } from '../features/bookGroups.js';
@@ -2066,7 +2066,7 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
               </div>
             )}
           />
-          <QueueCandidates queue={selQueue} queues={queues} books={books} wpm={wpm} fileStats={fileStats} csOf={csOf} pctOf={pctOf} openChecksums={openChecksums}
+          <QueueCandidates queue={selQueue} queues={queues} books={books} dirs={dirs} wpm={wpm} fileStats={fileStats} csOf={csOf} pctOf={pctOf} openChecksums={openChecksums}
             onAdd={(ids, label) => (ids.length > 1
               ? bulk((qs) => ids.reduce((acc, id) => addToQueue(acc, selQueue.id, id), qs), label)
               : saveQueues(addToQueue(queues, selQueue.id, ids[0])))}
@@ -2272,10 +2272,32 @@ function NamedQueue({ queue, others = [], books, wpm, setWpm, pace, fileStats, c
 // The add-books table: every library book outside this queue, filterable per column (regex), by
 // completion (finished books hidden by default) — open files and recently read first.
 const CAND_SHOW = 200;
-function QueueCandidates({ queue, queues, books, wpm, fileStats, csOf, pctOf, openChecksums, onAdd, onOpen }) {
+// ponytail: once per app session; the Find folders button re-runs it on demand.
+let foldersIndexed = false;
+function QueueCandidates({ queue, queues, books, dirs = [], wpm, fileStats, csOf, pctOf, openChecksums, onAdd, onOpen }) {
   const [cols, setCols] = useState({});
   const [state, setState] = useState('unfinished');
-  const paths = useMemo(() => foundPaths(), []);
+  // The browser never says which folder a file was opened from, so the Folder column comes from
+  // walking your search folders (indexFolders): silently once per session when their permission is
+  // already granted, or from the button (which may ask for it).
+  const [paths, setPaths] = useState(() => foundPaths());
+  const [indexing, setIndexing] = useState('');
+  async function runIndex(ask) {
+    const wanted = Object.entries(csOf).map(([, cs]) => ({ cs, name: fileStats[cs]?.fileName })).filter((w) => w.name);
+    if (!dirs.length || !wanted.length) return;
+    setIndexing('⟳ Looking through your folders…');
+    const r = await indexFolders(dirs, wanted, { ask }).catch(() => null);
+    if (!r) { setIndexing('Could not read the search folders.'); return; }
+    rememberPaths(r.paths);
+    setPaths(foundPaths());
+    setIndexing(ask || r.found ? `Found ${r.found} of ${wanted.length} linked files (${r.scanned.toLocaleString()} entries looked at)${r.skipped ? ` · ${r.skipped} folder${r.skipped === 1 ? '' : 's'} need permission — use Find folders` : ''}.` : '');
+  }
+  useEffect(() => {
+    if (foldersIndexed || !dirs.length || !Object.keys(fileStats).length) return;
+    foldersIndexed = true;
+    runIndex(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirs, fileStats]);
   const all = useMemo(() => candidateRows(books, queues, (b) => {
     const cs = csOf[b.id];
     return { pct: pctOf(b), file: (cs && (paths[cs] || fileStats[cs]?.fileName)) || '', open: !!cs && openChecksums.includes(cs), lastRead: fileStats[cs]?.lastRead };
@@ -2292,9 +2314,12 @@ function QueueCandidates({ queue, queues, books, wpm, fileStats, csOf, pctOf, op
           {Object.entries(CAND_STATES).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
         </select>
         {filtered && <button onClick={() => { setCols({}); setState('unfinished'); }}>Clear filters</button>}
+        <button disabled={!dirs.length || indexing.startsWith('⟳')} onClick={() => runIndex(true)}
+          title={dirs.length ? 'Look through your search folders and record which folder each linked file is in' : 'Add a search folder first (📁 Where your documents live, under the queue)'}>📁 Find folders</button>
         <button disabled={!rows.length} onClick={() => onAdd(shown.map((r) => r.book.id), `add ${shown.length}`)}
           title={`Add the ${shown.length} books shown to “${queue.name}”, in this order`}>＋ All shown ({shown.length})</button>
       </div>
+      {indexing && <p className="settings-note lj-findmsg">{indexing}</p>}
       <div className="lj-q-box lj-cand-box">
         <table className="lj-cand">
           <colgroup><col className="c-add" /><col className="c-title" /><col className="c-author" /><col className="c-genre" /><col className="c-type" /><col className="c-status" /><col className="c-folder" /><col className="c-file" /><col className="c-prog" /><col className="c-size" /></colgroup>
@@ -2334,7 +2359,7 @@ function QueueCandidates({ queue, queues, books, wpm, fileStats, csOf, pctOf, op
       <p className="settings-note lj-cand-foot">
         {rows.length > CAND_SHOW ? `Showing ${CAND_SHOW} of ${rows.length} — filter to narrow. ` : `${rows.length} book${rows.length === 1 ? '' : 's'}. `}
         Books already in a queue aren’t listed (a book sits in one queue — use ⇄ on its row to move it).
-        Folder is known once a linked document has been found in your search folders (▶ or 🔎 Search folders); File is its name.
+        Folder comes from your search folders (the browser doesn’t say where a file was opened from) — 📁 Find folders fills it in; File is the linked document’s name.
       </p>
     </section>
   );
