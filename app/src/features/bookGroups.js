@@ -63,3 +63,21 @@ export function makeGroup(name, members, createdAt, master) {
     createdAt: createdAt || 0,
   };
 }
+
+// Put files into one group: joins (and unites) any groups that already hold one of them, or makes
+// a new group. Returns { groups, group, made } — made: a new group was created. Used when two tracker
+// entries for the same book are reconciled and each had its own file.
+export function groupFiles(groups, members, name, master, createdAt) {
+  const want = [...new Set((members || []).filter(Boolean))];
+  if (want.length < 2) return { groups: groups || [], group: null, made: false };
+  const hits = (groups || []).filter((g) => (g.members || []).some((m) => want.includes(m)));
+  if (!hits.length) {
+    const g = makeGroup(name, want, createdAt, master);
+    return { groups: [...(groups || []), g], group: g, made: true };
+  }
+  const [first, ...others] = hits;
+  const united = { ...first, members: [...new Set([...(first.members || []), ...others.flatMap((g) => g.members || []), ...want])] };
+  const drop = new Set(others.map((g) => g.id));
+  const out = (groups || []).filter((g) => !drop.has(g.id)).map((g) => (g.id === first.id ? united : g));
+  return { groups: out, group: united, made: false };
+}

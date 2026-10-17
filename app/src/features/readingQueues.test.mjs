@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { newQueue, addToQueue, removeFromQueue, moveInQueue, moveToInQueue, queueBooks, queueStats, nextInQueue, sortQueueIds, deckMigration, addToDeck, deleteQueue, liveQueues, dedupeQueues, queueOf, moveQueue, splitFinished, moveInTodo, queuesOverview, recentPace, candidateRows, filterCandidates } from './readingQueues.js';
+import { newQueue, addToQueue, removeFromQueue, moveInQueue, moveToInQueue, queueBooks, queueStats, nextInQueue, sortQueueIds, deckMigration, addToDeck, deleteQueue, liveQueues, dedupeQueues, queueOf, moveQueue, splitFinished, moveInTodo, queuesOverview, mergeQueues, splitQueue, swapQueueId, recentPace, candidateRows, filterCandidates } from './readingQueues.js';
 
 const now = Date.parse('2026-10-11T12:00:00Z');
 const day = (n) => new Date(now - n * 86400000).toISOString().slice(0, 10);
@@ -128,4 +128,22 @@ assert.deepEqual([ov.total.queues, ov.total.count, ov.total.done, ov.total.words
 assert.equal(ov.total.eta, day(-6));
 const ovl = queuesOverview([{ id: 'q1', name: 'One', ids: ['a', 'b'] }], books, { isLinked: (b) => b.id === 'b', now });
 assert.deepEqual([ovl.rows[0].linked.count, ovl.rows[0].linked.wordsTotal], [1, 20000], 'linked-only stats cover just the linked books');
+
+// Merge: books in pill order, no duplicates, the others retired; split: by position or property.
+const mq = mergeQueues([{ id: 'q1', name: 'One', ids: ['a', 'b'] }, { id: 'q2', name: 'Two', ids: ['b', 'd'] }, { id: 'q3', name: 'Three', ids: ['c'] }], ['q1', 'q2'], 'Both');
+assert.deepEqual(mq.map((q) => [q.name, q.ids, !!q.deleted]), [['Both', ['a', 'b', 'd'], false], ['Two', [], true], ['Three', ['c'], false]]);
+const sAt = splitQueue([{ id: 'q1', name: 'One', ids: ['a', 'b', 'd'] }], 'q1', books, 'at', 1, 5);
+assert.deepEqual(sAt.map((q) => [q.name, q.ids]), [['One', ['a']], ['One · part 2', ['b', 'd']]]);
+const sFin = splitQueue([{ id: 'q1', name: 'One', ids: ['b', 'a', 'd'] }], 'q1', books, 'finished', 0, 5);
+assert.deepEqual(sFin.map((q) => [q.name, q.ids]), [['One', ['b', 'd']], ['One · finished', ['a']]]);
+{ const one = [{ id: 'q1', name: 'One', ids: ['b', 'd'] }]; assert.equal(splitQueue(one, 'q1', books, 'finished'), one, 'one group → unchanged'); }
+
+// Swapping a merged duplicate's id: takes its place, or keeps the earlier place when both queued.
+const sw1 = swapQueueId([{ id: 'q1', name: 'One', ids: ['a', 'quick', 'd'] }], 'quick', 'keep');
+assert.deepEqual(sw1.queues[0].ids, ['a', 'keep', 'd']);
+assert.match(sw1.note, /takes the quick entry’s place: “One” #2/);
+const sw2 = swapQueueId([{ id: 'q1', name: 'One', ids: ['quick'] }, { id: 'q2', name: 'Two', ids: ['keep', 'x'] }], 'quick', 'keep');
+assert.deepEqual(sw2.queues.map((q) => q.ids), [['keep'], ['x']]);
+assert.match(sw2.note, /both were queued — one entry left, at the earlier place: “One” #1/);
+assert.match(swapQueueId([{ id: 'q1', name: 'One', ids: ['keep'] }], 'quick', 'keep').note, /stays in “One” #1/);
 console.log('readingQueues: all cases pass');

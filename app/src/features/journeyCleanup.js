@@ -83,3 +83,65 @@ export function finishedDateIssues(books, dateFor = () => null) {
   }
   return { datable, undatable, contradictory };
 }
+
+// ── Quick-added copies of a recommended book ─────────────────────────────────────────────────────
+// The common split: a recommendation entry with good metadata (author, ISBN, Open Library cover…)
+// and a second entry made by "Add to Trackyread" when its file was opened — titled from the file
+// name, no author, linked to the document, and the one you actually read and queued. findQuickAddPairs
+// pairs them; mergeQuickInto folds the quick entry into the recommendation without losing anything.
+const STOP = new Set(['the', 'a', 'an', 'of', 'and', 'to', 'in', 'on', 'for', 'by', 'with', 'vol', 'volume', 'book', 'edition', 'ebook', 'epub', 'pdf', 'mobi', 'azw3', 'txt', 'html', 'retail']);
+const toks = (s) => norm(s).split(' ').filter((w) => w && !STOP.has(w));
+export const isQuickAdd = (b, linkedIds) => linkedIds.has(b.id) && !String(b.author || '').trim() && !String(b.recBy || '').trim();
+const richness = (b) => ['author', 'isbn', 'coverId', 'pages', 'pubDate', 'genre', 'recScore'].filter((k) => b[k] != null && String(b[k]).trim() !== '').length;
+
+// → [{ quick, keep, authorHit, alternatives }]. Every word of the recommendation's title must be in
+// the quick entry's (file-derived) title, plus the author's surname — or the titles must be equal, or
+// the title must be at least two words. A one-word title with no author in the file name is too weak.
+export function findQuickAddPairs(books, bindMap = {}) {
+  const linked = new Set(Object.values(bindMap || {}));
+  const live = (books || []).filter((b) => b && !b.deleted);
+  const rich = live.filter((b) => !isQuickAdd(b, linked) && String(b.author || '').trim());
+  const out = [];
+  for (const q of live.filter((b) => isQuickAdd(b, linked))) {
+    const qt = new Set(toks(q.title));
+    if (!qt.size) continue;
+    const cands = [];
+    for (const r of rich) {
+      const rt = toks(r.title);
+      if (!rt.length || !rt.every((w) => qt.has(w))) continue;
+      const at = toks(r.author);
+      const authorHit = at.length > 0 && qt.has(at[at.length - 1]);
+      const exact = norm(q.title) === norm(r.title);
+      if (!authorHit && !exact && rt.length < 2) continue;
+      const extra = [...qt].filter((w) => !rt.includes(w) && !at.includes(w) && !/^\d+$/.test(w)).length;
+      cands.push({ r, authorHit, score: rt.length * 2 + (authorHit ? 3 : 0) + (exact ? 2 : 0) - extra * 0.5 + richness(r) * 0.1 });
+    }
+    if (!cands.length) continue;
+    cands.sort((a, b) => b.score - a.score || String(a.r.id).localeCompare(String(b.r.id)));
+    out.push({ quick: q, keep: cands[0].r, authorHit: cands[0].authorHit, alternatives: cands.slice(1).map((c) => c.r) });
+  }
+  return out;
+}
+
+// The quick entry folded into the keeper: keeper's metadata wins, blanks fill from the quick entry,
+// reading state (started / reading / finished, dates, rating) comes across, the opened file's real
+// word count replaces a page estimate, both notes are kept, and the whole quick record is stored in
+// `mergedFrom` — so nothing is lost and the merge can be undone.
+export function mergeQuickInto(keep, quick, now = Date.now()) {
+  const out = mergeBooks(keep, quick);
+  if (Number(quick.words) > 0) out.words = Number(quick.words);
+  const kn = String(keep.notes || '').trim(), qn = String(quick.notes || '').trim();
+  if (kn && qn && kn !== qn) out.notes = `${kn}\n\n${qn}`;
+  // You read the quick copy — an On-deck shelf on the recommendation shouldn't mask that.
+  if ((quick.inProgress || quick.completion === true) && out.shelf === 'queue') delete out.shelf;
+  out.mergedFrom = [...(keep.mergedFrom || []), { at: new Date(now).toISOString(), record: quick }];
+  return out;
+}
+
+// What changed on a record, for the preview: [{ key, from, to }] (bookkeeping fields left out).
+export function bookDiff(before, after) {
+  const skip = new Set(['mergedFrom', 'updatedAt', 'id', 'deleted']);
+  return [...new Set([...Object.keys(before || {}), ...Object.keys(after || {})])]
+    .filter((k) => !skip.has(k) && JSON.stringify(before?.[k] ?? null) !== JSON.stringify(after?.[k] ?? null))
+    .map((k) => ({ key: k, from: before?.[k], to: after?.[k] }));
+}

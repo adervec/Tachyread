@@ -1,6 +1,6 @@
 // Self-check for journeyAnalytics.js — run: node app/src/features/journeyAnalytics.demo.mjs
 import assert from 'node:assert';
-import { cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, estHours, queueWithEstimates, recentWordsPerDay, yearGoal, seriesProgress, yearInBooks, weeklySummaries } from './journeyAnalytics.js';
+import { cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, estHours, queueWithEstimates, recentWordsPerDay, yearGoal, yearWordsGoal, seriesProgress, yearInBooks, weeklySummaries } from './journeyAnalytics.js';
 
 const books = [
   { id: 'a', title: 'A', author: 'X', genre: 'Literary', fnf: 'F', completion: true, finishTime: '2023-02-10', pages: 300, words: 90000, difficultyLevel: 4, rating: 5, recBy: 'Sam' },
@@ -177,3 +177,21 @@ assert.ok(qNone.items[0].hours > 0);
 }
 
 console.log('journeyAnalytics.demo: all assertions passed ✅');
+
+// yearWordsGoal: app-recorded words this year + off-app (unlinked) finishes this year; linked
+// finishes aren't double counted; last year's reading doesn't count.
+{
+  const now = Date.parse('2026-07-02T12:00:00Z');
+  const days = [{ date: '2025-12-31', wordsRead: 99999 }, { date: '2026-03-01', wordsRead: 40000 }, { date: '2026-07-01', wordsRead: 10000 }];
+  const bks = [
+    { id: 'paper', title: 'P', words: 80000, completion: true, finishTime: '2026-05-01' },
+    { id: 'linked', title: 'L', words: 90000, completion: true, finishTime: '2026-06-01' },
+    { id: 'old', title: 'O', words: 70000, completion: true, finishTime: '2025-06-01' },
+  ];
+  const g = yearWordsGoal(days, bks, new Set(['linked']), 260000, now);
+  assert.equal(g.appWords, 50000);
+  assert.equal(g.offApp, 80000);
+  assert.equal(g.read, 130000);
+  assert.equal(g.onTrack, true); // half the year, half the words
+  assert.ok(g.needPerDay > 0);
+}

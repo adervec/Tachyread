@@ -28,15 +28,15 @@ import {
 } from '../features/journeyLibrary.js';
 import {
   cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, estHours,
-  yearGoal, seriesProgress, yearInBooks, weeklySummaries,
+  yearGoal, yearWordsGoal, seriesProgress, yearInBooks, weeklySummaries,
 } from '../features/journeyAnalytics.js';
-import { findDuplicates, finishedDateIssues } from '../features/journeyCleanup.js';
+import { findDuplicates, finishedDateIssues, findQuickAddPairs, mergeQuickInto, bookDiff } from '../features/journeyCleanup.js';
 import { normTitle } from '../document/tocWizard.js';
 import { planBulkLinks, matchScore, newBookFor } from '../features/bulkLink.js';
 import { getSearchDirs, addSearchDir, removeSearchDir, pickerSupported, foundPaths, indexFolders, rememberPaths } from '../features/fileLocator.js';
 import { openBookFile, fileWhere } from '../features/openBook.js';
-import { newQueue, addToQueue, addToDeck, deleteQueue, liveQueues, dedupeQueues, moveQueue, splitFinished, moveInTodo, queuesOverview, removeFromQueue, setQueueIds, queueBooks, queueStats, QUEUE_SORTS, sortQueueIds, deckMigration, recentPace, CAND_COLS, CAND_STATES, candidateRows, filterCandidates } from '../features/readingQueues.js';
-import { groupForChecksum, masterOf, makeGroup } from '../features/bookGroups.js';
+import { newQueue, addToQueue, addToDeck, deleteQueue, liveQueues, dedupeQueues, moveQueue, splitFinished, moveInTodo, queuesOverview, removeFromQueue, setQueueIds, swapQueueId, mergeQueues, splitQueue, QUEUE_SPLITS, queueBooks, queueStats, QUEUE_SORTS, sortQueueIds, deckMigration, recentPace, CAND_COLS, CAND_STATES, candidateRows, filterCandidates } from '../features/readingQueues.js';
+import { groupForChecksum, masterOf, makeGroup, groupFiles } from '../features/bookGroups.js';
 import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordCount } from '../features/readingTime.js';
 import { olFetch, bookCoverUrl } from '../features/openLibrary.js';
 import { HistoryView } from './HistoryDialog.jsx';
@@ -162,6 +162,61 @@ function GoalCard({ books, goals, onSetGoal }) {
   );
 }
 
+const fmtVal = (v) => (v === undefined || v === null || v === '' ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v).length > 60 ? `${String(v).slice(0, 60)}…` : String(v));
+
+// Yearly WORDS goal, beside the books one (stored in the same synced goals ref as "<year>-words").
+// Counts reading the app recorded this year plus off-app finishes (books with no linked document).
+const fmtWords = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
+function WordsGoalCard({ books, goals, dayAgg, linkedIds, onSetGoal }) {
+  const now = useMemo(() => Date.now(), []); // eslint-disable-line react-hooks/purity
+  const year = new Date(now).getUTCFullYear();
+  const key = `${year}-words`;
+  const target = Number(goals?.[key]) || 0;
+  const g = useMemo(() => yearWordsGoal(dayAgg, books, linkedIds, target, now), [dayAgg, books, linkedIds, target, now]);
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState('');
+  const pct = g.target ? Math.min(100, (g.read / g.target) * 100) : 0;
+  return (
+    <div className="lj-goal">
+      {g.target > 0 ? (
+        <>
+          <div className="lj-goal-head">
+            <b>{g.year} words goal</b>
+            <span title={`${g.appWords.toLocaleString()} read in the app + ${g.offApp.toLocaleString()} from books finished elsewhere`}>{g.read.toLocaleString()} of {g.target.toLocaleString()} words</span>
+            <span className={`lj-goal-badge ${g.read >= g.target ? 'won' : g.onTrack ? 'on' : 'off'}`}>
+              {g.read >= g.target ? '🏆 goal hit!' : g.onTrack ? '✓ on track' : '⚠ behind pace'}
+            </span>
+            <span className="lj-spacer" />
+            <button className="link-btn" onClick={() => { setVal(String(g.target)); setEditing(true); }}>edit</button>
+          </div>
+          <div className="lj-goal-bar" title={`${fmtWords(g.read)}/${fmtWords(g.target)} · the tick marks where today sits in the year`}>
+            <i style={{ width: `${pct}%` }} />
+            <em style={{ left: `${g.yearFrac * 100}%` }} />
+          </div>
+          <p className="settings-note lj-goal-note">
+            {g.read >= g.target
+              ? `Done with ${g.daysLeft} days to spare — raise the bar?`
+              : `${fmtWords(g.remaining)} to go · need ~${(g.needPerDay ?? 0).toLocaleString()} words/day · current pace projects ${g.projected != null ? fmtWords(g.projected) : '—'} by year-end`}
+            {' '}· {fmtWords(g.appWords)} read in the app{g.offApp ? ` + ${fmtWords(g.offApp)} finished elsewhere` : ''}
+          </p>
+        </>
+      ) : (
+        <button onClick={() => { setVal('3000000'); setEditing(true); }}>🎯 Set a {year} words goal…</button>
+      )}
+      {editing && (
+        <div className="lj-inline">
+          <label className="settings-note" style={{ margin: 0 }}>Words in {year}:</label>
+          <input className="lj-goal-num lj-goal-words" type="number" min="1000" step="100000" value={val} onChange={(e) => setVal(e.target.value)} aria-label={`Words goal for ${year}`} />
+          <span className="settings-note" style={{ margin: 0 }}>{Number(val) > 0 ? `≈ ${fmtWords(Number(val))} · ~${Math.round(Number(val) / 90000)} novels` : ''}</span>
+          <button className="toggle-on" onClick={() => { onSetGoal(key, Math.max(0, Math.round(Number(val) || 0))); setEditing(false); }}>Set goal</button>
+          {g.target > 0 && <button onClick={() => { onSetGoal(key, 0); setEditing(false); }}>Remove</button>}
+          <button onClick={() => setEditing(false)}>Cancel</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function LiteraryJourneyDialog({ global, onPatch, initialTab, focusBookId, linkChecksum, linkFileName, openChecksums = [], onClose }) {
   const { openRecent } = useApp();
   const [books, setBooks] = useState(null);
@@ -207,6 +262,10 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   // list doesn't reshuffle under the user; reopening the tab re-evaluates.
   const fading = useMemo(() => (books ? forgettingScan(books) : []), [books]);
   const [cleanMsg, setCleanMsg] = useState('');
+  const [recon, setRecon] = useState(null);        // quick-add ↔ recommendation plans (preview)
+  const [reconPick, setReconPick] = useState(() => new Set());
+  const [reconMsg, setReconMsg] = useState('');
+  const [reconUndo, setReconUndo] = useState(null); // what the last reconcile changed, to put back
   // "This Book in Trackyread" entry points: focus an already-linked book, or run the link flow.
   // linkName mirrors the prop but can also be set by the embedded Files table's "link…" action.
   const [linkCs, setLinkCs] = useState(linkChecksum || null);
@@ -448,6 +507,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   }
 
   async function saveBook(patch) { await saveLibraryBook(patch); await reload(); }
+  const linkedIds = useMemo(() => new Set(Object.values(bindMap || {})), [bindMap]);
   async function setGoalTarget(year, target) {
     const next = { ...(goals || {}) };
     if (target > 0) next[year] = target; else delete next[year];
@@ -497,17 +557,92 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     let n = 0;
     for (const it of cleanup.datable) { await saveLibraryBook(it.fix); n++; }
     for (const it of cleanup.contradictory) { await saveLibraryBook(it.fix); n++; }
+    let qs = (await getLibraryRef('queues')) || [];
+    const qs0 = qs;
     for (const g of cleanup.dups) {
       await saveLibraryBook(g.merged);
       for (const dropId of g.dropIds) {
         for (const [cs, id] of Object.entries(bindMap || {})) if (id === dropId) await setBinding(cs, g.keepId);
+        qs = swapQueueId(qs, dropId, g.keepId).queues; // a queued copy stays queued as the keeper
         await deleteLibraryBook(dropId);
       }
       n++;
     }
+    if (qs !== qs0) await saveLibraryRef('queues', qs);
     setCleanMsg(`Applied ${n} fix${n === 1 ? '' : 'es'}${cleanup.undatable.length ? ` · ${cleanup.undatable.length} undated finish(es) left as-is` : ''}.`);
     setCleanup(null); await reload();
   }
+  // ── Quick-added copies of recommended books ───────────────────────────────────────────────────
+  // A recommendation (good metadata) and the entry "Add to Trackyread" made when its file was opened
+  // (the one you read and queued). Each plan says exactly what will happen; nothing changes until
+  // applied; the retired entry is kept as a tombstone plus a snapshot on the kept one; ↶ undoes it.
+  const nameOfCs = (cs) => fileStats[cs]?.fileName || docMeta.find((d) => d.checksum === cs)?.fileName || `${String(cs).slice(0, 8)}…`;
+  async function scanRecon() {
+    const qs = (await getLibraryRef('queues')) || [];
+    const groups = global?.bookGroups || [];
+    const plans = findQuickAddPairs(books, bindMap || {}).map(({ quick, keep, authorHit, alternatives }) => {
+      const csQ = Object.entries(bindMap || {}).filter(([, id]) => id === quick.id).map(([cs]) => cs);
+      const csK = Object.entries(bindMap || {}).filter(([, id]) => id === keep.id).map(([cs]) => cs);
+      const merged = mergeQuickInto(keep, quick);
+      let fileNote = 'no linked file';
+      if (csQ.length && !csK.length) fileNote = `${csQ.map(nameOfCs).join(', ')} becomes the kept entry’s linked file`;
+      else if (csQ.length && csK.length) {
+        const g = groupFiles(groups, [...csK, ...csQ], keep.title, csK[0], 0);
+        fileNote = `both files stay linked (${[...csK, ...csQ].map(nameOfCs).join(' + ')}) and ${g.made ? `become one book group “${keep.title}”` : `join book group “${g.group.name}”`} — shared reading position`;
+      }
+      return { id: quick.id, quick, keep, merged, authorHit, alternatives, diff: bookDiff(keep, merged), csQ, csK, fileNote, queueNote: swapQueueId(qs, quick.id, keep.id).note };
+    });
+    setRecon(plans);
+    setReconPick(new Set(plans.filter((pl) => pl.authorHit && !pl.alternatives.length).map((pl) => pl.id))); // the sure ones ticked
+    setReconMsg(plans.length ? '' : 'No quick-added copies of recommended books found. ✅');
+  }
+  async function applyRecon() {
+    const plans = (recon || []).filter((pl) => reconPick.has(pl.id));
+    if (!plans.length) return;
+    const qs0 = (await getLibraryRef('queues')) || [];
+    const groups0 = global?.bookGroups || [];
+    let qs = qs0, groups = groups0;
+    const undo = { books: [], bindings: [], queues: qs0, groups: groups0 };
+    const latest = new Map(); // one recommendation can absorb several quick copies
+    const bm = { ...(bindMap || {}) }; // links as they stand mid-apply
+    for (const pl of plans) {
+      const keep = latest.get(pl.keep.id) || pl.keep;
+      const csK = Object.entries(bm).filter(([, id]) => id === keep.id).map(([cs]) => cs);
+      if (!undo.books.some((b) => b.id === keep.id)) undo.books.push(pl.keep);
+      undo.books.push(pl.quick);
+      const merged = mergeQuickInto(keep, pl.quick);
+      await saveLibraryBook(merged);
+      latest.set(keep.id, merged);
+      if (pl.csQ.length && csK.length) {
+        const fs = (cs) => fileStats[cs]?.coverage || 0;
+        const all = [...new Set([...csK, ...pl.csQ])];
+        groups = groupFiles(groups, all, keep.title, [...all].sort((a, b) => fs(b) - fs(a))[0], Date.now()).groups;
+      }
+      for (const cs of pl.csQ) { undo.bindings.push([cs, pl.quick.id]); await setBinding(cs, keep.id); bm[cs] = keep.id; }
+      qs = swapQueueId(qs, pl.quick.id, keep.id).queues;
+      await deleteLibraryBook(pl.quick.id);
+    }
+    await saveLibraryRef('queues', qs);
+    if (groups !== groups0) onPatch?.({ bookGroups: groups });
+    setReconUndo(undo);
+    setReconMsg(`Reconciled ${plans.length} pair${plans.length === 1 ? '' : 's'} — each quick entry is folded into its recommendation (snapshot kept on it). ↶ Undo puts everything back.`);
+    setRecon(null);
+    setBindMap(await getBinding());
+    await reload();
+  }
+  async function undoRecon() {
+    const u = reconUndo;
+    if (!u) return;
+    for (const b of u.books) await saveLibraryBook({ ...b, deleted: false });
+    for (const [cs, id] of u.bindings) await setBinding(cs, id);
+    await saveLibraryRef('queues', u.queues);
+    onPatch?.({ bookGroups: u.groups });
+    setReconUndo(null);
+    setReconMsg('Undone — both entries, their file links, queues and book groups are back as they were.');
+    setBindMap(await getBinding());
+    await reload();
+  }
+
   // Opt-in destructive pass: the finished books no date could be found for are un-finished (→ To read),
   // for when they were mis-flagged. Kept separate so a real off-app read is never silently cleared.
   async function clearUndatedFinishes() {
@@ -570,6 +705,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
           {tab === 'dashboard' && stats && (
             <div className="lj-dash">
               <GoalCard books={books} goals={goals} onSetGoal={setGoalTarget} />
+              <WordsGoalCard books={books} goals={goals} dayAgg={dayAgg} linkedIds={linkedIds} onSetGoal={setGoalTarget} />
               <div className="rh-stat-grid">
                 <Stat v={stats.total} l="books" />
                 <Stat v={stats.finished} l="finished" sub={`${stats.reading} reading${stats.abandoned ? ` · ${stats.abandoned} abandoned` : ''}`} />
@@ -958,6 +1094,47 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                     <button className="toggle-on" disabled={!cleanup.datable.length && !cleanup.contradictory.length && !cleanup.dups.length} onClick={applySafeCleanup}>Apply safe fixes</button>
                     {cleanup.undatable.length > 0 && <button className="lj-danger" onClick={clearUndatedFinishes}>Un-finish the {cleanup.undatable.length} undated…</button>}
                     <button onClick={() => { setCleanup(null); setCleanMsg(''); }}>Dismiss</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="rh-section-h">Reconcile quick-added copies</div>
+              <p className="settings-note">
+                Finds books that exist twice: a recommendation with good details (author, ISBN, cover…) and a
+                second entry made by <i>Add to Trackyread</i> when you opened its file — titled from the file
+                name, and usually the one you read and queued. Each pair shows exactly what will happen. The
+                recommendation is kept and takes over the reading state, the file link and the queue place;
+                the quick entry is retired but kept as a snapshot on it, and ↶ Undo restores everything.
+              </p>
+              <div className="lj-inline">
+                <button onClick={scanRecon}>Scan for quick-added copies</button>
+                {reconUndo && <button onClick={undoRecon}>↶ Undo last reconcile</button>}
+                {reconMsg && <span className="settings-note">{reconMsg}</span>}
+              </div>
+              {recon && recon.length > 0 && (
+                <div className="lj-cleanup lj-recon">
+                  {recon.map((pl) => (
+                    <div key={pl.id} className="lj-recon-pair">
+                      <label className="lj-recon-head">
+                        <input type="checkbox" checked={reconPick.has(pl.id)} onChange={() => setReconPick((s0) => { const s1 = new Set(s0); if (s1.has(pl.id)) s1.delete(pl.id); else s1.add(pl.id); return s1; })} />
+                        <span>Keep <b>{pl.keep.title}</b> — {pl.keep.author}{pl.keep.isbn ? ` · ISBN ${pl.keep.isbn}` : ''}</span>
+                        <span className="lj-recon-arrow">←</span>
+                        <span>fold in <b>{pl.quick.title}</b> <em>({STATUS_LABEL[readStatus(pl.quick)]})</em></span>
+                      </label>
+                      <ul className="lj-clean-list">
+                        <li>📎 {pl.fileNote}</li>
+                        <li>📋 Queue: {pl.queueNote}</li>
+                        <li>✏️ {pl.diff.length ? <>changes on the kept entry: {pl.diff.map((d) => <span key={d.key} className="lj-recon-diff"><code>{d.key}</code> {fmtVal(d.from)} → <b>{fmtVal(d.to)}</b></span>)}</> : 'no field changes on the kept entry'}</li>
+                        <li>🗃 “{pl.quick.title}” is retired (kept as a tombstone + a snapshot in the kept entry’s history)</li>
+                        {!pl.authorHit && <li className="lj-recon-warn">⚠ The file name doesn’t mention the author — matched on the title alone. Check it’s the same book.</li>}
+                        {pl.alternatives.length > 0 && <li className="lj-recon-warn">⚠ Also matches: {pl.alternatives.map((b) => `${b.title} — ${b.author}`).join('; ')}. Left unticked — check which is right.</li>}
+                      </ul>
+                    </div>
+                  ))}
+                  <div className="lj-inline">
+                    <button className="toggle-on" disabled={!reconPick.size} onClick={applyRecon}>Reconcile {reconPick.size} ticked</button>
+                    <button onClick={() => setReconPick(new Set(recon.map((pl) => pl.id)))}>Tick all</button>
+                    <button onClick={() => { setRecon(null); setReconMsg(''); }}>Dismiss</button>
                   </div>
                 </div>
               )}
@@ -2038,7 +2215,7 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
           )}
         {undo && <button className="lj-qcat" onClick={() => { saveQueues(undo.queues); setUndo(null); }} title="Put the queues back as they were">↶ Undo {undo.label}</button>}
       </div>
-      {overview ? <QueuesDashboard queues={queues} books={books} wpm={wpm} pace={pace} fileStats={fileStats} csOf={csOf} onPick={setSel} />
+      {overview ? <QueuesDashboard queues={queues} books={books} wpm={wpm} pace={pace} fileStats={fileStats} csOf={csOf} onPick={setSel} onBulk={bulk} />
         : !selQueue ? <p className="settings-note">No queues yet — ＋ New queue to make one, then add books to it from the table that appears.</p> : (
         <div className="lj-q-panes">
           <NamedQueue
@@ -2078,8 +2255,13 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
   );
 }
 
-// View-only dashboard: every queue's progress and what's left, plus totals across all of them.
-function QueuesDashboard({ queues, books, wpm, pace, fileStats, csOf, onPick }) {
+// Dashboard: every queue's progress and what's left, plus totals across all of them.
+// Dashboard with whole-queue tools: tick queues to merge them; ✂ splits one (both undoable via ↶).
+function QueuesDashboard({ queues, books, wpm, pace, fileStats, csOf, onPick, onBulk }) {
+  const [picked, setPicked] = useState([]);
+  const [mergeName, setMergeName] = useState('');
+  const [splitAt, setSplitAt] = useState(null); // { id, n } while choosing a split position
+  const togglePick = (id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const { rows, total } = useMemo(() => queuesOverview(queues, books, {
     wpm, wordsPerDay: pace.wordsPerDay, fileOf: (b) => fileStats[csOf[b.id]] || null, isLinked: (b) => !!csOf[b.id],
   }), [queues, books, wpm, pace, fileStats, csOf]);
@@ -2094,13 +2276,50 @@ function QueuesDashboard({ queues, books, wpm, pace, fileStats, csOf, onPick }) 
         <div className="ab-stat" title="Everything left, read at your recent pace (last ~6 weeks, recent days weighted most)"><b>{total.eta || '—'}</b><span>{total.eta ? `all done at ~${pace.wordsPerDay.toLocaleString()} words/day` : 'needs some recent reading'}</span></div>
         <div className="ab-stat"><b>{total.hoursSpent} h</b><span>spent so far</span></div>
       </div>
+      <div className="lj-inline lj-qdash-tools">
+        {picked.length >= 2 ? (
+          <form className="lj-q-new" onSubmit={(e) => {
+            e.preventDefault();
+            const order = rows.map((r) => r.queue.id).filter((id) => picked.includes(id));
+            onBulk((qs) => mergeQueues(qs, order, mergeName), `merge ${order.length} queues`);
+            setPicked([]); setMergeName('');
+          }}>
+            <span className="settings-note" style={{ margin: 0 }}>Merge {picked.length} queues into</span>
+            <input value={mergeName} onChange={(e) => setMergeName(e.target.value)} aria-label="Name of the merged queue"
+              placeholder={rows.find((r) => picked.includes(r.queue.id))?.queue.name} />
+            <button type="submit" className="toggle-on" title="Books keep their order (left-most queue first); the other queues are removed — ↶ Undo puts them back">Merge</button>
+            <button type="button" onClick={() => setPicked([])}>Cancel</button>
+          </form>
+        ) : <span className="settings-note" style={{ margin: 0 }}>Tick two or more queues to merge them · ✂ on a row splits it.</span>}
+      </div>
       <div className="lj-q-box lj-qdash-box">
         <table className="lj-cand lj-qdash-table">
-          <thead><tr><th>Queue</th><th>Finished</th><th>Words read</th><th>Words left</th><th>Hours left</th><th>Done by*</th><th title="The same, counting only books that have a linked document">Linked files only</th><th>Up next</th></tr></thead>
+          <thead><tr><th aria-label="Select" /><th>Queue</th><th>Finished</th><th>Words read</th><th>Words left</th><th>Hours left</th><th>Done by*</th><th title="The same, counting only books that have a linked document">Linked files only</th><th>Up next</th></tr></thead>
           <tbody>
             {rows.map(({ queue: q, st, linked }) => (
               <tr key={q.id}>
-                <td><button className="link-btn" onClick={() => onPick(q.id)} title="Open this queue">{q.name}</button></td>
+                <td><input type="checkbox" checked={picked.includes(q.id)} onChange={() => togglePick(q.id)} aria-label={`Select “${q.name}” to merge`} /></td>
+                <td>
+                  <button className="link-btn" onClick={() => onPick(q.id)} title="Open this queue">{q.name}</button>
+                  {splitAt?.id === q.id ? (
+                    <span className="lj-qdash-split">
+                      {' '}first <input type="number" min="1" max={Math.max(1, st.count - 1)} value={splitAt.n} onChange={(e) => setSplitAt({ id: q.id, n: e.target.value })} aria-label="Books that stay in this queue" /> stay
+                      <button onClick={() => { onBulk((qs) => splitQueue(qs, q.id, books, 'at', Number(splitAt.n) || 1), `split “${q.name}”`); setSplitAt(null); }}>Split</button>
+                      <button onClick={() => setSplitAt(null)}>✕</button>
+                    </span>
+                  ) : st.count > 1 && (
+                    <select className="lj-q-move" value="" aria-label={`Split “${q.name}”`} title="Split this queue"
+                      onChange={(e) => {
+                        const how = e.target.value;
+                        if (!how) return;
+                        if (how === 'at') setSplitAt({ id: q.id, n: Math.ceil(st.count / 2) });
+                        else onBulk((qs) => splitQueue(qs, q.id, books, how), `split “${q.name}”`);
+                      }}>
+                      <option value="">✂</option>
+                      {Object.entries(QUEUE_SPLITS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                    </select>
+                  )}
+                </td>
                 <td><Bar cls="fin" pct={st.count ? st.done / st.count : 0} label={`${st.done} of ${st.count} finished`} /><span className="lj-cand-pct lj-qdash-n">{st.done}/{st.count}</span></td>
                 <td><Bar pct={st.pctWords / 100} /><span className="lj-cand-pct">{st.pctWords}%</span></td>
                 <td title={`${st.wordsLeft.toLocaleString()} words`}><span className="lj-qdash-left"><i style={{ width: `${(st.wordsLeft / maxLeft) * 100}%` }} /></span>{Math.round(st.wordsLeft / 1000)}k</td>
@@ -2115,7 +2334,7 @@ function QueuesDashboard({ queues, books, wpm, pace, fileStats, csOf, onPick }) 
           </tbody>
         </table>
       </div>
-      <p className="settings-note lj-cand-foot">* if that queue alone were read in order at your recent pace. View only — pick a queue to change it.</p>
+      <p className="settings-note lj-cand-foot">* if that queue alone were read in order at your recent pace. Click a queue’s name to open it.</p>
     </section>
   );
 }
