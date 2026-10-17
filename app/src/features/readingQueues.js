@@ -1,5 +1,6 @@
 // Named reading queues: hand-picked, hand-ordered lists of Trackyread books ("AI lore", "Sci-fi"…).
-// Membership is kept apart from a book's status, so one book can sit in several queues. Stored as
+// Membership is kept apart from a book's status. A book sits in at most ONE queue, once (adding it
+// elsewhere moves it; dedupeQueues cleans up older data). Stored as
 // one array in the library refs (refs:queues), so it syncs with the library like goals do. These are
 // the only queues — the old status-based "On deck" list is folded into one once (deckMigration).
 // All functions here are pure.
@@ -10,7 +11,52 @@ const bookWords = (b) => Number(b?.words) || (Number(b?.pages) ? Number(b.pages)
 export const newQueue = (name, now = Date.now()) => ({ id: 'q' + now.toString(36), name: String(name || 'Queue').trim() || 'Queue', ids: [] });
 
 const edit = (queues, qid, fn) => (queues || []).map((q) => (q.id === qid ? { ...q, ids: fn(q.ids || []) } : q));
-export const addToQueue = (queues, qid, bookId) => edit(queues, qid, (ids) => (ids.includes(bookId) ? ids : [...ids, bookId]));
+// Adding moves the book here from any other queue — never in two places.
+export const addToQueue = (queues, qid, bookId) => (queues || []).map((q) => {
+  const ids = (q.ids || []).filter((x) => x !== bookId || q.id === qid);
+  return q.id === qid ? { ...q, ids: ids.includes(bookId) ? ids : [...ids, bookId] } : (ids.length === (q.ids || []).length ? q : { ...q, ids });
+});
+// Older data (or a sync merge) can hold a book twice: keep its first place (queue order, then list
+// order) and drop the rest. Returns null when nothing needed fixing.
+export function dedupeQueues(queues) {
+  const seen = new Set();
+  let changed = false;
+  const out = (queues || []).map((q) => {
+    if (q.deleted) return q;
+    const ids = (q.ids || []).filter((id) => (seen.has(id) ? false : seen.add(id)));
+    if (ids.length === (q.ids || []).length) return q;
+    changed = true;
+    return { ...q, ids };
+  });
+  return changed ? out : null;
+}
+// The queue holding a book (live queues only), or null.
+export const queueOf = (queues, bookId) => (queues || []).find((q) => !q.deleted && (q.ids || []).includes(bookId)) || null;
+// Shift a queue one place left/right among the live ones (its pill order).
+export function moveQueue(queues, qid, delta) {
+  const live = (queues || []).map((q, i) => [q, i]).filter(([q]) => !q.deleted);
+  const k = live.findIndex(([q]) => q.id === qid), j = k + delta;
+  if (k < 0 || j < 0 || j >= live.length) return queues;
+  const out = [...queues];
+  [out[live[k][1]], out[live[j][1]]] = [out[live[j][1]], out[live[k][1]]];
+  return out;
+}
+
+// Finished books always show at the top (in the order they were finished — so one read out of
+// order rises there); the rest keep the queue's order.
+export function splitFinished(qBooks) {
+  const fin = qBooks.filter((b) => readStatus(b) === 'finished')
+    .sort((a, b) => String(a.finishTime || '').localeCompare(String(b.finishTime || '')));
+  return { fin, todo: qBooks.filter((b) => readStatus(b) !== 'finished') };
+}
+// New id order after moving an unfinished book to position `to` among the unfinished (finished first).
+export function moveInTodo(qBooks, bookId, to) {
+  const { fin, todo } = splitFinished(qBooks);
+  const rest = todo.map((b) => b.id).filter((id) => id !== bookId);
+  if (rest.length === todo.length) return [...fin, ...todo].map((b) => b.id);
+  rest.splice(Math.max(0, Math.min(rest.length, to)), 0, bookId);
+  return [...fin.map((b) => b.id), ...rest];
+}
 export const removeFromQueue = (queues, qid, bookId) => edit(queues, qid, (ids) => ids.filter((x) => x !== bookId));
 export function moveInQueue(queues, qid, bookId, delta) {
   return edit(queues, qid, (ids) => {
@@ -47,7 +93,6 @@ export const QUEUE_SORTS = {
   title: ['Title A–Z', (a, b) => a.book.title.localeCompare(b.book.title)],
   author: ['Author A–Z', (a, b) => String(a.book.author || '').localeCompare(String(b.book.author || ''))],
   rec: ['Rec score', (a, b) => (Number(b.book.recScore) || 0) - (Number(a.book.recScore) || 0)],
-  finishedLast: ['Finished to the bottom', (a, b) => Number(a.fin) - Number(b.fin)],
   reverse: ['Reverse', null],
 };
 export function sortQueueIds(qBooks, key, info = () => ({})) {
@@ -65,7 +110,7 @@ export function sortQueueIds(qBooks, key, info = () => ({})) {
 // marked fromDeck so a sync from another device that already did it doesn't make a second one.
 export function deckMigration(queues, books, now = Date.now()) {
   if ((queues || []).some((q) => q.fromDeck)) return null;
-  const deck = (books || []).filter((b) => !b.deleted && readStatus(b) === 'queue')
+  const deck = (books || []).filter((b) => !b.deleted && readStatus(b) === 'queue' && !queueOf(queues, b.id))
     .sort((a, b) => (Number(b.recScore) || 0) - (Number(a.recScore) || 0));
   if (!deck.length) return null;
   return [...(queues || []), { ...newQueue('On deck', now), ids: deck.map((b) => b.id), fromDeck: true }];
@@ -75,6 +120,7 @@ export function deckMigration(queues, books, now = Date.now()) {
 // deck, if it doesn't exist yet). `books` must already show this book on deck.
 // A deleted On deck queue comes back with just this book.
 export function addToDeck(queues, books, bookId) {
+  if (queueOf(queues, bookId)) return queues; // already queued somewhere — leave it where you put it
   const deck = (queues || []).find((q) => q.fromDeck);
   if (deck?.deleted) return queues.map((q) => (q === deck ? { ...q, deleted: false, ids: [bookId] } : q));
   return deck ? addToQueue(queues, deck.id, bookId) : deckMigration(queues, books) || queues || [];
@@ -103,12 +149,12 @@ export function recentPace(days, { now = Date.now(), halfLife = 10, windowDays =
   };
 }
 
-// Candidate rows for the "add books" table: one per library book not already in the queue, with the
+// Candidate rows for the "add books" table: one per library book in no queue at all, with the
 // text of each filterable column. `info(book)` → { pct, file, open, lastRead }; `file` may be a path
 // ('Books/SF/dune.epub'), split here into Folder ('Books/SF') and File ('dune.epub').
 export const CAND_COLS = { title: 'Title', author: 'Author', genre: 'Genre', type: 'Type', status: 'Status', folder: 'Folder', file: 'File' };
-export function candidateRows(books, queue, info = () => ({})) {
-  const inQ = new Set(queue?.ids || []);
+export function candidateRows(books, queues, info = () => ({})) {
+  const inQ = new Set(liveQueues(queues).flatMap((q) => q.ids || []));
   return (books || []).filter((b) => !b.deleted && !inQ.has(b.id)).map((book) => {
     const i = info(book) || {};
     const st = readStatus(book);
@@ -199,4 +245,21 @@ export async function nextInQueue(order, finishedId, available) {
     skipped += 1;
   }
   return { book: null, skipped };
+}
+
+// The view-only dashboard: every live queue's stats, plus totals over all of them (books are in one
+// queue each, so the totals don't double count). The overall ETA is everything left at your pace.
+export function queuesOverview(queues, books, opts = {}) {
+  const rows = liveQueues(queues).map((q) => ({ queue: q, st: queueStats(queueBooks(q, books), opts) }));
+  const sum = (k) => rows.reduce((a, r) => a + r.st[k], 0);
+  const wordsLeft = sum('wordsLeft'), wpd = opts.wordsPerDay, now = opts.now ?? Date.now();
+  return {
+    rows,
+    total: {
+      queues: rows.length, count: sum('count'), done: sum('done'), wordsTotal: sum('wordsTotal'), wordsLeft,
+      hoursLeft: Math.round((wordsLeft / (opts.wpm || 250) / 60) * 10) / 10,
+      hoursSpent: Math.round(sum('hoursSpent') * 10) / 10,
+      eta: wpd && wordsLeft ? new Date(now + (wordsLeft / wpd) * 86400000).toISOString().slice(0, 10) : null,
+    },
+  };
 }

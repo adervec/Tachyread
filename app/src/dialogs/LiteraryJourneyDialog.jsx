@@ -35,7 +35,7 @@ import { normTitle } from '../document/tocWizard.js';
 import { planBulkLinks, matchScore, newBookFor } from '../features/bulkLink.js';
 import { getSearchDirs, addSearchDir, removeSearchDir, pickerSupported, foundPaths } from '../features/fileLocator.js';
 import { openBookFile, fileWhere } from '../features/openBook.js';
-import { newQueue, addToQueue, addToDeck, deleteQueue, liveQueues, removeFromQueue, moveToInQueue, setQueueIds, queueBooks, queueStats, QUEUE_SORTS, sortQueueIds, deckMigration, recentPace, CAND_COLS, CAND_STATES, candidateRows, filterCandidates } from '../features/readingQueues.js';
+import { newQueue, addToQueue, addToDeck, deleteQueue, liveQueues, dedupeQueues, moveQueue, splitFinished, moveInTodo, queuesOverview, removeFromQueue, setQueueIds, queueBooks, queueStats, QUEUE_SORTS, sortQueueIds, deckMigration, recentPace, CAND_COLS, CAND_STATES, candidateRows, filterCandidates } from '../features/readingQueues.js';
 import { groupForChecksum, masterOf, makeGroup } from '../features/bookGroups.js';
 import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordCount } from '../features/readingTime.js';
 import { olFetch, bookCoverUrl } from '../features/openLibrary.js';
@@ -1983,7 +1983,8 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
     const load = () => getLibraryRef('queues').then((v) => {
       let qs = Array.isArray(v) ? v : [];
       const mig = deckMigration(qs, books); // the old On deck list, folded in once
-      if (mig) { qs = mig; saveLibraryRef('queues', mig).catch(() => {}); }
+      const dd = dedupeQueues(mig || qs); // one queue per book — older data could hold it twice
+      if (mig || dd) { qs = dd || mig; saveLibraryRef('queues', qs).catch(() => {}); }
       if (live) setQueues(qs);
     }).catch(() => { if (live) setQueues([]); });
     load();
@@ -1993,7 +1994,8 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
   const saveQueues = (next) => { setQueues(next); saveLibraryRef('queues', next).catch((e) => setFindMsg(`Could not save queues: ${e?.message || e}`)); };
   const bulk = (fn, label) => { setUndo({ queues, label }); saveQueues(fn(queues)); };
   const shownQueues = liveQueues(queues);
-  const selQueue = shownQueues.find((x) => x.id === sel) || shownQueues[0] || null;
+  const overview = sel === 'overview';
+  const selQueue = overview ? null : shownQueues.find((x) => x.id === sel) || shownQueues[0] || null;
   function createQueue() {
     const nq = newQueue(naming);
     saveQueues([...queues, nq]);
@@ -2006,15 +2008,21 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
   return (
     <div className="lj-queue">
       <div className="lj-queue-pick" role="tablist" aria-label="Queues">
-        {shownQueues.map((x) => {
+        {shownQueues.length > 0 && <button role="tab" aria-selected={overview} className={`lj-qcat${overview ? ' on' : ''}`} onClick={() => setSel('overview')} title="Every queue at a glance (view only)">📊 All queues</button>}
+        {shownQueues.map((x, qi) => {
           const qb = queueBooks(x, books);
           const done = qb.filter((b) => readStatus(b) === 'finished').length;
+          const on = selQueue?.id === x.id;
           return (
-            <button key={x.id} role="tab" aria-selected={selQueue?.id === x.id} className={`lj-qcat lj-qchip${selQueue?.id === x.id ? ' on' : ''}`} onClick={() => setSel(x.id)}
-              title={`${x.name}: ${done} of ${qb.length} finished`}>
-              <span>{x.name} ({qb.length})</span>
-              <Bar pct={qb.length ? done / qb.length : 0} label={`${done} of ${qb.length} finished`} />
-            </button>
+            <span key={x.id} className="lj-qpill">
+              {on && <button className="lj-qnudge" disabled={qi === 0} onClick={() => saveQueues(moveQueue(queues, x.id, -1))} aria-label={`Move “${x.name}” left`} title="Move this queue left">‹</button>}
+              <button role="tab" aria-selected={on} className={`lj-qcat lj-qchip${on ? ' on' : ''}`} onClick={() => setSel(x.id)}
+                title={`${x.name}: ${done} of ${qb.length} finished`}>
+                <span>{x.name} ({qb.length})</span>
+                <Bar pct={qb.length ? done / qb.length : 0} label={`${done} of ${qb.length} finished`} />
+              </button>
+              {on && <button className="lj-qnudge" disabled={qi === shownQueues.length - 1} onClick={() => saveQueues(moveQueue(queues, x.id, 1))} aria-label={`Move “${x.name}” right`} title="Move this queue right">›</button>}
+            </span>
           );
         })}
         {naming == null
@@ -2029,11 +2037,12 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
           )}
         {undo && <button className="lj-qcat" onClick={() => { saveQueues(undo.queues); setUndo(null); }} title="Put the queues back as they were">↶ Undo {undo.label}</button>}
       </div>
-      {!selQueue ? <p className="settings-note">No queues yet — ＋ New queue to make one, then add books to it from the table that appears.</p> : (
+      {overview ? <QueuesDashboard queues={queues} books={books} wpm={wpm} pace={pace} fileStats={fileStats} csOf={csOf} onPick={setSel} />
+        : !selQueue ? <p className="settings-note">No queues yet — ＋ New queue to make one, then add books to it from the table that appears.</p> : (
         <div className="lj-q-panes">
           <NamedQueue
             key={selQueue.id} // fresh rename/confirm-delete state per queue — an armed Delete must not carry over to the next one
-            queue={selQueue} books={books} wpm={wpm} setWpm={setWpm} pace={pace} fileStats={fileStats} csOf={csOf} pctOf={pctOf}
+            queue={selQueue} others={shownQueues.filter((x) => x.id !== selQueue.id)} books={books} wpm={wpm} setWpm={setWpm} pace={pace} fileStats={fileStats} csOf={csOf} pctOf={pctOf}
             openChecksums={openChecksums} dirs={dirs} finding={finding} openTheFile={openTheFile} findMsg={findMsg}
             onChange={(next) => saveQueues(queues.map((x) => (x.id === next.id ? next : x)))}
             onDelete={() => { bulk((qs) => deleteQueue(qs, selQueue.id), `delete “${selQueue.name}”`); setSel(null); }}
@@ -2057,7 +2066,7 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
               </div>
             )}
           />
-          <QueueCandidates queue={selQueue} books={books} wpm={wpm} fileStats={fileStats} csOf={csOf} pctOf={pctOf} openChecksums={openChecksums}
+          <QueueCandidates queue={selQueue} queues={queues} books={books} wpm={wpm} fileStats={fileStats} csOf={csOf} pctOf={pctOf} openChecksums={openChecksums}
             onAdd={(ids, label) => (ids.length > 1
               ? bulk((qs) => ids.reduce((acc, id) => addToQueue(acc, selQueue.id, id), qs), label)
               : saveQueues(addToQueue(queues, selQueue.id, ids[0])))}
@@ -2068,10 +2077,49 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
   );
 }
 
+// View-only dashboard: every queue's progress and what's left, plus totals across all of them.
+function QueuesDashboard({ queues, books, wpm, pace, fileStats, csOf, onPick }) {
+  const { rows, total } = useMemo(() => queuesOverview(queues, books, {
+    wpm, wordsPerDay: pace.wordsPerDay, fileOf: (b) => fileStats[csOf[b.id]] || null,
+  }), [queues, books, wpm, pace, fileStats, csOf]);
+  const maxLeft = Math.max(1, ...rows.map((r) => r.st.wordsLeft));
+  return (
+    <section className="lj-qdash" aria-label="All queues">
+      <div className="lj-qstats">
+        <div className="ab-stat"><b>{total.queues}</b><span>queues</span></div>
+        <div className="ab-stat"><b>{total.done} / {total.count}</b><span>books finished</span><Bar pct={total.count ? total.done / total.count : 0} label={`${total.done} of ${total.count} finished`} /></div>
+        <div className="ab-stat"><b>{total.wordsLeft.toLocaleString()}</b><span>words left of {total.wordsTotal.toLocaleString()}</span><Bar pct={total.wordsTotal ? 1 - total.wordsLeft / total.wordsTotal : 0} /></div>
+        <div className="ab-stat"><b>{total.hoursLeft} h</b><span>left at {wpm} wpm</span></div>
+        <div className="ab-stat" title="Everything left, read at your recent pace (last ~6 weeks, recent days weighted most)"><b>{total.eta || '—'}</b><span>{total.eta ? `all done at ~${pace.wordsPerDay.toLocaleString()} words/day` : 'needs some recent reading'}</span></div>
+        <div className="ab-stat"><b>{total.hoursSpent} h</b><span>spent so far</span></div>
+      </div>
+      <div className="lj-q-box lj-qdash-box">
+        <table className="lj-cand lj-qdash-table">
+          <thead><tr><th>Queue</th><th>Finished</th><th>Words read</th><th>Words left</th><th>Hours left</th><th>Done by*</th><th>Up next</th></tr></thead>
+          <tbody>
+            {rows.map(({ queue: q, st }) => (
+              <tr key={q.id}>
+                <td><button className="link-btn" onClick={() => onPick(q.id)} title="Open this queue">{q.name}</button></td>
+                <td><Bar cls="fin" pct={st.count ? st.done / st.count : 0} label={`${st.done} of ${st.count} finished`} /><span className="lj-cand-pct lj-qdash-n">{st.done}/{st.count}</span></td>
+                <td><Bar pct={st.pctWords / 100} /><span className="lj-cand-pct">{st.pctWords}%</span></td>
+                <td title={`${st.wordsLeft.toLocaleString()} words`}><span className="lj-qdash-left"><i style={{ width: `${(st.wordsLeft / maxLeft) * 100}%` }} /></span>{Math.round(st.wordsLeft / 1000)}k</td>
+                <td>{st.hoursLeft} h</td>
+                <td>{st.eta || '—'}</td>
+                <td title={st.next?.title || ''}>{st.next?.title || (st.count ? '✓ all finished' : 'empty')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="settings-note lj-cand-foot">* if that queue alone were read in order at your recent pace. View only — pick a queue to change it.</p>
+    </section>
+  );
+}
+
 // One queue: its stats (progress, pace, time, ETA, where the files are) with bars, the ordered list
 // with ▶ open / reorder / remove, and whole-queue reorders.
 const WHERE = { open: ['📂', 'Open in a tab'], local: ['💾', 'Saved on this device'], folder: ['📁', 'Found in a search folder'], unsearched: ['❔', 'Not on this device — not searched for yet'], missing: ['✖', 'Not on this device or in the search folders'], unlinked: ['—', 'No document linked'] };
-function NamedQueue({ queue, books, wpm, setWpm, pace, fileStats, csOf, pctOf, openChecksums, dirs, finding, openTheFile, findMsg, onChange, onDelete, onEdit, onBulk, onOpen, folders }) {
+function NamedQueue({ queue, others = [], books, wpm, setWpm, pace, fileStats, csOf, pctOf, openChecksums, dirs, finding, openTheFile, findMsg, onChange, onDelete, onEdit, onBulk, onOpen, folders }) {
   const qBooks = useMemo(() => queueBooks(queue, books), [queue, books]);
   const st = useMemo(() => queueStats(qBooks, {
     wpm, fileOf: (b) => fileStats[csOf[b.id]] || null, wordsPerDay: pace.wordsPerDay,
@@ -2105,7 +2153,10 @@ function NamedQueue({ queue, books, wpm, setWpm, pace, fileStats, csOf, pctOf, o
   }
   const counts = Object.values(where).reduce((a, w) => ({ ...a, [w]: (a[w] || 0) + 1 }), {});
   const avail = (counts.open || 0) + (counts.local || 0) + (counts.folder || 0);
-  const move = (b, to) => onEdit((qs) => moveToInQueue(qs, queue.id, b.id, to));
+  const { fin, todo } = useMemo(() => splitFinished(qBooks), [qBooks]);
+  const [hideFin, setHideFin] = useState(() => { try { return localStorage.getItem('tachyread-q-hidefin') === '1'; } catch { return false; } });
+  const toggleFin = () => { setHideFin(!hideFin); try { localStorage.setItem('tachyread-q-hidefin', hideFin ? '0' : '1'); } catch { /* private mode */ } };
+  const move = (b, to) => onEdit((qs) => setQueueIds(qs, queue.id, moveInTodo(qBooks, b.id, to)));
   const resort = (key) => onBulk((qs) => setQueueIds(qs, queue.id, sortQueueIds(qBooks, key, (b) => ({ pct: pctOf(b), lastRead: fileStats[csOf[b.id]]?.lastRead }))), `sort (${QUEUE_SORTS[key][0].toLowerCase()})`);
 
   return (
@@ -2168,27 +2219,42 @@ function NamedQueue({ queue, books, wpm, setWpm, pace, fileStats, csOf, pctOf, o
       <div className="lj-q-box">
         {qBooks.length === 0 ? <p className="settings-note">Empty so far — add books from the table{' '}<span className="lj-q-wide-only">on the right</span><span className="lj-q-narrow-only">below</span>.</p> : (
           <ol className="lj-queue-list">
-            {qBooks.map((b, i) => {
-              const fin = readStatus(b) === 'finished';
+            {fin.length > 0 && (
+              <li className="lj-q-finhead">
+                <button onClick={toggleFin} aria-expanded={!hideFin}>{hideFin ? '▸' : '▾'} ✓ {fin.length} finished</button>
+              </li>
+            )}
+            {[...(hideFin ? [] : fin), ...todo].map((b) => {
+              const isFin = readStatus(b) === 'finished';
+              const i = isFin ? -1 : todo.indexOf(b);
               const p = st.pctById[b.id] || 0;
               const w = WHERE[where[b.id]] || ['…', 'Checking'];
-              const last = i === qBooks.length - 1;
+              const last = i === todo.length - 1;
               return (
-                <li key={b.id} className={`lj-queue-item${fin ? ' done' : ''}`}>
-                  <span className="lj-queue-rank">{fin ? '✓' : i + 1}</span>
+                <li key={b.id} className={`lj-queue-item${isFin ? ' done' : ''}`}>
+                  <span className="lj-queue-rank">{isFin ? '✓' : i + 1}</span>
                   <span className="lj-queue-main">
                     <b title={b.title}>{b.title}</b>
-                    <em>{b.author}{fin ? ` · finished${b.finishTime ? ' ' + b.finishTime : ''}` : ''}</em>
-                    <Bar pct={p} cls={fin ? 'fin' : ''} />
+                    <em>{b.author}{isFin ? ` · finished${b.finishTime ? ' ' + b.finishTime : ''}` : ''}</em>
+                    <Bar pct={p} cls={isFin ? 'fin' : ''} />
                   </span>
-                  <span className="lj-queue-est">{pctTxt(p)} · {estHours(b, wpm) != null ? `~${estHours(b, wpm)} h` : '—'}{!fin && st.etaById[b.id] ? <><br /><span className="lj-queue-etc">done ~{st.etaById[b.id]}</span></> : ''}</span>
+                  <span className="lj-queue-est">{pctTxt(p)} · {estHours(b, wpm) != null ? `~${estHours(b, wpm)} h` : '—'}{!isFin && st.etaById[b.id] ? <><br /><span className="lj-queue-etc">done ~{st.etaById[b.id]}</span></> : ''}</span>
                   <span className="lj-queue-acts">
                     <span className="lj-where" role="img" aria-label={w[1]} title={w[1]}>{w[0]}</span>
                     {csOf[b.id] && <button className="lj-queue-read" disabled={finding === b.id} onClick={() => openTheFile(b)} title="Read it">{finding === b.id ? '⟳' : '▶'}</button>}
-                    <button disabled={i === 0} onClick={() => move(b, 0)} aria-label={`Move “${b.title}” to the top`} title="To the top">⤒</button>
-                    <button disabled={i === 0} onClick={() => move(b, i - 1)} aria-label={`Move “${b.title}” up`} title="Up">↑</button>
-                    <button disabled={last} onClick={() => move(b, i + 1)} aria-label={`Move “${b.title}” down`} title="Down">↓</button>
-                    <button disabled={last} onClick={() => move(b, qBooks.length)} aria-label={`Move “${b.title}” to the bottom`} title="To the bottom">⤓</button>
+                    {!isFin && <>
+                      <button disabled={i === 0} onClick={() => move(b, 0)} aria-label={`Move “${b.title}” to the top`} title="To the top (of what's left)">⤒</button>
+                      <button disabled={i === 0} onClick={() => move(b, i - 1)} aria-label={`Move “${b.title}” up`} title="Up">↑</button>
+                      <button disabled={last} onClick={() => move(b, i + 1)} aria-label={`Move “${b.title}” down`} title="Down">↓</button>
+                      <button disabled={last} onClick={() => move(b, todo.length)} aria-label={`Move “${b.title}” to the bottom`} title="To the bottom">⤓</button>
+                    </>}
+                    {others.length > 0 && (
+                      <select className="lj-q-move" value="" aria-label={`Move “${b.title}” to another queue`} title="Move to another queue"
+                        onChange={(e) => { if (e.target.value) onEdit((qs) => addToQueue(qs, e.target.value, b.id)); }}>
+                        <option value="">⇄</option>
+                        {others.map((x) => <option key={x.id} value={x.id}>→ {x.name}</option>)}
+                      </select>
+                    )}
                     <button title="Remove from this queue" aria-label={`Remove “${b.title}” from this queue`} onClick={() => onEdit((qs) => removeFromQueue(qs, queue.id, b.id))}>✕</button>
                     <button title="Open in Library" aria-label={`Open “${b.title}” in Library`} onClick={() => onOpen(b.id)}>↗</button>
                   </span>
@@ -2206,14 +2272,14 @@ function NamedQueue({ queue, books, wpm, setWpm, pace, fileStats, csOf, pctOf, o
 // The add-books table: every library book outside this queue, filterable per column (regex), by
 // completion (finished books hidden by default) — open files and recently read first.
 const CAND_SHOW = 200;
-function QueueCandidates({ queue, books, wpm, fileStats, csOf, pctOf, openChecksums, onAdd, onOpen }) {
+function QueueCandidates({ queue, queues, books, wpm, fileStats, csOf, pctOf, openChecksums, onAdd, onOpen }) {
   const [cols, setCols] = useState({});
   const [state, setState] = useState('unfinished');
   const paths = useMemo(() => foundPaths(), []);
-  const all = useMemo(() => candidateRows(books, queue, (b) => {
+  const all = useMemo(() => candidateRows(books, queues, (b) => {
     const cs = csOf[b.id];
     return { pct: pctOf(b), file: (cs && (paths[cs] || fileStats[cs]?.fileName)) || '', open: !!cs && openChecksums.includes(cs), lastRead: fileStats[cs]?.lastRead };
-  }), [books, queue, csOf, pctOf, paths, fileStats, openChecksums]);
+  }), [books, queues, csOf, pctOf, paths, fileStats, openChecksums]);
   const { rows, bad } = useMemo(() => filterCandidates(all, { cols, state }), [all, cols, state]);
   const shown = rows.slice(0, CAND_SHOW);
   const filtered = Object.values(cols).some((t) => t?.trim()) || state !== 'unfinished';
@@ -2263,10 +2329,11 @@ function QueueCandidates({ queue, books, wpm, fileStats, csOf, pctOf, openChecks
             ))}
           </tbody>
         </table>
-        {!rows.length && <p className="settings-note">No books match{filtered ? ' these filters' : ' — everything unfinished is already in this queue'}.</p>}
+        {!rows.length && <p className="settings-note">No books match{filtered ? ' these filters' : ' — everything unfinished is already queued'}.</p>}
       </div>
       <p className="settings-note lj-cand-foot">
         {rows.length > CAND_SHOW ? `Showing ${CAND_SHOW} of ${rows.length} — filter to narrow. ` : `${rows.length} book${rows.length === 1 ? '' : 's'}. `}
+        Books already in a queue aren’t listed (a book sits in one queue — use ⇄ on its row to move it).
         Folder is known once a linked document has been found in your search folders (▶ or 🔎 Search folders); File is its name.
       </p>
     </section>
