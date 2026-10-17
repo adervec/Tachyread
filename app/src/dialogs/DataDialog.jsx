@@ -4,10 +4,11 @@ import { fmtDateTime } from '../features/dateFmt.js';
 import { useApp } from '../state/AppContext.jsx';
 import {
   exportSummary, importAllData, exportBackup, importBackupStream,
-  storeCounts, clearStore, wipeAllData, getAppLog, clearAppLog,
+  storeCounts, clearStore, wipeAllData, getAppLog, clearAppLog, getSpeechLog,
 } from '../state/storage.js';
 import { saveBlobToFile, pickFile, readFileText, fsSaveSupported } from '../features/fileSystem.js';
 import { blobLines, readBackup, isStreamableHeader } from '../features/backupStream.js';
+import { SPEECH_LOG_FIELDS } from '../features/speechLog.js';
 import { SYNC_PROVIDERS, getSyncProvider, driveOriginAllowed, getDriveProfile } from '../features/sync/syncProviders.js';
 import { backupToProvider, restoreFromProvider, syncWithProvider } from '../features/sync/syncManager.js';
 
@@ -419,6 +420,20 @@ export default function DataDialog({ onClose }) {
             >⬇ Download .txt</button>
             <button className="grab-trash" disabled={!logEntries?.length} onClick={async () => { await clearAppLog(); setLogEntries([]); }}>🗑 Clear log</button>
             <span className="settings-note" style={{ margin: 0 }}>{logEntries ? `${logEntries.length} entr${logEntries.length === 1 ? 'y' : 'ies'} (newest first, capped at 500)` : 'Loading…'}</span>
+          </div>
+          <div className="field-section">Speech log</div>
+          <p className="settings-note">
+            One compact record per reading-aloud session: words advanced, how exactly they were read,
+            average voice scores and a per-minute trend (no audio, no transcripts). Field meanings are in
+            the file’s <code>fields</code> entry. Kept on this device (last 2000 sessions) and in full backups.
+          </p>
+          <div className="data-row">
+            <button onClick={async () => {
+              const sessions = await getSpeechLog();
+              if (!sessions.length) { setMsg('No reading-aloud sessions logged yet.'); return; }
+              const body = JSON.stringify({ app: 'tachyread', kind: 'speechLog', v: 1, fields: SPEECH_LOG_FIELDS, sessions });
+              await saveBlobToFile(new Blob([body], { type: 'application/json' }), 'tachyread-speech-log.json', [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]);
+            }}>⬇ Download speech log (.json)</button>
           </div>
           <div className="app-log">
             {(logEntries || []).map((e, i) => (

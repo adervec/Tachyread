@@ -5,6 +5,7 @@ import { openDB } from 'idb';
 import { defaultGlobalSettings, defaultFileSettings, syncableGlobalSettings } from './settings.js';
 import { mergePresence, presenceList } from '../features/presence.js';
 import { writeBackup, readBackup, BACKUP_VERSION } from '../features/backupStream.js';
+import { SPEECH_LOG_CAP } from '../features/speechLog.js';
 
 const DB_NAME = 'Tachyread';
 const DB_VERSION = 12;
@@ -141,6 +142,24 @@ export async function getAppLog() {
 export async function clearAppLog() {
   const db = await getDB();
   await db.delete('global', 'appLog');
+}
+
+// Reading-aloud session records (features/speechLog.js) — device-local, capped, in the full backup.
+export function appendSpeechLog(rec) {
+  _logChain = _logChain
+    .then(async () => {
+      const db = await getDB();
+      const arr = (await db.get('global', 'speechLog')) || [];
+      arr.push(rec);
+      if (arr.length > SPEECH_LOG_CAP) arr.splice(0, arr.length - SPEECH_LOG_CAP);
+      await db.put('global', arr, 'speechLog');
+    })
+    .catch(() => { /* logging must never throw */ });
+  return _logChain;
+}
+export async function getSpeechLog() {
+  const db = await getDB();
+  return (await db.get('global', 'speechLog')) || [];
 }
 
 // ── API spend log — one record per Anthropic/ElevenLabs call, for the spend dashboard. Best-effort:

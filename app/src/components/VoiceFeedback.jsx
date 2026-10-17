@@ -8,7 +8,7 @@ import { STRICTNESS, strictnessOf, speakParams } from '../features/speakAlign.js
 // how far it last moved the text (so a stall is visible, not a mystery), plus optional live
 // voice-quality scores (SpeechImprover's acoustic attributes averaged over the session, with a
 // trend). Draggable by its grip (position remembered per device), collapsible, and ✕ turns reading
-// aloud off. Feedback only — no audio or scores are kept.
+// aloud off. No audio is kept; the session's average scores go into the speech log (features/speechLog.js).
 const TICK_MS = 110;
 const PUBLISH_EVERY = 5; // ticks → scores refresh ~every 0.5 s
 const TREND_CAP = 120;   // ~1 min of trend
@@ -72,7 +72,7 @@ function Lineup({ info, docWords, wordIndex }) {
   );
 }
 
-export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0, speakCfg = {}, onTune, onStop, showScores = true, wordsRef, profile = 'neutral' }) {
+export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0, speakCfg = {}, onTune, onStop, showScores = true, wordsRef, sessionRef, profile = 'neutral' }) {
   const strict = strictnessOf(speakParams(speakCfg));
   const [v, setV] = useState(null);
   const [trend, setTrend] = useState([]);
@@ -110,6 +110,7 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
           if (!next) return;
           if (!voicedSince.current) voicedSince.current = performance.now();
           setV(next);
+          sessionRef?.current?.voice(next); // session average → the speech log
           setTrend((tr) => [...tr.slice(-(TREND_CAP - 1)), next.overall]);
         }, TICK_MS);
       } catch (e) {
@@ -122,7 +123,7 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
       stream?.getTracks().forEach((t) => t.stop());
       ctx?.close().catch(() => {});
     };
-  }, [showScores, wordsRef, profile]);
+  }, [showScores, wordsRef, sessionRef, profile]);
 
   // Drag by the grip (pointer), or nudge it with the arrow keys when the grip has focus.
   const onGripDown = (e) => {
