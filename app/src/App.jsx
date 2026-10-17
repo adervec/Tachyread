@@ -195,7 +195,7 @@ function StatusText({ text, seq }) {
 }
 
 function AppInner() {
-  const { state, activeTab: rawActiveTab, hydrateTab, openFiles, openClipboard, openRecent, setStatus, patchSettings, patchTab, openDialog, closeDialog, setActiveTab, setActivePanel, dispatch, updateGlobal, flushReadState, closeAllTabs } = useApp();
+  const { state, activeTab: rawActiveTab, hydrateTab, openFiles, openClipboard, openRecent, setStatus, patchSettings, patchTab, openDialog, closeDialog, setActiveTab, setActivePanel, dispatch, updateGlobal, flushReadState, closeAllTabs, closeTab } = useApp();
   // A lazy (restored, not-yet-loaded) tab has no parsed document — treat it as "no active reader"
   // until it hydrates, so nothing downstream touches activeTab.doc before it exists.
   const activeTab = rawActiveTab && !rawActiveTab.lazy ? rawActiveTab : null;
@@ -2373,7 +2373,7 @@ function AppInner() {
       return;
     }
     if (action === 'close-tab' && activeTab) {
-      dispatch({ type: 'CLOSE_TAB', id: activeTab.id });
+      closeTab(activeTab.id);
       return;
     }
     if (action === 'close-all') {
