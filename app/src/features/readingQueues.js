@@ -22,6 +22,12 @@ export function moveInQueue(queues, qid, bookId, delta) {
   });
 }
 
+// Deleting leaves a tombstone ({deleted:true}) rather than dropping the queue: otherwise the deleted
+// "On deck" queue looked never-made and deckMigration rebuilt it (and a sync could resurrect any
+// deleted queue). liveQueues() is what the UI shows.
+export const deleteQueue = (queues, qid) => (queues || []).map((q) => (q.id === qid ? { ...q, deleted: true, ids: [] } : q));
+export const liveQueues = (queues) => (queues || []).filter((q) => !q.deleted);
+
 // Put a book at position `to` (0 = top; past the end = bottom).
 export const moveToInQueue = (queues, qid, bookId, to) => edit(queues, qid, (ids) => {
   if (!ids.includes(bookId)) return ids;
@@ -67,8 +73,10 @@ export function deckMigration(queues, books, now = Date.now()) {
 
 // Shelving a book "On deck" elsewhere adds it to that queue (making it, with the rest of the old
 // deck, if it doesn't exist yet). `books` must already show this book on deck.
+// A deleted On deck queue comes back with just this book.
 export function addToDeck(queues, books, bookId) {
   const deck = (queues || []).find((q) => q.fromDeck);
+  if (deck?.deleted) return queues.map((q) => (q === deck ? { ...q, deleted: false, ids: [bookId] } : q));
   return deck ? addToQueue(queues, deck.id, bookId) : deckMigration(queues, books) || queues || [];
 }
 
@@ -96,19 +104,21 @@ export function recentPace(days, { now = Date.now(), halfLife = 10, windowDays =
 }
 
 // Candidate rows for the "add books" table: one per library book not already in the queue, with the
-// text of each filterable column. `info(book)` → { pct, file, open, lastRead }.
-export const CAND_COLS = { title: 'Title', author: 'Author', genre: 'Genre', type: 'Type', status: 'Status', file: 'File' };
+// text of each filterable column. `info(book)` → { pct, file, open, lastRead }; `file` may be a path
+// ('Books/SF/dune.epub'), split here into Folder ('Books/SF') and File ('dune.epub').
+export const CAND_COLS = { title: 'Title', author: 'Author', genre: 'Genre', type: 'Type', status: 'Status', folder: 'Folder', file: 'File' };
 export function candidateRows(books, queue, info = () => ({})) {
   const inQ = new Set(queue?.ids || []);
   return (books || []).filter((b) => !b.deleted && !inQ.has(b.id)).map((book) => {
     const i = info(book) || {};
     const st = readStatus(book);
     const pct = st === 'finished' ? 1 : i.pct || 0;
+    const path = i.file || '', cut = path.lastIndexOf('/');
     return {
       book, pct, fin: pct >= 0.99, open: !!i.open, lastRead: i.lastRead || null,
       cols: {
         title: book.title || '', author: book.author || '', genre: [book.genre, book.subgenre].filter(Boolean).join(' / '),
-        type: CONTENT_TYPES[contentType(book)], status: STATUS_LABEL[st].replace(/^\S+\s/, ''), file: i.file || '',
+        type: CONTENT_TYPES[contentType(book)], status: STATUS_LABEL[st].replace(/^\S+\s/, ''), folder: path.slice(0, Math.max(0, cut)), file: path.slice(cut + 1),
       },
     };
   });

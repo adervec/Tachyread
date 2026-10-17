@@ -35,7 +35,7 @@ import { normTitle } from '../document/tocWizard.js';
 import { planBulkLinks, matchScore, newBookFor } from '../features/bulkLink.js';
 import { getSearchDirs, addSearchDir, removeSearchDir, pickerSupported, foundPaths } from '../features/fileLocator.js';
 import { openBookFile, fileWhere } from '../features/openBook.js';
-import { newQueue, addToQueue, addToDeck, removeFromQueue, moveToInQueue, setQueueIds, queueBooks, queueStats, QUEUE_SORTS, sortQueueIds, deckMigration, recentPace, CAND_COLS, CAND_STATES, candidateRows, filterCandidates } from '../features/readingQueues.js';
+import { newQueue, addToQueue, addToDeck, deleteQueue, liveQueues, removeFromQueue, moveToInQueue, setQueueIds, queueBooks, queueStats, QUEUE_SORTS, sortQueueIds, deckMigration, recentPace, CAND_COLS, CAND_STATES, candidateRows, filterCandidates } from '../features/readingQueues.js';
 import { groupForChecksum, masterOf, makeGroup } from '../features/bookGroups.js';
 import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordCount } from '../features/readingTime.js';
 import { olFetch, bookCoverUrl } from '../features/openLibrary.js';
@@ -1992,7 +1992,8 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
   }, [books]);
   const saveQueues = (next) => { setQueues(next); saveLibraryRef('queues', next).catch((e) => setFindMsg(`Could not save queues: ${e?.message || e}`)); };
   const bulk = (fn, label) => { setUndo({ queues, label }); saveQueues(fn(queues)); };
-  const selQueue = queues?.find((x) => x.id === sel) || queues?.[0] || null;
+  const shownQueues = liveQueues(queues);
+  const selQueue = shownQueues.find((x) => x.id === sel) || shownQueues[0] || null;
   function createQueue() {
     const nq = newQueue(naming);
     saveQueues([...queues, nq]);
@@ -2005,7 +2006,7 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
   return (
     <div className="lj-queue">
       <div className="lj-queue-pick" role="tablist" aria-label="Queues">
-        {queues.map((x) => {
+        {shownQueues.map((x) => {
           const qb = queueBooks(x, books);
           const done = qb.filter((b) => readStatus(b) === 'finished').length;
           return (
@@ -2031,10 +2032,11 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
       {!selQueue ? <p className="settings-note">No queues yet — ＋ New queue to make one, then add books to it from the table that appears.</p> : (
         <div className="lj-q-panes">
           <NamedQueue
+            key={selQueue.id} // fresh rename/confirm-delete state per queue — an armed Delete must not carry over to the next one
             queue={selQueue} books={books} wpm={wpm} setWpm={setWpm} pace={pace} fileStats={fileStats} csOf={csOf} pctOf={pctOf}
             openChecksums={openChecksums} dirs={dirs} finding={finding} openTheFile={openTheFile} findMsg={findMsg}
             onChange={(next) => saveQueues(queues.map((x) => (x.id === next.id ? next : x)))}
-            onDelete={() => { bulk((qs) => qs.filter((x) => x.id !== selQueue.id), `delete “${selQueue.name}”`); setSel(null); }}
+            onDelete={() => { bulk((qs) => deleteQueue(qs, selQueue.id), `delete “${selQueue.name}”`); setSel(null); }}
             onEdit={(fn) => saveQueues(fn(queues))}
             onBulk={bulk}
             onOpen={onOpen}
@@ -2229,7 +2231,7 @@ function QueueCandidates({ queue, books, wpm, fileStats, csOf, pctOf, openChecks
       </div>
       <div className="lj-q-box lj-cand-box">
         <table className="lj-cand">
-          <colgroup><col className="c-add" /><col className="c-title" /><col className="c-author" /><col className="c-genre" /><col className="c-type" /><col className="c-status" /><col className="c-file" /><col className="c-prog" /><col className="c-size" /></colgroup>
+          <colgroup><col className="c-add" /><col className="c-title" /><col className="c-author" /><col className="c-genre" /><col className="c-type" /><col className="c-status" /><col className="c-folder" /><col className="c-file" /><col className="c-prog" /><col className="c-size" /></colgroup>
           <thead>
             <tr><th aria-label="Add" />{Object.values(CAND_COLS).map((l) => <th key={l}>{l}</th>)}<th>Read</th><th>Size</th></tr>
             <tr className="lj-cand-filters">
@@ -2253,6 +2255,7 @@ function QueueCandidates({ queue, books, wpm, fileStats, csOf, pctOf, openChecks
                 <td title={c.genre}>{c.genre}</td>
                 <td>{c.type}</td>
                 <td>{c.status}</td>
+                <td title={c.folder}>{c.folder}</td>
                 <td title={c.file}>{c.file}</td>
                 <td><Bar pct={pct} /><span className="lj-cand-pct">{pctTxt(pct)}</span></td>
                 <td>{estHours(b, wpm) != null ? `~${estHours(b, wpm)} h` : '—'}</td>
@@ -2264,7 +2267,7 @@ function QueueCandidates({ queue, books, wpm, fileStats, csOf, pctOf, openChecks
       </div>
       <p className="settings-note lj-cand-foot">
         {rows.length > CAND_SHOW ? `Showing ${CAND_SHOW} of ${rows.length} — filter to narrow. ` : `${rows.length} book${rows.length === 1 ? '' : 's'}. `}
-        File shows where a linked document was last found (folder path) or its file name.
+        Folder is known once a linked document has been found in your search folders (▶ or 🔎 Search folders); File is its name.
       </p>
     </section>
   );

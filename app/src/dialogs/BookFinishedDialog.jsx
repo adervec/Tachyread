@@ -107,7 +107,7 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
       const nameOf = (b) => b.title;
       const available = async (b) => ['open', 'local', 'folder'].includes((await fileWhere(csOf[b.id], nameOf(b), { openChecksums, dirs: ds, search: true })).where);
       const lists = [];
-      for (const q of Array.isArray(named) ? named : []) if (linkedId && q.ids.includes(linkedId)) lists.push([q.name, queueBooks(q, live)]);
+      for (const q of Array.isArray(named) ? named : []) if (!q.deleted && linkedId && q.ids.includes(linkedId)) lists.push([q.name, queueBooks(q, live)]);
       const out = [];
       for (const [label, order] of lists) {
         const { book, skipped } = await nextInQueue(order.filter((b) => csOf[b.id] !== checksum), linkedId, available);
