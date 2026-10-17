@@ -90,7 +90,7 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
   // "Up next": for every queue holding this book, the first unfinished item whose
   // file can actually be opened (open tab, saved copy, or found in the search folders). Worked out
   // from the queues as they stand now, before this book is marked finished.
-  const { state: appState, openRecent, openFiles } = useApp();
+  const { state: appState, openRecent, openFiles, closeTab } = useApp();
   const openChecksums = useMemo(() => appState.tabs.map((t) => (t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum)).filter(Boolean), [appState.tabs]);
   const linkedId = lib?.boundBook?.id || (choice.mode === 'existing' ? choice.bookId : null);
   const [upNext, setUpNext] = useState(null); // null = working it out → [{ label, book, cs, name, skipped }]
@@ -156,11 +156,14 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
     await record();
     onClose();
   }
-  // Save, then open the next queue item (jumps to its tab when it's already open).
+  // Save, open the next queue item (jumps to its tab when it's already open), then close this
+  // finished book's tab — it used to stay open, so the session restored it on the next launch.
   async function saveAndOpen(n) {
     await record();
     const r = await openBookFile({ cs: n.cs, name: n.book.title, openChecksums, dirs, openRecent, openFiles }).catch((e) => ({ ok: false, msg: e?.message || String(e) }));
-    if (r.ok) onClose(); else setOpenMsg(`Saved — but ${r.msg}`);
+    if (!r.ok) { setOpenMsg(`Saved — but ${r.msg}`); return; }
+    onClose();
+    closeTab(tab.id);
   }
 
   return (
@@ -236,7 +239,7 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
         : upNext.map((n) => (
           <div key={n.label} className="bf-next">
             {n.book
-              ? <button className="toggle-on" onClick={() => saveAndOpen(n)}>Save &amp; open “{n.book.title}”</button>
+              ? <button className="toggle-on" onClick={() => saveAndOpen(n)} title="Mark this finished, close its tab and open the next one">Save, close &amp; open “{n.book.title}”</button>
               : <span className="settings-note">Nothing in {n.label} can be opened on this device.</span>}
             <span className="settings-note"> {n.book ? `next in ${n.label}` : ''}{n.skipped ? ` · skipped ${n.skipped} whose file isn’t on this device` : ''}</span>
           </div>

@@ -284,6 +284,35 @@ export function AppProvider({ children }) {
   // device (the reported "theme reset to default"); `posUpdatedAt`/`posDevice` date the reading
   // position so the cross-device merge can prefer the NEWEST progress, not just the furthest.
   const saveMetaRef = useRef(new Map()); // tab.id -> { wordIndex, reuse, updatedAt, posUpdatedAt, posDevice }
+  // Write one tab's settings if they changed since its last save. Also called straight away for tabs
+  // being CLOSED: the debounced pass below only sees open tabs, so a change made just before closing
+  // (e.g. "Save, close & open next" recording a finish) was otherwise never written.
+  function persistTab(tab) {
+    if (tab.lazy || savedSettingsRef.current.get(tab.id) === tab.settings) return; // placeholder / unchanged → skip
+    savedSettingsRef.current.set(tab.id, tab.settings);
+    const s = tab.settings;
+    let meta = saveMetaRef.current.get(tab.id);
+    if (!meta) {
+      // Seed from the loaded settings (stored stamps ride in via buildTabData's spread).
+      meta = { wordIndex: s.wordIndex, reuse: JSON.stringify(tabDefaultsFrom(s)), updatedAt: s.updatedAt || 0, posUpdatedAt: s.posUpdatedAt || 0, posDevice: s.posDevice || '' };
+    }
+    const reuse = JSON.stringify(tabDefaultsFrom(s));
+    if (reuse !== meta.reuse) { meta.updatedAt = Date.now(); meta.reuse = reuse; }
+    if (s.wordIndex !== meta.wordIndex) { meta.posUpdatedAt = Date.now(); meta.posDevice = stateRef.current.global.deviceName || ''; meta.wordIndex = s.wordIndex; }
+    // Source-page summary for the reading history (PDF pages / EPUB·HTML sections / grabbed
+    // images). O(1) per save: the word→segment map is on the doc; the furthest page reached is a
+    // running max so a rewind doesn't shrink it.
+    let src = {};
+    const w2s = tab.doc?.wordToSegment;
+    if (w2s && tab.doc.segmentCount) {
+      const curSeg = w2s[Math.min(s.wordIndex, w2s.length - 1)] || 0;
+      if (meta.srcMax == null) meta.srcMax = s.sourceMaxSeg || 0;
+      meta.srcMax = Math.max(meta.srcMax, curSeg);
+      src = { sourcePages: tab.doc.segmentCount, sourceKind: tab.doc.source?.kind || '', sourceCurSeg: curSeg, sourceMaxSeg: meta.srcMax };
+    }
+    saveMetaRef.current.set(tab.id, meta);
+    saveFile({ ...s, ...src, updatedAt: meta.updatedAt, posUpdatedAt: meta.posUpdatedAt, posDevice: meta.posDevice }).catch(() => {});
+  }
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
@@ -292,30 +321,7 @@ export function AppProvider({ children }) {
       for (const tab of state.tabs) {
         live.add(tab.id);
         if (tab.lazy) continue; // placeholder — its settings shell must not overwrite the stored record
-        if (savedSettingsRef.current.get(tab.id) === tab.settings) continue; // unchanged → skip
-        savedSettingsRef.current.set(tab.id, tab.settings);
-        const s = tab.settings;
-        let meta = saveMetaRef.current.get(tab.id);
-        if (!meta) {
-          // Seed from the loaded settings (stored stamps ride in via buildTabData's spread).
-          meta = { wordIndex: s.wordIndex, reuse: JSON.stringify(tabDefaultsFrom(s)), updatedAt: s.updatedAt || 0, posUpdatedAt: s.posUpdatedAt || 0, posDevice: s.posDevice || '' };
-        }
-        const reuse = JSON.stringify(tabDefaultsFrom(s));
-        if (reuse !== meta.reuse) { meta.updatedAt = Date.now(); meta.reuse = reuse; }
-        if (s.wordIndex !== meta.wordIndex) { meta.posUpdatedAt = Date.now(); meta.posDevice = stateRef.current.global.deviceName || ''; meta.wordIndex = s.wordIndex; }
-        // Source-page summary for the reading history (PDF pages / EPUB·HTML sections / grabbed
-        // images). O(1) per save: the word→segment map is on the doc; the furthest page reached is a
-        // running max so a rewind doesn't shrink it.
-        let src = {};
-        const w2s = tab.doc?.wordToSegment;
-        if (w2s && tab.doc.segmentCount) {
-          const curSeg = w2s[Math.min(s.wordIndex, w2s.length - 1)] || 0;
-          if (meta.srcMax == null) meta.srcMax = s.sourceMaxSeg || 0;
-          meta.srcMax = Math.max(meta.srcMax, curSeg);
-          src = { sourcePages: tab.doc.segmentCount, sourceKind: tab.doc.source?.kind || '', sourceCurSeg: curSeg, sourceMaxSeg: meta.srcMax };
-        }
-        saveMetaRef.current.set(tab.id, meta);
-        saveFile({ ...s, ...src, updatedAt: meta.updatedAt, posUpdatedAt: meta.posUpdatedAt, posDevice: meta.posDevice }).catch(() => {});
+        persistTab(tab);
       }
       for (const id of [...savedSettingsRef.current.keys()]) if (!live.has(id)) { savedSettingsRef.current.delete(id); saveMetaRef.current.delete(id); }
     }, 600);
@@ -698,17 +704,25 @@ export function AppProvider({ children }) {
     }
   }, [openDoc]);
 
+  // Save what's pending for tabs about to close (reading mask + settings) — see persistTab.
+  const flushClosing = (keep) => {
+    if (stateRef.current.incognito) return;
+    for (const t of stateRef.current.tabs) if (keep(t)) { flushReadState(t); persistTab(t); }
+  };
   const closeTab = useCallback((id) => {
+    flushClosing((t) => t.id === id);
     dispatch({ type: 'CLOSE_TAB', id });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closeAllTabs = useCallback(() => {
+    flushClosing(() => true);
     dispatch({ type: 'CLOSE_ALL_TABS' });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closeTabs = useCallback((ids) => {
+    flushClosing((t) => ids.includes(t.id));
     dispatch({ type: 'CLOSE_TABS', ids });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setActiveTab = useCallback(async (id) => {
     const tab = stateRef.current.tabs.find((t) => t.id === id);
