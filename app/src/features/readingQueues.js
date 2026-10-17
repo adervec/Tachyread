@@ -267,3 +267,54 @@ export function queuesOverview(queues, books, opts = {}) {
     },
   };
 }
+
+// Merge several queues into the first of them (pill order): their books in order, duplicates
+// dropped; the others are retired (tombstones). `name` renames the result.
+export function mergeQueues(queues, ids, name = '') {
+  const pick = liveQueues(queues).filter((q) => ids.includes(q.id));
+  if (pick.length < 2) return queues;
+  const target = pick[0];
+  const merged = [...new Set(pick.flatMap((q) => q.ids || []))];
+  return queues.map((q) => (q.id === target.id ? { ...q, name: String(name).trim() || q.name, ids: merged }
+    : (!q.deleted && ids.includes(q.id) ? { ...q, deleted: true, ids: [] } : q)));
+}
+
+// Split one queue. how: 'at' (the first `at` books stay, the rest move to a new queue), or by a
+// property — 'finished', 'genre', 'author', 'type'. The first group keeps the queue (and its name);
+// every other group becomes a new queue right after it, named "<queue> · <group>". Order is kept.
+export const QUEUE_SPLITS = { at: 'At a position', finished: 'Finished / not finished', genre: 'By genre', author: 'By author', type: 'By content type' };
+export function splitQueue(queues, qid, books, how, at = 0, now = Date.now()) {
+  const q = (queues || []).find((x) => x.id === qid && !x.deleted);
+  if (!q) return queues;
+  const byId = new Map((books || []).map((b) => [b.id, b]));
+  const groups = new Map();
+  const put = (label, id) => { if (!groups.has(label)) groups.set(label, []); groups.get(label).push(id); };
+  const keyOf = {
+    finished: (b) => (readStatus(b) === 'finished' ? 'finished' : 'not finished'),
+    genre: (b) => String(b.genre || '').trim() || 'no genre',
+    author: (b) => String(b.author || '').trim() || 'no author',
+    type: (b) => CONTENT_TYPES[contentType(b)],
+  }[how];
+  (q.ids || []).forEach((id, i) => {
+    if (how === 'at') put(i < at ? '' : '2', id);
+    else put(byId.get(id) ? keyOf(byId.get(id)) : '', id); // unknown books stay with the first group
+  });
+  if (groups.size < 2) return queues;
+  const [[, firstIds], ...rest] = [...groups.entries()];
+  const made = rest.map(([label, ids], k) => ({ ...newQueue(`${q.name} · ${label === '2' ? 'part 2' : label}`, now + k), ids }));
+  const out = [];
+  for (const x of queues) { out.push(x.id === qid ? { ...x, ids: firstIds } : x); if (x.id === qid) out.push(...made); }
+  return out;
+}
+
+// Replace one book with another in the queues (a merged duplicate): the kept entry takes the dropped
+// one's place, or — when both were queued — keeps whichever place came first. Returns { queues, note }.
+export function swapQueueId(queues, dropId, keepId) {
+  const dq = queueOf(queues, dropId), kq = queueOf(queues, keepId);
+  if (!dq) return { queues, note: kq ? `stays in “${kq.name}” #${kq.ids.indexOf(keepId) + 1}` : 'not queued' };
+  const replaced = queues.map((q) => (q.deleted ? q : { ...q, ids: (q.ids || []).map((id) => (id === dropId ? keepId : id)) }));
+  const next = dedupeQueues(replaced) || replaced;
+  const at = queueOf(next, keepId);
+  const where = `“${at.name}” #${at.ids.indexOf(keepId) + 1}`;
+  return { queues: next, note: kq ? `both were queued — one entry left, at the earlier place: ${where}` : `takes the quick entry’s place: ${where}` };
+}

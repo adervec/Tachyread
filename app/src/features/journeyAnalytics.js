@@ -299,3 +299,29 @@ export function queueWithEstimates(books, wpm = 250, opts = {}) {
     totalLines: Math.round(totalWords / WORDS_PER_LINE),
   };
 }
+
+// Yearly WORDS goal. Words read = what the app recorded you reading this year (daily history — real
+// reading only; sections ticked as read never land there) + the words of books finished this year
+// that have no linked document (paper / another app), so off-app reading still counts without
+// double-counting linked books. `linkedIds`: Set of book ids that have a linked document.
+export function yearWordsGoal(dayAgg, books, linkedIds, target, now = Date.now()) {
+  const d = new Date(now);
+  const year = d.getUTCFullYear();
+  const y0 = Date.UTC(year, 0, 1), y1 = Date.UTC(year + 1, 0, 1);
+  const yearFrac = Math.min(1, Math.max(0, (now - y0) / (y1 - y0)));
+  const from = `${year}-01-01`, to = d.toISOString().slice(0, 10);
+  const appWords = (dayAgg || []).reduce((a, x) => a + (x.date >= from && x.date <= to ? x.wordsRead || 0 : 0), 0);
+  const offApp = (books || []).reduce((a, b) => {
+    const t = finishMs(b);
+    return a + (!b.deleted && readStatus(b) === 'finished' && t != null && t >= y0 && t < now + 1 && !linkedIds?.has(b.id) ? bookWords(b) : 0);
+  }, 0);
+  const read = appWords + offApp;
+  const daysLeft = Math.max(0, Math.round((y1 - now) / 86400000));
+  const remaining = Math.max(0, (target || 0) - read);
+  return {
+    year, read, appWords, offApp, target: target || 0, yearFrac, daysLeft, remaining,
+    onTrack: target > 0 ? read >= Math.floor(target * yearFrac) : null,
+    projected: yearFrac > 0.02 ? Math.round(read / yearFrac) : null,
+    needPerDay: target > 0 && remaining > 0 && daysLeft > 0 ? Math.round(remaining / daysLeft) : null,
+  };
+}
