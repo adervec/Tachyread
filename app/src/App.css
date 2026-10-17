@@ -1839,7 +1839,6 @@
    tocHeadingStyle setting). Colours reference the theme's own variables, so each pack auto-matches
    the active theme. Selectors carry enough specificity to win over the read-status text colours. */
 .line-row.toc-head .text { line-height: 1.3; }
-.line-row.toc-head .word.current { text-decoration: none; }
 
 /* classic — refined serif with a rule beneath the top tier */
 .line-pane.hsp-classic .toc-head .text { font-family: var(--serif-family); color: var(--current-line-fg, inherit); }
@@ -4333,6 +4332,18 @@
 }
 .lj-q-pane .lj-qstats { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
 .lj-cand-foot { margin: 4px 0 0; }
+.lj-qpill { display: inline-flex; align-items: center; gap: 2px; }
+.lj-qnudge { padding: 2px 6px; font-size: 13px; line-height: 1; }
+.lj-q-finhead { list-style: none; padding: 4px 2px; border-bottom: 1px solid var(--divider); }
+.lj-q-finhead button { background: transparent; border: none; color: var(--status-fg); cursor: pointer; font-size: 12px; padding: 2px 0; }
+.lj-q-move { font-size: 11px; padding: 1px 2px; max-width: 46px; }
+.lj-qdash-box { height: auto; max-height: min(60vh, 640px); }
+.lj-qdash-table { table-layout: auto; }
+.lj-qdash-table td .lj-pbar { width: 80px; }
+.lj-qdash-n { width: 44px; }
+.lj-qdash-left { display: inline-block; width: 80px; height: 5px; margin-right: 6px; vertical-align: middle; border-radius: 3px; background: color-mix(in srgb, var(--status-fg) 15%, transparent); overflow: hidden; }
+.lj-qdash-left > i { display: block; height: 100%; background: #d9a441; }
+@media (max-width: 900px) { .lj-qdash-table { width: 720px; } }
 
 /* All-notes manager (Trackyread → Notes) */
 .an-list { display: flex; flex-direction: column; gap: 8px; max-height: 62vh; overflow-y: auto; }

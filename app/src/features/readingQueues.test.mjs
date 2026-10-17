@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { newQueue, addToQueue, removeFromQueue, moveInQueue, moveToInQueue, queueBooks, queueStats, nextInQueue, sortQueueIds, deckMigration, addToDeck, deleteQueue, liveQueues, recentPace, candidateRows, filterCandidates } from './readingQueues.js';
+import { newQueue, addToQueue, removeFromQueue, moveInQueue, moveToInQueue, queueBooks, queueStats, nextInQueue, sortQueueIds, deckMigration, addToDeck, deleteQueue, liveQueues, dedupeQueues, queueOf, moveQueue, splitFinished, moveInTodo, queuesOverview, recentPace, candidateRows, filterCandidates } from './readingQueues.js';
 
 const now = Date.parse('2026-10-11T12:00:00Z');
 const day = (n) => new Date(now - n * 86400000).toISOString().slice(0, 10);
@@ -51,7 +51,6 @@ const info = (b) => ({ pct: b.id === 'b' ? 0.5 : 0 });
 assert.deepEqual(sortQueueIds(qb, 'shortest', info), ['a', 'b', 'd']); // a finished (0 left), b 10k, d 40k
 assert.deepEqual(sortQueueIds(qb, 'progress', info), ['a', 'b', 'd']);
 assert.deepEqual(sortQueueIds(qb, 'longest', info), ['d', 'b', 'a']);
-assert.deepEqual(sortQueueIds(qb, 'finishedLast', info), ['b', 'd', 'a']);
 assert.deepEqual(sortQueueIds(qb, 'reverse'), ['d', 'b', 'a']);
 
 // On-deck migration: once, rec-score order; not again once a fromDeck queue exists.
@@ -90,7 +89,7 @@ const lib = [
   { id: 'r', title: 'Dracula (1897)', author: 'Bram Stoker' },
   { id: 's', title: 'In queue', author: 'Someone' },
 ];
-const rows = candidateRows(lib, { ids: ['s'] }, (b) => ({ pct: b.id === 'p' ? 0.4 : 0, file: b.id === 'r' ? 'gothic/dracula.epub' : '', open: b.id === 'r' }));
+const rows = candidateRows(lib, [{ id: 'z', ids: ['s'] }, { id: 'gone', deleted: true, ids: ['p'] }], (b) => ({ pct: b.id === 'p' ? 0.4 : 0, file: b.id === 'r' ? 'gothic/dracula.epub' : '', open: b.id === 'r' }));
 assert.deepEqual(filterCandidates(rows).rows.map((r) => r.book.id), ['r', 'p'], 'open first; finished and queued hidden');
 assert.deepEqual(filterCandidates(rows, { state: 'all' }).rows.map((r) => r.book.id).sort(), ['p', 'q', 'r']);
 assert.deepEqual(filterCandidates(rows, { state: 'finished' }).rows.map((r) => r.book.id), ['q']);
@@ -101,4 +100,30 @@ assert.deepEqual(filterCandidates(rows, { cols: { folder: '^gothic$' } }).rows.m
 assert.deepEqual(filterCandidates(rows, { cols: { file: '^dracula' } }).rows.map((r) => r.book.id), ['r']);
 const bad = filterCandidates(rows, { cols: { title: '(1897' } });
 assert.deepEqual([bad.rows.map((r) => r.book.id), bad.bad], [['r'], ['title']]);
+
+// One queue per book: adding elsewhere moves it; duplicates from old data are dropped (first place wins).
+const pair = [{ id: 'q1', name: 'One', ids: ['a', 'b'] }, { id: 'q2', name: 'Two', ids: ['c'] }];
+assert.deepEqual(addToQueue(pair, 'q2', 'a').map((q) => q.ids), [['b'], ['c', 'a']]);
+assert.deepEqual(addToQueue(pair, 'q1', 'a').map((q) => q.ids), [['a', 'b'], ['c']], 'already there → unchanged');
+assert.deepEqual(dedupeQueues([{ id: 'q1', ids: ['a', 'b', 'a'] }, { id: 'q2', ids: ['b', 'c'] }]).map((q) => q.ids), [['a', 'b'], ['c']]);
+assert.equal(dedupeQueues(pair), null);
+assert.equal(queueOf(pair, 'c').id, 'q2');
+assert.deepEqual(addToDeck([{ id: 'q1', ids: ['x'] }], deckBooks, 'x'), [{ id: 'q1', ids: ['x'] }], 'shelving On deck leaves an already-queued book alone');
+assert.deepEqual(deckMigration([{ id: 'q1', ids: ['y'] }], deckBooks).at(-1).ids, ['x'], 'migration skips books already queued');
+
+// Pill order: moves among live queues, skipping tombstones.
+const three = [{ id: 'q1', ids: [] }, { id: 'dead', deleted: true, ids: [] }, { id: 'q3', ids: [] }];
+assert.deepEqual(moveQueue(three, 'q3', -1).map((q) => q.id), ['q3', 'dead', 'q1']);
+assert.deepEqual(moveQueue(three, 'q1', -1), three);
+
+// Finished on top, in finish order; moves only reorder the unfinished part.
+const mix = [{ id: 'u1', title: 'U1' }, { id: 'f2', title: 'F2', completion: true, finishTime: '2026-10-02' }, { id: 'u2', title: 'U2' }, { id: 'f1', title: 'F1', completion: true, finishTime: '2026-10-01' }];
+const sp = splitFinished(mix);
+assert.deepEqual([sp.fin.map((b) => b.id), sp.todo.map((b) => b.id)], [['f1', 'f2'], ['u1', 'u2']]);
+assert.deepEqual(moveInTodo(mix, 'u2', 0), ['f1', 'f2', 'u2', 'u1']);
+
+// Dashboard totals over all live queues.
+const ov = queuesOverview([{ id: 'q1', name: 'One', ids: ['a', 'b'] }, { id: 'q2', name: 'Two', ids: ['d'] }, { id: 'x', deleted: true, ids: ['c'] }], books, { wpm: 250, wordsPerDay: 10000, now });
+assert.deepEqual([ov.total.queues, ov.total.count, ov.total.done, ov.total.wordsLeft], [2, 3, 1, 60000]);
+assert.equal(ov.total.eta, day(-6));
 console.log('readingQueues: all cases pass');
