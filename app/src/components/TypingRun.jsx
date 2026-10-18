@@ -117,6 +117,8 @@ const PendingWord = memo(function PendingWord({ w, orig, vc, bypassSym, noSpecia
   );
 });
 
+const HOT_GUARD_MS = 2000; // how recently you must have typed for shortcuts to be held back
+
 export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns, endFanfare = true, plan = null, onPlanNext, onPlanExit, globalCfg = null, onPatchCfg = null }) {
   const { doc, settings } = tab;
   // Typing OPTIONS are APP-LEVEL (global.typingCfg): they persist across tabs and launches. Only
@@ -290,6 +292,14 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const escArmRef = useRef(0);
   const escArmTimer = useRef(0);
   const [escArmed, setEscArmed] = useState(false);
+  // Hotkey guard: mid-run, while you're actively typing (a key within HOT_GUARD_MS), shortcuts with
+  // Ctrl/Alt/⌘ and the F-keys are swallowed — app ones (Help, tab switching…) and the browser ones a
+  // page can block (reload, find, print, bookmark). A slip of the finger mid-flow no longer derails
+  // the run. Ctrl/Alt+Backspace (word delete) and AltGr characters still pass; pause briefly and
+  // every shortcut works again. ponytail: no setting — add one if someone wants hotkeys mid-run.
+  const lastTypedAt = useRef(0);
+  const [hotBlocked, setHotBlocked] = useState(false);
+  const hotTimer = useRef(0);
   // Setback flash: names how much progress a mistake just cost.
   const [penalty, setPenalty] = useState(null);
   const penaltyTimer = useRef(0);
@@ -341,6 +351,23 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
   const focus = () => inputRef.current?.focus();
   useEffect(() => { focus(); }, [phase]);
+  useEffect(() => {
+    if (phase !== 'running') return undefined;
+    const guard = (e) => {
+      if (Date.now() - lastTypedAt.current > HOT_GUARD_MS) return;
+      const altGr = e.getModifierState?.('AltGraph');
+      const mod = (e.ctrlKey || e.metaKey || e.altKey) && !altGr;
+      if (!mod && !/^F\d{1,2}$/.test(e.key)) return;
+      if (['Backspace', 'Control', 'Alt', 'Meta', 'Shift', 'AltGraph'].includes(e.key)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setHotBlocked(true);
+      clearTimeout(hotTimer.current);
+      hotTimer.current = setTimeout(() => setHotBlocked(false), 1800);
+    };
+    window.addEventListener('keydown', guard, true); // capture: before the app's own shortcut handler
+    return () => { window.removeEventListener('keydown', guard, true); clearTimeout(hotTimer.current); };
+  }, [phase]);
   // "Just start typing" must work no matter where focus wandered — opening via the menu leaves it
   // on the menu button, toggling a tile leaves it on the tile. A capture-phase grab redirects any
   // printable key to the sink BEFORE the browser delivers the text, so the very first letter both
@@ -800,6 +827,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   }
 
   function onChange(e) {
+    lastTypedAt.current = Date.now();
     let val = e.target.value;
     if (phase !== 'running') {
       // Typing the first letter starts the run from idle (monkeytype-style), and mid-countdown it
@@ -1187,6 +1215,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       <div className={`tr-viewport${ticker ? ' ticker-vp' : ''}`} style={{ display: phase === 'done' ? 'none' : undefined, ...(settings.fontFamily ? { fontFamily: settings.fontFamily } : null) }}>
         {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{count}</div>}
         {escArmed && phase === 'running' && <div className="tr-esc-hint" role="status">Esc again to end the run</div>}
+        {hotBlocked && phase === 'running' && !escArmed && <div className="tr-esc-hint" role="status">Shortcut ignored while you’re typing — pause a moment to use it</div>}
         {painAt > 0 && stopOnError && phase === 'running' && <div className={`tr-pain ${painFx}`} key={painAt} aria-hidden="true" />}
         {penalty && <div className="tr-penalty" role="status" key={penalty.at}>💥 −{penalty.n} word{penalty.n > 1 ? 's' : ''}</div>}
         <div className={`tr-cursor${phase === 'running' ? '' : ' waiting'}`} ref={caretRef} style={{ opacity: phase === 'done' ? 0 : 1 }} />
