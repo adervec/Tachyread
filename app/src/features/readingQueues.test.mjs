@@ -109,6 +109,10 @@ assert.deepEqual(filterCandidates(rows, { state: 'unstarted' }).rows.map((r) => 
 assert.deepEqual(filterCandidates(rows, { cols: { title: '^d', author: 'herb' } }).rows.map((r) => r.book.id), ['p']);
 assert.deepEqual(filterCandidates(rows, { cols: { folder: '^gothic$' } }).rows.map((r) => r.book.id), ['r']);
 assert.deepEqual(filterCandidates(rows, { cols: { file: '^dracula' } }).rows.map((r) => r.book.id), ['r']);
+// Length bounds, and keepOrder leaves the given order alone (the queue table).
+const sized = candidateRows([{ id: 'x1', title: 'Short', words: 30000 }, { id: 'x2', title: 'Mid', words: 90000 }, { id: 'x3', title: 'Huge', words: 400000 }], []);
+assert.deepEqual(filterCandidates(sized, { minWords: 50000, maxWords: 200000 }).rows.map((r) => r.book.id), ['x2']);
+assert.deepEqual(filterCandidates(sized, { maxWords: 100000, keepOrder: true }).rows.map((r) => r.book.id), ['x1', 'x2']);
 const bad = filterCandidates(rows, { cols: { title: '(1897' } });
 assert.deepEqual([bad.rows.map((r) => r.book.id), bad.bad], [['r'], ['title']]);
 

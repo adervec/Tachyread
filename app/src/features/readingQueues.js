@@ -161,19 +161,21 @@ export function recentPace(days, { now = Date.now(), halfLife = 10, windowDays =
 export const CAND_COLS = { title: 'Title', author: 'Author', genre: 'Genre', type: 'Type', status: 'Status', folder: 'Folder', file: 'File' };
 export function candidateRows(books, queues, info = () => ({})) {
   const inQ = new Set(liveQueues(queues).flatMap((q) => q.ids || []));
-  return (books || []).filter((b) => !b.deleted && !inQ.has(b.id)).map((book) => {
-    const i = info(book) || {};
-    const st = readStatus(book);
-    const pct = st === 'finished' ? 1 : i.pct || 0;
-    const path = i.file || '', cut = path.lastIndexOf('/');
-    return {
-      book, pct, fin: pct >= 0.99, open: !!i.open, lastRead: i.lastRead || null,
-      cols: {
-        title: book.title || '', author: book.author || '', genre: [book.genre, book.subgenre].filter(Boolean).join(' / '),
-        type: CONTENT_TYPES[contentType(book)], status: STATUS_LABEL[st].replace(/^\S+\s/, ''), folder: path.slice(0, Math.max(0, cut)), file: path.slice(cut + 1),
-      },
-    };
-  });
+  return (books || []).filter((b) => !b.deleted && !inQ.has(b.id)).map((book) => bookRow(book, info(book)));
+}
+// One filterable row for a book (the add-books table and the queue's own table share it).
+export function bookRow(book, info) {
+  const i = info || {};
+  const st = readStatus(book);
+  const pct = st === 'finished' ? 1 : i.pct || 0;
+  const path = i.file || '', cut = path.lastIndexOf('/');
+  return {
+    book, pct, fin: pct >= 0.99, open: !!i.open, lastRead: i.lastRead || null, words: bookWords(book),
+    cols: {
+      title: book.title || '', author: book.author || '', genre: [book.genre, book.subgenre].filter(Boolean).join(' / '),
+      type: CONTENT_TYPES[contentType(book)], status: STATUS_LABEL[st].replace(/^\S+\s/, ''), folder: path.slice(0, Math.max(0, cut)), file: path.slice(cut + 1),
+    },
+  };
 }
 
 // Completion filter values. Default 'unfinished' — finished books stay out of the way.
@@ -182,15 +184,19 @@ const stateOk = (r, s) => s === 'all' || (s === 'finished' ? r.fin : s === 'unfi
 
 // Per-column filter text → case-insensitive regex. Text that isn't a valid regex is matched
 // literally (and reported in `bad`, so the box can say so).
-export function filterCandidates(rows, { cols = {}, state = 'unfinished' } = {}) {
+// minWords/maxWords (optional) bound the book's length; keepOrder skips the open-first sort (the
+// queue's own table keeps queue order).
+export function filterCandidates(rows, { cols = {}, state = 'unfinished', minWords = null, maxWords = null, keepOrder = false } = {}) {
   const bad = [];
   const tests = Object.entries(cols).filter(([, t]) => t && t.trim()).map(([k, t]) => {
     try { const re = new RegExp(t.trim(), 'i'); return [k, (v) => re.test(v)]; }
     catch { bad.push(k); const lc = t.trim().toLowerCase(); return [k, (v) => v.toLowerCase().includes(lc)]; }
   });
-  const out = rows.filter((r) => stateOk(r, state) && tests.every(([k, f]) => f(r.cols[k] || '')))
-    // Open files first, then most recently read, then rec score.
-    .sort((a, b) => (Number(b.open) - Number(a.open)) || String(b.lastRead || '').localeCompare(String(a.lastRead || ''))
+  const lenOk = (r) => (minWords == null || r.words >= minWords) && (maxWords == null || r.words <= maxWords);
+  const out = rows.filter((r) => stateOk(r, state) && lenOk(r) && tests.every(([k, f]) => f(r.cols[k] || '')));
+  if (keepOrder) return { rows: out, bad };
+  // Open files first, then most recently read, then rec score.
+  out.sort((a, b) => (Number(b.open) - Number(a.open)) || String(b.lastRead || '').localeCompare(String(a.lastRead || ''))
       || (Number(b.book.recScore) || 0) - (Number(a.book.recScore) || 0));
   return { rows: out, bad };
 }
