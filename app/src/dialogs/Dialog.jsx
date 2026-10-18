@@ -3,7 +3,11 @@ import { useEffect } from 'react';
 export default function Dialog({ title, onClose, children, buttons, width = 520, dismissable = true }) {
   useEffect(() => {
     function onKey(e) {
-      if (e.key === 'Escape' && dismissable) onClose?.();
+      if (e.key !== 'Escape' || !dismissable) return;
+      // First Escape inside a text field only leaves the field (see App's Escape handling).
+      const t = e.target;
+      if ((t.tagName === 'INPUT' && t.type !== 'checkbox' && t.type !== 'radio') || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') { t.blur(); return; }
+      onClose?.();
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);

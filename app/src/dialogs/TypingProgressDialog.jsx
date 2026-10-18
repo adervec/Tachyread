@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSessionState } from '../state/useSessionState.js';
 import Dialog from './Dialog.jsx';
 import { allTypingRuns, clearTypingRuns } from '../state/storage.js';
 import { TYPING_MODE_BY_ID } from '../engine/typingModes.js';
@@ -80,8 +81,8 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
   // Column filters: weekly summaries and recent runs (regex text · min/max numbers · from/to dates).
   const NO_WF = { week: ['', ''], runs: ['', ''], avg: ['', ''], best: ['', ''], acc: ['', ''], words: ['', ''] };
   const NO_RUNF = { when: ['', ''], mode: '', device: 'all', text: ['', ''], net: ['', ''], gross: ['', ''], acc: ['', ''], cons: ['', ''], words: ['', ''], time: ['', ''], tier: '' };
-  const [wf, setWf] = useState(NO_WF);
-  const [runF, setRunF] = useState(NO_RUNF);
+  const [wf, setWf] = useSessionState('tr-tp-wf', NO_WF);
+  const [runF, setRunF] = useSessionState('tr-tp-runf', NO_RUNF);
   const setW = (k) => (v) => setWf((f) => ({ ...f, [k]: v }));
   const setR = (k) => (v) => setRunF((f) => ({ ...f, [k]: v }));
 

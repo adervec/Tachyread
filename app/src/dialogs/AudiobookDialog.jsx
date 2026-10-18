@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useSessionState } from '../state/useSessionState.js';
 import { textMatcher, inRange, inDates, anySet } from '../features/tableFilter.js';
 import { TextF, RangeF, DateF } from '../components/ColFilter.jsx';
 import { totalChars, chunkChars, etaSeconds, chunkHealth, fmtEta, previewText } from '../features/ttsProgress.js';
@@ -168,10 +169,10 @@ export default function AudiobookDialog({ onClose }) {
   const [libBusy, setLibBusy] = useState(false);
   // Library table controls: column sort, a name filter, and whether never-narrated books show.
   const [libSort, setLibSort] = useState({ key: 'lastAt', dir: -1 });
-  const [libQ, setLibQ] = useState('');
+  const [libQ, setLibQ] = useSessionState('tr-ab-libq', '');
   // Library table column filters (regex text · min/max numbers · from/to dates).
   const NO_ABF = { coverage: ['', ''], chunks: ['', ''], clips: ['', ''], size: ['', ''], length: ['', ''], words: ['', ''], voices: '', folders: '', last: ['', ''] };
-  const [abF, setAbF] = useState(NO_ABF);
+  const [abF, setAbF] = useSessionState('tr-ab-libf', NO_ABF);
   const setAb = (k) => (v) => setAbF((f) => ({ ...f, [k]: v }));
   // Stats tab filters: throughput-by-voice and recent-runs tables.
   const NO_VF = { voice: '', runs: ['', ''], chars: ['', ''], rate: ['', ''], ok: ['', ''], failed: ['', ''] };

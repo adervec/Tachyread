@@ -1745,6 +1745,9 @@ function AppInner() {
       if (e.key === 'Escape') {
         if (k.immersiveRef?.current) { k.setImmersive(false); return; }
         if (k.showFootnote) { k.setShowFootnote(false); return; }
+        // In a dialog's text box / filter, the first Escape just leaves the field — closing the whole
+        // panel (and losing what you'd typed) from a filter box was too easy. A second Escape closes.
+        if (inDialog && inField && t.type !== 'checkbox' && t.type !== 'radio') { t.blur(); return; }
         if (inDialog) { k.closeDialog(); }
         return;
       }
@@ -1776,6 +1779,11 @@ function AppInner() {
       if (ctrl) return; // any other Ctrl/Cmd combo is the browser's
 
       // ── Reading surface (only while actually reading — no dialog tab, focus not on a control) ─────
+      // "/" in a panel jumps to its first table filter (Library, Files, queues, Audiobook Centre…).
+      if (inDialog && e.key === '/' && !ctrl) {
+        const f = [...document.querySelectorAll('.lj-filter-row input, .ab-filter-row input, .lj-cand-filters input, .colf-text')].find((el) => el.offsetParent);
+        if (f) { e.preventDefault(); f.focus(); f.select?.(); return; }
+      }
       if (inDialog) return;
       if (typingOnRef.current) return; // typing overlay owns the keys — no reading nav underneath
       const onControl = !!(t.closest && t.closest('button, a[href], [role="button"]'));
