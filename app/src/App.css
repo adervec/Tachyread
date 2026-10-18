@@ -3155,6 +3155,8 @@
 .type-sink { position: absolute; opacity: 0; left: -9999px; width: 1px; height: 1px; }
 
 /* Typing run (practice mode) */
+.tr-theme { display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 0 0 6px; }
+.tr-theme select { flex: 1; min-width: 0; font-size: 12px; }
 .type-run {
   position: absolute;
   inset: 0;
@@ -4333,6 +4335,32 @@
 }
 .lj-q-pane .lj-qstats { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
 .lj-cand-foot { margin: 4px 0 0; }
+.lj-recon-man { flex-wrap: wrap; gap: 6px; }
+.lj-recon-man input { min-width: 220px; flex: 1; font-size: 12px; }
+.lj-recon-box { height: auto; max-height: min(55vh, 560px); }
+.lj-recon-table col.c-tick { width: 28px; } .lj-recon-table col.c-keep { width: 22%; } .lj-recon-table col.c-fold { width: 22%; }
+.lj-recon-table col.c-file { width: 15%; } .lj-recon-table col.c-queue { width: 18%; } .lj-recon-table col.c-chg { width: 17%; } .lj-recon-table col.c-more { width: 30px; }
+.lj-recon-table tr.warn td { background: color-mix(in srgb, #d9a441 10%, transparent); }
+.lj-recon-table tr.lj-recon-detail td { white-space: normal; background: color-mix(in srgb, var(--divider) 12%, transparent); }
+.lj-recon-more { padding: 0 5px; font-size: 11px; }
+/* Queue table (the queue's own books, with detail columns + filters). Stacked layout gives it the full width. */
+.lj-q-panes.stacked { grid-template-columns: 1fr; }
+.lj-qtable { min-width: 1060px; }
+.lj-qtable col.c-rank { width: 34px; } .lj-qtable col.c-title { width: 19%; } .lj-qtable col.c-author { width: 11%; }
+.lj-qtable col.c-genre { width: 9%; } .lj-qtable col.c-type { width: 7%; } .lj-qtable col.c-words { width: 92px; }
+.lj-qtable col.c-read { width: 90px; } .lj-qtable col.c-eta { width: 84px; } .lj-qtable col.c-folder { width: 11%; }
+.lj-qtable col.c-file { width: 12%; } .lj-qtable col.c-acts { width: 200px; }
+.lj-qtable tr.done td { opacity: 0.6; }
+.lj-qtable td.lj-qrank { color: var(--status-fg); font-variant-numeric: tabular-nums; text-align: right; }
+.lj-qtable td.lj-qacts { overflow: visible; }
+.lj-qtable td.lj-qacts button { font-size: 11px; padding: 1px 5px; }
+.lj-qtable td.lj-qacts .lj-queue-read { color: var(--toggle-active-bg); font-weight: 600; }
+.lj-qwords-f { display: table-cell; }
+.lj-qwords-f input { width: calc(50% - 2px) !important; }
+.lj-qwords-f input + input { margin-left: 4px; }
+.lj-qdim { color: var(--status-fg); }
+.lj-qtable .lj-where { width: 1.2em; margin-right: 3px; }
+.lj-qtable tr.lj-q-finhead td { border-bottom: 1px solid var(--divider); }
 .lj-recon-pair { border-bottom: 1px solid var(--divider); padding: 6px 0; }
 .lj-recon-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; cursor: pointer; }
 .lj-recon-arrow { color: var(--status-fg); }

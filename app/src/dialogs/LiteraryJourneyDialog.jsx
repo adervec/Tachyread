@@ -35,7 +35,7 @@ import { normTitle } from '../document/tocWizard.js';
 import { planBulkLinks, matchScore, newBookFor } from '../features/bulkLink.js';
 import { getSearchDirs, addSearchDir, removeSearchDir, pickerSupported, foundPaths, indexFolders, rememberPaths } from '../features/fileLocator.js';
 import { openBookFile, fileWhere } from '../features/openBook.js';
-import { newQueue, addToQueue, addToDeck, deleteQueue, liveQueues, dedupeQueues, moveQueue, splitFinished, moveInTodo, queuesOverview, removeFromQueue, setQueueIds, swapQueueId, mergeQueues, splitQueue, QUEUE_SPLITS, queueBooks, queueStats, QUEUE_SORTS, sortQueueIds, deckMigration, recentPace, CAND_COLS, CAND_STATES, candidateRows, filterCandidates } from '../features/readingQueues.js';
+import { newQueue, addToQueue, addToDeck, deleteQueue, liveQueues, dedupeQueues, moveQueue, splitFinished, moveInTodo, queuesOverview, removeFromQueue, setQueueIds, swapQueueId, mergeQueues, splitQueue, QUEUE_SPLITS, queueBooks, queueStats, QUEUE_SORTS, sortQueueIds, deckMigration, recentPace, CAND_COLS, CAND_STATES, candidateRows, filterCandidates, bookRow } from '../features/readingQueues.js';
 import { groupForChecksum, masterOf, makeGroup, groupFiles } from '../features/bookGroups.js';
 import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordCount } from '../features/readingTime.js';
 import { olFetch, bookCoverUrl } from '../features/openLibrary.js';
@@ -579,24 +579,48 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   // (the one you read and queued). Each plan says exactly what will happen; nothing changes until
   // applied; the retired entry is kept as a tombstone plus a snapshot on the kept one; ↶ undoes it.
   const nameOfCs = (cs) => fileStats[cs]?.fileName || docMeta.find((d) => d.checksum === cs)?.fileName || `${String(cs).slice(0, 8)}…`;
+  // One pair's preview: what changes on the kept entry, where the file link and queue entry end up.
+  function planFor({ quick, keep, authorHit = true, alternatives = [], manual = false }, qs, groups) {
+    const csQ = Object.entries(bindMap || {}).filter(([, id]) => id === quick.id).map(([cs]) => cs);
+    const csK = Object.entries(bindMap || {}).filter(([, id]) => id === keep.id).map(([cs]) => cs);
+    const merged = mergeQuickInto(keep, quick);
+    let fileNote = 'no linked file';
+    if (csQ.length && !csK.length) fileNote = `${csQ.map(nameOfCs).join(', ')} becomes the kept entry’s linked file`;
+    else if (csQ.length && csK.length) {
+      const g = groupFiles(groups, [...csK, ...csQ], keep.title, csK[0], 0);
+      fileNote = `both files stay linked (${[...csK, ...csQ].map(nameOfCs).join(' + ')}) and ${g.made ? `become one book group “${keep.title}”` : `join book group “${g.group.name}”`} — shared reading position`;
+    }
+    return { id: quick.id, quick, keep, merged, authorHit, alternatives, manual, diff: bookDiff(keep, merged), csQ, csK, fileNote, queueNote: swapQueueId(qs, quick.id, keep.id).note };
+  }
   async function scanRecon() {
     const qs = (await getLibraryRef('queues')) || [];
     const groups = global?.bookGroups || [];
-    const plans = findQuickAddPairs(books, bindMap || {}).map(({ quick, keep, authorHit, alternatives }) => {
-      const csQ = Object.entries(bindMap || {}).filter(([, id]) => id === quick.id).map(([cs]) => cs);
-      const csK = Object.entries(bindMap || {}).filter(([, id]) => id === keep.id).map(([cs]) => cs);
-      const merged = mergeQuickInto(keep, quick);
-      let fileNote = 'no linked file';
-      if (csQ.length && !csK.length) fileNote = `${csQ.map(nameOfCs).join(', ')} becomes the kept entry’s linked file`;
-      else if (csQ.length && csK.length) {
-        const g = groupFiles(groups, [...csK, ...csQ], keep.title, csK[0], 0);
-        fileNote = `both files stay linked (${[...csK, ...csQ].map(nameOfCs).join(' + ')}) and ${g.made ? `become one book group “${keep.title}”` : `join book group “${g.group.name}”`} — shared reading position`;
-      }
-      return { id: quick.id, quick, keep, merged, authorHit, alternatives, diff: bookDiff(keep, merged), csQ, csK, fileNote, queueNote: swapQueueId(qs, quick.id, keep.id).note };
-    });
+    const manual = (recon || []).filter((pl) => pl.manual); // pairs you picked yourself survive a rescan
+    const found = findQuickAddPairs(books, bindMap || {}).filter((pr) => !manual.some((m) => m.id === pr.quick.id));
+    const plans = [...manual, ...found.map((pr) => planFor(pr, qs, groups))];
     setRecon(plans);
     setReconPick(new Set(plans.filter((pl) => pl.authorHit && !pl.alternatives.length).map((pl) => pl.id))); // the sure ones ticked
     setReconMsg(plans.length ? '' : 'No quick-added copies of recommended books found. ✅');
+  }
+  // Manual pairing, for when the scan misses or mismatches: pick the entry to KEEP and the one to fold
+  // into it; it joins the list (ticked) with the same preview and the same apply / undo.
+  const [manKeep, setManKeep] = useState('');
+  const [manFold, setManFold] = useState('');
+  const [reconOpen, setReconOpen] = useState(null); // plan id whose details row is expanded
+  const bookByLabel = (label) => {
+    const m = /\[([^\]]+)\]$/.exec(String(label).trim());
+    return m ? books.find((b) => b.id === m[1] && !b.deleted) || null : null;
+  };
+  async function addManualPair() {
+    const keep = bookByLabel(manKeep), quick = bookByLabel(manFold);
+    if (!keep || !quick) { setReconMsg('Pick both entries from the suggestions (start typing a title).'); return; }
+    if (keep.id === quick.id) { setReconMsg('Those are the same entry.'); return; }
+    const qs = (await getLibraryRef('queues')) || [];
+    const pl = planFor({ quick, keep, manual: true }, qs, global?.bookGroups || []);
+    setRecon((r) => [pl, ...(r || []).filter((x) => x.id !== quick.id)]);
+    setReconPick((s0) => new Set([...s0, quick.id]));
+    setManKeep(''); setManFold('');
+    setReconMsg(`Added “${quick.title}” → “${keep.title}” to the list below — check its row, then reconcile.`);
   }
   async function applyRecon() {
     const plans = (recon || []).filter((pl) => reconPick.has(pl.id));
@@ -1113,30 +1137,62 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                 {reconUndo && <button onClick={undoRecon}>↶ Undo last reconcile</button>}
                 {reconMsg && <span className="settings-note">{reconMsg}</span>}
               </div>
+              <form className="lj-inline lj-recon-man" onSubmit={(e) => { e.preventDefault(); addManualPair(); }}>
+                <span className="settings-note" style={{ margin: 0 }}>Pair two yourself — keep</span>
+                <input list="lj-recon-books" value={manKeep} onChange={(e) => setManKeep(e.target.value)} placeholder="entry to keep (good details)…" aria-label="Entry to keep" />
+                <span className="settings-note" style={{ margin: 0 }}>← fold in</span>
+                <input list="lj-recon-books" value={manFold} onChange={(e) => setManFold(e.target.value)} placeholder="entry to retire…" aria-label="Entry to fold in and retire" />
+                <button type="button" title="Swap which entry is kept" onClick={() => { setManKeep(manFold); setManFold(manKeep); }}>⇄</button>
+                <button type="submit" disabled={!manKeep || !manFold}>＋ Add pair</button>
+                <datalist id="lj-recon-books">
+                  {books.filter((b) => !b.deleted).map((b) => <option key={b.id} value={`${b.title}${b.author ? ` — ${b.author}` : ''} [${b.id}]`} />)}
+                </datalist>
+              </form>
               {recon && recon.length > 0 && (
                 <div className="lj-cleanup lj-recon">
-                  {recon.map((pl) => (
-                    <div key={pl.id} className="lj-recon-pair">
-                      <label className="lj-recon-head">
-                        <input type="checkbox" checked={reconPick.has(pl.id)} onChange={() => setReconPick((s0) => { const s1 = new Set(s0); if (s1.has(pl.id)) s1.delete(pl.id); else s1.add(pl.id); return s1; })} />
-                        <span>Keep <b>{pl.keep.title}</b> — {pl.keep.author}{pl.keep.isbn ? ` · ISBN ${pl.keep.isbn}` : ''}</span>
-                        <span className="lj-recon-arrow">←</span>
-                        <span>fold in <b>{pl.quick.title}</b> <em>({STATUS_LABEL[readStatus(pl.quick)]})</em></span>
-                      </label>
-                      <ul className="lj-clean-list">
-                        <li>📎 {pl.fileNote}</li>
-                        <li>📋 Queue: {pl.queueNote}</li>
-                        <li>✏️ {pl.diff.length ? <>changes on the kept entry: {pl.diff.map((d) => <span key={d.key} className="lj-recon-diff"><code>{d.key}</code> {fmtVal(d.from)} → <b>{fmtVal(d.to)}</b></span>)}</> : 'no field changes on the kept entry'}</li>
-                        <li>🗃 “{pl.quick.title}” is retired (kept as a tombstone + a snapshot in the kept entry’s history)</li>
-                        {!pl.authorHit && <li className="lj-recon-warn">⚠ The file name doesn’t mention the author — matched on the title alone. Check it’s the same book.</li>}
-                        {pl.alternatives.length > 0 && <li className="lj-recon-warn">⚠ Also matches: {pl.alternatives.map((b) => `${b.title} — ${b.author}`).join('; ')}. Left unticked — check which is right.</li>}
-                      </ul>
-                    </div>
-                  ))}
+                  <div className="lj-q-box lj-recon-box">
+                    <table className="lj-cand lj-recon-table">
+                      <colgroup><col className="c-tick" /><col className="c-keep" /><col className="c-fold" /><col className="c-file" /><col className="c-queue" /><col className="c-chg" /><col className="c-more" /></colgroup>
+                      <thead><tr><th aria-label="Reconcile" /><th>Keep</th><th>Fold in &amp; retire</th><th>File link</th><th>Queue</th><th>Changes</th><th aria-label="Details" /></tr></thead>
+                      <tbody>
+                        {recon.map((pl) => {
+                          const warn = [!pl.authorHit && 'matched on the title alone — the file name doesn’t mention the author', pl.alternatives.length && `also matches ${pl.alternatives.map((b) => b.title).join('; ')}`].filter(Boolean);
+                          const open = reconOpen === pl.id;
+                          return (
+                            <Fragment key={pl.id}>
+                              <tr className={warn.length ? 'warn' : ''}>
+                                <td><input type="checkbox" checked={reconPick.has(pl.id)} aria-label={`Reconcile “${pl.quick.title}” into “${pl.keep.title}”`}
+                                  onChange={() => setReconPick((s0) => { const s1 = new Set(s0); if (s1.has(pl.id)) s1.delete(pl.id); else s1.add(pl.id); return s1; })} /></td>
+                                <td title={`${pl.keep.title} — ${pl.keep.author || ''}${pl.keep.isbn ? ` · ISBN ${pl.keep.isbn}` : ''}`}><b>{pl.keep.title}</b>{pl.keep.author ? <span className="lj-qdim"> — {pl.keep.author}</span> : ''}</td>
+                                <td title={pl.quick.title}>{warn.length ? <span title={warn.join(' · ')}>⚠ </span> : ''}{pl.manual ? <span title="Paired by you">✋ </span> : ''}{pl.quick.title} <span className="lj-qdim">({STATUS_LABEL[readStatus(pl.quick)].replace(/^\S+\s/, '')})</span></td>
+                                <td title={pl.fileNote}>{pl.csQ.length ? (pl.csK.length ? '🔗 both linked + grouped' : `📎 ${pl.csQ.map(nameOfCs).join(', ')}`) : '—'}</td>
+                                <td title={pl.queueNote}>{pl.queueNote}</td>
+                                <td title={pl.diff.map((d) => `${d.key}: ${fmtVal(d.from)} → ${fmtVal(d.to)}`).join('\n')}>{pl.diff.length ? `${pl.diff.length} field${pl.diff.length === 1 ? '' : 's'}: ${pl.diff.map((d) => d.key).join(', ')}` : 'none'}</td>
+                                <td><button className="lj-recon-more" onClick={() => setReconOpen(open ? null : pl.id)} aria-expanded={open} title="Details">{open ? '▾' : '▸'}</button></td>
+                              </tr>
+                              {open && (
+                                <tr className="lj-recon-detail"><td /><td colSpan={6}>
+                                  <ul className="lj-clean-list">
+                                    <li>📎 {pl.fileNote}</li>
+                                    <li>📋 Queue: {pl.queueNote}</li>
+                                    <li>✏️ {pl.diff.length ? pl.diff.map((d) => <span key={d.key} className="lj-recon-diff"><code>{d.key}</code> {fmtVal(d.from)} → <b>{fmtVal(d.to)}</b></span>) : 'no field changes on the kept entry'}</li>
+                                    <li>🗃 “{pl.quick.title}” is retired (kept as a tombstone + a snapshot in the kept entry’s history)</li>
+                                    {warn.map((w) => <li key={w} className="lj-recon-warn">⚠ {w}. Check it’s the same book.</li>)}
+                                  </ul>
+                                </td></tr>
+                              )}
+                            </Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                   <div className="lj-inline">
                     <button className="toggle-on" disabled={!reconPick.size} onClick={applyRecon}>Reconcile {reconPick.size} ticked</button>
                     <button onClick={() => setReconPick(new Set(recon.map((pl) => pl.id)))}>Tick all</button>
+                    <button onClick={() => setReconPick(new Set())}>Untick all</button>
                     <button onClick={() => { setRecon(null); setReconMsg(''); }}>Dismiss</button>
+                    <span className="settings-note" style={{ margin: 0 }}>⚠ = less certain (left unticked) · ✋ = paired by you · hover a cell or ▸ for the full details</span>
                   </div>
                 </div>
               )}
@@ -2158,6 +2214,11 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
   const [sel, setSel] = useState(null);
   const [naming, setNaming] = useState(null); // new-queue name being typed, or null
   const [undo, setUndo] = useState(null);     // { queues, label } before the last bulk change
+  const [paths, setPaths] = useState(() => foundPaths()); // checksum → 'Folder/sub/file' (indexFolders)
+  // Stacked (queue full width, add-books below) suits the queue's detail columns; side by side
+  // keeps both in view. Remembered per device.
+  const [stacked, setStacked] = useState(() => { try { return localStorage.getItem('tachyread-q-layout') !== 'side'; } catch { return true; } });
+  const toggleLayout = () => { setStacked(!stacked); try { localStorage.setItem('tachyread-q-layout', stacked ? 'side' : 'stacked'); } catch { /* private mode */ } };
   useEffect(() => {
     let live = true;
     const load = () => getLibraryRef('queues').then((v) => {
@@ -2219,8 +2280,9 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
       </div>
       {overview ? <QueuesDashboard queues={queues} books={books} wpm={wpm} pace={pace} fileStats={fileStats} csOf={csOf} onPick={setSel} onBulk={bulk} />
         : !selQueue ? <p className="settings-note">No queues yet — ＋ New queue to make one, then add books to it from the table that appears.</p> : (
-        <div className="lj-q-panes">
+        <div className={`lj-q-panes${stacked ? ' stacked' : ''}`}>
           <NamedQueue
+            paths={paths} stacked={stacked} onLayout={toggleLayout}
             key={selQueue.id} // fresh rename/confirm-delete state per queue — an armed Delete must not carry over to the next one
             queue={selQueue} others={shownQueues.filter((x) => x.id !== selQueue.id)} books={books} wpm={wpm} setWpm={setWpm} pace={pace} fileStats={fileStats} csOf={csOf} pctOf={pctOf}
             openChecksums={openChecksums} dirs={dirs} finding={finding} openTheFile={openTheFile} findMsg={findMsg}
@@ -2246,7 +2308,7 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
               </div>
             )}
           />
-          <QueueCandidates queue={selQueue} queues={queues} books={books} dirs={dirs} wpm={wpm} fileStats={fileStats} csOf={csOf} pctOf={pctOf} openChecksums={openChecksums}
+          <QueueCandidates queue={selQueue} queues={queues} books={books} dirs={dirs} paths={paths} setPaths={setPaths} wpm={wpm} fileStats={fileStats} csOf={csOf} pctOf={pctOf} openChecksums={openChecksums}
             onAdd={(ids, label) => (ids.length > 1
               ? bulk((qs) => ids.reduce((acc, id) => addToQueue(acc, selQueue.id, id), qs), label)
               : saveQueues(addToQueue(queues, selQueue.id, ids[0])))}
@@ -2344,7 +2406,9 @@ function QueuesDashboard({ queues, books, wpm, pace, fileStats, csOf, onPick, on
 // One queue: its stats (progress, pace, time, ETA, where the files are) with bars, the ordered list
 // with ▶ open / reorder / remove, and whole-queue reorders.
 const WHERE = { open: ['📂', 'Open in a tab'], local: ['💾', 'Saved on this device'], folder: ['📁', 'Found in a search folder'], unsearched: ['❔', 'Not on this device — not searched for yet'], missing: ['✖', 'Not on this device or in the search folders'], unlinked: ['—', 'No document linked'] };
-function NamedQueue({ queue, others = [], books, wpm, setWpm, pace, fileStats, csOf, pctOf, openChecksums, dirs, finding, openTheFile, findMsg, onChange, onDelete, onEdit, onBulk, onOpen, folders }) {
+// The queue table's filterable text columns (Words has min/max instead).
+const QCOLS = { title: 'Title', author: 'Author', genre: 'Genre', type: 'Type', folder: 'Folder', file: 'File' };
+function NamedQueue({ queue, others = [], paths = {}, stacked = true, onLayout, books, wpm, setWpm, pace, fileStats, csOf, pctOf, openChecksums, dirs, finding, openTheFile, findMsg, onChange, onDelete, onEdit, onBulk, onOpen, folders }) {
   const qBooks = useMemo(() => queueBooks(queue, books), [queue, books]);
   const st = useMemo(() => queueStats(qBooks, {
     wpm, fileOf: (b) => fileStats[csOf[b.id]] || null, wordsPerDay: pace.wordsPerDay,
@@ -2386,6 +2450,19 @@ function NamedQueue({ queue, others = [], books, wpm, setWpm, pace, fileStats, c
   const [hideFin, setHideFin] = useState(() => { try { return localStorage.getItem('tachyread-q-hidefin') === '1'; } catch { return false; } });
   const toggleFin = () => { setHideFin(!hideFin); try { localStorage.setItem('tachyread-q-hidefin', hideFin ? '0' : '1'); } catch { /* private mode */ } };
   const move = (b, to) => onEdit((qs) => setQueueIds(qs, queue.id, moveInTodo(qBooks, b.id, to)));
+  // Filters over the queue's own rows (you won't read a big queue strictly in order): regex per text
+  // column, min/max words, finished or not. Queue order is kept; moves still act on the full queue.
+  const [qcols, setQcols] = useState({});
+  const [minW, setMinW] = useState('');
+  const [maxW, setMaxW] = useState('');
+  const [qstate, setQstate] = useState('all');
+  const qrows = useMemo(() => [...(hideFin ? [] : fin), ...todo].map((b) => {
+    const cs = csOf[b.id];
+    return bookRow(b, { pct: st.pctById[b.id], file: (cs && (paths[cs] || fileStats[cs]?.fileName)) || '' });
+  }), [fin, todo, hideFin, csOf, st, paths, fileStats]);
+  const num = (v) => (String(v).trim() === '' ? null : Number(v) * 1000);
+  const { rows: shownRows, bad: qbad } = useMemo(() => filterCandidates(qrows, { cols: qcols, state: qstate, minWords: num(minW), maxWords: num(maxW), keepOrder: true }), [qrows, qcols, qstate, minW, maxW]);
+  const qfiltered = Object.values(qcols).some((t) => t?.trim()) || minW !== '' || maxW !== '' || qstate !== 'all';
   const resort = (key) => onBulk((qs) => setQueueIds(qs, queue.id, sortQueueIds(qBooks, key, (b) => ({ pct: pctOf(b), lastRead: fileStats[csOf[b.id]]?.lastRead }))), `sort (${QUEUE_SORTS[key][0].toLowerCase()})`);
 
   return (
@@ -2447,7 +2524,12 @@ function NamedQueue({ queue, others = [], books, wpm, setWpm, pace, fileStats, c
           <option value="">⇅ Reorder…</option>
           {Object.entries(QUEUE_SORTS).map(([k, [label]]) => <option key={k} value={k}>{label}</option>)}
         </select>
+        <select value={qstate} onChange={(e) => setQstate(e.target.value)} aria-label="Show">
+          {Object.entries(CAND_STATES).map(([k, label]) => <option key={k} value={k}>{k === 'all' ? 'All books' : label}</option>)}
+        </select>
+        {qfiltered && <button onClick={() => { setQcols({}); setMinW(''); setMaxW(''); setQstate('all'); }}>Clear filters</button>}
         <span className="lj-spacer" />
+        <button onClick={onLayout} title={stacked ? 'Put the queue and the add-books table side by side' : 'Stack the add-books table under the queue (room for every column)'}>{stacked ? '⇔ Side by side' : '⇕ Stack'}</button>
         {counts.unsearched > 0 && <button disabled={searching} onClick={searchFolders} title="Look through your search folders for the files not on this device">{searching ? '⟳ Searching…' : `🔎 Search folders (${counts.unsearched})`}</button>}
         <button disabled={!st.next} title="Open a random unfinished pick from this queue" onClick={() => {
           const pool = qBooks.filter((b) => readStatus(b) !== 'finished');
@@ -2456,53 +2538,73 @@ function NamedQueue({ queue, others = [], books, wpm, setWpm, pace, fileStats, c
       </div>
       {findMsg && <p className="settings-note lj-findmsg">{findMsg}</p>}
       <div className="lj-q-box">
-        {qBooks.length === 0 ? <p className="settings-note">Empty so far — add books from the table{' '}<span className="lj-q-wide-only">on the right</span><span className="lj-q-narrow-only">below</span>.</p> : (
-          <ol className="lj-queue-list">
-            {fin.length > 0 && (
-              <li className="lj-q-finhead">
-                <button onClick={toggleFin} aria-expanded={!hideFin}>{hideFin ? '▸' : '▾'} ✓ {fin.length} finished</button>
-              </li>
-            )}
-            {[...(hideFin ? [] : fin), ...todo].map((b) => {
-              const isFin = readStatus(b) === 'finished';
-              const i = isFin ? -1 : todo.indexOf(b);
-              const p = st.pctById[b.id] || 0;
-              const w = WHERE[where[b.id]] || ['…', 'Checking'];
-              const last = i === todo.length - 1;
-              return (
-                <li key={b.id} className={`lj-queue-item${isFin ? ' done' : ''}`}>
-                  <span className="lj-queue-rank">{isFin ? '✓' : i + 1}</span>
-                  <span className="lj-queue-main">
-                    <b title={b.title}>{b.title}</b>
-                    <em>{b.author}{isFin ? ` · finished${b.finishTime ? ' ' + b.finishTime : ''}` : ''}</em>
-                    <Bar pct={p} cls={isFin ? 'fin' : ''} />
-                  </span>
-                  <span className="lj-queue-est">{pctTxt(p)} · {estHours(b, wpm) != null ? `~${estHours(b, wpm)} h` : '—'}{!isFin && st.etaById[b.id] ? <><br /><span className="lj-queue-etc">done ~{st.etaById[b.id]}</span></> : ''}</span>
-                  <span className="lj-queue-acts">
-                    <span className="lj-where" role="img" aria-label={w[1]} title={w[1]}>{w[0]}</span>
-                    {csOf[b.id] && <button className="lj-queue-read" disabled={finding === b.id} onClick={() => openTheFile(b)} title="Read it">{finding === b.id ? '⟳' : '▶'}</button>}
-                    {!isFin && <>
-                      <button disabled={i === 0} onClick={() => move(b, 0)} aria-label={`Move “${b.title}” to the top`} title="To the top (of what's left)">⤒</button>
-                      <button disabled={i === 0} onClick={() => move(b, i - 1)} aria-label={`Move “${b.title}” up`} title="Up">↑</button>
-                      <button disabled={last} onClick={() => move(b, i + 1)} aria-label={`Move “${b.title}” down`} title="Down">↓</button>
-                      <button disabled={last} onClick={() => move(b, todo.length)} aria-label={`Move “${b.title}” to the bottom`} title="To the bottom">⤓</button>
-                    </>}
-                    {others.length > 0 && (
-                      <select className="lj-q-move" value="" aria-label={`Move “${b.title}” to another queue`} title="Move to another queue"
-                        onChange={(e) => { if (e.target.value) onEdit((qs) => addToQueue(qs, e.target.value, b.id)); }}>
-                        <option value="">⇄</option>
-                        {others.map((x) => <option key={x.id} value={x.id}>→ {x.name}</option>)}
-                      </select>
-                    )}
-                    <button title="Remove from this queue" aria-label={`Remove “${b.title}” from this queue`} onClick={() => onEdit((qs) => removeFromQueue(qs, queue.id, b.id))}>✕</button>
-                    <button title="Open in Library" aria-label={`Open “${b.title}” in Library`} onClick={() => onOpen(b.id)}>↗</button>
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
+        {qBooks.length === 0 ? <p className="settings-note">Empty so far — add books from the table {stacked ? 'below' : <><span className="lj-q-wide-only">on the right</span><span className="lj-q-narrow-only">below</span></>}.</p> : (
+          <table className="lj-cand lj-qtable">
+            <colgroup><col className="c-rank" /><col className="c-title" /><col className="c-author" /><col className="c-genre" /><col className="c-type" /><col className="c-words" /><col className="c-read" /><col className="c-eta" /><col className="c-folder" /><col className="c-file" /><col className="c-acts" /></colgroup>
+            <thead>
+              <tr><th>#</th><th>Title</th><th>Author</th><th>Genre</th><th>Type</th><th title="Words · hours at your speed">Words</th><th>Read</th><th>Done by</th><th>Folder</th><th>File</th><th aria-label="Actions" /></tr>
+              <tr className="lj-cand-filters">
+                <th />
+                {['title', 'author', 'genre', 'type'].map((k) => (
+                  <th key={k}><input value={qcols[k] || ''} onChange={(e) => setQcols({ ...qcols, [k]: e.target.value })} placeholder="regex" className={qbad.includes(k) ? 'bad' : ''} aria-label={`Filter ${QCOLS[k]} (regular expression)`} /></th>
+                ))}
+                <th className="lj-qwords-f">
+                  <input value={minW} onChange={(e) => setMinW(e.target.value)} placeholder="min k" inputMode="numeric" aria-label="Minimum words, in thousands" title="Minimum words, in thousands (e.g. 50 = 50,000)" />
+                  <input value={maxW} onChange={(e) => setMaxW(e.target.value)} placeholder="max k" inputMode="numeric" aria-label="Maximum words, in thousands" title="Maximum words, in thousands (e.g. 120 = 120,000)" />
+                </th>
+                <th /><th />
+                {['folder', 'file'].map((k) => (
+                  <th key={k}><input value={qcols[k] || ''} onChange={(e) => setQcols({ ...qcols, [k]: e.target.value })} placeholder="regex" className={qbad.includes(k) ? 'bad' : ''} aria-label={`Filter ${QCOLS[k]} (regular expression)`} /></th>
+                ))}
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {fin.length > 0 && (
+                <tr className="lj-q-finhead"><td colSpan={11}><button onClick={toggleFin} aria-expanded={!hideFin}>{hideFin ? '▸' : '▾'} ✓ {fin.length} finished</button></td></tr>
+              )}
+              {shownRows.map(({ book: b, pct: p, cols: c, words }) => {
+                const isFin = readStatus(b) === 'finished';
+                const i = isFin ? -1 : todo.indexOf(b);
+                const w = WHERE[where[b.id]] || ['…', 'Checking'];
+                const last = i === todo.length - 1;
+                return (
+                  <tr key={b.id} className={isFin ? 'done' : ''}>
+                    <td className="lj-qrank">{isFin ? '✓' : i + 1}</td>
+                    <td title={b.title}><button className="link-btn" onClick={() => onOpen(b.id)} title="Open in Library">{b.title}</button></td>
+                    <td title={c.author}>{c.author}</td>
+                    <td title={c.genre}>{c.genre}</td>
+                    <td>{c.type}</td>
+                    <td title={`${words.toLocaleString()} words`}>{words ? `${Math.round(words / 1000)}k` : '—'}{estHours(b, wpm) != null ? <span className="lj-qdim"> · {estHours(b, wpm)} h</span> : ''}</td>
+                    <td><Bar pct={p} cls={isFin ? 'fin' : ''} /><span className="lj-cand-pct">{pctTxt(p)}</span></td>
+                    <td>{isFin ? (b.finishTime || '✓') : st.etaById[b.id] || '—'}</td>
+                    <td title={c.folder}>{c.folder}</td>
+                    <td title={c.file}><span className="lj-where" role="img" aria-label={w[1]} title={w[1]}>{w[0]}</span>{c.file}</td>
+                    <td className="lj-qacts">
+                      {csOf[b.id] && <button className="lj-queue-read" disabled={finding === b.id} onClick={() => openTheFile(b)} title="Read it">{finding === b.id ? '⟳' : '▶'}</button>}
+                      {!isFin && <>
+                        <button disabled={i === 0} onClick={() => move(b, 0)} aria-label={`Move “${b.title}” to the top`} title="To the top (of what's left)">⤒</button>
+                        <button disabled={i === 0} onClick={() => move(b, i - 1)} aria-label={`Move “${b.title}” up`} title="Up one place in the full queue">↑</button>
+                        <button disabled={last} onClick={() => move(b, i + 1)} aria-label={`Move “${b.title}” down`} title="Down one place in the full queue">↓</button>
+                        <button disabled={last} onClick={() => move(b, todo.length)} aria-label={`Move “${b.title}” to the bottom`} title="To the bottom">⤓</button>
+                      </>}
+                      {others.length > 0 && (
+                        <select className="lj-q-move" value="" aria-label={`Move “${b.title}” to another queue`} title="Move to another queue"
+                          onChange={(e) => { if (e.target.value) onEdit((qs) => addToQueue(qs, e.target.value, b.id)); }}>
+                          <option value="">⇄</option>
+                          {others.map((x) => <option key={x.id} value={x.id}>→ {x.name}</option>)}
+                        </select>
+                      )}
+                      <button title="Remove from this queue" aria-label={`Remove “${b.title}” from this queue`} onClick={() => onEdit((qs) => removeFromQueue(qs, queue.id, b.id))}>✕</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
+      {qfiltered && <p className="settings-note lj-cand-foot">Showing {shownRows.length} of {qrows.length}{hideFin && fin.length ? ` (${fin.length} finished hidden)` : ''} — numbers and moves still follow the full queue order.</p>}
       {folders}
     </section>
   );
@@ -2513,13 +2615,12 @@ function NamedQueue({ queue, others = [], books, wpm, setWpm, pace, fileStats, c
 const CAND_SHOW = 200;
 // ponytail: once per app session; the Find folders button re-runs it on demand.
 let foldersIndexed = false;
-function QueueCandidates({ queue, queues, books, dirs = [], wpm, fileStats, csOf, pctOf, openChecksums, onAdd, onOpen }) {
+function QueueCandidates({ queue, queues, books, dirs = [], paths, setPaths, wpm, fileStats, csOf, pctOf, openChecksums, onAdd, onOpen }) {
   const [cols, setCols] = useState({});
   const [state, setState] = useState('unfinished');
   // The browser never says which folder a file was opened from, so the Folder column comes from
   // walking your search folders (indexFolders): silently once per session when their permission is
   // already granted, or from the button (which may ask for it).
-  const [paths, setPaths] = useState(() => foundPaths());
   const [indexing, setIndexing] = useState('');
   async function runIndex(ask) {
     const wanted = Object.entries(csOf).map(([, cs]) => ({ cs, name: fileStats[cs]?.fileName })).filter((w) => w.name);

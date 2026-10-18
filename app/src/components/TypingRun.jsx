@@ -10,6 +10,7 @@ import { createReadAloud } from '../features/readAloud.js';
 import { rateFromIndex } from '../features/tts.js';
 import { fmtTime } from '../features/dateFmt.js';
 import { allTypingRuns } from '../state/storage.js';
+import { applyTheme, THEME_NAMES } from '../state/themes.js';
 import { consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress, penaltyRewind } from '../features/typingUpgrades.js';
 import { currentSession, sessionStats, bookForecast } from '../features/typingSession.js';
 import { splitRun, splitsFor } from '../features/typingSplits.js';
@@ -126,6 +127,18 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     : { ...(settings.typing || {}), ...(globalCfg || {}) };
   // ALL option writes go through here → the app-level store when wired, per-tab otherwise.
   const patchCfg = (p) => (onPatchCfg ? onPatchCfg(p) : onPatch?.({ typing: { ...cfg, ...p } }));
+  // Typing's own theme (app-wide typing option): its palette is applied to this overlay only, so every
+  // typing run looks the same whichever document the text came from. '' = follow the document.
+  const runRef = useRef(null);
+  useLayoutEffect(() => {
+    const el = runRef.current;
+    if (!el) return;
+    el.removeAttribute('style');
+    el.classList.remove('theme-dark', 'theme-light');
+    if (!cfg.theme) return;
+    const root = getComputedStyle(document.documentElement); // keep the user's chosen fonts
+    applyTheme(cfg.theme, root.getPropertyValue('--serif-family').trim(), root.getPropertyValue('--sans-family').trim(), el);
+  }, [cfg.theme]);
   // Case behaviour is BINARY and explicit: 'as written' MATCHES case (a lowercase letter no
   // longer satisfies a capital); cfg.caseFold opts into case-agnostic; the lowercase transforms
   // are inherently agnostic (typing caps still counts, per the Aa-shown display mode).
@@ -938,7 +951,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const cyclePace = () => patchCfg({ pace: { off: 'last', last: 'pb', pb: 'custom', custom: 'off' }[paceMode] || 'off' });
 
   return (
-    <div className="type-run" onPointerDown={focus}>
+    <div className="type-run" ref={runRef} onPointerDown={focus}>
       <input
         ref={inputRef}
         className="type-sink"
@@ -1077,6 +1090,13 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         })()}
         {sideVisible && !locked && (
           <aside className="tr-side" aria-label="Typing options">
+            <label className="tr-theme" title="Typing's own look, the same for every typing run — or follow the document the text came from">
+              <span>🎨 Theme</span>
+              <select value={cfg.theme || ''} onChange={(e) => patchCfg({ theme: e.target.value })} aria-label="Typing theme">
+                <option value="">Same as the document</option>
+                {THEME_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
             <div className="tt-group">Text</div>
             <Tile icon="#" label="Punctuation" state={punctState} on={noSpecial} onClick={cyclePunct} disabled={locked}
               title="Cycle: shown → hidden → dim auto-skipped ghosts. Ghosts are never required — but typing one anyway is accepted, never an error." />
