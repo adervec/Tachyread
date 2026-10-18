@@ -2842,6 +2842,7 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
   const groupedSet = new Set(groups.flatMap((g) => g.members || []));
   const ungroupedFiles = Object.entries(fileStats).filter(([cs]) => !groupedSet.has(cs));
   const [grpQ, setGrpQ] = useState(''); // New-group picker filter (ticked files always stay listed)
+  const [grpAddQ, setGrpAddQ] = useState(''); // "Add a file" search for the group being edited
   const renameGrp = (id, name) => onGroups(groups.map((g) => (g.id === id ? { ...g, name } : g)));
   const setGrpMaster = (id, cs) => onGroups(groups.map((g) => (g.id === id ? { ...g, master: cs } : g)));
   const addGrpMember = (id, cs) => cs && onGroups(groups.map((g) => (g.id === id ? { ...g, members: [...new Set([...(g.members || []), cs])] } : g)));
@@ -2984,10 +2985,13 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
                 ))}
                 <div className="lj-inline" style={{ margin: '4px 0 0' }}>
                   {ungroupedFiles.length > 0 && (
-                    <select value="" onChange={(e) => addGrpMember(g.id, e.target.value)} title="Add another edition/file to this group">
-                      <option value="">＋ Add a file…</option>
-                      {ungroupedFiles.map(([cs, f]) => <option key={cs} value={cs}>{f.fileName || cs.slice(0, 8)}</option>)}
-                    </select>
+                    <form className="lj-q-new" onSubmit={(e) => { e.preventDefault(); const m = /\[([^\]]+)\]$/.exec(grpAddQ.trim()); if (m) { addGrpMember(g.id, m[1]); setGrpAddQ(''); } }}>
+                      <input list="lj-grp-files" value={grpAddQ} onChange={(e) => setGrpAddQ(e.target.value)} placeholder="＋ Add a file — type to search…" aria-label="Add a file to this group" title="Add another edition/file to this group (type part of its name)" />
+                      <button type="submit" disabled={!/\[[^\]]+\]$/.test(grpAddQ.trim())}>Add</button>
+                      <datalist id="lj-grp-files">
+                        {ungroupedFiles.map(([cs, f]) => <option key={cs} value={`${f.fileName || cs.slice(0, 8)} [${cs}]`} />)}
+                      </datalist>
+                    </form>
                   )}
                   <button className="lj-danger" title="Delete the group (files keep their own progress)" onClick={() => forgetGrp(g.id)}>🗑 Forget group</button>
                 </div>
