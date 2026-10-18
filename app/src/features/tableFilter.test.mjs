@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import { textMatcher, inRange, inDates, anySet } from './tableFilter.js';
+
+assert.equal(textMatcher('').test, null);
+assert.ok(textMatcher('^du').test('Dune'));
+assert.ok(!textMatcher('^du').test('Old Dune'));
+const bad = textMatcher('(1897');
+assert.equal(bad.bad, true);
+assert.ok(bad.test('Dracula (1897)'), 'invalid regex → literal match');
+assert.ok(inRange(5, '', ''));
+assert.ok(inRange(50000, '40', '60', 1000));
+assert.ok(!inRange(70000, '40', '60', 1000));
+assert.ok(!inRange(null, '1', ''), 'missing value fails once a bound is set');
+assert.ok(inRange(0, '0', ''));
+assert.ok(inDates('2026-10-05T12:00', '2026-10-01', '2026-10-31'));
+assert.ok(!inDates('2026-09-30', '2026-10-01', ''));
+assert.ok(!inDates('', '2026-10-01', ''));
+assert.ok(inDates('', '', ''));
+assert.equal(anySet({ a: '', b: 'all', c: ['', ''] }), false);
+assert.equal(anySet({ a: '', c: ['', '5'] }), true);
+console.log('tableFilter: all cases pass');

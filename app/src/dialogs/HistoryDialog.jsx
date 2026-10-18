@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { textMatcher, inRange, inDates, anySet } from '../features/tableFilter.js';
+import { TextF, RangeF, DateF } from '../components/ColFilter.jsx';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { allFiles, allDocMeta, allFocusSessions, getBinding, setBinding, getLibraryBooks } from '../state/storage.js';
@@ -97,7 +99,10 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
   const [tab, setTab] = useState('overview'); // overview | calendar | library (the "Files" table)
   const [selected, setSelected] = useState(null); // checksum of the book being inspected
   const [shelfFilter, setShelfFilter] = useState(() => new Set()); // shelf ids to show; empty = every shelf
-  const [fq, setFq] = useState(''); // Files table: File-column text filter
+  // Files table column filters: regex on text, min/max on numbers, from/to on dates.
+  const NO_FF = { file: '', link: '', pct: ['', ''], words: ['', ''], time: ['', ''], wpm: ['', ''], rating: ['', ''], last: ['', ''] };
+  const [ff, setFf] = useState(NO_FF);
+  const setF = (k) => (v) => setFf((f) => ({ ...f, [k]: v }));
   const [linkFilter, setLinkFilter] = useState('all'); // all | linked | unlinked
   const [fsort, setFsort] = useState({ key: 'recent', dir: 1 }); // Files table header sort
 
@@ -280,8 +285,10 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
     let list = model.books;
     if (shelfFilter.size) list = list.filter((b) => shelfFilter.has(b.shelf));
     if (linkFilter !== 'all') list = list.filter((b) => !!linkMap[b.checksum] === (linkFilter === 'linked'));
-    const q = fq.trim().toLowerCase();
-    if (q) list = list.filter((b) => `${b.name} ${linkMap[b.checksum]?.title || ''}`.toLowerCase().includes(q));
+    const fileT = textMatcher(ff.file).test, linkT = textMatcher(ff.link).test;
+    list = list.filter((b) => (!fileT || fileT(b.name)) && (!linkT || linkT(linkMap[b.checksum]?.title || ''))
+      && inRange(b.posFrac * 100, ...ff.pct) && inRange(b.wordsRead, ...ff.words, 1000) && inRange(b.activeSecs / 3600, ...ff.time)
+      && inRange(b.avgWpm, ...ff.wpm) && inRange(b.rating, ...ff.rating) && inDates(b.lastRead, ...ff.last));
     const cmp = {
       recent: (a, b) => (b.lastRead || '').localeCompare(a.lastRead || ''),
       progress: (a, b) => b.posFrac - a.posFrac,
@@ -295,7 +302,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
     }[fsort.key] || (() => 0);
     const sorted = [...list].sort(cmp);
     return fsort.dir < 0 ? sorted.reverse() : sorted;
-  }, [model, shelfFilter, linkFilter, fq, fsort, linkMap]);
+  }, [model, shelfFilter, linkFilter, ff, fsort, linkMap]);
   const fsortBy = (key) => setFsort((s) => ({ key, dir: s.key === key ? -s.dir : 1 }));
   const fsortMark = (key) => (fsort.key === key ? (fsort.dir > 0 ? ' ▾' : ' ▴') : '');
 
@@ -399,7 +406,8 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
           {tab === 'library' && !selBook && (
             <div className="rh-library">
               <div className="rh-lib-controls">
-                <span className="settings-note" style={{ margin: 0 }}>{libraryBooks.length} file{libraryBooks.length === 1 ? '' : 's'} — filters live under each column header</span>
+                <span className="settings-note" style={{ margin: 0 }}>{libraryBooks.length} of {model?.books.length || 0} file{libraryBooks.length === 1 ? '' : 's'} — every column has a filter under its header (text: regex · numbers: min/max · dates: from/to)</span>
+                {(anySet(ff) || shelfFilter.size > 0 || linkFilter !== 'all') && <button onClick={() => { setFf(NO_FF); setShelfFilter(new Set()); setLinkFilter('all'); }}>Clear filters</button>}
               </div>
               <div className="lj-tablewrap">
                 <table className="lj-table rh-files-table">
@@ -423,13 +431,20 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
                           ))}
                         </span>
                       </th>
-                      <th><input placeholder="filter…" value={fq} onChange={(e) => setFq(e.target.value)} /></th>
+                      <th><TextF value={ff.file} onChange={setF('file')} label="file name" /></th>
                       <th>
                         <select value={linkFilter} onChange={(e) => setLinkFilter(e.target.value)} title="Filter by Trackyread link">
                           <option value="all">all</option><option value="linked">🔗 linked</option><option value="unlinked">○ not</option>
                         </select>
+                        <TextF value={ff.link} onChange={setF('link')} label="linked book title" />
                       </th>
-                      <th colSpan={7} />
+                      <th><RangeF value={ff.pct} onChange={setF('pct')} label="% through" /></th>
+                      <th><RangeF value={ff.words} onChange={setF('words')} label="words read" unit="k" /></th>
+                      <th><RangeF value={ff.time} onChange={setF('time')} label="active time" unit="h" /></th>
+                      <th><RangeF value={ff.wpm} onChange={setF('wpm')} label="WPM" /></th>
+                      <th><RangeF value={ff.rating} onChange={setF('rating')} label="rating" /></th>
+                      <th><DateF value={ff.last} onChange={setF('last')} label="Last read" /></th>
+                      <th />
                     </tr>
                   </thead>
                   <tbody>

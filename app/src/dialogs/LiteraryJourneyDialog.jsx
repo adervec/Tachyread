@@ -35,6 +35,8 @@ import { normTitle } from '../document/tocWizard.js';
 import { planBulkLinks, matchScore, newBookFor } from '../features/bulkLink.js';
 import { getSearchDirs, addSearchDir, removeSearchDir, pickerSupported, foundPaths, indexFolders, rememberPaths } from '../features/fileLocator.js';
 import { openBookFile, fileWhere } from '../features/openBook.js';
+import { textMatcher, inRange, inDates, anySet } from '../features/tableFilter.js';
+import { TextF, RangeF, DateF } from '../components/ColFilter.jsx';
 import { newQueue, addToQueue, addToDeck, deleteQueue, liveQueues, dedupeQueues, moveQueue, splitFinished, moveInTodo, queuesOverview, removeFromQueue, setQueueIds, swapQueueId, mergeQueues, splitQueue, QUEUE_SPLITS, queueBooks, queueStats, QUEUE_SORTS, sortQueueIds, deckMigration, recentPace, CAND_COLS, CAND_STATES, candidateRows, filterCandidates, bookRow } from '../features/readingQueues.js';
 import { groupForChecksum, masterOf, makeGroup, groupFiles } from '../features/bookGroups.js';
 import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordCount } from '../features/readingTime.js';
@@ -246,7 +248,9 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   // Library view controls
   const [flt, setFlt] = useState({ readState: 'all', fnf: 'all', difficulty: [], recMin: 0, genre: 'all', search: '', recBy: 'all', tag: 'all', ctype: 'all' });
   // Per-column filters live in the table header (status/title/author/genre/type/file-link).
-  const [colF, setColF] = useState({ title: '', author: '', genre: 'all', type: 'all', status: 'all', file: 'all' });
+  // Library table column filters: every column — regex on text, min/max on numbers, from/to on dates.
+  const NO_COLF = { title: '', author: '', genre: 'all', type: 'all', status: 'all', file: 'all', started: ['', ''], pct: ['', ''], diff: ['', ''], rec: ['', ''], pages: ['', ''], pub: ['', ''], finished: ['', ''] };
+  const [colF, setColF] = useState(NO_COLF);
   const [sort, setSort] = useState({ key: 'rec', dir: 1 }); // table-header sorting; dir 1 = the key's natural order
   const [limit, setLimit] = useState(100);
   const [selected, setSelected] = useState(null);
@@ -444,12 +448,15 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     if (!books) return [];
     let base = filterBooks(books, flt);
     // Column filters (header row): text includes on title/author, exact on the rest.
-    const tq = colF.title.trim().toLowerCase();
-    const aq = colF.author.trim().toLowerCase();
+    const tq = textMatcher(colF.title).test, aq = textMatcher(colF.author).test;
     base = base.filter((b) => {
       if (colF.status !== 'all' && readStatus(b) !== colF.status) return false;
-      if (tq && !`${b.title || ''} ${b.series || ''}`.toLowerCase().includes(tq)) return false;
-      if (aq && !String(b.author || '').toLowerCase().includes(aq)) return false;
+      if (tq && !tq(`${b.title || ''} ${b.series || ''}`)) return false;
+      if (aq && !aq(b.author || '')) return false;
+      const fs = fileStats[csForBook[b.id]];
+      if (!inDates(fs?.firstRead, ...colF.started) || !inRange(fs ? (fs.coverage || 0) * 100 : null, ...colF.pct)) return false;
+      if (!inRange(b.difficultyLevel, ...colF.diff) || !inRange(b.recScore, ...colF.rec) || !inRange(b.pages, ...colF.pages) || !inRange(pubYear(b), ...colF.pub)) return false;
+      if (!inDates(finishMs(b) != null ? new Date(finishMs(b)).toISOString() : '', ...colF.finished)) return false;
       if (colF.genre !== 'all' && (b.genre || '') !== colF.genre) return false;
       if (colF.type !== 'all' && contentType(b) !== colF.type) return false;
       if (colF.file !== 'all' && !!csForBook[b.id] !== (colF.file === 'linked')) return false;
@@ -897,6 +904,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               </div>
               <div className="lj-toolbar2">
                 <span className="settings-note">{filtered.length} match{filtered.length === 1 ? '' : 'es'}</span>
+                {anySet(colF) && <button onClick={() => { setColF(NO_COLF); setLimit(100); }} title="Clear the filters under the table's column headers">Clear column filters</button>}
                 <span className="lj-viewtoggle" role="tablist" aria-label="List view">
                   <button className={ljView !== 'tiles' ? 'on' : ''} onClick={() => onPatch?.({ ljView: 'table' })} title="Table view">▤ Table</button>
                   <button className={ljView === 'tiles' ? 'on' : ''} onClick={() => onPatch?.({ ljView: 'tiles' })} title="Cover tile grid">▦ Tiles</button>
@@ -948,8 +956,8 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                           <option value="all">all</option><option value="finished">✅</option><option value="reading">📖</option><option value="queue">📋</option><option value="toread">🔖</option><option value="abandoned">✕</option>
                         </select>
                       </th>
-                      <th><input placeholder="filter…" value={colF.title} onChange={(e) => { setColF({ ...colF, title: e.target.value }); setLimit(100); }} /></th>
-                      <th><input placeholder="filter…" value={colF.author} onChange={(e) => { setColF({ ...colF, author: e.target.value }); setLimit(100); }} /></th>
+                      <th><TextF value={colF.title} onChange={(v) => { setColF({ ...colF, title: v }); setLimit(100); }} label="title or series" /></th>
+                      <th><TextF value={colF.author} onChange={(v) => { setColF({ ...colF, author: v }); setLimit(100); }} label="author" /></th>
                       <th>
                         <select value={colF.genre} onChange={(e) => { setColF({ ...colF, genre: e.target.value }); setLimit(100); }} title="Filter by genre">
                           <option value="all">all</option>{genreOptions.map((g) => <option key={g} value={g}>{g}</option>)}
@@ -965,7 +973,12 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                           <option value="all">all</option><option value="linked">📄</option><option value="unlinked">—</option>
                         </select>
                       </th>
-                      <th colSpan={8} />
+                      {[['started', 'Started', 'date'], ['pct', '% read'], ['diff', 'difficulty'], ['rec', 'rec score'], ['pages', 'pages'], ['pub', 'year published'], ['finished', 'Finished', 'date']].map(([k, label, kind]) => (
+                        <th key={k}>{kind === 'date'
+                          ? <DateF value={colF[k]} onChange={(v) => { setColF({ ...colF, [k]: v }); setLimit(100); }} label={label} />
+                          : <RangeF value={colF[k]} onChange={(v) => { setColF({ ...colF, [k]: v }); setLimit(100); }} label={label} />}</th>
+                      ))}
+                      <th />
                     </tr>
                   </thead>
                   <tbody>
@@ -1726,6 +1739,7 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
 // imported; a row expands to show its imported reference fields.
 function RefList({ kind, items, subitems, books, onOpen }) {
   const [q, setQ] = useState('');
+  const [rf, setRf] = useState({ books: ['', ''], finished: ['', ''], pct: ['', ''] }); // column ranges
   const [open, setOpen] = useState(null);
   const [rsort, setRsort] = useState({ key: 'books', dir: 1 });
   const nameKey = kind === 'author' ? 'author' : 'genre';
@@ -1737,14 +1751,15 @@ function RefList({ kind, items, subitems, books, onOpen }) {
   }, [items, books, nameKey]);
   const rows = useMemo(() => {
     const base = (items || derived || [])
-      .filter((it) => !q || String(it[nameKey] || '').toLowerCase().includes(q.toLowerCase()))
+      .filter((it) => { const t = textMatcher(q).test; return !t || t(it[nameKey] || ''); })
       .map((it) => {
         const name = it[nameKey] || '—';
         const mine = books.filter((b) => (b[nameKey] || '') === name);
         const fin = mine.filter((b) => readStatus(b) === 'finished').length;
         const total = mine.length || it.count || 0;
         return { it, name, mine: mine.length, fin, total, pct: total ? (fin / total) * 100 : 0 };
-      });
+      })
+      .filter((r) => inRange(r.total, ...rf.books) && inRange(r.fin, ...rf.finished) && inRange(r.pct, ...rf.pct));
     const cmp = {
       name: (a, b) => a.name.localeCompare(b.name),
       books: (a, b) => b.total - a.total,
@@ -1753,7 +1768,7 @@ function RefList({ kind, items, subitems, books, onOpen }) {
     }[rsort.key] || (() => 0);
     const sorted = base.sort(cmp);
     return rsort.dir < 0 ? sorted.reverse() : sorted;
-  }, [items, derived, q, books, nameKey, rsort]);
+  }, [items, derived, q, books, nameKey, rsort, rf]);
   const rsortBy = (key) => setRsort((s) => ({ key, dir: s.key === key ? -s.dir : 1 }));
   const rsortMark = (key) => (rsort.key === key ? (rsort.dir > 0 ? ' ▾' : ' ▴') : '');
   // Best-effort external lookups — plain search URLs, nothing is fetched until clicked.
@@ -1761,8 +1776,8 @@ function RefList({ kind, items, subitems, books, onOpen }) {
   const wikiUrl = (name) => `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(name)}`;
   return (
     <div className="lj-ref">
-      <input className="lj-search" placeholder={`Search ${kind}s…`} value={q} onChange={(e) => setQ(e.target.value)} />
-      <p className="settings-note">{rows.length} {kind}{rows.length === 1 ? '' : 's'}{!items && ' (derived from your books)'} · click a name for its reference details</p>
+      <p className="settings-note">{rows.length} {kind}{rows.length === 1 ? '' : 's'}{!items && ' (derived from your books)'}{rows.length > 300 ? ' · showing the first 300 — filter to narrow' : ''} · click a name for its reference details
+        {(q || anySet(rf)) && <> · <button className="link-btn" onClick={() => { setQ(''); setRf({ books: ['', ''], finished: ['', ''], pct: ['', ''] }); }}>clear filters</button></>}</p>
       <div className="lj-tablewrap">
         <table className="lj-table lj-ref-table">
           <thead>
@@ -1772,6 +1787,13 @@ function RefList({ kind, items, subitems, books, onOpen }) {
               ))}
               <th>Links</th>
               <th aria-label="Show in library" />
+            </tr>
+            <tr className="lj-filter-row">
+              <th><TextF value={q} onChange={setQ} label={kind === 'author' ? 'author name' : 'genre name'} /></th>
+              <th><RangeF value={rf.books} onChange={(v) => setRf({ ...rf, books: v })} label="books" /></th>
+              <th><RangeF value={rf.finished} onChange={(v) => setRf({ ...rf, finished: v })} label="finished" /></th>
+              <th><RangeF value={rf.pct} onChange={(v) => setRf({ ...rf, pct: v })} label="completion %" /></th>
+              <th colSpan={2} />
             </tr>
           </thead>
           <tbody>
@@ -2819,6 +2841,7 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
   // Group management (rename / master / members / forget) — mutates global.bookGroups in place.
   const groupedSet = new Set(groups.flatMap((g) => g.members || []));
   const ungroupedFiles = Object.entries(fileStats).filter(([cs]) => !groupedSet.has(cs));
+  const [grpQ, setGrpQ] = useState(''); // New-group picker filter (ticked files always stay listed)
   const renameGrp = (id, name) => onGroups(groups.map((g) => (g.id === id ? { ...g, name } : g)));
   const setGrpMaster = (id, cs) => onGroups(groups.map((g) => (g.id === id ? { ...g, master: cs } : g)));
   const addGrpMember = (id, cs) => cs && onGroups(groups.map((g) => (g.id === id ? { ...g, members: [...new Set([...(g.members || []), cs])] } : g)));
@@ -2850,6 +2873,7 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
   // (features/bulkLink.js). Each row carries its own target — an existing book, a new book of a
   // chosen type, or skip — so a wrong guess is a dropdown away from right. Weak matches default to
   // skip: a wrong link the user accepts is worse than a file left for later.
+  const [bulkF, setBulkF] = useState({ file: '', words: ['', ''], read: ['', ''], tier: 'all' }); // bulk-link table filters
   const [bulk, setBulk] = useState(null); // rows from planBulkLinks, each with a live `target`
   const [pick, setPick] = useState(null); // { cs, q } — the row whose library search box is open
   const [busy, setBusy] = useState(null); // { done, total, label } while applying — the table is read-only then
@@ -2976,8 +3000,9 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
       {ungroupedFiles.length >= 2 && (
         <details className="lj-newgrp">
           <summary>＋ New group — pick 2+ files that are the same book</summary>
+          <TextF value={grpQ} onChange={setGrpQ} label="file name" />
           <div className="lj-newgrp-list">
-            {ungroupedFiles.map(([cs, f]) => (
+            {ungroupedFiles.filter(([cs, f]) => newSel.has(cs) || !textMatcher(grpQ).test || textMatcher(grpQ).test(f.fileName || '')).map(([cs, f]) => (
               <label key={cs} className="inline-check">
                 <input type="checkbox" checked={newSel.has(cs)} onChange={(e) => setNewSel((prev) => { const n = new Set(prev); e.target.checked ? n.add(cs) : n.delete(cs); return n; })} />
                 {f.fileName || cs.slice(0, 8)}
@@ -3006,9 +3031,22 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
         <div className="lj-cleanup">
           <div className="lj-tablewrap">
             <table className="lj-table lj-bulk">
-              <thead><tr><th>File</th><th>Words</th><th>Read</th><th>Match</th><th>Link to</th><th></th></tr></thead>
+              <thead>
+                <tr><th>File</th><th>Words</th><th>Read</th><th>Match</th><th>Link to</th><th></th></tr>
+                <tr className="lj-filter-row">
+                  <th><TextF value={bulkF.file} onChange={(v) => setBulkF({ ...bulkF, file: v })} label="file" /></th>
+                  <th><RangeF value={bulkF.words} onChange={(v) => setBulkF({ ...bulkF, words: v })} label="words" unit="k" /></th>
+                  <th><RangeF value={bulkF.read} onChange={(v) => setBulkF({ ...bulkF, read: v })} label="% read" /></th>
+                  <th>
+                    <select value={bulkF.tier} onChange={(e) => setBulkF({ ...bulkF, tier: e.target.value })} aria-label="Filter by match">
+                      <option value="all">all</option><option value="strong">✓ sure</option><option value="weak">? review</option><option value="none">– none</option>
+                    </select>
+                  </th>
+                  <th colSpan={2} />
+                </tr>
+              </thead>
               <tbody>
-                {bulk.map((r) => {
+                {bulk.filter((r) => { const t = textMatcher(bulkF.file).test; return (!t || t(`${r.title} ${r.fileName || ''}`)) && inRange(r.words, ...bulkF.words, 1000) && inRange(r.coverage * 100, ...bulkF.read) && (bulkF.tier === 'all' || r.tier === bulkF.tier); }).map((r) => {
                   const toBook = r.target !== 'skip' && !r.target.startsWith('new:');
                   const dupe = toBook && bulk.some((o) => o !== r && o.target === r.target);
                   const taken = toBook ? fileOf[r.target] : null;
