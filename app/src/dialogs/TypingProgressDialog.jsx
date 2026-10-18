@@ -7,6 +7,8 @@ import { typingWeekly, typingOverall } from '../features/typingStats.js';
 import { typingStreak, aggregateKeys, fingerStats, keyFinger } from '../features/typingUpgrades.js';
 import { keyboardRows } from '../features/keyboards.js';
 import { normalizeRuns, difficultyRows, runDifficulty, difficultyLabel } from '../features/typingDifficulty.js';
+import { textMatcher, inRange, inDates, anySet } from '../features/tableFilter.js';
+import { TextF, RangeF, DateF } from '../components/ColFilter.jsx';
 
 function fmtDur(ms) {
   const s = Math.round((ms || 0) / 1000);
@@ -75,6 +77,13 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
   // On by default: raw WPM tracks the text as much as the typist, so an un-normalised trend calls a
   // week of dense text a slump. The toggle is there because the raw number is still what you felt.
   const [adjust, setAdjust] = useState(true);
+  // Column filters: weekly summaries and recent runs (regex text · min/max numbers · from/to dates).
+  const NO_WF = { week: ['', ''], runs: ['', ''], avg: ['', ''], best: ['', ''], acc: ['', ''], words: ['', ''] };
+  const NO_RUNF = { when: ['', ''], mode: '', device: 'all', text: ['', ''], net: ['', ''], gross: ['', ''], acc: ['', ''], cons: ['', ''], words: ['', ''], time: ['', ''], tier: '' };
+  const [wf, setWf] = useState(NO_WF);
+  const [runF, setRunF] = useState(NO_RUNF);
+  const setW = (k) => (v) => setWf((f) => ({ ...f, [k]: v }));
+  const setR = (k) => (v) => setRunF((f) => ({ ...f, [k]: v }));
 
   useEffect(() => {
     allTypingRuns().then((r) => setRawRuns(r.sort((a, b) => a.ts - b.ts))).catch(() => setRawRuns([]));
@@ -169,9 +178,21 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                 <div className="tp-section">Weekly summaries</div>
                 <div className="tp-table-wrap">
                   <table className="tp-table">
-                    <thead><tr><th>Week</th><th>Runs</th><th>Avg net</th><th>Δ vs prev</th><th>Best</th><th>Avg acc</th><th>Words</th><th>Time</th></tr></thead>
+                    <thead>
+                      <tr><th>Week</th><th>Runs</th><th>Avg net</th><th>Δ vs prev</th><th>Best</th><th>Avg acc</th><th>Words</th><th>Time{anySet(wf) && <button className="ab-clearf" onClick={() => setWf(NO_WF)} title="Clear these filters">✕</button>}</th></tr>
+                      <tr className="ab-filter-row">
+                        <th><DateF value={wf.week} onChange={setW('week')} label="Week starting" /></th>
+                        <th><RangeF value={wf.runs} onChange={setW('runs')} label="runs" /></th>
+                        <th><RangeF value={wf.avg} onChange={setW('avg')} label="average net WPM" /></th>
+                        <th />
+                        <th><RangeF value={wf.best} onChange={setW('best')} label="best WPM" /></th>
+                        <th><RangeF value={wf.acc} onChange={setW('acc')} label="average accuracy %" /></th>
+                        <th><RangeF value={wf.words} onChange={setW('words')} label="words" unit="k" /></th>
+                        <th />
+                      </tr>
+                    </thead>
                     <tbody>
-                      {weekly.map((w) => (
+                      {weekly.filter((w) => inDates(w.week, ...wf.week) && inRange(w.runs, ...wf.runs) && inRange(w.avgNet, ...wf.avg) && inRange(w.best, ...wf.best) && inRange(w.avgAcc, ...wf.acc) && inRange(w.words, ...wf.words, 1000)).map((w) => (
                         <tr key={w.week}>
                           <td>{w.week} → {w.end}</td>
                           <td>{w.runs}</td>
@@ -285,10 +306,34 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
           <div className="tp-table-wrap">
             <table className="tp-table">
               <thead>
-                <tr><th>When</th><th>Mode</th><th>Device</th><th>Text</th><th>{adjust ? 'Adj' : 'Net'}</th><th>Gross</th><th>Acc</th><th>Consist.</th><th>Words</th><th>Time</th><th>Tier</th></tr>
+                <tr><th>When</th><th>Mode</th><th>Device</th><th>Text</th><th>{adjust ? 'Adj' : 'Net'}</th><th>Gross</th><th>Acc</th><th>Consist.</th><th>Words</th><th>Time</th><th>Tier{anySet(runF) && <button className="ab-clearf" onClick={() => setRunF(NO_RUNF)} title="Clear these filters">✕</button>}</th></tr>
+                <tr className="ab-filter-row">
+                  <th><DateF value={runF.when} onChange={setR('when')} label="Run date" /></th>
+                  <th><TextF value={runF.mode} onChange={setR('mode')} label="mode" /></th>
+                  <th>
+                    <select value={runF.device} onChange={(e) => setR('device')(e.target.value)} aria-label="Filter by device">
+                      <option value="all">all</option><option value="Desktop">🖥</option><option value="Mobile">📱</option>
+                    </select>
+                  </th>
+                  <th><RangeF value={runF.text} onChange={setR('text')} label="text difficulty ×" /></th>
+                  <th><RangeF value={runF.net} onChange={setR('net')} label="net WPM" /></th>
+                  <th><RangeF value={runF.gross} onChange={setR('gross')} label="gross WPM" /></th>
+                  <th><RangeF value={runF.acc} onChange={setR('acc')} label="accuracy %" /></th>
+                  <th><RangeF value={runF.cons} onChange={setR('cons')} label="consistency %" /></th>
+                  <th><RangeF value={runF.words} onChange={setR('words')} label="words" /></th>
+                  <th><RangeF value={runF.time} onChange={setR('time')} label="duration" unit=" min" /></th>
+                  <th><TextF value={runF.tier} onChange={setR('tier')} label="tier" /></th>
+                </tr>
               </thead>
               <tbody>
-                {[...runs].reverse().slice(0, 50).map((r, i) => (
+                {/* Unfiltered: the latest 50. Filtered: searches every run (up to 500 shown). */}
+                {[...runs].reverse().filter((r) => {
+                  const mt = textMatcher(runF.mode).test, tt = textMatcher(runF.tier).test;
+                  return inDates(r.ts ? new Date(r.ts).toISOString() : '', ...runF.when) && (!mt || mt(r.mode ? (TYPING_MODE_BY_ID[r.mode]?.label || r.mode) : ''))
+                    && (runF.device === 'all' || r.device === runF.device) && inRange(runDifficulty(r), ...runF.text) && inRange(r.netWpm, ...runF.net)
+                    && inRange(r.grossWpm, ...runF.gross) && inRange(r.accuracy, ...runF.acc) && inRange(r.consistency, ...runF.cons)
+                    && inRange(r.words, ...runF.words) && inRange(r.durationMs / 60000, ...runF.time) && (!tt || tt(r.tier || ''));
+                }).slice(0, anySet(runF) ? 500 : 50).map((r, i) => (
                   <tr key={i}>
                     <td>{fmtDateTime(r.ts)}{r.pb?.allTime ? ' 🏆' : r.pb?.mode ? ' 🥇' : ''}</td>
                     <td>{r.mode ? (TYPING_MODE_BY_ID[r.mode]?.label || r.mode) : '—'}</td>

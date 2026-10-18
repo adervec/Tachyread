@@ -173,6 +173,20 @@ export default function AudiobookDialog({ onClose }) {
   const NO_ABF = { coverage: ['', ''], chunks: ['', ''], clips: ['', ''], size: ['', ''], length: ['', ''], words: ['', ''], voices: '', folders: '', last: ['', ''] };
   const [abF, setAbF] = useState(NO_ABF);
   const setAb = (k) => (v) => setAbF((f) => ({ ...f, [k]: v }));
+  // Stats tab filters: throughput-by-voice and recent-runs tables.
+  const NO_VF = { voice: '', runs: ['', ''], chars: ['', ''], rate: ['', ''], ok: ['', ''], failed: ['', ''] };
+  const NO_RF = { when: ['', ''], book: '', pass: '', voice: '', chunks: ['', ''], rate: ['', ''], status: 'all' };
+  const [vf, setVf] = useState(NO_VF);
+  const [rf, setRf] = useState(NO_RF);
+  // Per-chunk clips table filters (hidden rows keep their real priority numbers).
+  const NO_CF = { source: '', length: ['', ''], size: ['', ''], added: ['', ''], quality: ['', ''] };
+  const [cf, setCf] = useState(NO_CF);
+  // Narration-queue and download-folder table filters (hidden queue rows keep their real order).
+  const NO_QF = { status: 'all', book: '', pass: '', voice: '', pct: ['', ''], chunks: ['', ''], chars: ['', ''], queued: ['', ''], finished: ['', ''] };
+  const NO_FF = { book: '', shelf: '', tracks: ['', ''], format: '', synced: ['', ''] };
+  const [qf, setQf] = useState(NO_QF);
+  const [fldF, setFldF] = useState(NO_FF);
+  const [fAddQ, setFAddQ] = useState({}); // folder id → "add a book" search text
   const [showNoAudio, setShowNoAudio] = useState(false);
   const queueRef = useRef(queue);
   queueRef.current = queue;
@@ -928,12 +942,35 @@ export default function AudiobookDialog({ onClose }) {
                 <thead>
                   <tr>
                     <th title="Status"></th><th>Book</th><th>Pass</th><th>Voice</th><th>Progress</th><th>Chunks</th>
-                    <th>Chars</th><th title="Time left at the measured rate">ETA</th><th>Queued</th><th>Finished</th><th></th>
+                    <th>Chars</th><th title="Time left at the measured rate">ETA</th><th>Queued</th><th>Finished</th><th>{anySet(qf) && <button className="ab-clearf" onClick={() => setQf(NO_QF)} title="Clear these filters">✕</button>}</th>
+                  </tr>
+                  <tr className="ab-filter-row">
+                    <th>
+                      <select value={qf.status} onChange={(e) => setQf({ ...qf, status: e.target.value })} aria-label="Filter by status">
+                        <option value="all">all</option><option value="queued">◌</option><option value="running">●</option><option value="done">✓</option><option value="error">⚠</option><option value="stopped">■</option>
+                      </select>
+                    </th>
+                    <th><TextF value={qf.book} onChange={(v) => setQf({ ...qf, book: v })} label="book" /></th>
+                    <th><TextF value={qf.pass} onChange={(v) => setQf({ ...qf, pass: v })} label="pass" /></th>
+                    <th><TextF value={qf.voice} onChange={(v) => setQf({ ...qf, voice: v })} label="voice" /></th>
+                    <th><RangeF value={qf.pct} onChange={(v) => setQf({ ...qf, pct: v })} label="progress %" /></th>
+                    <th><RangeF value={qf.chunks} onChange={(v) => setQf({ ...qf, chunks: v })} label="chunks" /></th>
+                    <th><RangeF value={qf.chars} onChange={(v) => setQf({ ...qf, chars: v })} label="characters" unit="k" /></th>
+                    <th />
+                    <th><DateF value={qf.queued} onChange={(v) => setQf({ ...qf, queued: v })} label="Queued" /></th>
+                    <th><DateF value={qf.finished} onChange={(v) => setQf({ ...qf, finished: v })} label="Finished" /></th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
                   {queue.map((j, i) => {
                     const pctJ = j.charsTotal ? Math.round((j.charsDone / j.charsTotal) * 100) : 0;
+                    const tq = (k) => textMatcher(qf[k]).test;
+                    const iso = (t) => (t ? new Date(t).toISOString() : '');
+                    if ((qf.status !== 'all' && j.status !== qf.status) || (tq('book') && !tq('book')(j.fileName || ''))
+                      || (tq('pass') && !tq('pass')(j.lines ? `1 chunk @ line ${j.lines[0] + 1}` : JOB_KIND_LABEL[j.kind] || j.kind || ''))
+                      || (tq('voice') && !tq('voice')(j.voiceLabel || '')) || !inRange(pctJ, ...qf.pct) || !inRange(j.total, ...qf.chunks)
+                      || !inRange(j.charsTotal, ...qf.chars, 1000) || !inDates(iso(j.queuedAt), ...qf.queued) || !inDates(iso(j.finishedAt), ...qf.finished)) return null;
                     const ICON = { queued: '◌', running: '●', done: '✓', error: '⚠', stopped: '■' };
                     const fin = isFinished(j);
                     const eta = !fin && thr.msPerChar ? (Math.max(0, j.charsTotal - j.charsDone) * thr.msPerChar) / 1000 : null;
@@ -1137,12 +1174,25 @@ export default function AudiobookDialog({ onClose }) {
                     </div>
                     {assigned.length > 0 && (
                       <table className="ab-table ab-folder-table">
-                        <thead><tr><th>Book</th><th>Shelf</th><th>Tracks</th><th>Format</th><th>Synced</th><th></th></tr></thead>
+                        <thead>
+                          <tr><th>Book</th><th>Shelf</th><th>Tracks</th><th>Format</th><th>Synced</th><th>{anySet(fldF) && <button className="ab-clearf" onClick={() => setFldF(NO_FF)} title="Clear these filters (they apply to every folder)">✕</button>}</th></tr>
+                          <tr className="ab-filter-row">
+                            <th><TextF value={fldF.book} onChange={(v) => setFldF({ ...fldF, book: v })} label="book" /></th>
+                            <th><TextF value={fldF.shelf} onChange={(v) => setFldF({ ...fldF, shelf: v })} label="shelf" /></th>
+                            <th><RangeF value={fldF.tracks} onChange={(v) => setFldF({ ...fldF, tracks: v })} label="tracks" /></th>
+                            <th><TextF value={fldF.format} onChange={(v) => setFldF({ ...fldF, format: v })} label="format" /></th>
+                            <th><DateF value={fldF.synced} onChange={(v) => setFldF({ ...fldF, synced: v })} label="Synced" /></th>
+                            <th />
+                          </tr>
+                        </thead>
                         <tbody>
                           {assigned.map((cs) => {
                             const b = f.books[cs];
                             const n = Object.keys(b.tracks || {}).length;
                             const live = shelfFor(trk.binding, trk.books, cs);
+                            const ft = (k) => textMatcher(fldF[k]).test;
+                            if ((ft('book') && !ft('book')(b.fileName || '')) || (ft('shelf') && !ft('shelf')(live || '')) || !inRange(b.syncedAt ? n : null, ...fldF.tracks)
+                              || (ft('format') && !ft('format')(b.format || '')) || !inDates(b.syncedAt ? new Date(b.syncedAt).toISOString() : '', ...fldF.synced)) return null;
                             return (
                               <tr key={cs}>
                                 <td className="ab-td-name" title={b.fileName}>📖 {b.fileName}</td>
@@ -1163,10 +1213,19 @@ export default function AudiobookDialog({ onClose }) {
                       </table>
                     )}
                     <div className="ab-fbook-add">
-                      <select value="" aria-label={`Add a book to ${f.name}`} onChange={(e) => { const cs = e.target.value; if (!cs) return; const o = options.find((x) => x.cs === cs); commitFolders(assignBook(foldersRef.current, f.id, cs, o && o.name)); }}>
-                        <option value="">➕ Add a book to this folder…</option>
-                        {options.map((o) => <option key={o.cs} value={o.cs}>{o.name}</option>)}
-                      </select>
+                      <form className="ab-fbook-pick" onSubmit={(e) => {
+                        e.preventDefault();
+                        const m = /\[([^\]]+)\]$/.exec(String(fAddQ[f.id] || '').trim());
+                        const o = m && options.find((x) => x.cs === m[1]);
+                        if (!o) return;
+                        commitFolders(assignBook(foldersRef.current, f.id, o.cs, o.name));
+                        setFAddQ((q) => ({ ...q, [f.id]: '' }));
+                      }}>
+                        <input list={`ab-fbooks-${f.id}`} value={fAddQ[f.id] || ''} onChange={(e) => setFAddQ((q) => ({ ...q, [f.id]: e.target.value }))}
+                          placeholder="➕ Add a book to this folder — type to search…" aria-label={`Add a book to ${f.name}`} />
+                        <button type="submit" disabled={!/\[[^\]]+\]$/.test(String(fAddQ[f.id] || '').trim())}>Add</button>
+                        <datalist id={`ab-fbooks-${f.id}`}>{options.map((o) => <option key={o.cs} value={`${o.name} [${o.cs}]`} />)}</datalist>
+                      </form>
                       <button disabled={!options.length} onClick={() => addAllToFolder(f, options)} title="Add every book not already in this folder">➕ Add all ({options.length})</button>
                       {assigned.length > 1 && <button className="grab-trash" onClick={() => removeAllFromFolder(f)} title="Stop syncing every book here — files already written stay on disk">✕ Remove all ({assigned.length})</button>}
                     </div>
@@ -1201,9 +1260,19 @@ export default function AudiobookDialog({ onClose }) {
                 with the rate for the voice you actually picked rather than a blended average.
               </p>
               <table className="ab-table">
-                <thead><tr><th>Voice</th><th>Runs</th><th>Chars</th><th>Chars/s</th><th>Generated</th><th>Failed</th></tr></thead>
+                <thead>
+                  <tr><th>Voice</th><th>Runs</th><th>Chars</th><th>Chars/s</th><th>Generated</th><th>Failed{anySet(vf) && <button className="ab-clearf" onClick={() => setVf(NO_VF)} title="Clear these filters">✕</button>}</th></tr>
+                  <tr className="ab-filter-row">
+                    <th><TextF value={vf.voice} onChange={(v) => setVf({ ...vf, voice: v })} label="voice" /></th>
+                    <th><RangeF value={vf.runs} onChange={(v) => setVf({ ...vf, runs: v })} label="runs" /></th>
+                    <th><RangeF value={vf.chars} onChange={(v) => setVf({ ...vf, chars: v })} label="characters" unit="k" /></th>
+                    <th><RangeF value={vf.rate} onChange={(v) => setVf({ ...vf, rate: v })} label="chars per second" /></th>
+                    <th><RangeF value={vf.ok} onChange={(v) => setVf({ ...vf, ok: v })} label="generated" /></th>
+                    <th><RangeF value={vf.failed} onChange={(v) => setVf({ ...vf, failed: v })} label="failed" /></th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {byVoice.map((v) => {
+                  {byVoice.filter((v) => { const t = textMatcher(vf.voice).test; return (!t || t(labelVoice(v.voice))) && inRange(v.runs, ...vf.runs) && inRange(v.chars, ...vf.chars, 1000) && inRange(v.charsPerSec, ...vf.rate) && inRange(v.ok, ...vf.ok) && inRange(v.failed, ...vf.failed); }).map((v) => {
                     const share = byVoice[0].charsPerSec ? (v.charsPerSec / Math.max(...byVoice.map((x) => x.charsPerSec))) * 100 : 0;
                     return (
                       <tr key={v.voice}>
@@ -1224,9 +1293,31 @@ export default function AudiobookDialog({ onClose }) {
 
               <div className="field-section">Recent runs</div>
               <table className="ab-table">
-                <thead><tr><th>When</th><th>Book</th><th>Pass</th><th>Voice</th><th>Chunks</th><th>Rate</th><th></th></tr></thead>
+                <thead>
+                  <tr><th>When</th><th>Book</th><th>Pass</th><th>Voice</th><th>Chunks</th><th>Rate</th><th>{anySet(rf) && <button className="ab-clearf" onClick={() => setRf(NO_RF)} title="Clear these filters">✕</button>}</th></tr>
+                  <tr className="ab-filter-row">
+                    <th><DateF value={rf.when} onChange={(v) => setRf({ ...rf, when: v })} label="Run date" /></th>
+                    <th><TextF value={rf.book} onChange={(v) => setRf({ ...rf, book: v })} label="book" /></th>
+                    <th><TextF value={rf.pass} onChange={(v) => setRf({ ...rf, pass: v })} label="pass" /></th>
+                    <th><TextF value={rf.voice} onChange={(v) => setRf({ ...rf, voice: v })} label="voice" /></th>
+                    <th><RangeF value={rf.chunks} onChange={(v) => setRf({ ...rf, chunks: v })} label="chunks generated" /></th>
+                    <th><RangeF value={rf.rate} onChange={(v) => setRf({ ...rf, rate: v })} label="chars per second" /></th>
+                    <th>
+                      <select value={rf.status} onChange={(e) => setRf({ ...rf, status: e.target.value })} aria-label="Filter by outcome">
+                        <option value="all">all</option><option value="done">✓</option><option value="stopped">■</option><option value="other">⚠</option>
+                      </select>
+                    </th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {[...runs].reverse().slice(0, 20).map((r, i) => (
+                  {/* Unfiltered: the latest 20. Filtered: searches every logged run (up to 200 shown). */}
+                  {[...runs].reverse().filter((r) => {
+                    const t = (k) => textMatcher(rf[k]).test;
+                    const st = r.status === 'done' || r.status === 'stopped' ? r.status : 'other';
+                    return inDates(r.at ? new Date(r.at).toISOString() : '', ...rf.when) && (!t('book') || t('book')(r.fileName || ''))
+                      && (!t('pass') || t('pass')(r.lines ? '1 chunk' : (JOB_KIND_LABEL[r.kind] || r.kind || ''))) && (!t('voice') || t('voice')(labelVoice(r.voiceId)))
+                      && inRange(r.ok, ...rf.chunks) && inRange(r.ms > 0 ? (r.charsDone / r.ms) * 1000 : null, ...rf.rate) && (rf.status === 'all' || st === rf.status);
+                  }).slice(0, anySet(rf) ? 200 : 20).map((r, i) => (
                     <tr key={i}>
                       <td>{fmtWhen(r.at)}</td>
                       <td className="ab-td-name" title={r.fileName}>{r.fileName}</td>
@@ -1544,12 +1635,26 @@ export default function AudiobookDialog({ onClose }) {
             <p className="settings-note" style={{ marginTop: 0 }}>The top clip plays. Recordings (🎤) always outrank Piper renders. Reorder or delete stale clips.</p>
             {cl.length > 0 && (
               <table className="ab-table ab-clip-table">
-                <thead><tr><th>#</th><th>Source</th><th>Wave</th><th>Length</th><th>Size</th><th>Added</th><th title="Narration-quality score for recorded takes">Quality</th><th></th></tr></thead>
+                <thead>
+                  <tr><th>#</th><th>Source</th><th>Wave</th><th>Length</th><th>Size</th><th>Added</th><th title="Narration-quality score for recorded takes">Quality</th><th>{anySet(cf) && <button className="ab-clearf" onClick={() => setCf(NO_CF)} title="Clear these filters">✕</button>}</th></tr>
+                  <tr className="ab-filter-row">
+                    <th /><th><TextF value={cf.source} onChange={(v) => setCf({ ...cf, source: v })} label="source / voice" /></th><th />
+                    <th><RangeF value={cf.length} onChange={(v) => setCf({ ...cf, length: v })} label="length" unit=" s" /></th>
+                    <th><RangeF value={cf.size} onChange={(v) => setCf({ ...cf, size: v })} label="size" unit=" KB" /></th>
+                    <th><DateF value={cf.added} onChange={(v) => setCf({ ...cf, added: v })} label="Added" /></th>
+                    <th><RangeF value={cf.quality} onChange={(v) => setCf({ ...cf, quality: v })} label="quality score" /></th><th />
+                  </tr>
+                </thead>
                 <tbody>
-                  {cl.map((c, i) => (
+                  {cl.map((c, i) => {
+                    const srcLabel = c.source === 'mic' ? '🎤 recording' : (c.voiceId?.startsWith('el:') ? labelVoice(c.voiceId) : `🤖 ${voiceLabel(c.voiceId)}`);
+                    const st = textMatcher(cf.source).test;
+                    if ((st && !st(srcLabel)) || !inRange(c.durationMs / 1000, ...cf.length) || !inRange(c.sizeBytes / 1024, ...cf.size)
+                      || !inDates(c.createdAt ? new Date(c.createdAt).toISOString() : '', ...cf.added) || !inRange(c.quality?.score, ...cf.quality)) return null;
+                    return (
                     <tr key={c.id} className={i === 0 ? 'ab-top' : ''}>
                       <td className="clip-pri">{i === 0 ? '★' : i + 1}</td>
-                      <td className="ab-td-name">{c.source === 'mic' ? '🎤 recording' : (c.voiceId?.startsWith('el:') ? labelVoice(c.voiceId) : `🤖 ${voiceLabel(c.voiceId)}`)}</td>
+                      <td className="ab-td-name">{srcLabel}</td>
                       <td><ClipWave checksum={checksum} line={li} clipId={c.id} /></td>
                       <td>{fmtDur(c.durationMs)}</td>
                       <td>{fmtBytes(c.sizeBytes)}</td>
@@ -1572,7 +1677,8 @@ export default function AudiobookDialog({ onClose }) {
                         <button className="grab-trash" onClick={async () => { if (playingKey === `${li}:${c.id}`) stopPlay(); await deleteAudioClipById(checksum, li, c.id); await refresh(); if (clipsFor(li).length === 0) setClipMgr(null); }} title="Delete this clip">🗑</button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             )}
