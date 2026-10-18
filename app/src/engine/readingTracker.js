@@ -203,8 +203,9 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
   // "Free" words: ticked read (ToC checkbox, section scan, edition catch-up) with no time and no pace —
   // read elsewhere, maybe years ago. They count for coverage but NOT for WPM (which would otherwise
   // spike: words with no minutes). Actually reading one later turns it into normal reading.
-  const MARKED = READ_SRC.marked;
-  const isFree = (i) => mask[i] === 1 && srcTrace[i] === MARKED && !wpm[i];
+  // Typed-through text is the same: covered, but the tracker has no reading time for it.
+  const MARKED = READ_SRC.marked, TYPED = READ_SRC.typing;
+  const isFree = (i) => mask[i] === 1 && (srcTrace[i] === MARKED || srcTrace[i] === TYPED) && !wpm[i];
   let freeCount = 0;
   for (let i = 0; i < wordCount; i++) if (isFree(i)) freeCount++;
   let sessionNewWords = 0;
@@ -218,13 +219,16 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
   let longRegressions = 0;
   const regress = []; // capped recent regressions: {at, back, ms, ts}
   const events = []; // {ts, processed, activeMs}
-  const dayMap = new Map(daily.map((d) => [d.date, { date: d.date, words: d.words || 0, ms: d.ms || 0 }]));
+  // Per day: words + active ms, and the part of that read ALOUD (sw/sms — speaking pace is far slower
+  // than reading, so pace estimates can set it aside instead of being dragged down by it).
+  const dayMap = new Map(daily.map((d) => [d.date, { date: d.date, words: d.words || 0, ms: d.ms || 0, sw: d.sw || 0, sms: d.sms || 0 }]));
 
-  function bumpDay(words, ms) {
+  function bumpDay(words, ms, aloud = false) {
     const d = today();
-    const cur = dayMap.get(d) || { date: d, words: 0, ms: 0 };
+    const cur = dayMap.get(d) || { date: d, words: 0, ms: 0, sw: 0, sms: 0 };
     cur.words += words;
     cur.ms += ms;
+    if (aloud) { cur.sw = (cur.sw || 0) + words; cur.sms = (cur.sms || 0) + ms; }
     dayMap.set(d, cur);
   }
 
@@ -308,7 +312,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     lifetimeMs += activeMs;
     sessionNewWords += freshWords;
     readCount += newWords;
-    if (activeMs > 0 || freshWords > 0) bumpDay(freshWords, activeMs);
+    if (activeMs > 0 || freshWords > 0) bumpDay(freshWords, activeMs, srcKind === 'speak');
     if (activeMs > 0 || processed > 0) events.push({ ts: now, processed, activeMs });
     trim(now);
     dirty = true;
@@ -432,7 +436,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     if (added <= 0) return { added: 0, ms: 0 };
     const ms = Math.round((added / p) * 60000);
     lifetimeMs += ms;
-    bumpDay(added, ms);
+    bumpDay(added, ms, srcKind === 'speak');
     stampParas(a, b, Date.now());
     dirty = true;
     return { added, ms };
@@ -725,5 +729,10 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     },
     get paraCount() { return paraCount; },
     dailyArray: () => [...dayMap.values()],
+    // The file record's dailyHistory shape (aloud part only when there is one).
+    dailyHistory: () => [...dayMap.values()].map((d) => ({
+      date: d.date, wordsRead: d.words, activeTimeSecs: Math.round(d.ms / 1000),
+      ...(d.sw || d.sms ? { aloudWords: d.sw, aloudSecs: Math.round(d.sms / 1000) } : {}),
+    })),
   };
 }

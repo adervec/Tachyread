@@ -126,27 +126,33 @@ export function addToDeck(queues, books, bookId) {
   return deck ? addToQueue(queues, deck.id, bookId) : deckMigration(queues, books) || queues || [];
 }
 
-// Recent reading pace from per-day totals [{date:'YYYY-MM-DD', wordsRead, activeSecs}], weighted so
-// recent days count most (half-life `halfLife` days, over the last `windowDays`; days without
-// reading count as zero). A slow stretch months ago no longer drags today's estimate down.
+// Recent reading pace from per-day totals [{date:'YYYY-MM-DD', wordsRead, activeSecs, aloudWords?,
+// aloudSecs?}], weighted so recent days count most (half-life `halfLife` days, over the last
+// `windowDays`; days without reading count as zero). A slow stretch months ago no longer drags
+// today's estimate down — and neither does an occasional read-aloud session: its words and minutes
+// are left out of the reading speed, and its time counts toward words/day as if it had been spent
+// reading at that speed. (Typed-through and ticked text never reach daily totals at all.)
 export function recentPace(days, { now = Date.now(), halfLife = 10, windowDays = 42 } = {}) {
   const byDate = new Map((days || []).map((d) => [d.date, d]));
   const dates = [...byDate.keys()].sort();
   if (!dates.length) return { wordsPerDay: null, wpm: null };
   const today = Date.parse(new Date(now).toISOString().slice(0, 10));
   const span = Math.max(1, Math.min(windowDays, Math.round((today - Date.parse(dates[0])) / 86400000) + 1));
-  let w = 0, words = 0, wWords = 0, wMins = 0;
+  const rows = [];
+  let w = 0, wWords = 0, wMins = 0;
   for (let age = 0; age < span; age++) {
     const d = byDate.get(new Date(today - age * 86400000).toISOString().slice(0, 10));
     const k = 0.5 ** (age / halfLife);
+    const aloudW = Math.min(d?.wordsRead || 0, d?.aloudWords || 0), aloudS = Math.min(d?.activeSecs || 0, d?.aloudSecs || 0);
+    const readW = (d?.wordsRead || 0) - aloudW, readS = (d?.activeSecs || 0) - aloudS;
     w += k;
-    words += k * (d?.wordsRead || 0);
-    if (d?.activeSecs > 0) { wWords += k * (d.wordsRead || 0); wMins += k * (d.activeSecs / 60); }
+    if (readS > 0) { wWords += k * readW; wMins += k * (readS / 60); }
+    rows.push({ k, readW, aloudW, aloudS });
   }
-  return {
-    wordsPerDay: words > 0 ? Math.round(words / w) : null,
-    wpm: wMins > 1 ? Math.round(wWords / wMins) : null,
-  };
+  const wpm = wMins > 1 ? Math.round(wWords / wMins) : null;
+  // Read-aloud minutes valued at reading speed (or at their own words when there's no speed yet).
+  const words = rows.reduce((a, r) => a + r.k * (r.readW + (wpm ? (r.aloudS / 60) * wpm : r.aloudW)), 0);
+  return { wordsPerDay: words > 0 ? Math.round(words / w) : null, wpm };
 }
 
 // Candidate rows for the "add books" table: one per library book in no queue at all, with the

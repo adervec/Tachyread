@@ -54,7 +54,7 @@ export async function creditNarration({ doc, chunk, wpm, tabs = [], incognito = 
       persistentWordsRead: tracker.readCount,
       persistentPacedWords: tracker.pacedCount,
       persistentActiveTimeSecs: Math.round(tracker.lifetimeActiveMs / 1000),
-      dailyHistory: tracker.dailyArray().map((d) => ({ date: d.date, wordsRead: d.words, activeTimeSecs: Math.round(d.ms / 1000) })),
+      dailyHistory: tracker.dailyHistory(),
     });
   }
   return added;

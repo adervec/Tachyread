@@ -514,11 +514,7 @@ export function AppProvider({ children }) {
         persistentWordsRead: tr.readCount,
         persistentPacedWords: tr.pacedCount, // minus ticked-only words — what WPM figures divide by
         persistentActiveTimeSecs: Math.round(tr.lifetimeActiveMs / 1000),
-        dailyHistory: tr.dailyArray().map((d) => ({
-          date: d.date,
-          wordsRead: d.words,
-          activeTimeSecs: Math.round(d.ms / 1000),
-        })),
+        dailyHistory: tr.dailyHistory(),
       },
     });
     tr.markSaved();

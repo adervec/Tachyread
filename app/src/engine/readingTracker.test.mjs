@@ -185,4 +185,18 @@ assert.equal(t16b.pacedCount, 120);
 t16b.unmarkRangeRead(600, 900);
 assert.equal(t16b.pacedCount, 120);
 assert.equal(t16b.readCount, 200); // 0–100 read + 500–600 left ticked
+
+// Reading aloud is tallied separately per day; typed-through text is coverage only (no WPM).
+const t17 = createReadingTracker({ wordCount: 1000 });
+t17.recordMove(0, 0, T);
+for (let i = 1; i <= 20; i++) t17.recordMove(i - 1, i, T + i * 200);
+for (let i = 21; i <= 30; i++) t17.recordMove(i - 1, i, T + 4000 + (i - 20) * 500, 'speak');
+const dh = t17.dailyHistory()[0];
+assert.equal(dh.wordsRead, 30);
+assert.equal(dh.aloudWords, 10);
+assert.equal(dh.aloudSecs, 5);
+const wpmBefore = t17.lifetimeWpm();
+t17.markRangeRead(100, 400, 'typing');
+assert.equal(t17.lifetimeWpm(), wpmBefore, 'typed-through text does not inflate WPM');
+assert.equal(t17.readCount, 330);
 console.log('ok');

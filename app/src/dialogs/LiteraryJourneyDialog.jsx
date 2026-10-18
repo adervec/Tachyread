@@ -289,9 +289,11 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
       if (!cs) continue;
       const daily = (f.dailyHistory || []).filter((d) => (d.wordsRead || 0) > 0 || (d.activeTimeSecs || 0) > 0).sort((x, y) => (x.date < y.date ? -1 : 1));
       for (const d of daily) {
-        const cur = byDay.get(d.date) || { date: d.date, wordsRead: 0, activeSecs: 0 };
+        const cur = byDay.get(d.date) || { date: d.date, wordsRead: 0, activeSecs: 0, aloudWords: 0, aloudSecs: 0 };
         cur.wordsRead += d.wordsRead || 0;
         cur.activeSecs += d.activeTimeSecs || 0;
+        cur.aloudWords += d.aloudWords || 0; // the part read aloud — kept out of pace estimates
+        cur.aloudSecs += d.aloudSecs || 0;
         byDay.set(d.date, cur);
       }
       stats[cs] = {
