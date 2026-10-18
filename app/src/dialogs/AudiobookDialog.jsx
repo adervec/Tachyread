@@ -1,4 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { textMatcher, inRange, inDates, anySet } from '../features/tableFilter.js';
+import { TextF, RangeF, DateF } from '../components/ColFilter.jsx';
 import { totalChars, chunkChars, etaSeconds, chunkHealth, fmtEta, previewText } from '../features/ttsProgress.js';
 import Dialog from './Dialog.jsx';
 import { fmtDateTime } from '../features/dateFmt.js';
@@ -167,6 +169,10 @@ export default function AudiobookDialog({ onClose }) {
   // Library table controls: column sort, a name filter, and whether never-narrated books show.
   const [libSort, setLibSort] = useState({ key: 'lastAt', dir: -1 });
   const [libQ, setLibQ] = useState('');
+  // Library table column filters (regex text · min/max numbers · from/to dates).
+  const NO_ABF = { coverage: ['', ''], chunks: ['', ''], clips: ['', ''], size: ['', ''], length: ['', ''], words: ['', ''], voices: '', folders: '', last: ['', ''] };
+  const [abF, setAbF] = useState(NO_ABF);
+  const setAb = (k) => (v) => setAbF((f) => ({ ...f, [k]: v }));
   const [showNoAudio, setShowNoAudio] = useState(false);
   const queueRef = useRef(queue);
   queueRef.current = queue;
@@ -766,7 +772,14 @@ export default function AudiobookDialog({ onClose }) {
   // them alike. A book with no manifest has nothing to measure, so its numbers are blank, not 0.
   // ponytail: recomputed per render — a shelf is hundreds of rows at most, and the compiler
   // refused to keep a manual memo here.
-  const libQuery = libQ.trim().toLowerCase();
+  const libT = textMatcher(libQ).test, voiceT = textMatcher(abF.voices).test, folderT = textMatcher(abF.folders).test;
+  const abOk = (r) => (!libT || libT(r.fileName || ''))
+    && inRange(r.coverage == null ? null : r.coverage * 100, ...abF.coverage) && inRange(r.chunksWithAudio, ...abF.chunks)
+    && inRange(r.clips, ...abF.clips) && inRange(r.bytes == null ? null : r.bytes / 1048576, ...abF.size)
+    && inRange(r.durationMs == null ? null : r.durationMs / 60000, ...abF.length) && inRange(r.words, ...abF.words, 1000)
+    && (!voiceT || voiceT(r.voices.map((v) => labelVoice(v.voice)).join(', ')))
+    && (!folderT || folderT(foldersForBook(folders, r.checksum).map((f) => f.name).join(', ')))
+    && inDates(r.lastAt ? new Date(r.lastAt).toISOString() : '', ...abF.last);
   const libRows = sortRows(
     [
       ...library,
@@ -774,7 +787,7 @@ export default function AudiobookDialog({ onClose }) {
         checksum: f.checksum, fileName: f.fileName || 'Document', words: f.totalWords || 0, noAudio: true,
         chunks: null, chunksWithAudio: null, coverage: null, clips: null, bytes: null, durationMs: null, lastAt: null, mic: 0, voices: [],
       })) : []),
-    ].filter((r) => !libQuery || (r.fileName || '').toLowerCase().includes(libQuery)),
+    ].filter(abOk),
     libSort.key, libSort.dir,
   );
   // A sortable column header. Names sort A→Z first; every numeric column starts biggest-first.
@@ -983,7 +996,7 @@ export default function AudiobookDialog({ onClose }) {
           </div>
 
           {!library.length && !showNoAudio && <p className="settings-note">No book has any narration yet. Tick <strong>No narration yet</strong> to list your books and pick one.</p>}
-          {libRows.length > 0 && (
+          {(libRows.length > 0 || libQ || anySet(abF)) && (
             <div className="ab-scroll">
               <table className="ab-table ab-lib-table">
                 <thead>
@@ -999,6 +1012,19 @@ export default function AudiobookDialog({ onClose }) {
                     <th>Folders</th>
                     {sortTh('lastAt', 'Last', 'Sort by when audio was last added')}
                     <th></th>
+                  </tr>
+                  <tr className="ab-filter-row">
+                    <th><TextF value={libQ} onChange={setLibQ} label="book name" /></th>
+                    <th><RangeF value={abF.coverage} onChange={setAb('coverage')} label="coverage %" /></th>
+                    <th><RangeF value={abF.chunks} onChange={setAb('chunks')} label="chunks with audio" /></th>
+                    <th><RangeF value={abF.clips} onChange={setAb('clips')} label="clips" /></th>
+                    <th><RangeF value={abF.size} onChange={setAb('size')} label="size" unit=" MB" /></th>
+                    <th><RangeF value={abF.length} onChange={setAb('length')} label="length" unit=" min" /></th>
+                    <th><RangeF value={abF.words} onChange={setAb('words')} label="words" unit="k" /></th>
+                    <th><TextF value={abF.voices} onChange={setAb('voices')} label="voices" /></th>
+                    <th><TextF value={abF.folders} onChange={setAb('folders')} label="folders" /></th>
+                    <th><DateF value={abF.last} onChange={setAb('last')} label="Last audio added" /></th>
+                    <th>{(libQ || anySet(abF)) && <button onClick={() => { setLibQ(''); setAbF(NO_ABF); }} title="Clear every column filter">✕</button>}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1050,7 +1076,7 @@ export default function AudiobookDialog({ onClose }) {
               </table>
             </div>
           )}
-          {libQ && !libRows.length && <p className="settings-note">No book matches “{libQ}”.</p>}
+          {(libQ || anySet(abF)) && !libRows.length && <p className="settings-note">No book matches these filters.</p>}
         </div>
       )}
 

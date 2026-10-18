@@ -4335,6 +4335,15 @@
 }
 .lj-q-pane .lj-qstats { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
 .lj-cand-foot { margin: 4px 0 0; }
+/* Shared column filters (components/ColFilter.jsx). */
+.colf-text { width: 100%; min-width: 0; box-sizing: border-box; font-size: 11px; padding: 2px 4px; }
+.colf-text.bad { outline: 1px solid #c0392b; }
+.colf-range { display: flex; gap: 2px; min-width: 0; }
+.colf-range input { width: 50%; min-width: 0; box-sizing: border-box; font-size: 11px; padding: 2px 3px; }
+.colf-dates { flex-direction: column; }
+.colf-dates input { width: 100%; font-size: 10px; padding: 1px 2px; }
+.ab-filter-row th { padding: 2px 3px; font-weight: normal; }
+.colf-bar { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px; }
 .lj-recon-man { flex-wrap: wrap; gap: 6px; }
 .lj-recon-man input { min-width: 220px; flex: 1; font-size: 12px; }
 .lj-recon-box { height: auto; max-height: min(55vh, 560px); }
