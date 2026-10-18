@@ -81,6 +81,17 @@ const slowNow = recentPace([{ date: day(30), wordsRead: 30000, activeSecs: 3600 
 const fastNow = recentPace([{ date: day(30), wordsRead: 0, activeSecs: 0 }, { date: day(0), wordsRead: 60000, activeSecs: 3600 }], { now });
 assert.ok(fastNow.wordsPerDay > slowNow.wordsPerDay, 'today weighs more than a month ago');
 assert.deepEqual(recentPace([], { now }), { wordsPerDay: null, wpm: null });
+// An occasional read-aloud session (slow: 1,300 words in 10 min) doesn't drag the reading speed down,
+// and its minutes count toward words/day at reading speed.
+const plain = recentPace([{ date: day(1), wordsRead: 10000, activeSecs: 1800 }, { date: day(0), wordsRead: 10000, activeSecs: 1800 }], { now });
+const aloud = recentPace([
+  { date: day(1), wordsRead: 10000, activeSecs: 1800 },
+  { date: day(0), wordsRead: 11300, activeSecs: 2400, aloudWords: 1300, aloudSecs: 600 },
+], { now });
+assert.equal(aloud.wpm, plain.wpm, 'speaking time left out of the reading speed');
+assert.ok(aloud.wordsPerDay > plain.wordsPerDay, 'the extra 10 minutes still count, valued at reading speed');
+const naive = recentPace([{ date: day(1), wordsRead: 10000, activeSecs: 1800 }, { date: day(0), wordsRead: 11300, activeSecs: 2400 }], { now });
+assert.ok(naive.wpm < plain.wpm - 20, `without the split, speaking drags the speed (${naive.wpm} vs ${plain.wpm})`);
 
 // Candidates: excludes queue members, finished hidden by default, per-column regex, bad regex → literal.
 const lib = [

@@ -238,7 +238,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
       maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(), srcB64: tracker.serializeSrc(),
       lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(), paraTsB64: tracker.serializeParaTs(),
     }).catch(() => {});
-    const dailyHistory = tracker.dailyArray().map((d) => ({ date: d.date, wordsRead: d.words, activeTimeSecs: Math.round(d.ms / 1000) }));
+    const dailyHistory = tracker.dailyHistory();
     await saveFile({
       ...(storedTab?.settings || {}), contentChecksum: storedChecksum,
       persistentWordsRead: tracker.readCount, persistentPacedWords: tracker.pacedCount, persistentActiveTimeSecs: Math.round(tracker.lifetimeActiveMs / 1000), dailyHistory,

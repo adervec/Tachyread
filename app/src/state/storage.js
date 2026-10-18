@@ -1288,12 +1288,16 @@ function mergeDaily(a = [], b = []) {
 // Merge FileSettings dailyHistory ({date,wordsRead,activeTimeSecs}) by date, by max.
 function mergeDailyHistory(a = [], b = []) {
   const m = new Map();
-  for (const d of a || []) if (d?.date) m.set(d.date, { date: d.date, wordsRead: d.wordsRead || 0, activeTimeSecs: d.activeTimeSecs || 0 });
+  const one = (d) => ({ date: d.date, wordsRead: d.wordsRead || 0, activeTimeSecs: d.activeTimeSecs || 0, ...(d.aloudWords || d.aloudSecs ? { aloudWords: d.aloudWords || 0, aloudSecs: d.aloudSecs || 0 } : {}) });
+  for (const d of a || []) if (d?.date) m.set(d.date, one(d));
   for (const d of b || []) {
     if (!d?.date) continue;
     const cur = m.get(d.date);
-    if (!cur) m.set(d.date, { date: d.date, wordsRead: d.wordsRead || 0, activeTimeSecs: d.activeTimeSecs || 0 });
-    else { cur.wordsRead = Math.max(cur.wordsRead, d.wordsRead || 0); cur.activeTimeSecs = Math.max(cur.activeTimeSecs, d.activeTimeSecs || 0); }
+    if (!cur) m.set(d.date, one(d));
+    else {
+      cur.wordsRead = Math.max(cur.wordsRead, d.wordsRead || 0); cur.activeTimeSecs = Math.max(cur.activeTimeSecs, d.activeTimeSecs || 0);
+      if (d.aloudWords || d.aloudSecs) { cur.aloudWords = Math.max(cur.aloudWords || 0, d.aloudWords || 0); cur.aloudSecs = Math.max(cur.aloudSecs || 0, d.aloudSecs || 0); }
+    }
   }
   return [...m.values()];
 }
