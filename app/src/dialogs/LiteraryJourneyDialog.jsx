@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useSessionState } from '../state/useSessionState.js';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { scanMiscategorized, applyRecat, recatSummary } from '../features/journeyRecat.js';
@@ -246,12 +247,12 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   const providerOk = provider && provider.supported() && provider.available(sync) === true;
 
   // Library view controls
-  const [flt, setFlt] = useState({ readState: 'all', fnf: 'all', difficulty: [], recMin: 0, genre: 'all', search: '', recBy: 'all', tag: 'all', ctype: 'all' });
+  const [flt, setFlt] = useSessionState('tr-lj-flt', { readState: 'all', fnf: 'all', difficulty: [], recMin: 0, genre: 'all', search: '', recBy: 'all', tag: 'all', ctype: 'all' });
   // Per-column filters live in the table header (status/title/author/genre/type/file-link).
   // Library table column filters: every column — regex on text, min/max on numbers, from/to on dates.
   const NO_COLF = { title: '', author: '', genre: 'all', type: 'all', status: 'all', file: 'all', started: ['', ''], pct: ['', ''], diff: ['', ''], rec: ['', ''], pages: ['', ''], pub: ['', ''], finished: ['', ''] };
-  const [colF, setColF] = useState(NO_COLF);
-  const [sort, setSort] = useState({ key: 'rec', dir: 1 }); // table-header sorting; dir 1 = the key's natural order
+  const [colF, setColF] = useSessionState('tr-lj-colf', NO_COLF);
+  const [sort, setSort] = useSessionState('tr-lj-sort', { key: 'rec', dir: 1 }); // table-header sorting; dir 1 = the key's natural order
   const [limit, setLimit] = useState(100);
   const [selected, setSelected] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -1738,8 +1739,8 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
 // Goodreads / Wikipedia search links. Falls back to book-derived counts when no reference data was
 // imported; a row expands to show its imported reference fields.
 function RefList({ kind, items, subitems, books, onOpen }) {
-  const [q, setQ] = useState('');
-  const [rf, setRf] = useState({ books: ['', ''], finished: ['', ''], pct: ['', ''] }); // column ranges
+  const [q, setQ] = useSessionState(`tr-ref-${kind}-q`, '');
+  const [rf, setRf] = useSessionState(`tr-ref-${kind}-rf`, { books: ['', ''], finished: ['', ''], pct: ['', ''] }); // column ranges
   const [open, setOpen] = useState(null);
   const [rsort, setRsort] = useState({ key: 'books', dir: 1 });
   const nameKey = kind === 'author' ? 'author' : 'genre';
@@ -2450,7 +2451,9 @@ function NamedQueue({ queue, others = [], paths = {}, stacked = true, onLayout, 
     let live = true;
     (async () => {
       const m = {};
-      for (const b of qBooks) m[b.id] = (await fileWhere(csOf[b.id], fileStats[csOf[b.id]]?.fileName || b.title, { openChecksums, dirs })).where;
+      // In parallel — one at a time took ages to fill the "…" placeholders on a long queue.
+      const res = await Promise.all(qBooks.map((b) => fileWhere(csOf[b.id], fileStats[csOf[b.id]]?.fileName || b.title, { openChecksums, dirs }).catch(() => ({ where: 'missing' }))));
+      qBooks.forEach((b, i) => { m[b.id] = res[i].where; });
       if (live) setWhere(m);
     })();
     return () => { live = false; };
@@ -2469,15 +2472,17 @@ function NamedQueue({ queue, others = [], paths = {}, stacked = true, onLayout, 
   const counts = Object.values(where).reduce((a, w) => ({ ...a, [w]: (a[w] || 0) + 1 }), {});
   const avail = (counts.open || 0) + (counts.local || 0) + (counts.folder || 0);
   const { fin, todo } = useMemo(() => splitFinished(qBooks), [qBooks]);
-  const [hideFin, setHideFin] = useState(() => { try { return localStorage.getItem('tachyread-q-hidefin') === '1'; } catch { return false; } });
+  // Finished books start collapsed (a long finished list pushed what's left off-screen) unless you
+  // chose to show them; the choice is remembered per device.
+  const [hideFin, setHideFin] = useState(() => { try { return localStorage.getItem('tachyread-q-hidefin') !== '0'; } catch { return true; } });
   const toggleFin = () => { setHideFin(!hideFin); try { localStorage.setItem('tachyread-q-hidefin', hideFin ? '0' : '1'); } catch { /* private mode */ } };
   const move = (b, to) => onEdit((qs) => setQueueIds(qs, queue.id, moveInTodo(qBooks, b.id, to)));
   // Filters over the queue's own rows (you won't read a big queue strictly in order): regex per text
   // column, min/max words, finished or not. Queue order is kept; moves still act on the full queue.
-  const [qcols, setQcols] = useState({});
-  const [minW, setMinW] = useState('');
-  const [maxW, setMaxW] = useState('');
-  const [qstate, setQstate] = useState('all');
+  const [qcols, setQcols] = useSessionState(`tr-q-${queue.id}-cols`, {});
+  const [minW, setMinW] = useSessionState(`tr-q-${queue.id}-minw`, '');
+  const [maxW, setMaxW] = useSessionState(`tr-q-${queue.id}-maxw`, '');
+  const [qstate, setQstate] = useSessionState(`tr-q-${queue.id}-state`, 'all');
   const qrows = useMemo(() => [...(hideFin ? [] : fin), ...todo].map((b) => {
     const cs = csOf[b.id];
     return bookRow(b, { pct: st.pctById[b.id], file: (cs && (paths[cs] || fileStats[cs]?.fileName)) || '' });
@@ -2638,8 +2643,8 @@ const CAND_SHOW = 200;
 // ponytail: once per app session; the Find folders button re-runs it on demand.
 let foldersIndexed = false;
 function QueueCandidates({ queue, queues, books, dirs = [], paths, setPaths, wpm, fileStats, csOf, pctOf, openChecksums, onAdd, onOpen }) {
-  const [cols, setCols] = useState({});
-  const [state, setState] = useState('unfinished');
+  const [cols, setCols] = useSessionState('tr-cand-cols', {});
+  const [state, setState] = useSessionState('tr-cand-state', 'unfinished');
   // The browser never says which folder a file was opened from, so the Folder column comes from
   // walking your search folders (indexFolders): silently once per session when their permission is
   // already granted, or from the button (which may ask for it).

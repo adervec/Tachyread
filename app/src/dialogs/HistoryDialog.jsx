@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSessionState } from '../state/useSessionState.js';
 import { textMatcher, inRange, inDates, anySet } from '../features/tableFilter.js';
 import { TextF, RangeF, DateF } from '../components/ColFilter.jsx';
 import Dialog from './Dialog.jsx';
@@ -101,10 +102,12 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
   const [shelfFilter, setShelfFilter] = useState(() => new Set()); // shelf ids to show; empty = every shelf
   // Files table column filters: regex on text, min/max on numbers, from/to on dates.
   const NO_FF = { file: '', link: '', pct: ['', ''], words: ['', ''], time: ['', ''], wpm: ['', ''], rating: ['', ''], last: ['', ''] };
-  const [ff, setFf] = useState(NO_FF);
+  const [ff, setFf] = useSessionState('tr-files-ff', NO_FF);
   const setF = (k) => (v) => setFf((f) => ({ ...f, [k]: v }));
-  const [linkFilter, setLinkFilter] = useState('all'); // all | linked | unlinked
-  const [fsort, setFsort] = useState({ key: 'recent', dir: 1 }); // Files table header sort
+  // Rows drawn at once — hundreds of rows made the panel stutter; filter, or show more.
+  const [fLimit, setFLimit] = useState(200);
+  const [linkFilter, setLinkFilter] = useSessionState('tr-files-link', 'all'); // all | linked | unlinked
+  const [fsort, setFsort] = useSessionState('tr-files-sort', { key: 'recent', dir: 1 }); // Files table header sort
 
   const openBook = onOpenBook || ((id) => openDialog({ kind: 'literary-journey', tab: 'library', focusBookId: id }));
   const linkFile = onLinkFile || ((cs, name) => openDialog({ kind: 'literary-journey', tab: 'library', linkChecksum: cs, linkFileName: name }));
@@ -448,7 +451,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
                     </tr>
                   </thead>
                   <tbody>
-                    {libraryBooks.map((b) => (
+                    {libraryBooks.slice(0, fLimit).map((b) => (
                       <tr key={b.checksum} onClick={() => setSelected(b.checksum)} title="Open this file's reading detail">
                         <td><span className="rh-shelf-dot" title={SHELF_BY_ID[b.shelf]?.label}>{SHELF_BY_ID[b.shelf]?.icon}</span></td>
                         <td className="lj-td-title">
@@ -489,6 +492,13 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
                   </tbody>
                 </table>
               </div>
+              {libraryBooks.length > fLimit && (
+                <div className="lj-inline">
+                  <span className="settings-note" style={{ margin: 0 }}>Showing {fLimit} of {libraryBooks.length} — filter to narrow, or</span>
+                  <button className="lj-more" onClick={() => setFLimit(fLimit + 200)}>Show 200 more</button>
+                  <button className="lj-more" onClick={() => setFLimit(libraryBooks.length)}>Show all {libraryBooks.length}</button>
+                </div>
+              )}
             </div>
           )}
 
