@@ -12,7 +12,7 @@ import {
   buildDataset, buildProgress, buildDigest, buildCoworkRequest, buildCoworkManifest,
   buildApiMessages, parseAiOutput, contentHash,
 } from './journeyAi.js';
-import { opsInstruction, sanitizeOutput, planRows, isReportOnly } from './coworkOps.js';
+import { opsInstruction, sanitizeOutput, planRows, isReportOnly, queuesForDataset } from './coworkOps.js';
 import { writeSnapshot, commitRows } from './coworkApply.js';
 import { liveQueues } from './readingQueues.js';
 import { weeklySummaries } from './journeyAnalytics.js';
@@ -29,9 +29,12 @@ async function writeToDir(dir, name, text) {
 }
 
 async function datasetWithProgress(light, books) {
-  const progress = buildProgress(await allFiles().catch(() => []), { books, bindMap: {}, days: 63 });
+  const bindMap = await getBinding().catch(() => ({})); // real links — "link files" must see which are linked
+  const progress = buildProgress(await allFiles().catch(() => []), { books, bindMap, days: 63 });
   progress.weeklySummaries = weeklySummaries(progress.days, books, { weeks: 8 });
-  return buildDataset(books, { light, progress });
+  const ds = buildDataset(books, { light, progress });
+  ds.queues = queuesForDataset(await getLibraryRef('queues').catch(() => []), books);
+  return ds;
 }
 
 // Scheduled runs NEVER apply book changes on their own: an API reply goes through the same
@@ -43,7 +46,7 @@ async function applyReportOnly(ai, reply, ops, books) {
   const [bindMap, queues] = await Promise.all([getBinding().catch(() => ({})), getLibraryRef('queues').catch(() => [])]);
   const booksById = Object.fromEntries(books.map((b) => [b.id, b]));
   const queuedIds = new Set(liveQueues(queues || []).flatMap((q) => q.ids || []));
-  const { output, dropped } = sanitizeOutput(parseAiOutput(reply), ops, { booksById, bindMap, queuedIds });
+  const { output, dropped } = sanitizeOutput(parseAiOutput(reply), ops, { booksById, bindMap, queuedIds, queues: queues || [] });
   const rows = planRows(output, { booksById }).filter((r) => ['analysis', 'recommendations', 'brief', 'weekly'].includes(r.kind));
   if (!rows.length) return { ai, note: `nothing applicable${dropped.length ? ` (${dropped.length} item(s) outside the operation dropped)` : ''}` };
   const r = await commitRows(rows, { books, ai: { ...ai, ledger: [...(ai?.ledger || []), hash].slice(-50) }, ops, source: 'scheduled API', auto: true });
@@ -70,7 +73,8 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
       else if (perm !== 'granted') { ok = false; note = 'skipped — folder permission needs re-granting (open the Cowork page once)'; }
       else {
         target = target || dir.name;
-        const instr = combineCoworkInstruction(coworkIds);
+        const instr = combineCoworkInstruction(coworkIds, { question: ai?.question || '' });
+        if (!instr) throw new Error('nothing to send ("Ask a question" needs a question)');
         const books = await getLibraryBooks();
         const dataset = await datasetWithProgress(instr.mode === 'light', books);
         await writeSnapshot(dir, now); // the request's agent reads snapshot/ too

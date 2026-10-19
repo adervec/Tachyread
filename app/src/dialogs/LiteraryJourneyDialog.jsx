@@ -52,7 +52,7 @@ import {
   SYNC_ACTION_GROUPS, actionById, combineCoworkInstruction, SCHEDULE_OPTS,
   syncRole, recordRun, mergedHistory, calendarCells, fmtAgo, dayKey,
 } from '../features/coworkActions.js';
-import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction } from '../features/coworkOps.js';
+import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset } from '../features/coworkOps.js';
 import { writeSnapshot, commitRows, undoLastApply } from '../features/coworkApply.js';
 import { getDeviceId } from '../state/storage.js';
 import { deviceKind } from '../state/device.js';
@@ -693,9 +693,14 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     const groups = global?.bookGroups || [];
     const manual = (recon || []).filter((pl) => pl.manual); // pairs you picked yourself survive a rescan
     const found = findQuickAddPairs(books, bindMap || {}).filter((pr) => !manual.some((m) => m.id === pr.quick.id));
-    const plans = [...manual, ...found.map((pr) => planFor(pr, qs, groups))];
+    // Pairs the cowork "Spot likely duplicates" operation suggested (🤖) — same preview, never ticked.
+    const live = new Map(books.filter((b) => !b.deleted).map((b) => [b.id, b]));
+    const taken = new Set([...manual, ...found.map((pr) => ({ id: pr.quick.id }))].map((x) => x.id));
+    const fromAi = (ai?.dupeSuggestions || []).filter((d) => live.has(d.keepId) && live.has(d.foldId) && !taken.has(d.foldId) && taken.add(d.foldId))
+      .map((d) => ({ ...planFor({ quick: live.get(d.foldId), keep: live.get(d.keepId) }, qs, groups), aiWhy: d.why || 'suggested by the cowork agent' }));
+    const plans = [...manual, ...found.map((pr) => planFor(pr, qs, groups)), ...fromAi];
     setRecon(plans);
-    setReconPick(new Set(plans.filter((pl) => pl.authorHit && !pl.alternatives.length).map((pl) => pl.id))); // the sure ones ticked
+    setReconPick(new Set(plans.filter((pl) => pl.authorHit && !pl.alternatives.length && !pl.aiWhy).map((pl) => pl.id))); // the sure ones ticked; AI suggestions never pre-ticked
     setReconMsg(plans.length ? '' : 'No quick-added copies of recommended books found. ✅');
   }
   // Manual pairing, for when the scan misses or mismatches: pick the entry to KEEP and the one to fold
@@ -1238,6 +1243,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               </p>
               <div className="lj-inline">
                 <button onClick={scanRecon}>Scan for quick-added copies</button>
+                {(ai?.dupeSuggestions || []).length > 0 && <span className="settings-note" style={{ margin: 0 }}>🤖 {ai.dupeSuggestions.length} pair{ai.dupeSuggestions.length === 1 ? '' : 's'} suggested by the cowork agent — included in the scan</span>}
                 {reconUndo && <button onClick={undoRecon}>↶ Undo last reconcile</button>}
                 {reconMsg && <span className="settings-note">{reconMsg}</span>}
               </div>
@@ -1268,7 +1274,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                                 <td><input type="checkbox" checked={reconPick.has(pl.id)} aria-label={`Reconcile “${pl.quick.title}” into “${pl.keep.title}”`}
                                   onChange={() => setReconPick((s0) => { const s1 = new Set(s0); if (s1.has(pl.id)) s1.delete(pl.id); else s1.add(pl.id); return s1; })} /></td>
                                 <td title={`${pl.keep.title} — ${pl.keep.author || ''}${pl.keep.isbn ? ` · ISBN ${pl.keep.isbn}` : ''}`}><b>{pl.keep.title}</b>{pl.keep.author ? <span className="lj-qdim"> — {pl.keep.author}</span> : ''}</td>
-                                <td title={pl.quick.title}>{warn.length ? <span title={warn.join(' · ')}>⚠ </span> : ''}{pl.manual ? <span title="Paired by you">✋ </span> : ''}{pl.quick.title} <span className="lj-qdim">({STATUS_LABEL[readStatus(pl.quick)].replace(/^\S+\s/, '')})</span></td>
+                                <td title={pl.quick.title}>{warn.length ? <span title={warn.join(' · ')}>⚠ </span> : ''}{pl.manual ? <span title="Paired by you">✋ </span> : ''}{pl.aiWhy ? <span title={`Suggested by the cowork agent: ${pl.aiWhy}`}>🤖 </span> : ''}{pl.quick.title} <span className="lj-qdim">({STATUS_LABEL[readStatus(pl.quick)].replace(/^\S+\s/, '')})</span></td>
                                 <td title={pl.fileNote}>{pl.csQ.length ? (pl.csK.length ? '🔗 both linked + grouped' : `📎 ${pl.csQ.map(nameOfCs).join(', ')}`) : '—'}</td>
                                 <td title={pl.queueNote}>{pl.queueNote}</td>
                                 <td title={pl.diff.map((d) => `${d.key}: ${fmtVal(d.from)} → ${fmtVal(d.to)}`).join('\n')}>{pl.diff.length ? `${pl.diff.length} field${pl.diff.length === 1 ? '' : 's'}: ${pl.diff.map((d) => d.key).join(', ')}` : 'none'}</td>
@@ -1282,6 +1288,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                                     <li>✏️ {pl.diff.length ? pl.diff.map((d) => <span key={d.key} className="lj-recon-diff"><code>{d.key}</code> {fmtVal(d.from)} → <b>{fmtVal(d.to)}</b></span>) : 'no field changes on the kept entry'}</li>
                                     <li>🗃 “{pl.quick.title}” is retired (kept as a tombstone + a snapshot in the kept entry’s history)</li>
                                     {warn.map((w) => <li key={w} className="lj-recon-warn">⚠ {w}. Check it’s the same book.</li>)}
+                                    {pl.aiWhy && <li>🤖 Suggested by the cowork agent: {pl.aiWhy}</li>}
                                   </ul>
                                 </td></tr>
                               )}
@@ -1296,7 +1303,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                     <button onClick={() => setReconPick(new Set(recon.map((pl) => pl.id)))}>Tick all</button>
                     <button onClick={() => setReconPick(new Set())}>Untick all</button>
                     <button onClick={() => { setRecon(null); setReconMsg(''); }}>Dismiss</button>
-                    <span className="settings-note" style={{ margin: 0 }}>⚠ = less certain (left unticked) · ✋ = paired by you · hover a cell or ▸ for the full details</span>
+                    <span className="settings-note" style={{ margin: 0 }}>⚠ = less certain (left unticked) · ✋ = paired by you · 🤖 = suggested by the cowork agent (left unticked) · hover a cell or ▸ for the full details</span>
                   </div>
                 </div>
               )}
@@ -3498,7 +3505,9 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
   const datasetWithProgress = async (light) => {
     const progress = buildProgress(await allFiles().catch(() => []), { books, bindMap, days: 63 });
     progress.weeklySummaries = weeklySummaries(progress.days, books, { weeks: 8 });
-    return buildDataset(books, { light, progress });
+    const ds = buildDataset(books, { light, progress });
+    ds.queues = queuesForDataset(await getLibraryRef('queues').catch(() => []), books); // for queue advice
+    return ds;
   };
   // Request builder: a checkbox TREE of every sync action (cowork folder / direct API / cloud),
   // each row carrying its last-run info and its own schedule. Selection is session-local.
@@ -3507,6 +3516,7 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
   const [review, setReview] = useState(null);
   const [picked, setPicked] = useState(() => new Set());
   const [openExplain, setOpenExplain] = useState(null);
+  const [question, setQuestion] = useState(ai?.question || ''); // for the "Ask a question" operation
   const [dir, setDir] = useState(null);
   const [dirPath, setDirPath] = useState(ai?.coworkDirPath || '');
   const panelReady = usePanelReady();
@@ -3553,7 +3563,7 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
     if ((ai?.ledger || []).includes(hash)) { setMsg('That reply was already applied.'); return; }
     const queues = (await getLibraryRef('queues').catch(() => null)) || [];
     const queuedIds = new Set(liveQueues(queues).flatMap((q) => q.ids || []));
-    const { output, dropped } = sanitizeOutput(parseAiOutput(text), ops, { booksById, bindMap, queuedIds });
+    const { output, dropped } = sanitizeOutput(parseAiOutput(text), ops, { booksById, bindMap, queuedIds, queues });
     const files = Object.fromEntries((await allFiles().catch(() => [])).map((f) => [f.checksum, f]));
     const rows = planRows(output, { booksById, files });
     setReview({ rows, dropped, ops, source, hash });
@@ -3633,7 +3643,8 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
       if (!dir) { ok = false; note = 'no cowork folder chosen'; parts.push('cowork skipped (no folder)'); }
       else {
         try {
-          const ci = combineCoworkInstruction(coworkIds);
+          const ci = combineCoworkInstruction(coworkIds, { question });
+          if (!ci) throw new Error('nothing to send — “Ask a question” needs a question');
           const dataset = await datasetWithProgress(ci.mode === 'light');
           if (!ids.includes('cw-snapshot')) await writeSnapshot(dir); // the agent reads snapshot/ too
           await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(buildCoworkRequest(dataset, ci), null, 2));
@@ -3682,7 +3693,7 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
   }
   async function copyDigest() {
     try {
-      const ci = combineCoworkInstruction([...sel]) || opsInstruction(['cw-light']);
+      const ci = combineCoworkInstruction([...sel], { question }) || opsInstruction(['cw-light']);
       await navigator.clipboard.writeText(buildDigest(await datasetWithProgress(ci.mode === 'light'), ci));
       await logActivity('digest', `Copied ${ci.mode} digest to clipboard`);
       setMsg('Digest copied — paste it into a Claude chat, then paste the JSON reply below.');
@@ -3805,10 +3816,14 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
                   <div className="cwt-explain">
                     <div><b>Sends / reads:</b> {ex.sends}</div>
                     <div><b>May change:</b> {ex.changes}</div>
-                    {op && <div><b>Never changes:</b> {NEVER_CHANGED}</div>}
+                    {op && <div><b>Never changes:</b> {op.never || NEVER_CHANGED}</div>}
                     <div><b>Review &amp; undo:</b> {ex.review}</div>
                     {op && <div className="settings-note" style={{ margin: '2px 0 0' }}>Enforced by the app, not left to the AI: when the reply comes back, anything outside this permission is discarded and listed.</div>}
                   </div>
+                )}
+                {a.id === 'cw-ask' && sel.has('cw-ask') && !viewer && (
+                  <textarea className="lj-instr cwt-question" rows={2} placeholder="Your question — e.g. “Is my typing accuracy improving since I switched to word-backspace-only?”"
+                    value={question} onChange={(e) => setQuestion(e.target.value)} onBlur={() => persistAi({ question })} aria-label="Question for the agent" />
                 )}
                 </Fragment>
               );
@@ -3895,6 +3910,18 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
             <details key={date} className="lj-hist" open={i === 0}>
               <summary><span>{date}</span></summary>
               <p className="lj-analysis cw-brief">{b.text}</p>
+            </details>
+          ))}
+        </>
+      )}
+
+      {(ai?.answers || []).length > 0 && (
+        <>
+          <div className="rh-section-h">Answers</div>
+          {ai.answers.slice(0, 10).map((x, i) => (
+            <details key={x.at} className="lj-hist" open={i === 0}>
+              <summary><span>{fmtDateTime(x.at)}{x.question ? ` — ${x.question}` : ''}</span></summary>
+              <p className="lj-analysis cw-brief">{x.text}</p>
             </details>
           ))}
         </>

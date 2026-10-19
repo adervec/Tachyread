@@ -46,8 +46,8 @@ const BY_ID = Object.fromEntries(SYNC_ACTIONS.map((a) => [a.id, a]));
 export const actionById = (id) => BY_ID[id] || null;
 
 // The checked cowork OPERATIONS as one request instruction ({ mode, ops, text }), or null.
-export function combineCoworkInstruction(ids) {
-  return opsInstruction(ids.filter((id) => COWORK_OPS[id]));
+export function combineCoworkInstruction(ids, extras = {}) {
+  return opsInstruction(ids.filter((id) => COWORK_OPS[id]), extras);
 }
 
 // ── Schedules ───────────────────────────────────────────────────────────────
