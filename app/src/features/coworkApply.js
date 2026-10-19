@@ -3,7 +3,7 @@
 // the last commit. The decisions are pure (coworkOps.js / coworkSnapshot.js); this only does I/O.
 import {
   allFiles, getLibraryBooks, getBinding, getLibraryRef, allTypingRuns, getSpeechLog, allFocusSessions,
-  allAudiobookManifests, getLibraryBook, saveLibraryBook, saveLibraryRef, addCrossNotes, getCrossNotes, deleteCrossNote, setBinding, saveJourneyAi,
+  allAudiobookManifests, getLibraryBook, saveLibraryBook, saveLibraryRef, deleteLibraryBook, addCrossNotes, getCrossNotes, deleteCrossNote, setBinding, saveJourneyAi,
 } from '../state/storage.js';
 import { buildSnapshot } from './coworkSnapshot.js';
 import { buildApply, applySummary } from './coworkOps.js';
@@ -63,6 +63,7 @@ export async function undoLastApply(ai) {
     await saveLibraryBook(b);
   }
   for (const cs of u.links || []) await setBinding(cs, null);
+  for (const id of u.created || []) await deleteLibraryBook(id); // books the apply created (tombstoned)
   if (u.queues) await saveLibraryRef('queues', u.queues);
   if (u.crossTexts?.length) {
     const texts = new Set(u.crossTexts);
