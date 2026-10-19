@@ -145,7 +145,16 @@ export function buildDataset(books, { light = true, progress = null } = {}) {
     recentFinishes: recent, unreadCandidates: unread,
   };
   if (progress) ds.progress = progress;
-  if (!light) ds.allBooks = books.map((b) => compact(b, ['id', 'title', 'author', 'genre', 'subgenre', 'fnf', 'type', 'difficultyLevel', 'recScore', 'completion', 'finishTime', 'pages', 'pubDate']));
+  // Full list for heavy tasks: status, plus which editable fields are EMPTY (fill-blank operations
+  // may only touch those — the app enforces it on the way back in, see coworkOps.js).
+  const FILLABLE = ['genre', 'subgenre', 'description', 'synopsis', 'type', 'difficultyLevel'];
+  if (!light) {
+    ds.allBooks = books.filter((b) => !b.deleted).map((b) => ({
+      ...compact(b, ['id', 'title', 'author', 'genre', 'subgenre', 'fnf', 'type', 'difficultyLevel', 'recScore', 'finishTime', 'pages', 'pubDate']),
+      status: readStatus(b),
+      missing: FILLABLE.filter((f) => b[f] === undefined || b[f] === null || String(b[f]).trim() === ''),
+    }));
+  }
   return ds;
 }
 
@@ -171,10 +180,17 @@ export function buildDigest(dataset, instruction) {
       'with a better-written version; keep each to a short paragraph grounded ONLY in the given numbers.',
     ] : []),
     '',
-    '## Reply with ONE ```json block, no prose, using the exact ids below:',
-    '```',
-    heavy ? SCHEMA_HEAVY : SCHEMA_LIGHT,
-    '```',
+    // Operation requests (instruction.ops) carry their own narrow schema in the task text; anything
+    // outside it is discarded by the app on the way back in.
+    ...(instruction.ops ? [
+      '## Reply with ONE ```json block, no prose, using ONLY the keys in the task\'s reply schema and the exact ids below.',
+      'Read-only activity files (reading days, typing, reading aloud, narration, queues, goals) are in the snapshot/ folder next to this file — see snapshot/README.md.',
+    ] : [
+      '## Reply with ONE ```json block, no prose, using the exact ids below:',
+      '```',
+      heavy ? SCHEMA_HEAVY : SCHEMA_LIGHT,
+      '```',
+    ]),
     'If the request JSON declares a `requestHash`, echo it verbatim as a top-level `requestHash` field of your reply.',
     '',
     '## Data',
@@ -211,7 +227,7 @@ export function buildApiMessages(dataset, instruction) {
   const content =
     `Task (${instruction.mode}): ${instruction.text}\n\n` +
     (heavy ? 'NOTE: you only see a compact subset here — a full tech-tree rebuild needs the cowork export. Do the analysis you can.\n\n' : '') +
-    `Return JSON: ${heavy ? SCHEMA_HEAVY : SCHEMA_LIGHT}. Use the exact ids given.\n\nDATA:\n` + JSON.stringify(dataset);
+    (instruction.ops ? 'Return JSON using ONLY the keys in the reply schema above. Use the exact ids given.\n\nDATA:\n' : `Return JSON: ${heavy ? SCHEMA_HEAVY : SCHEMA_LIGHT}. Use the exact ids given.\n\nDATA:\n`) + JSON.stringify(dataset);
   return { system, messages: [{ role: 'user', content }] };
 }
 

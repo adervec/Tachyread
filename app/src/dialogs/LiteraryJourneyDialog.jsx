@@ -12,15 +12,15 @@ import {
   getJourneyAi, saveJourneyAi, exportLibraryData, importLibraryData, librarySize, clearLibrary,
   getBinding, setBinding, getSectionBindings, setSectionBinding, allDocMeta, allFiles, getFsHandle, setFsHandle,
   loadFile, loadReadState, loadDocPayload,
-  getCrossNotes, saveCrossNote, deleteCrossNote, addCrossNotes,
+  getCrossNotes, saveCrossNote, deleteCrossNote,
 } from '../state/storage.js';
 import { extractTextMeta } from '../features/textMeta.js';
 import { createReadingTracker } from '../engine/readingTracker.js';
 import { sectionSpan } from '../document/toc.js';
 import { askClaude, anthropicConfigured } from '../features/anthropic.js';
 import {
-  getInstruction, LIGHT_INSTRUCTION, buildDataset, buildDigest, buildProgress, AI_NOTE_TYPES,
-  buildCoworkRequest, buildCoworkManifest, buildApiMessages, parseAiOutput, applyAiOutput, contentHash,
+  buildDataset, buildDigest, buildProgress, AI_NOTE_TYPES,
+  buildCoworkRequest, buildCoworkManifest, buildApiMessages, parseAiOutput, contentHash,
 } from '../features/journeyAi.js';
 import {
   normalizeSeed, filterBooks, libraryStats, exportJourneyMarkdown,
@@ -52,6 +52,8 @@ import {
   SYNC_ACTION_GROUPS, actionById, combineCoworkInstruction, SCHEDULE_OPTS,
   syncRole, recordRun, mergedHistory, calendarCells, fmtAgo, dayKey,
 } from '../features/coworkActions.js';
+import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction } from '../features/coworkOps.js';
+import { writeSnapshot, commitRows, undoLastApply } from '../features/coworkApply.js';
 import { getDeviceId } from '../state/storage.js';
 import { deviceKind } from '../state/device.js';
 import { AXES, READER_ARCHETYPES, readerProfile, matchArchetype, currentArchetype, archetypeTrend, archetypeAxes } from '../features/readerArchetype.js';
@@ -1161,7 +1163,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
           {tab === 'genres' && <RefList kind="genre" items={refs.genres} subitems={refs.subgenres} books={books} onOpen={(name) => { setColF({ ...colF, genre: name, author: '' }); setLimit(100); setTab('library'); }} />}
           {tab === 'archetype' && <ArchetypeView books={books} />}
           {tab === 'constellation' && <ConstellationView books={books} ai={ai} />}
-          {tab === 'ai' && <AiView books={books} ai={ai} global={global} bindMap={bindMap || {}} onBind={bind} onReload={reload} />}
+          {tab === 'ai' && <AiView books={books} ai={ai} global={global} bindMap={bindMap || {}} onReload={reload} />}
 
           {tab === 'data' && (
             <div className="lj-data">
@@ -3489,7 +3491,7 @@ async function readFromDir(dir, name) {
   try { const fh = await dir.getFileHandle(name); return await (await fh.getFile()).text(); } catch { return null; }
 }
 
-function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
+function AiView({ books, ai, global, bindMap = {}, onReload }) {
   // Reading-progress bundle (daily/weekly totals, streak, in-flight books) attached to every export,
   // so cowork daily/weekly summary tasks have the data. Built fresh at call time from the file records.
   // The algorithmic weekly summaries ride along so a cowork task can return dressed-up `weeklies`.
@@ -3501,7 +3503,10 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
   // Request builder: a checkbox TREE of every sync action (cowork folder / direct API / cloud),
   // each row carrying its last-run info and its own schedule. Selection is session-local.
   const [sel, setSel] = useState(() => new Set(['cw-light']));
-  const [customText, setCustomText] = useState(ai?.customText ?? '');
+  // A reply waiting for review: { rows, dropped, ops, source, hash } — nothing is written until Apply.
+  const [review, setReview] = useState(null);
+  const [picked, setPicked] = useState(() => new Set());
+  const [openExplain, setOpenExplain] = useState(null);
   const [dir, setDir] = useState(null);
   const [dirPath, setDirPath] = useState(ai?.coworkDirPath || '');
   const panelReady = usePanelReady();
@@ -3541,35 +3546,52 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
   const designate = () => persistAi({ syncMachine: { deviceId, name: (global?.deviceName || '').trim() || deviceKind(), at: Date.now() } });
   const releaseRole = () => persistAi({ syncMachine: null });
 
-  // Persist an AI output: apply whitelisted book patches + the ai patch, dedupe via the ledger, and —
-  // per the user's design — reset a HEAVY instruction back to light once its result has been applied.
-  async function applyOutput(output, sourceText) {
-    const hash = contentHash(sourceText || JSON.stringify(output));
-    const ledger = ai?.ledger || [];
-    if (ledger.includes(hash)) { setMsg('That output was already applied.'); return; }
-    const { bookUpdates, aiPatch, crossNoteAdds, bindingAdds, weeklyAdds } = applyAiOutput(output, booksById);
-    for (const b of bookUpdates) await saveLibraryBook(b);
-    const crossAdded = crossNoteAdds?.length ? await addCrossNotes(crossNoteAdds) : 0;
-    for (const bd of bindingAdds || []) await onBind?.(bd.checksum, bd.bookId);
-    const wasHeavy = getInstruction(ai).mode === 'heavy';
-    const nextAi = { ...(ai || {}), ...aiPatch, ledger: [...ledger, hash].slice(-50) };
-    // A new analysis ARCHIVES the previous one instead of silently overwriting it (capped 20).
-    if (aiPatch.analysis && ai?.analysis && ai.analysis !== aiPatch.analysis) {
-      nextAi.analysisHistory = [{ text: ai.analysis, at: ai.updatedAt || Date.now() }, ...(ai.analysisHistory || [])].slice(0, 20);
-    }
-    // Stamp when the analysis blurb was (re)generated so the Dashboard can show its age.
-    if (aiPatch.analysis) nextAi.updatedAt = Date.now();
-    // Dressed-up weekly summaries land keyed by their week's Monday (Analytics prefers these).
-    if (weeklyAdds?.length) {
-      nextAi.weeklies = { ...(ai?.weeklies || {}) };
-      for (const w of weeklyAdds) nextAi.weeklies[w.week] = { text: w.text, at: Date.now() };
-    }
-    if (wasHeavy) nextAi.instruction = { mode: 'light', text: LIGHT_INSTRUCTION, updatedAt: Date.now() };
-    const summary = `Applied — ${bookUpdates.length} book patch(es)${crossAdded ? `, ${crossAdded} shared note(s)` : ''}${bindingAdds?.length ? `, ${bindingAdds.length} file link(s)` : ''}${weeklyAdds?.length ? `, ${weeklyAdds.length} weekly summar${weeklyAdds.length === 1 ? 'y' : 'ies'}` : ''}${aiPatch.analysis ? ', analysis' : ''}${aiPatch.recommendations ? ', recommendations' : ''}${aiPatch.treeMeta ? ', tech tree' : ''}.`;
-    nextAi.activity = [...(ai?.activity || []), actEntry('apply', summary)].slice(-40);
-    await saveJourneyAi(nextAi);
-    setMsg(`${summary}${wasHeavy ? ' Instruction reset to light.' : ''}`);
-    onReload();
+  // Every reply — folder, paste or API — is filtered by the operations it was REQUESTED for
+  // (coworkOps.sanitizeOutput: anything else is dropped, with the reason) and staged as review rows.
+  async function stageReply(text, ops, source) {
+    const hash = contentHash(text);
+    if ((ai?.ledger || []).includes(hash)) { setMsg('That reply was already applied.'); return; }
+    const queues = (await getLibraryRef('queues').catch(() => null)) || [];
+    const queuedIds = new Set(liveQueues(queues).flatMap((q) => q.ids || []));
+    const { output, dropped } = sanitizeOutput(parseAiOutput(text), ops, { booksById, bindMap, queuedIds });
+    const files = Object.fromEntries((await allFiles().catch(() => [])).map((f) => [f.checksum, f]));
+    const rows = planRows(output, { booksById, files });
+    setReview({ rows, dropped, ops, source, hash });
+    setPicked(new Set(rows.map((r) => r.key)));
+    setMsg(rows.length
+      ? `Reply ready for review: ${rows.length} proposed change(s)${dropped.length ? `, ${dropped.length} out-of-scope item(s) discarded` : ''}. Nothing is written until you apply.`
+      : `Nothing in that reply is allowed by the requested operation(s)${dropped.length ? ` — ${dropped.length} item(s) discarded` : ''}.`);
+  }
+  async function applyReview() {
+    if (!review) return;
+    const rows = review.rows.filter((r) => picked.has(r.key));
+    if (!rows.length) { setMsg('Nothing ticked.'); return; }
+    setBusy(true);
+    try {
+      const base = { ...(ai || {}), ledger: [...(ai?.ledger || []), review.hash].slice(-50) };
+      const r = await commitRows(rows, { books, ai: base, ops: review.ops, source: review.source });
+      setMsg(`Applied: ${r.summary}. ↶ Undo puts it all back.`);
+      setReview(null);
+      onReload();
+    } catch (e) { setMsg('Apply failed: ' + (e?.message || e)); }
+    setBusy(false);
+  }
+  async function undoApply() {
+    setBusy(true);
+    try { const r = await undoLastApply(ai); setMsg(r.summary); onReload(); }
+    catch (e) { setMsg('Undo failed: ' + (e?.message || e)); }
+    setBusy(false);
+  }
+  async function snapshotNow() {
+    if (!dir) { setMsg('Choose the cowork folder first.'); return; }
+    setBusy(true);
+    try {
+      const n = await writeSnapshot(dir);
+      const cur = recordRun((await getJourneyAi().catch(() => null)) || ai || {}, ['cw-snapshot'], { at: Date.now(), kind: 'cowork', target: coworkTarget, ok: true, note: `wrote snapshot (${n} files)` });
+      await saveJourneyAi(cur); onReload();
+      setMsg(`Snapshot written: ${n} files in ${coworkTarget || dir.name}/snapshot/ (read-only for agents — see its README.md).`);
+    } catch (e) { setMsg('Snapshot failed: ' + (e?.message || e)); }
+    setBusy(false);
   }
 
   async function chooseFolder() {
@@ -3592,26 +3614,32 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
       else {
         try {
           const dataset = await datasetWithProgress(true); // API path is always the compact subset
-          const { system, messages } = buildApiMessages(dataset, { mode: 'light', text: LIGHT_INSTRUCTION });
+          const instr = opsInstruction(['cw-light']);
+          const { system, messages } = buildApiMessages(dataset, instr);
           const reply = await askClaude(messages, { key: global.anthropicKey, model, system, maxTokens: 2048, source: 'trackyread-ai' });
-          await applyOutput(parseAiOutput(reply), reply);
-          apiNote = 'ran + applied'; parts.push('API refresh applied');
+          await stageReply(reply, instr.ops, `API (${model})`);
+          apiNote = 'ran — reply staged for review'; parts.push('API reply ready for review below');
         } catch (e) { apiOk = false; apiNote = String(e?.message || e); parts.push('API failed'); }
       }
     }
     let cur = (await getJourneyAi().catch(() => null)) || ai || {};
-    const coworkIds = ids.filter((id) => id.startsWith('cw-'));
+    if (ids.includes('cw-snapshot') && dir) {
+      try { const n = await writeSnapshot(dir); cur = recordRun(cur, ['cw-snapshot'], { at: now, kind: 'cowork', target: coworkTarget, ok: true, note: `wrote snapshot (${n} files)` }); parts.push('snapshot written'); }
+      catch (e) { cur = recordRun(cur, ['cw-snapshot'], { at: now, kind: 'cowork', target: coworkTarget, ok: false, note: String(e?.message || e) }); parts.push('snapshot failed'); }
+    }
+    const coworkIds = ids.filter((id) => COWORK_OPS[id]);
     if (coworkIds.length) {
       let ok = true; let note;
       if (!dir) { ok = false; note = 'no cowork folder chosen'; parts.push('cowork skipped (no folder)'); }
       else {
         try {
-          const ci = combineCoworkInstruction(coworkIds, customText);
+          const ci = combineCoworkInstruction(coworkIds);
           const dataset = await datasetWithProgress(ci.mode === 'light');
+          if (!ids.includes('cw-snapshot')) await writeSnapshot(dir); // the agent reads snapshot/ too
           await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(buildCoworkRequest(dataset, ci), null, 2));
           await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, ci));
           await writeToDir(dir, 'cowork.json', JSON.stringify(buildCoworkManifest(), null, 2)); // discovery manifest for hubs
-          cur = { ...cur, instruction: { ...ci, updatedAt: now }, customText };
+          cur = { ...cur, instruction: { ...ci, updatedAt: now } }; // the reply is filtered by these ops
           note = `wrote request (${ci.mode})`; parts.push(`cowork request written (${ci.mode})`);
         } catch (e) { ok = false; note = String(e?.message || e); parts.push('cowork write failed'); }
       }
@@ -3643,7 +3671,9 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
       const t = await readFromDir(dir, 'journey-cowork-response.json');
       if (!t) { setMsg('No journey-cowork-response.json in the folder yet.'); }
       else {
-        await applyOutput(parseAiOutput(t), t);
+        // Filtered by the operations the last request asked for (an old request without ops is
+        // treated as the report-only analysis operation — the safest reading).
+        await stageReply(t, ai?.instruction?.ops || ['cw-light'], 'cowork folder');
         const n = Date.now(); setLastRead(n);
         try { localStorage.setItem('tr-cowork-lastread', String(n)); } catch { /* quota */ }
       }
@@ -3652,7 +3682,7 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
   }
   async function copyDigest() {
     try {
-      const ci = combineCoworkInstruction([...sel], customText) || { mode: 'light', text: LIGHT_INSTRUCTION };
+      const ci = combineCoworkInstruction([...sel]) || opsInstruction(['cw-light']);
       await navigator.clipboard.writeText(buildDigest(await datasetWithProgress(ci.mode === 'light'), ci));
       await logActivity('digest', `Copied ${ci.mode} digest to clipboard`);
       setMsg('Digest copied — paste it into a Claude chat, then paste the JSON reply below.');
@@ -3660,7 +3690,8 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
   }
   async function applyPasted() {
     setBusy(true);
-    try { await applyOutput(parseAiOutput(pasted), pasted); setPasted(''); }
+    const ticked = [...sel].filter((id) => COWORK_OPS[id]);
+    try { await stageReply(pasted, ticked.length ? ticked : (ai?.instruction?.ops || ['cw-light']), 'pasted reply'); setPasted(''); }
     catch (e) { setMsg('Could not parse that reply: ' + (e?.message || e)); }
     setBusy(false);
   }
@@ -3736,10 +3767,20 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
               <span className="cwt-gico">{g.icon}</span><b>{g.label}</b>
               <span className="cwt-target" title="Where this group's actions land">→ {targetOf(g)}</span>
             </label>
-            {g.actions.map((a) => {
+            {g.actions.map((a, ai2) => {
               const run = actionRuns[a.id];
+              const op = COWORK_OPS[a.id];
+              const prevOp = COWORK_OPS[g.actions[ai2 - 1]?.id];
+              const sub = op && op.group !== prevOp?.group ? OP_GROUPS.find((x) => x.id === op.group) : null;
+              const ex = op ? op.explain : a.id === 'cw-snapshot' ? {
+                sends: 'Nothing goes to an AI. Writes read-only files into the folder\'s snapshot/ subfolder: reading days, books, queues, goals, typing, reading aloud, narration quality, focus, an activity log and a README explaining every field.',
+                changes: 'Nothing in Tachyread — the app never reads these files back. Files in snapshot/ are overwritten each time. No document text, audio or keys are written.',
+                review: 'Nothing to review. Also written automatically with every operation request.',
+              } : null;
               return (
-                <div key={a.id} className="cwt-row">
+                <Fragment key={a.id}>
+                {sub && <div className="cwt-sub">{sub.label}</div>}
+                <div className="cwt-row">
                   <label className="cwt-main">
                     <input type="checkbox" disabled={viewer} checked={sel.has(a.id)} onChange={() => toggleSel(a.id)} />
                     <span className="cwt-ico" aria-hidden="true">{a.icon}</span>
@@ -3758,15 +3799,20 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
                   >
                     {SCHEDULE_OPTS.map((o) => <option key={o.id} value={o.id}>{o.id === 'off' ? '⏰ manual' : `⏰ ${o.label}`}</option>)}
                   </select>
+                  {ex && <button type="button" className="cwt-explain-btn" aria-expanded={openExplain === a.id} onClick={() => setOpenExplain(openExplain === a.id ? null : a.id)} title="Exactly what this does and may change">{openExplain === a.id ? '▾ details' : '▸ details'}</button>}
                 </div>
+                {ex && openExplain === a.id && (
+                  <div className="cwt-explain">
+                    <div><b>Sends / reads:</b> {ex.sends}</div>
+                    <div><b>May change:</b> {ex.changes}</div>
+                    {op && <div><b>Never changes:</b> {NEVER_CHANGED}</div>}
+                    <div><b>Review &amp; undo:</b> {ex.review}</div>
+                    {op && <div className="settings-note" style={{ margin: '2px 0 0' }}>Enforced by the app, not left to the AI: when the reply comes back, anything outside this permission is discarded and listed.</div>}
+                  </div>
+                )}
+                </Fragment>
               );
             })}
-            {g.id === 'cowork' && sel.has('cw-custom') && !viewer && (
-              <textarea
-                className="lj-instr" rows={4} placeholder="Custom heavy task for the cowork agent…"
-                value={customText} onChange={(e) => setCustomText(e.target.value)} onBlur={() => persistAi({ customText })}
-              />
-            )}
             {g.id === 'cowork' && (
               <div className="lj-inline cwt-foot">
                 {!panelReady && <button onClick={chooseFolder} disabled={viewer}>{dir ? `📁 ${dir.name}` : '📁 Choose cowork folder…'}</button>}
@@ -3786,9 +3832,72 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
       {!viewer && (
         <div className="lj-inline">
           <button className="toggle-on" disabled={busy || sel.size === 0} onClick={() => runSelected()}>▶ Run selected ({[...sel].filter((id) => actionById(id)).length})</button>
-          {dir && <button disabled={busy} onClick={readResponse}>📥 Read response</button>}
+          {dir && <button disabled={busy} onClick={readResponse} title="Read the agent's reply — it is filtered and shown for review, never applied straight away">📥 Read response</button>}
+          {dir && <button disabled={busy} onClick={snapshotNow} title="Write the read-only activity snapshot now">📸 Snapshot now</button>}
           <span className="settings-note">Scheduled actions run automatically — on the sync machine only.</span>
         </div>
+      )}
+
+      {review && (
+        <div className="cw-review">
+          <div className="rh-section-h">Review the reply — {review.source} · {review.ops.map((id) => COWORK_OPS[id]?.label || id).join(', ')}</div>
+          <p className="settings-note">Nothing has been written yet. Untick anything you don&rsquo;t want, then apply. Applied changes can be undone in one step.</p>
+          {review.rows.length > 0 && (
+            <div className="lj-q-box cw-review-box">
+              <table className="lj-cand cw-review-table">
+                <thead><tr><th aria-label="Apply" /><th>Change</th><th>Now</th><th>Proposed</th></tr></thead>
+                <tbody>
+                  {review.rows.map((r) => (
+                    <tr key={r.key}>
+                      <td><input type="checkbox" checked={picked.has(r.key)} aria-label={`Apply: ${r.label}`} onChange={() => setPicked((s0) => { const s1 = new Set(s0); if (s1.has(r.key)) s1.delete(r.key); else s1.add(r.key); return s1; })} /></td>
+                      <td title={r.label}>{r.label}</td>
+                      <td title={String(r.from ?? '')} className="lj-qdim">{r.from == null || r.from === '' ? '—' : String(r.from)}</td>
+                      <td title={String(r.to ?? '')}>{String(r.to ?? '')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {review.dropped.length > 0 && (
+            <details className="lj-fold">
+              <summary>{review.dropped.length} item(s) in the reply were outside the requested operation(s) and were discarded</summary>
+              <ul className="lj-clean-list">{review.dropped.slice(0, 200).map((d, i) => <li key={i}><b>{d.what}</b> — {d.why}</li>)}</ul>
+            </details>
+          )}
+          <div className="lj-inline">
+            <button className="toggle-on" disabled={busy || !picked.size} onClick={applyReview}>Apply {picked.size} ticked</button>
+            <button onClick={() => setPicked(new Set(review.rows.map((r) => r.key)))}>Tick all</button>
+            <button onClick={() => setPicked(new Set())}>Untick all</button>
+            <button onClick={() => { setReview(null); setMsg('Reply discarded — nothing was changed.'); }}>Discard reply</button>
+          </div>
+        </div>
+      )}
+      {(ai?.lastApply || (ai?.applyLog || []).length > 0) && (
+        <>
+          <div className="rh-section-h">Applied changes</div>
+          {ai?.lastApply && !viewer && (
+            <div className="lj-inline">
+              <span className="settings-note" style={{ margin: 0 }}>Last apply {fmtDateTime(ai.lastApply.at)}: {ai.lastApply.summary}</span>
+              <button disabled={busy} onClick={undoApply} title="Restore every book, link, note and AI field the last apply changed (books you edited since are left alone)">↶ Undo last apply</button>
+            </div>
+          )}
+          <details className="lj-fold">
+            <summary>Apply log ({(ai?.applyLog || []).length})</summary>
+            <ul className="lj-clean-list">{(ai?.applyLog || []).slice(0, 50).map((e, i) => <li key={i}>{fmtDateTime(e.at)} — {e.summary}{e.source ? ` · ${e.source}` : ''}{e.auto ? ' · auto' : ''}</li>)}</ul>
+          </details>
+        </>
+      )}
+      {ai?.briefs && Object.keys(ai.briefs).length > 0 && (
+        <>
+          <div className="rh-section-h">Morning briefs</div>
+          {Object.entries(ai.briefs).sort((x, y) => (x[0] < y[0] ? 1 : -1)).slice(0, 10).map(([date, b], i) => (
+            <details key={date} className="lj-hist" open={i === 0}>
+              <summary><span>{date}</span></summary>
+              <p className="lj-analysis cw-brief">{b.text}</p>
+            </details>
+          ))}
+        </>
       )}
 
       <div className="rh-section-h cw-hist-h">
@@ -3842,7 +3951,7 @@ function AiView({ books, ai, global, bindMap = {}, onBind, onReload }) {
           <summary>Copy / paste (manual chat fallback)</summary>
           <div className="lj-inline"><button onClick={copyDigest}>Copy digest to clipboard</button></div>
           <textarea className="lj-instr" rows={3} placeholder="Paste Claude's JSON reply here…" value={pasted} onChange={(e) => setPasted(e.target.value)} />
-          <div className="lj-inline"><button disabled={busy || !pasted.trim()} onClick={applyPasted}>Apply pasted output</button></div>
+          <div className="lj-inline"><button disabled={busy || !pasted.trim()} onClick={applyPasted}>Review pasted reply</button><span className="settings-note" style={{ margin: 0 }}>Filtered by the ticked operations (or the last request&rsquo;s).</span></div>
         </details>
       )}
 

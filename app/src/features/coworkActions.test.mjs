@@ -19,14 +19,12 @@ assert.equal(actionById('nope'), null);
 
 // Instruction combining: none → null; light only → light; any heavy → heavy; custom text rides along.
 assert.equal(combineCoworkInstruction([]), null);
-assert.equal(combineCoworkInstruction(['api-light']), null, 'non-cowork ids ignored');
+assert.equal(combineCoworkInstruction(['api-light', 'cw-snapshot']), null, 'non-operation ids ignored');
 const li = combineCoworkInstruction(['cw-light']);
-assert.equal(li.mode, 'light');
-assert.equal(li.text, LIGHT_INSTRUCTION);
-const hv = combineCoworkInstruction(['cw-light', 'cw-tree', 'cw-custom'], 'Also cross-check translations.');
+assert.deepEqual([li.mode, li.ops], ['light', ['cw-light']]);
+const hv = combineCoworkInstruction(['cw-light', 'cw-tree']);
 assert.equal(hv.mode, 'heavy');
-assert.ok(hv.text.includes(LIGHT_INSTRUCTION) && hv.text.includes(HEAVY_PLACEHOLDER) && hv.text.includes('cross-check translations'), 'texts concatenate in order');
-assert.equal(combineCoworkInstruction(['cw-custom'], '   ').text, LIGHT_INSTRUCTION, 'blank custom falls back');
+assert.ok(!actionById('cw-custom'), 'the free-text custom instruction is gone');
 
 // Schedules: manual → never due; scheduled-but-never-run → due immediately; due exactly at last+period.
 assert.equal(nextDueAt('off', 5), null);

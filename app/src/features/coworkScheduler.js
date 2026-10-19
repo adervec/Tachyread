@@ -6,13 +6,15 @@
 // readwrite grant — otherwise the run is logged as skipped so the user knows to re-grant.
 
 import {
-  getJourneyAi, saveJourneyAi, getLibraryBooks, allFiles, getFsHandle, getDeviceId,
-  saveLibraryBook, addCrossNotes, setBinding,
+  getJourneyAi, saveJourneyAi, getLibraryBooks, allFiles, getFsHandle, getDeviceId, getBinding, getLibraryRef,
 } from '../state/storage.js';
 import {
   buildDataset, buildProgress, buildDigest, buildCoworkRequest, buildCoworkManifest,
-  buildApiMessages, parseAiOutput, applyAiOutput, contentHash, getInstruction, LIGHT_INSTRUCTION,
+  buildApiMessages, parseAiOutput, contentHash,
 } from './journeyAi.js';
+import { opsInstruction, sanitizeOutput, planRows, isReportOnly } from './coworkOps.js';
+import { writeSnapshot, commitRows } from './coworkApply.js';
+import { liveQueues } from './readingQueues.js';
 import { weeklySummaries } from './journeyAnalytics.js';
 import { askClaude, anthropicConfigured } from './anthropic.js';
 import { syncWithProvider, syncLibraryWithProvider } from './sync/syncManager.js';
@@ -32,28 +34,20 @@ async function datasetWithProgress(light, books) {
   return buildDataset(books, { light, progress });
 }
 
-// Headless twin of the dialog's applyOutput: ledger dedupe, whitelisted book patches, notes,
-// bindings, weeklies, analysis archiving, heavy→light reset. Returns the summary line.
-async function applyOutputHeadless(ai, output, sourceText, booksById) {
-  const hash = contentHash(sourceText || JSON.stringify(output));
-  const ledger = ai?.ledger || [];
-  if (ledger.includes(hash)) return { ai, note: 'output already applied' };
-  const { bookUpdates, aiPatch, crossNoteAdds, bindingAdds, weeklyAdds } = applyAiOutput(output, booksById);
-  for (const b of bookUpdates) await saveLibraryBook(b);
-  if (crossNoteAdds?.length) await addCrossNotes(crossNoteAdds);
-  for (const bd of bindingAdds || []) await setBinding(bd.checksum, bd.bookId);
-  const wasHeavy = getInstruction(ai).mode === 'heavy';
-  const next = { ...(ai || {}), ...aiPatch, ledger: [...ledger, hash].slice(-50) };
-  if (aiPatch.analysis && ai?.analysis && ai.analysis !== aiPatch.analysis) {
-    next.analysisHistory = [{ text: ai.analysis, at: ai.updatedAt || Date.now() }, ...(ai.analysisHistory || [])].slice(0, 20);
-  }
-  if (aiPatch.analysis) next.updatedAt = Date.now();
-  if (weeklyAdds?.length) {
-    next.weeklies = { ...(ai?.weeklies || {}) };
-    for (const w of weeklyAdds) next.weeklies[w.week] = { text: w.text, at: Date.now() };
-  }
-  if (wasHeavy) next.instruction = { mode: 'light', text: LIGHT_INSTRUCTION, updatedAt: Date.now() };
-  return { ai: next, note: `applied ${bookUpdates.length} patch(es)${aiPatch.analysis ? ' + analysis' : ''}` };
+// Scheduled runs NEVER apply book changes on their own: an API reply goes through the same
+// permission filter as everything else, and only REPORT rows (analysis, read-next, briefs,
+// weeklies) are committed automatically — logged and undoable like a manual apply.
+async function applyReportOnly(ai, reply, ops, books) {
+  const hash = contentHash(reply);
+  if ((ai?.ledger || []).includes(hash)) return { ai, note: 'reply already applied' };
+  const [bindMap, queues] = await Promise.all([getBinding().catch(() => ({})), getLibraryRef('queues').catch(() => [])]);
+  const booksById = Object.fromEntries(books.map((b) => [b.id, b]));
+  const queuedIds = new Set(liveQueues(queues || []).flatMap((q) => q.ids || []));
+  const { output, dropped } = sanitizeOutput(parseAiOutput(reply), ops, { booksById, bindMap, queuedIds });
+  const rows = planRows(output, { booksById }).filter((r) => ['analysis', 'recommendations', 'brief', 'weekly'].includes(r.kind));
+  if (!rows.length) return { ai, note: `nothing applicable${dropped.length ? ` (${dropped.length} item(s) outside the operation dropped)` : ''}` };
+  const r = await commitRows(rows, { books, ai: { ...ai, ledger: [...(ai?.ledger || []), hash].slice(-50) }, ops, source: 'scheduled API', auto: true });
+  return { ai: r.ai, note: `applied ${r.summary}${dropped.length ? ` · dropped ${dropped.length} out-of-scope item(s)` : ''}` };
 }
 
 // One scheduler pass. Exported for direct invocation; startCoworkScheduler wires the timer.
@@ -66,7 +60,7 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
   const g = deps.getGlobal();
 
   // ── Cowork folder actions: one combined request write ──
-  const coworkIds = due.filter((id) => id.startsWith('cw-'));
+  const coworkIds = due.filter((id) => id.startsWith('cw-') && id !== 'cw-snapshot');
   if (coworkIds.length) {
     let note; let ok = true; let target = ai?.coworkDirPath || '';
     try {
@@ -76,17 +70,31 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
       else if (perm !== 'granted') { ok = false; note = 'skipped — folder permission needs re-granting (open the Cowork page once)'; }
       else {
         target = target || dir.name;
-        const instr = combineCoworkInstruction(coworkIds, ai?.customText || '');
+        const instr = combineCoworkInstruction(coworkIds);
         const books = await getLibraryBooks();
         const dataset = await datasetWithProgress(instr.mode === 'light', books);
+        await writeSnapshot(dir, now); // the request's agent reads snapshot/ too
         await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(buildCoworkRequest(dataset, instr), null, 2));
         await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, instr));
         await writeToDir(dir, 'cowork.json', JSON.stringify(buildCoworkManifest(), null, 2));
-        ai.instruction = { ...instr, updatedAt: now }; // response-apply resets heavy → light as usual
+        ai.instruction = { ...instr, updatedAt: now }; // the reply is filtered by THESE ops when read back
         note = `auto-wrote cowork request (${instr.mode})`;
       }
     } catch (e) { ok = false; note = `auto cowork write failed: ${e?.message || e}`; }
     ai = recordRun(ai, coworkIds, { at: now, kind: 'cowork', target, ok, note, auto: true });
+  }
+
+  // ── Activity snapshot (read-only files) ──
+  if (due.includes('cw-snapshot')) {
+    let ok = true; let note;
+    try {
+      const dir = await getFsHandle('journeyCoworkDir');
+      const perm = dir && (await (dir.queryPermission?.({ mode: 'readwrite' }) ?? 'granted'));
+      if (!dir) { ok = false; note = 'skipped — no cowork folder chosen'; }
+      else if (perm !== 'granted') { ok = false; note = 'skipped — folder permission needs re-granting (open the Cowork page once)'; }
+      else note = `auto snapshot (${await writeSnapshot(dir, now)} files)`;
+    } catch (e) { ok = false; note = `snapshot failed: ${e?.message || e}`; }
+    ai = recordRun(ai, ['cw-snapshot'], { at: now, kind: 'cowork', target: ai?.coworkDirPath || 'cowork folder', ok, note, auto: true });
   }
 
   // ── Direct API action ──
@@ -97,13 +105,13 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
       else {
         const books = await getLibraryBooks();
         const dataset = await datasetWithProgress(true, books);
-        const instr = { mode: 'light', text: LIGHT_INSTRUCTION };
+        const instr = opsInstruction(['cw-light']); // report-only operation
         const { system, messages } = buildApiMessages(dataset, instr);
         const reply = await askClaude(messages, {
           key: g.anthropicKey, model: g.anthropicModel || 'claude-sonnet-5', system, maxTokens: 2048, source: 'trackyread-auto',
         });
-        const booksById = Object.fromEntries(books.map((b) => [b.id, b]));
-        const r = await applyOutputHeadless(ai, parseAiOutput(reply), reply, booksById);
+        if (!isReportOnly(instr.ops)) throw new Error('scheduled API runs are report-only');
+        const r = await applyReportOnly(ai, reply, instr.ops, books);
         ai = r.ai; note = `auto API refresh — ${r.note}`;
       }
     } catch (e) { ok = false; note = `auto API refresh failed: ${e?.message || e}`; }
