@@ -136,7 +136,9 @@ export function recentPace(days, { now = Date.now(), halfLife = 10, windowDays =
   const byDate = new Map((days || []).map((d) => [d.date, d]));
   const dates = [...byDate.keys()].sort();
   if (!dates.length) return { wordsPerDay: null, wpm: null };
-  const today = Date.parse(new Date(now).toISOString().slice(0, 10));
+  // Anchor on the LOCAL date (tracker days are local), then step in whole days.
+  const ld = new Date(now);
+  const today = Date.UTC(ld.getFullYear(), ld.getMonth(), ld.getDate());
   const span = Math.max(1, Math.min(windowDays, Math.round((today - Date.parse(dates[0])) / 86400000) + 1));
   const rows = [];
   let w = 0, wWords = 0, wMins = 0;

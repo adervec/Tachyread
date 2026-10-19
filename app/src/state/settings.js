@@ -46,6 +46,7 @@ export function defaultFileSettings() {
     // Styled exactly like the current word (same option set), so it can be made as loud or as
     // faint as you like — and told apart from your own position at a glance.
     paceGhost: false,
+    scrollGhost: false, // scroll-to-read: a ghost runs ahead of your scrolled word at the WPM (restarts on each forward scroll)
     ghostWordStyles: ['Box'], // same vocabulary as currentWordStyles
     ghostWordColor: '',       // '' = a theme-derived default distinct from the current-word colour
     ghostWordFontDelta: 0,

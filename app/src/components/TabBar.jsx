@@ -2,7 +2,10 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { groupForChecksum, masterOf } from '../features/bookGroups.js';
 import { finishedNotRereading } from '../features/recentFilter.js';
-import { getBinding, getLibraryBook, getLibraryBooks, getPresencePeers, loadFile, saveLibraryBook, setBinding } from '../state/storage.js';
+import { getBinding, getLibraryBook, getLibraryBooks, getLibraryRef, getPresencePeers, loadFile, saveLibraryBook, setBinding } from '../state/storage.js';
+import { queueOf, queueBooks, nextInQueue } from '../features/readingQueues.js';
+import { openBookFile } from '../features/openBook.js';
+import { getSearchDirs } from '../features/fileLocator.js';
 import { contentType, readStatus } from '../features/journeyLibrary.js';
 import { sortTabIds, tabInfo, TAB_SORT_KEYS } from '../features/tabSort.js';
 import { bookFromOpenedDoc } from '../features/trackyreadAdd.js';
@@ -32,7 +35,7 @@ function tabPct(tab) {
 }
 
 export default function TabBar() {
-  const { state, setActiveTab, closeTab, closeTabs, closeAllTabs, setActivePanel, closePanel, reorderTabs, sortTabs, updateGlobal, setStatus, openDialog } = useApp();
+  const { state, setActiveTab, closeTab, closeTabs, closeAllTabs, setActivePanel, closePanel, reorderTabs, sortTabs, updateGlobal, setStatus, openDialog, openRecent, openFiles } = useApp();
   const { panels, activePanelId, tabs } = state;
   const groups = state.global.bookGroups || [];
   const multiRow = !!state.global.tabBarMultiRow;
@@ -42,6 +45,30 @@ export default function TabBar() {
   const [dropId, setDropId] = useState(null);  // tab the drop indicator is on
   // Right-click menu (desktop): Notepad++-style close actions for the tab under the cursor.
   const [menu, setMenu] = useState(null);      // { x, y, tabId } | null
+  // The menu tab's queue (if its book is queued): { queue, next: { book, cs } | null } — looked up
+  // when the menu opens, for "Open next in queue" / "Go to queue".
+  const [menuQ, setMenuQ] = useState(null);
+  async function lookupQueue(tab) {
+    setMenuQ(null);
+    const cs = tab.lazy ? tab.settings?.contentChecksum : tab.doc?.contentChecksum;
+    const bookId = cs && bindings[cs];
+    if (!bookId) return;
+    const [queues, books] = await Promise.all([getLibraryRef('queues').catch(() => null), getLibraryBooks().catch(() => [])]);
+    const q = queueOf(queues || [], bookId);
+    if (!q) return;
+    const csOf = {};
+    for (const [c, id] of Object.entries(bindings)) if (!csOf[id]) csOf[id] = c;
+    const { book } = await nextInQueue(queueBooks(q, books), bookId, (b) => !!csOf[b.id]);
+    setMenuQ({ tabId: tab.id, queue: q, next: book ? { book, cs: csOf[book.id] } : null });
+  }
+  async function openQueueNext() {
+    const n = menuQ?.next;
+    if (!n) return;
+    const openChecksums = tabs.map((t) => (t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum)).filter(Boolean);
+    const r = await openBookFile({ cs: n.cs, name: n.book.title, openChecksums, dirs: await getSearchDirs().catch(() => []), openRecent, openFiles })
+      .catch((e) => ({ ok: false, msg: e?.message || String(e) }));
+    if (!r.ok) setStatus?.(r.msg);
+  }
   useEffect(() => {
     if (!menu) return;
     const onKey = (e) => { if (e.key === 'Escape') setMenu(null); };
@@ -224,6 +251,13 @@ export default function TabBar() {
     const items = [
       { label: 'Sort tabs ›', n: tabs.length > 1 ? undefined : 0, keep: true, fn: () => setMenu({ ...menu, sort: true }) },
       { sep: true },
+      ...(menuQ && menuQ.tabId === menu.tabId ? [
+        menuQ.next
+          ? { label: `▶ Open next in “${menuQ.queue.name}”: ${menuQ.next.book.title}`, fn: openQueueNext }
+          : { label: `▶ Nothing unfinished left in “${menuQ.queue.name}”`, n: 0, fn: () => {} },
+        { label: `↗ Go to queue “${menuQ.queue.name}” in Trackyread`, fn: () => openDialog?.({ kind: 'literary-journey', tab: 'queue', focusQueueId: menuQ.queue.id }) },
+        { sep: true },
+      ] : []),
       ...(untracked ? [
         { label: '＋ Add to Trackyread', fn: () => addTabToTrackyread(menuTab, false) },
         { label: '＋ Add to Trackyread & open it', fn: () => addTabToTrackyread(menuTab, true) },
@@ -298,7 +332,7 @@ export default function TabBar() {
             // doesn't start its autoscroll on the way.
             onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeTab(tab.id); } }}
             onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}
-            onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, tabId: tab.id }); }}
+            onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, tabId: tab.id }); lookupQueue(tab); }}
             onDragStart={(e) => { dragId.current = tab.id; e.dataTransfer.effectAllowed = 'move'; }}
             onDragOver={(e) => { if (dragId.current && dragId.current !== tab.id) { e.preventDefault(); setDropId(tab.id); } }}
             onDragLeave={() => setDropId((d) => (d === tab.id ? null : d))}
