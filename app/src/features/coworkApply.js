@@ -3,10 +3,11 @@
 // the last commit. The decisions are pure (coworkOps.js / coworkSnapshot.js); this only does I/O.
 import {
   allFiles, getLibraryBooks, getBinding, getLibraryRef, allTypingRuns, getSpeechLog, allFocusSessions,
-  allAudiobookManifests, getLibraryBook, saveLibraryBook, addCrossNotes, getCrossNotes, deleteCrossNote, setBinding, saveJourneyAi,
+  allAudiobookManifests, getLibraryBook, saveLibraryBook, saveLibraryRef, addCrossNotes, getCrossNotes, deleteCrossNote, setBinding, saveJourneyAi,
 } from '../state/storage.js';
 import { buildSnapshot } from './coworkSnapshot.js';
 import { buildApply, applySummary } from './coworkOps.js';
+import { setQueueIds } from './readingQueues.js';
 
 async function writeFile(dir, name, text) {
   const fh = await dir.getFileHandle(name, { create: true });
@@ -31,7 +32,12 @@ export async function writeSnapshot(dir, now = Date.now()) {
 // kept as ai.lastApply; every commit is logged in ai.applyLog.
 export async function commitRows(rows, { books, ai, ops = [], source = '', auto = false, now = Date.now() }) {
   const booksById = Object.fromEntries((books || []).map((b) => [b.id, b]));
-  const { bookUpdates, crossNoteAdds, bindingAdds, aiNext, undo } = buildApply(rows, { booksById, ai, now });
+  const { bookUpdates, crossNoteAdds, bindingAdds, queueOrders, aiNext, undo } = buildApply(rows, { booksById, ai, now });
+  if (queueOrders.length) {
+    const before = (await getLibraryRef('queues').catch(() => null)) || [];
+    undo.queues = before; // the whole array as it was — undo puts it back
+    await saveLibraryRef('queues', queueOrders.reduce((qs, qo) => setQueueIds(qs, qo.queueId, qo.ids), before));
+  }
   for (const b of bookUpdates) await saveLibraryBook(b);
   if (crossNoteAdds.length) await addCrossNotes(crossNoteAdds);
   for (const l of bindingAdds) await setBinding(l.checksum, l.bookId);
@@ -57,6 +63,7 @@ export async function undoLastApply(ai) {
     await saveLibraryBook(b);
   }
   for (const cs of u.links || []) await setBinding(cs, null);
+  if (u.queues) await saveLibraryRef('queues', u.queues);
   if (u.crossTexts?.length) {
     const texts = new Set(u.crossTexts);
     for (const n of await getCrossNotes()) if (n.source === 'ai' && texts.has(n.text)) await deleteCrossNote(n.id);

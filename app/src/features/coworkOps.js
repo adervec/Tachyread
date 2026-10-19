@@ -13,8 +13,12 @@
 //                                                               to-read books that are in no queue
 //   aiNotes / crossNotes                                       — append AI notes (never the user's notes)
 //   bindings: 'unlinked'                                       — link a file that has NO link yet
+//   answer                                                     — a text answer (AI record only)
+//   queueOrder                                                 — reorder a queue (same books, new order)
+//   duplicates                                                 — suggest duplicate pairs for the Reconcile table
 // Pure; see coworkOps.test.mjs.
 import { readStatus } from './journeyLibrary.js';
+import { liveQueues, queueBooks } from './readingQueues.js';
 import { AI_NOTE_TYPES } from './journeyAi.js';
 
 const NEVER = 'Titles, authors, ids, reading/finished status and dates, ratings, your own notes, queues, reading progress and history, file links that already exist.';
@@ -51,6 +55,16 @@ export const COWORK_OPS = {
       review: 'Report only — applied automatically when scheduled via the API.',
     },
   },
+  'cw-ask': {
+    icon: '❓', group: 'report', label: 'Ask a question', heavy: false, needsQuestion: true,
+    instruction: 'QUESTION. Answer this question about the reader\'s reading, typing, speaking or library, using the dataset and the snapshot/ files; be concrete and cite the numbers you use: «{question}». Return the answer as `answer` (Markdown).',
+    allow: { answer: true },
+    explain: {
+      sends: 'Your question (typed below when this is ticked) and the compact dataset; the agent can also read the snapshot/ files.',
+      changes: 'Stores the answer text on the Cowork page (newest first). Writes nothing to any book, queue or link — even if the reply tries to.',
+      review: 'Report only. Undo removes the answer.',
+    },
+  },
   'cw-fill-genre': {
     icon: '🏷', group: 'fill', label: 'Fill missing genre / subgenre', heavy: true,
     instruction: 'FILL MISSING GENRE. For books in allBooks whose `missing` list includes "genre" and/or "subgenre", return bookPatches with ONLY those missing fields. Do not patch any book that already has the field.',
@@ -78,6 +92,16 @@ export const COWORK_OPS = {
     explain: {
       sends: 'The full library list.',
       changes: 'Sets the content type (long-form, short-form, article, AI-generated, poetry, reference) ONLY on books that have none.',
+      review: 'Row per book. Undo restores.',
+    },
+  },
+  'cw-fill-diff': {
+    icon: '🎚', group: 'fill', label: 'Estimate missing difficulty', heavy: true,
+    instruction: 'FILL MISSING DIFFICULTY. For books whose `missing` list includes "difficultyLevel", return bookPatches with ONLY difficultyLevel as an integer 1 (easy) – 5 (very demanding). Skip books you do not know.',
+    allow: { fields: { difficultyLevel: { blanks: true, range: [1, 5] } } },
+    explain: {
+      sends: 'The full library list.',
+      changes: 'Sets the difficulty (1–5) ONLY on books that have none. Out-of-range or non-numeric values are dropped.',
       review: 'Row per book. Undo restores.',
     },
   },
@@ -121,6 +145,28 @@ export const COWORK_OPS = {
       review: 'Row per book, old → new type. Untick anything you disagree with; types you set by hand are worth a look. Undo restores.',
     },
   },
+  'cw-queue-advice': {
+    icon: '🧭', group: 'targeted', label: 'Queue-order advice', heavy: false,
+    instruction: 'QUEUE ADVICE. dataset.queues lists each queue in its current order with each book\'s status, length and progress. Suggest a better reading order for any queue that would benefit (variety, momentum, series order, finishing what is nearly done). Return `queueOrder` [{queueId, ids: [EVERY book id of that queue, in the new order], why}].',
+    allow: { queueOrder: true },
+    never: 'Which books are in a queue (nothing is added, removed or moved between queues), and everything about the books themselves.',
+    explain: {
+      sends: 'The compact dataset plus your queues (book ids, titles, status, length, progress) in their current order.',
+      changes: 'Proposes a new ORDER for a queue — the same books, rearranged. A suggestion that adds, drops or duplicates a book is discarded. Finished books still show at the top of the queue view regardless.',
+      review: 'One row per queue with the reason; the queue is only reordered if you tick it and apply. Undo restores the previous order.',
+    },
+  },
+  'cw-dupes': {
+    icon: '👯', group: 'targeted', label: 'Spot likely duplicates', heavy: true,
+    instruction: 'DUPLICATES. Find pairs of entries in allBooks that are the same work (e.g. a recommendation and a file-titled entry, different editions, typos). Return `duplicates` [{keepId (the entry with better metadata), foldId, why}]. Only clear cases.',
+    allow: { duplicates: true },
+    never: 'Any book — nothing is merged here.',
+    explain: {
+      sends: 'The full library list.',
+      changes: 'Nothing directly. Suggested pairs are saved for Import / Export → Reconcile quick-added copies, where they appear (marked 🤖) next to the scan\'s own pairs with the full preview — and only merge if you tick them there.',
+      review: 'Row per pair here; applying only stores the suggestion. Undo removes the suggestions.',
+    },
+  },
   'cw-tree': {
     icon: '🌳', group: 'targeted', label: 'Rebuild tech tree', heavy: true,
     instruction: 'TECH TREE. Return treeMeta.pos (x,y in -500..500 per book id) and treeMeta.edges ([idA, idB, "influence"|"prereq"|"series"]) for lineage between books in the library.',
@@ -142,6 +188,12 @@ export const COWORK_OPS = {
     },
   },
 };
+// Queues as the request dataset carries them (for queue advice): order, and enough per book to judge.
+export const queuesForDataset = (queues, books) => liveQueues(queues || []).map((q) => ({
+  id: q.id, name: q.name,
+  books: queueBooks(q, books || []).map((b) => ({ id: b.id, title: b.title, author: b.author || null, genre: b.genre || null, status: readStatus(b), words: Number(b.words) || (Number(b.pages) ? Number(b.pages) * 275 : null), series: b.series || null, seriesNum: b.seriesNum ?? null })),
+}));
+
 export const OP_GROUPS = [
   { id: 'report', label: 'Reports — change no books' },
   { id: 'fill', label: 'Fill blanks — never overwrite' },
@@ -157,7 +209,7 @@ export function combinedAllow(ids) {
   for (const id of ids) {
     const a = COWORK_OPS[id]?.allow;
     if (!a) continue;
-    for (const k of ['analysis', 'recommendations', 'brief', 'weeklies', 'treeMeta', 'aiNotes', 'crossNotes']) if (a[k]) out[k] = true;
+    for (const k of ['analysis', 'recommendations', 'brief', 'weeklies', 'treeMeta', 'aiNotes', 'crossNotes', 'answer', 'queueOrder', 'duplicates']) if (a[k]) out[k] = true;
     if (a.bindings) out.bindings = a.bindings;
     for (const [f, rule] of Object.entries(a.fields || {})) {
       const cur = out.fields[f];
@@ -181,19 +233,22 @@ export function schemaFor(ids) {
   if (a.crossNotes) parts.push('"crossNotes": [{"bookIds":["<id>",…],"series"?,"type","text"}]');
   if (a.bindings) parts.push('"bindings": [{"checksum","bookId"}]');
   if (a.treeMeta) parts.push('"treeMeta": {"pos": {"<id>": {"x","y"}}, "edges": [["<idA>","<idB>","<kind>"]]}');
+  if (a.answer) parts.push('"answer": "markdown"');
+  if (a.queueOrder) parts.push('"queueOrder": [{"queueId", "ids": ["<every id of that queue>"], "why"}]');
+  if (a.duplicates) parts.push('"duplicates": [{"keepId", "foldId", "why"}]');
   return `{ ${parts.join(', ')} }`;
 }
 
 // One combined request instruction for the ticked operations.
-export function opsInstruction(ids) {
-  const ops = ids.filter((id) => COWORK_OPS[id]);
+export function opsInstruction(ids, { question = '' } = {}) {
+  const ops = ids.filter((id) => COWORK_OPS[id] && (!COWORK_OPS[id].needsQuestion || String(question).trim()));
   if (!ops.length) return null;
   return {
     mode: ops.some((id) => COWORK_OPS[id].heavy) ? 'heavy' : 'light',
     ops,
     text: [
       `Do ONLY these ${ops.length} task(s). The app discards anything in your reply that these tasks may not change.`,
-      ...ops.map((id, i) => `${i + 1}. ${COWORK_OPS[id].instruction}`),
+      ...ops.map((id, i) => `${i + 1}. ${COWORK_OPS[id].instruction.replace('{question}', String(question).trim())}`),
       `Reply schema (only these keys): ${schemaFor(ops)}`,
     ].join('\n'),
   };
@@ -204,7 +259,7 @@ const short = (v) => (typeof v === 'string' && v.length > 120 ? `${v.slice(0, 12
 
 // Keep only what the requested operations may change. ctx: { booksById, bindMap, queuedIds:Set }.
 // → { output (sanitized), dropped: [{ what, why }] }
-export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedIds = new Set() } = {}) {
+export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedIds = new Set(), queues = [] } = {}) {
   const a = combinedAllow(ids);
   const out = {}, dropped = [];
   const drop = (what, why) => dropped.push({ what, why });
@@ -224,6 +279,7 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
       if (!rule) { drop(`${book.title}: ${f}`, 'field not allowed by the requested operations'); continue; }
       if (rule.blanks && !blank(book[f])) { drop(`${book.title}: ${f}`, 'already has a value (fill-blanks only)'); continue; }
       if (rule.unreadOnly && (readStatus(book) !== 'toread' || queuedIds.has(book.id))) { drop(`${book.title}: ${f}`, 'not an unqueued to-read book'); continue; }
+      if (rule.range && !(Number.isInteger(Number(v)) && Number(v) >= rule.range[0] && Number(v) <= rule.range[1])) { drop(`${book.title}: ${f} = ${v}`, `must be a whole number ${rule.range[0]}–${rule.range[1]}`); continue; }
       if (JSON.stringify(book[f]) === JSON.stringify(v)) continue; // no actual change
       keep[f] = v;
     }
@@ -240,6 +296,30 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
       out.bindings = raw.bindings.filter((b) => {
         if (!b?.checksum || !booksById[b.bookId]) { drop(`link ${b?.checksum || '?'}`, 'unknown file or book'); return false; }
         if (bindMap[b.checksum]) { drop(`link ${b.checksum.slice(0, 8)}…`, 'file is already linked — links are never replaced'); return false; }
+        return true;
+      });
+    }
+  }
+  if (raw?.answer != null) { if (a.answer && String(raw.answer).trim()) out.answer = String(raw.answer); else drop('answer', 'not part of the requested operations'); }
+  if (raw?.queueOrder?.length) {
+    if (!a.queueOrder) drop(`${raw.queueOrder.length} queue order(s)`, 'not part of the requested operations');
+    else {
+      out.queueOrder = raw.queueOrder.filter((qo) => {
+        const q = queues.find((x) => x.id === qo?.queueId && !x.deleted);
+        if (!q) { drop(`queue order ${qo?.queueId}`, 'no such queue'); return false; }
+        const ids = Array.isArray(qo.ids) ? qo.ids : [];
+        const same = ids.length === (q.ids || []).length && new Set(ids).size === ids.length && ids.every((id) => q.ids.includes(id));
+        if (!same) { drop(`order for “${q.name}”`, 'not exactly the same books (would add, drop or duplicate one)'); return false; }
+        if (ids.every((id, i) => id === q.ids[i])) return false; // already in that order
+        return true;
+      });
+    }
+  }
+  if (raw?.duplicates?.length) {
+    if (!a.duplicates) drop(`${raw.duplicates.length} duplicate pair(s)`, 'not part of the requested operations');
+    else {
+      out.duplicates = raw.duplicates.filter((d) => {
+        if (!booksById[d?.keepId] || !booksById[d?.foldId] || d.keepId === d.foldId) { drop(`pair ${d?.keepId} + ${d?.foldId}`, 'unknown or identical books'); return false; }
         return true;
       });
     }
@@ -276,6 +356,11 @@ export function planRows(output, { booksById = {}, files = {} } = {}) {
     rows.push({ key: `x:${i}`, kind: 'cross', label: `Shared note — ${n.series || ids.map(title).join(' + ')}`, to: short(n.text), value: { bookIds: ids, series: n.series || null, type: AI_NOTE_TYPES[n.type] ? n.type : 'other', text: String(n.text).trim() } });
   });
   for (const b of output.bindings || []) rows.push({ key: `l:${b.checksum}`, kind: 'link', label: `Link ${files[b.checksum]?.fileName || `${b.checksum.slice(0, 8)}…`}`, from: '(unlinked)', to: title(b.bookId), value: b });
+  if (output.answer) rows.push({ key: 'answer', kind: 'answer', label: 'Answer to your question', to: short(output.answer), value: output.answer });
+  for (const qo of output.queueOrder || []) {
+    rows.push({ key: `q:${qo.queueId}`, kind: 'queueOrder', label: `Reorder queue — ${qo.why ? short(String(qo.why)) : ''}`.replace(/ — $/, ''), from: '(current order)', to: qo.ids.slice(0, 6).map(title).join(' → ') + (qo.ids.length > 6 ? ' → …' : ''), value: { queueId: qo.queueId, ids: qo.ids } });
+  }
+  for (const d of output.duplicates || []) rows.push({ key: `d:${d.keepId}:${d.foldId}`, kind: 'dupe', label: `Duplicate? keep “${title(d.keepId)}”, fold in “${title(d.foldId)}”`, to: short(String(d.why || '')), value: { keepId: d.keepId, foldId: d.foldId, why: String(d.why || '') } });
   return rows;
 }
 
@@ -287,7 +372,7 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now() } =
   const aiNext = { ...(ai || {}) };
   const undo = { at: now, books: [], links: [], crossTexts: [], ai: {} };
   const keepAi = (k) => { if (!(k in undo.ai)) undo.ai[k] = ai?.[k] === undefined ? null : ai[k]; };
-  const crossNoteAdds = [], bindingAdds = [];
+  const crossNoteAdds = [], bindingAdds = [], queueOrders = [];
   for (const r of rows) {
     if (r.kind === 'field') book(r.bookId)[r.field] = r.value;
     else if (r.kind === 'note') {
@@ -305,7 +390,13 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now() } =
     } else if (r.kind === 'recommendations') { keepAi('recommendations'); aiNext.recommendations = r.value; }
     else if (r.kind === 'treeMeta') { keepAi('treeMeta'); aiNext.treeMeta = r.value; }
     else if (r.kind === 'weekly') { keepAi('weeklies'); aiNext.weeklies = { ...(aiNext.weeklies || {}), [r.value.week]: { text: r.value.text, at: now } }; }
-    else if (r.kind === 'brief') {
+    else if (r.kind === 'answer') { keepAi('answers'); aiNext.answers = [{ at: now, question: ai?.question || '', text: String(r.value) }, ...(aiNext.answers || [])].slice(0, 30); }
+    else if (r.kind === 'queueOrder') queueOrders.push(r.value);
+    else if (r.kind === 'dupe') {
+      keepAi('dupeSuggestions');
+      const list = (aiNext.dupeSuggestions || []).filter((x) => !(x.keepId === r.value.keepId && x.foldId === r.value.foldId));
+      aiNext.dupeSuggestions = [...list, { ...r.value, at: now }].slice(-200);
+    } else if (r.kind === 'brief') {
       keepAi('briefs');
       const date = /^\d{4}-\d{2}-\d{2}$/.test(String(r.value.date || '')) ? r.value.date : new Date(now).toISOString().slice(0, 10);
       const briefs = { ...(aiNext.briefs || {}), [date]: { text: String(r.value.text || ''), at: now } };
@@ -313,7 +404,7 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now() } =
     }
   }
   for (const id of working.keys()) undo.books.push(booksById[id]);
-  return { bookUpdates: [...working.values()], crossNoteAdds, bindingAdds, aiNext, undo };
+  return { bookUpdates: [...working.values()], crossNoteAdds, bindingAdds, queueOrders, aiNext, undo };
 }
 
 // Short "what was applied" line for the log.
@@ -325,6 +416,9 @@ export function applySummary(rows) {
     n('cross') && `${n('cross')} shared note${n('cross') === 1 ? '' : 's'}`,
     n('link') && `${n('link')} file link${n('link') === 1 ? '' : 's'}`,
     n('weekly') && `${n('weekly')} weekly summar${n('weekly') === 1 ? 'y' : 'ies'}`,
+    n('queueOrder') && `${n('queueOrder')} queue order${n('queueOrder') === 1 ? '' : 's'}`,
+    n('dupe') && `${n('dupe')} duplicate suggestion${n('dupe') === 1 ? '' : 's'}`,
+    n('answer') && 'answer',
     n('analysis') && 'analysis', n('recommendations') && 'read-next list', n('treeMeta') && 'tree layout', n('brief') && 'morning brief',
   ].filter(Boolean);
   return parts.join(', ') || 'nothing';

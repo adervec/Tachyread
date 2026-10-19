@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { COWORK_OPS, combinedAllow, opsInstruction, sanitizeOutput, planRows, buildApply, isReportOnly, schemaFor } from './coworkOps.js';
+import { COWORK_OPS, combinedAllow, opsInstruction, sanitizeOutput, planRows, buildApply, isReportOnly, schemaFor, queuesForDataset } from './coworkOps.js';
 
 const books = {
   a: { id: 'a', title: 'Alpha', author: 'X', genre: '', recScore: 5 },                    // to-read, no genre
@@ -54,4 +54,36 @@ assert.equal(ap.aiNext.briefs['2026-10-19'].text, 'Good morning');
 assert.deepEqual(ap.undo.ai, { briefs: {} });
 // Every op has the three explanation parts.
 for (const [id, op] of Object.entries(COWORK_OPS)) assert.ok(op.explain.sends && op.explain.changes && op.explain.review, id);
+
+// Ask a question: dropped without a question; the question lands in the instruction; answer only.
+assert.equal(opsInstruction(['cw-ask']), null);
+assert.match(opsInstruction(['cw-ask'], { question: 'Am I faster?' }).text, /Am I faster\?/);
+const ans = sanitizeOutput({ answer: 'Yes', bookPatches: [{ id: 'a', genre: 'x' }] }, ['cw-ask'], ctx);
+assert.deepEqual(Object.keys(ans.output), ['answer']);
+
+// Difficulty: blanks only, whole numbers 1–5.
+const diff = sanitizeOutput({ bookPatches: [{ id: 'a', difficultyLevel: 3 }, { id: 'c', difficultyLevel: 9 }] }, ['cw-fill-diff'], ctx);
+assert.deepEqual(diff.output.bookPatches, [{ id: 'a', difficultyLevel: 3 }]);
+assert.match(diff.dropped[0].why, /whole number 1–5/);
+
+// Queue advice: only an exact permutation of the queue's own books; reorders apply via buildApply.
+const queues = [{ id: 'q1', name: 'Now', ids: ['a', 'b', 'c'] }];
+const qa = sanitizeOutput({ queueOrder: [
+  { queueId: 'q1', ids: ['c', 'a', 'b'], why: 'momentum' },
+  { queueId: 'q1', ids: ['c', 'a'], why: 'dropped one' },
+  { queueId: 'q1', ids: ['a', 'b', 'c', 'zzz'] },
+  { queueId: 'nope', ids: [] },
+] }, ['cw-queue-advice'], { ...ctx, queues });
+assert.deepEqual(qa.output.queueOrder.map((q) => q.ids), [['c', 'a', 'b']]);
+assert.equal(qa.dropped.length, 3);
+const qrows = planRows(qa.output, { booksById: books });
+assert.equal(qrows[0].kind, 'queueOrder');
+assert.deepEqual(buildApply(qrows, { booksById: books }).queueOrders, [{ queueId: 'q1', ids: ['c', 'a', 'b'] }]);
+assert.deepEqual(queuesForDataset(queues, Object.values(books))[0].books.map((b) => b.id), ['a', 'b', 'c']);
+
+// Duplicates: stored as suggestions only (no book touched).
+const du = sanitizeOutput({ duplicates: [{ keepId: 'a', foldId: 'c', why: 'same' }, { keepId: 'a', foldId: 'a' }] }, ['cw-dupes'], ctx);
+assert.equal(du.output.duplicates.length, 1);
+const dap = buildApply(planRows(du.output, { booksById: books }), { booksById: books, ai: {}, now: 5 });
+assert.deepEqual([dap.bookUpdates.length, dap.aiNext.dupeSuggestions], [0, [{ keepId: 'a', foldId: 'c', why: 'same', at: 5 }]]);
 console.log('coworkOps: all cases pass');
