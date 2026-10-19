@@ -696,6 +696,15 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       </Field>
 
       <Section>Pace ghost</Section>
+      <Field label="Lead ghost in scroll mode">
+        <input type="checkbox" checked={!!s.scrollGhost} onChange={(e) => patch({ scrollGhost: e.target.checked })} />
+      </Field>
+      <p className="settings-note" style={{ margin: '2px 0 6px' }}>
+        In scroll-to-read, a ghost runs ahead of your scrolled word at the WPM above — the speed auto-play
+        would go — so your eye can follow it while you keep scroll mode&rsquo;s calm, manual control.
+        Every forward scroll restarts it from your new word; it keeps going while you don&rsquo;t scroll,
+        up to 250 words ahead. Its look is the ghost style below.
+      </p>
       <Field label="Race a pace ghost">
         <input type="checkbox" checked={!!s.paceGhost} onChange={(e) => patch({ paceGhost: e.target.checked })} />
       </Field>

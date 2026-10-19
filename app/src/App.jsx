@@ -106,7 +106,7 @@ import { activitySummary } from './features/activitySummary.js';
 import { dockMiniIds } from './features/dockMini.js';
 import { cameraOffPatch } from './features/cameraOff.js';
 import { shouldKeepAwake, setKeepAwake } from './features/wakeLock.js';
-import { ghostIndexAt, raceState, ghostRunFrom, ghostResetReason, ghostAtGoal, goalRace } from './features/paceGhost.js';
+import { ghostIndexAt, raceState, ghostRunFrom, ghostResetReason, ghostAtGoal, goalRace, leadGhostStep } from './features/paceGhost.js';
 import { goalTargetIndex } from './engine/goals.js';
 import { bookFromOpenedDoc } from './features/trackyreadAdd.js';
 import { sectionChecksum } from './document/sectionHash.js';
@@ -424,7 +424,11 @@ function AppInner() {
   // drifts and a re-render can't advance it.
   const [ghostRun, setGhostRun] = useState(null);
   const [ghostIdx, setGhostIdx] = useState(null);
-  const ghostOn = !!activeTab?.settings.paceGhost;
+  // Scroll-mode LEAD ghost (setting scrollGhost): a guide running ahead of your scrolled word,
+  // restarted by every forward scroll, kept going while you don't scroll (features/paceGhost.js).
+  const leadGhost = scrollActive && !!activeTab?.settings.scrollGhost;
+  const ghostOn = !!activeTab?.settings.paceGhost || leadGhost;
+  const leadLastRef = useRef(null);
   const ghostWpm = activeTab?.settings.wpm || 250;
   const ghostTotal = activeTab?.doc?.words?.length || 0;
   const resetGhost = useCallback(() => {
@@ -435,12 +439,13 @@ function AppInner() {
   // Start / tear down a run. Playing hands the pace back to auto-play; idle means you stopped.
   useEffect(() => {
     if (!ghostOn || !activeTab) { setGhostRun(null); setGhostIdx(null); return undefined; }
-    const reason = ghostResetReason({ playing, idle: readingMode === 'idle' });
+    // The lead ghost keeps running while you're still (you're following it), so idle doesn't end it.
+    const reason = ghostResetReason({ playing, idle: !leadGhost && readingMode === 'idle' });
     if (reason) { setGhostRun(null); setGhostIdx(null); return undefined; }
     if (!ghostRun) resetGhost();
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ghostOn, playing, readingMode, activeTab?.id]);
+  }, [ghostOn, leadGhost, playing, readingMode, activeTab?.id]);
   // With a goal set, its target is the race's FINISH LINE: the ghost stops there instead of
   // wandering off, so "who gets to the goal first" is a real question rather than a moving one.
   const ghostGoalTarget = useMemo(() => {
@@ -456,6 +461,14 @@ function AppInner() {
   useEffect(() => {
     if (!ghostOn || !ghostRun) return undefined;
     const step = () => {
+      if (leadGhost) {
+        const wi = activeTabRef.current?.settings?.wordIndex || 0;
+        const r = leadGhostStep({ run: ghostRun, readerIdx: wi, lastReaderIdx: leadLastRef.current, now: Date.now(), wpm: ghostWpm, totalWords: ghostTotal });
+        leadLastRef.current = wi;
+        if (r.reset) { resetGhost(); return; }
+        setGhostIdx(r.idx);
+        return;
+      }
       const raw = ghostIndexAt({ ...ghostRun, now: Date.now(), wpm: ghostWpm, totalWords: ghostTotal });
       const idx = ghostAtGoal(raw, ghostGoalRef.current)?.idx ?? raw;
       setGhostIdx(idx);
@@ -470,8 +483,9 @@ function AppInner() {
     step();
     const t = setInterval(step, 250);
     return () => clearInterval(t);
-  }, [ghostOn, ghostRun, ghostWpm, ghostTotal, resetGhost]);
-  const ghostRace = ghostOn && ghostIdx != null ? raceState(activeTab?.settings.wordIndex ?? 0, ghostIdx) : null;
+  }, [ghostOn, leadGhost, ghostRun, ghostWpm, ghostTotal, resetGhost]);
+  // A guide isn't a race — no ahead/behind readout while the lead ghost is on.
+  const ghostRace = ghostOn && !leadGhost && ghostIdx != null ? raceState(activeTab?.settings.wordIndex ?? 0, ghostIdx) : null;
   // Goal verdict: reader's MEASURED pace against the ghost's SET pace, both to the goal target.
   const ghostGoal = ghostOn && ghostIdx != null && ghostGoalTarget != null
     ? goalRace({
@@ -3426,7 +3440,7 @@ function AppInner() {
         <StatisticsDialog tabs={state.tabs} activeTabId={state.activeTabId} onClose={closeDialog} />
       )}
       {dialog?.kind === 'literary-journey' && (
-        <LiteraryJourneyDialog global={state.global} onPatch={(p) => updateGlobal(p)} initialTab={dialog.tab} focusBookId={dialog.focusBookId} linkChecksum={dialog.linkChecksum} linkFileName={dialog.linkFileName} openChecksums={state.tabs.filter((t) => !t.lazy && t.settings?.contentChecksum).map((t) => t.settings.contentChecksum)} onClose={closeDialog} />
+        <LiteraryJourneyDialog global={state.global} onPatch={(p) => updateGlobal(p)} initialTab={dialog.tab} focusBookId={dialog.focusBookId} focusQueueId={dialog.focusQueueId} linkChecksum={dialog.linkChecksum} linkFileName={dialog.linkFileName} openChecksums={state.tabs.filter((t) => !t.lazy && t.settings?.contentChecksum).map((t) => t.settings.contentChecksum)} onClose={closeDialog} />
       )}
       {dialog?.kind === 'proper-names' && dlgTab && (
         <ProperNamesDialog

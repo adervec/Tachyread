@@ -72,3 +72,17 @@ export function goalRace({ readerIdx = 0, ghostIdx = null, targetIdx = null, rea
   const leader = marginSec < 5 ? 'tie' : readerEta < ghostEta ? 'you' : 'ghost';
   return { readerEta, ghostEta, leader, marginSec, readerDone, ghostDone };
 }
+
+// ── scroll-mode lead ghost ────────────────────────────────────────────────────────────────────
+// In scroll-to-read the ghost isn't a rival but a guide: it runs AHEAD of your scrolled word at the
+// auto-play WPM so your eye can follow it, while you keep scroll mode's calm, manual feel. Every
+// forward scroll restarts it from your new word; it keeps going while you're not scrolling (that's
+// the point), but never more than `cap` words ahead — then it waits for you.
+// → { idx, reset } — reset: start a new run from `readerIdx` (you scrolled forward, or jumped back).
+export function leadGhostStep({ run, readerIdx = 0, lastReaderIdx = null, now = 0, wpm = 250, totalWords = Infinity, cap = 250, jumpBack = 300 } = {}) {
+  const forward = lastReaderIdx != null && readerIdx > lastReaderIdx;
+  const back = lastReaderIdx != null && lastReaderIdx - readerIdx > jumpBack;
+  if (!run || forward || back) return { idx: readerIdx, reset: true };
+  const raw = ghostIndexAt({ ...run, now, wpm, totalWords });
+  return { idx: Math.min(raw ?? readerIdx, readerIdx + cap), reset: false };
+}

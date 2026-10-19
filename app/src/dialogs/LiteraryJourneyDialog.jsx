@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useSessionState } from '../state/useSessionState.js';
+import { todaySummary, localDate } from '../features/todaySummary.js';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { scanMiscategorized, applyRecat, recatSummary } from '../features/journeyRecat.js';
@@ -167,6 +168,88 @@ function GoalCard({ books, goals, onSetGoal }) {
 
 const fmtVal = (v) => (v === undefined || v === null || v === '' ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v).length > 60 ? `${String(v).slice(0, 60)}…` : String(v));
 
+// The dashboard's "Today" card: words / time / speed so far against your usual day and what the
+// words goal needs, the streak, what you read today (with each book's progress), anything finished
+// today, and what's next in your queues. Everything comes from data the dialog already has.
+const fmtMin = (secs) => (secs >= 3600 ? `${Math.floor(secs / 3600)}h ${Math.round((secs % 3600) / 60)}m` : secs >= 60 ? `${Math.round(secs / 60)}m` : `${Math.round(secs)}s`);
+function TodayCard({ books, goals, dayAgg, fileStats, bindMap, linkedIds, openChecksums = [], onOpenBook, onOpenFile, onQueues }) {
+  const now = useMemo(() => Date.now(), []); // eslint-disable-line react-hooks/purity
+  const byId = useMemo(() => new Map(books.map((b) => [b.id, b])), [books]);
+  const t = useMemo(() => todaySummary({ dayAgg, fileStats, bookOf: (cs) => byId.get(bindMap[cs]) || null, books, now }), [dayAgg, fileStats, bindMap, byId, books, now]);
+  const pace = useMemo(() => recentPace(dayAgg.filter((d) => d.date !== t.today), { now: now - 86400000 }), [dayAgg, t.today, now]);
+  const wordsTarget = Number(goals?.[`${new Date(now).getUTCFullYear()}-words`]) || 0;
+  const wg = useMemo(() => (wordsTarget ? yearWordsGoal(dayAgg, books, linkedIds, wordsTarget, now) : null), [wordsTarget, dayAgg, books, linkedIds, now]);
+  // What's next in each queue (first few queues).
+  const [nexts, setNexts] = useState([]);
+  useEffect(() => {
+    let live = true;
+    getLibraryRef('queues').then((qs) => {
+      if (!live) return;
+      // Skip what you're already reading today — "up next" means the one after it.
+      const readToday = new Set(t.files.map((f) => f.book?.id).filter(Boolean));
+      setNexts(liveQueues(qs || []).map((q) => { const todo = splitFinished(queueBooks(q, books)).todo; return { q, book: todo.find((b) => !readToday.has(b.id)) || todo[0] || null }; }).filter((x) => x.book).slice(0, 4));
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [books, t.files]);
+  // Today's need = what's left of the year's goal per day, plus today's own share already read.
+  const need = wg && wg.remaining > 0 ? Math.round((wg.remaining + t.words) / Math.max(1, wg.daysLeft + 1)) : null;
+  const usual = pace.wordsPerDay;
+  const bar = (v, of) => (of ? Math.min(1, v / of) : 0);
+  const csOf = {};
+  for (const [c, id] of Object.entries(bindMap)) if (!csOf[id]) csOf[id] = c;
+  return (
+    <div className="lj-today">
+      <div className="lj-today-head">
+        <b>Today</b>
+        <span className="settings-note" style={{ margin: 0 }}>{new Date(now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+        <span className="lj-spacer" />
+        <span className={`lj-today-streak${t.streak.readToday ? ' on' : ''}`} title="Consecutive days with some reading">
+          🔥 {t.streak.days} day{t.streak.days === 1 ? '' : 's'}{!t.streak.readToday && t.streak.days ? ' — read today to keep it' : ''}
+        </span>
+      </div>
+      <div className="lj-qstats">
+        <div className="ab-stat"><b>{t.words.toLocaleString()}</b><span>words today{t.aloudWords ? ` (${t.aloudWords.toLocaleString()} aloud)` : ''}</span></div>
+        <div className="ab-stat"><b>{fmtMin(t.secs)}</b><span>active reading</span></div>
+        <div className="ab-stat"><b>{t.wpm ?? '—'}</b><span>wpm today{pace.wpm ? ` · usually ~${pace.wpm}` : ''}</span></div>
+        <div className="ab-stat" title="Your recent words per day (last ~6 weeks, recent days weighted most)">
+          <b>{usual ? `${Math.round((t.words / usual) * 100)}%` : '—'}</b><span>{usual ? `of your usual ~${usual.toLocaleString()}/day` : 'of a usual day (no history yet)'}</span>
+          {usual ? <Bar pct={bar(t.words, usual)} label="Today against your usual day" /> : null}
+        </div>
+        {need != null && (
+          <div className="ab-stat" title="What's left of this year's words goal, spread over the days left (today included)">
+            <b>{t.words >= need ? '✓' : (need - t.words).toLocaleString()}</b><span>{t.words >= need ? `words goal: today's ~${need.toLocaleString()} done` : `words to go for today's goal share (~${need.toLocaleString()})`}</span>
+            <Bar cls={t.words >= need ? 'fin' : ''} pct={bar(t.words, need)} label="Today against the words goal's daily share" />
+          </div>
+        )}
+      </div>
+      {t.files.length > 0 ? (
+        <div className="lj-today-list">
+          {t.files.slice(0, 8).map((f) => (
+            <div key={f.cs} className="lj-today-row">
+              <button className="link-btn" onClick={() => (f.book ? onOpenBook(f.book.id) : onOpenFile(f.cs))} title={f.book ? 'Open in Library' : 'Open the file'}>{f.book?.title || f.name}</button>
+              <span className="lj-qdim">{f.words.toLocaleString()} words · {fmtMin(f.secs)}</span>
+              <Bar pct={f.coverage} label={`${Math.round(f.coverage * 100)}% of the book read`} /><span className="lj-cand-pct">{Math.round(f.coverage * 100)}%</span>
+              {!openChecksums.includes(f.cs) && <button onClick={() => onOpenFile(f.cs)} title="Continue reading">▶</button>}
+            </div>
+          ))}
+        </div>
+      ) : <p className="settings-note">Nothing read yet today.</p>}
+      {t.finished.length > 0 && <p className="settings-note lj-today-fin">🎉 Finished today: {t.finished.map((b) => b.title).join(', ')}</p>}
+      {nexts.length > 0 && (
+        <div className="lj-today-next">
+          <span className="settings-note" style={{ margin: 0 }}>Up next:</span>
+          {nexts.map(({ q, book }) => (
+            <span key={q.id} className="lj-today-chip">
+              <button className="link-btn" onClick={onQueues} title={`Queue “${q.name}”`}>{q.name}</button> → <button className="link-btn" onClick={() => onOpenBook(book.id)}>{book.title}</button>
+              {csOf[book.id] && <button onClick={() => onOpenFile(csOf[book.id])} title="Open it">▶</button>}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Yearly WORDS goal, beside the books one (stored in the same synced goals ref as "<year>-words").
 // Counts reading the app recorded this year plus off-app finishes (books with no linked document).
 const fmtWords = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
@@ -220,7 +303,7 @@ function WordsGoalCard({ books, goals, dayAgg, linkedIds, onSetGoal }) {
   );
 }
 
-export default function LiteraryJourneyDialog({ global, onPatch, initialTab, focusBookId, linkChecksum, linkFileName, openChecksums = [], onClose }) {
+export default function LiteraryJourneyDialog({ global, onPatch, initialTab, focusBookId, focusQueueId, linkChecksum, linkFileName, openChecksums = [], onClose }) {
   const { openRecent } = useApp();
   const [books, setBooks] = useState(null);
   const [refs, setRefs] = useState({ authors: null, genres: null, subgenres: null });
@@ -276,6 +359,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   const [linkCs, setLinkCs] = useState(linkChecksum || null);
   const [linkName, setLinkName] = useState(linkFileName || '');
   useEffect(() => { if (focusBookId) { setTab('library'); setSelected(focusBookId); } }, [focusBookId]);
+  useEffect(() => { if (focusQueueId) setTab('queue'); }, [focusQueueId]); // tab menu → "Go to queue"
 
   async function reload() {
     const [bs, a, g, sg, goalsRec, aiRec, sz, bind, secs, xNotes, docs, files] = await Promise.all([
@@ -301,7 +385,9 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
         cur.aloudSecs += d.aloudSecs || 0;
         byDay.set(d.date, cur);
       }
+      const td = daily.find((x) => x.date === localDate(Date.now())); // tracker days are local dates
       stats[cs] = {
+        today: td ? { words: td.wordsRead || 0, secs: td.activeTimeSecs || 0 } : undefined, // the dashboard's Today card
         fileName: f.fileName || '',
         firstRead: daily[0]?.date || null,
         lastRead: daily.length ? daily[daily.length - 1].date : null,
@@ -738,6 +824,8 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
 
           {tab === 'dashboard' && stats && (
             <div className="lj-dash">
+              <TodayCard books={books} goals={goals} dayAgg={dayAgg} fileStats={fileStats} bindMap={bindMap || {}} linkedIds={linkedIds} openChecksums={openChecksums}
+                onOpenBook={(id) => { setTab('library'); setSelected(id); }} onOpenFile={async (cs) => { if (await openRecent(cs)) handleClose(); }} onQueues={() => setTab('queue')} />
               <GoalCard books={books} goals={goals} onSetGoal={setGoalTarget} />
               <WordsGoalCard books={books} goals={goals} dayAgg={dayAgg} linkedIds={linkedIds} onSetGoal={setGoalTarget} />
               <div className="rh-stat-grid">
@@ -1043,7 +1131,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
             </div>
           )}
 
-          {tab === 'queue' && <QueueView books={books} fileStats={fileStats} bindMap={bindMap || {}} openChecksums={openChecksums} dayAgg={dayAgg} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
+          {tab === 'queue' && <QueueView key={focusQueueId || 'q'} initialSel={focusQueueId} books={books} fileStats={fileStats} bindMap={bindMap || {}} openChecksums={openChecksums} dayAgg={dayAgg} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
           {tab === 'series' && <SeriesView books={books} crossNotes={crossNotes} onDeleteCross={async (id) => { await deleteCrossNote(id); setCrossNotes(await getCrossNotes()); }} onShelve={shelve} onOpen={(id) => { setTab('library'); setSelected(id); }} />}
           {tab === 'groups' && (
             <GroupsView
@@ -2200,7 +2288,7 @@ const pctTxt = (p) => `${Math.round((p || 0) * 100)}%`;
 const Bar = ({ pct, cls = '', label }) => (
   <span className={`lj-pbar ${cls}`} role="img" aria-label={label || `${pctTxt(pct)} read`}><i style={{ width: pctTxt(Math.min(1, pct)) }} /></span>
 );
-function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums = [], dayAgg = [] }) {
+function QueueView({ initialSel = null, books, onOpen, fileStats = {}, bindMap = {}, openChecksums = [], dayAgg = [] }) {
   const { openRecent, openFiles, closeDialog } = useApp();
   const pace = useMemo(() => recentPace(dayAgg), [dayAgg]);
   const [wpmIn, setWpm] = useState(null);
@@ -2234,7 +2322,7 @@ function QueueView({ books, onOpen, fileStats = {}, bindMap = {}, openChecksums 
     } finally { setFinding(null); }
   }
   const [queues, setQueues] = useState(null); // null = loading
-  const [sel, setSel] = useState(null);
+  const [sel, setSel] = useState(initialSel);
   const [naming, setNaming] = useState(null); // new-queue name being typed, or null
   const [undo, setUndo] = useState(null);     // { queues, label } before the last bulk change
   const [paths, setPaths] = useState(() => foundPaths()); // checksum → 'Folder/sub/file' (indexFolders)

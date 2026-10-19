@@ -102,3 +102,14 @@ assert.equal(goalRace({ readerIdx: 10, ghostIdx: null, targetIdx: 100, readerWpm
 assert.equal(goalRace({}), null);
 
 console.log('paceGhost (goal): all cases pass');
+
+// Scroll-mode lead ghost: runs ahead at the WPM, restarts on every forward scroll, waits at the cap.
+{
+  const { leadGhostStep } = await import('./paceGhost.js');
+  const run = { startIdx: 100, startedAt: 1000 };
+  assert.deepEqual(leadGhostStep({ run, readerIdx: 100, lastReaderIdx: 100, now: 1000 + 60000, wpm: 120 }), { idx: 220, reset: false }, '1 min at 120 wpm → 120 words ahead');
+  assert.deepEqual(leadGhostStep({ run, readerIdx: 100, lastReaderIdx: 100, now: 1000 + 600000, wpm: 120 }), { idx: 350, reset: false }, 'capped 250 ahead');
+  assert.deepEqual(leadGhostStep({ run, readerIdx: 130, lastReaderIdx: 100, now: 5000 }), { idx: 130, reset: true }, 'scrolling forward restarts from the new word');
+  assert.deepEqual(leadGhostStep({ run, readerIdx: 90, lastReaderIdx: 100, now: 5000, wpm: 120 }).reset, false, 'a small step back keeps the run');
+  assert.deepEqual(leadGhostStep({ run: null, readerIdx: 5 }), { idx: 5, reset: true });
+}
