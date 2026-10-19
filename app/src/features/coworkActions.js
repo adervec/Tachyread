@@ -8,9 +8,7 @@
 //   ai.syncMachine  { deviceId, name, at } | null                    — the designated sync device
 //   ai.coworkDirPath  string                                         — user-annotated full folder path
 
-import {
-  LIGHT_INSTRUCTION, HEAVY_PLACEHOLDER, KNOWLEDGE_GRAPH_INSTRUCTION, CLASSIFY_INSTRUCTION,
-} from './journeyAi.js';
+import { COWORK_OPS, opsInstruction } from './coworkOps.js';
 
 // ── The action tree ─────────────────────────────────────────────────────────
 // Three groups = the three transports. `needsKey` gates the whole group on an Anthropic key —
@@ -19,18 +17,18 @@ import {
 export const SYNC_ACTION_GROUPS = [
   {
     id: 'cowork', icon: '🤝', label: 'Cowork folder', kind: 'cowork',
+    // The well-defined operations (coworkOps.js — each with its own enforced write permission and a
+    // full explanation), plus the read-only activity snapshot. The old free-text custom instruction
+    // is gone: a reply could ask for anything; now the app only accepts what the ticked ops allow.
     actions: [
-      { id: 'cw-light', icon: '🔄', label: 'Refresh recs + analysis', desc: 'Light — compact dataset, updates recommendations, analysis and weekly summaries', mode: 'light', text: LIGHT_INSTRUCTION },
-      { id: 'cw-tree', icon: '🌳', label: 'Rebuild tech tree', desc: 'Heavy — full library travels; repositions the reading tech tree', mode: 'heavy', text: HEAVY_PLACEHOLDER },
-      { id: 'cw-graph', icon: '🕸', label: 'Rebuild knowledge graph', desc: 'Heavy — full library; regenerates cross-book concept edges', mode: 'heavy', text: KNOWLEDGE_GRAPH_INSTRUCTION },
-      { id: 'cw-classify', icon: '🗂', label: 'Audit content types', desc: 'Heavy — fixes wrong or missing long-form/article/poetry/… classifications', mode: 'heavy', text: CLASSIFY_INSTRUCTION },
-      { id: 'cw-custom', icon: '✏️', label: 'Custom instruction', desc: 'Heavy — your own task text, appended to whatever else is checked', mode: 'heavy', text: '' },
+      { id: 'cw-snapshot', icon: '📸', label: 'Write activity snapshot', desc: 'Read-only files for observing agents — changes nothing in Tachyread' },
+      ...Object.entries(COWORK_OPS).map(([id, op]) => ({ id, icon: op.icon, label: op.label, desc: op.explain.changes, op: true })),
     ],
   },
   {
     id: 'api', icon: '🤖', label: 'Direct API (Anthropic)', kind: 'api', needsKey: true,
     actions: [
-      { id: 'api-light', icon: '⚡', label: 'Light refresh via API', desc: 'Asks Claude directly with the compact dataset — no folder round-trip', mode: 'light', text: LIGHT_INSTRUCTION },
+      { id: 'api-light', icon: '⚡', label: 'Analysis + read-next via API', desc: 'Asks Claude directly (same operation as "Reading-profile analysis") — report only, no book changes' },
     ],
   },
   {
@@ -47,16 +45,9 @@ export const SYNC_ACTIONS = SYNC_ACTION_GROUPS.flatMap((g) =>
 const BY_ID = Object.fromEntries(SYNC_ACTIONS.map((a) => [a.id, a]));
 export const actionById = (id) => BY_ID[id] || null;
 
-// Combine the checked cowork actions into ONE request instruction (the protocol carries a single
-// instruction). Heavy wins the mode; texts concatenate in catalog order; the custom action
-// contributes the user's saved text.
-export function combineCoworkInstruction(ids, customText = '') {
-  const acts = SYNC_ACTIONS.filter((a) => a.kind === 'cowork' && ids.includes(a.id));
-  if (!acts.length) return null;
-  const mode = acts.some((a) => a.mode === 'heavy') ? 'heavy' : 'light';
-  const text = acts.map((a) => (a.id === 'cw-custom' ? (customText || '').trim() : a.text))
-    .filter(Boolean).join('\n\n');
-  return { mode, text: text || LIGHT_INSTRUCTION };
+// The checked cowork OPERATIONS as one request instruction ({ mode, ops, text }), or null.
+export function combineCoworkInstruction(ids) {
+  return opsInstruction(ids.filter((id) => COWORK_OPS[id]));
 }
 
 // ── Schedules ───────────────────────────────────────────────────────────────
