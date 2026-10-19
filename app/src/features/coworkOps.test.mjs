@@ -86,4 +86,25 @@ const du = sanitizeOutput({ duplicates: [{ keepId: 'a', foldId: 'c', why: 'same'
 assert.equal(du.output.duplicates.length, 1);
 const dap = buildApply(planRows(du.output, { booksById: books }), { booksById: books, ai: {}, now: 5 });
 assert.deepEqual([dap.bookUpdates.length, dap.aiNext.dupeSuggestions], [0, [{ keepId: 'a', foldId: 'c', why: 'same', at: 5 }]]);
+
+// Locked books: no operation may touch them.
+const lockedBooks = { ...books, a: { ...books.a, locked: true } };
+const lk = sanitizeOutput({ bookPatches: [{ id: 'a', genre: 'X' }], aiNotes: [{ bookId: 'a', text: 'n' }], duplicates: [{ keepId: 'a', foldId: 'c' }] }, ['cw-fill-genre', 'cw-notes', 'cw-dupes'], { ...ctx, booksById: lockedBooks });
+assert.equal(lk.output.bookPatches, undefined);
+assert.deepEqual(lk.output.aiNotes, []);
+assert.deepEqual(lk.output.duplicates, []);
+assert.ok(lk.dropped.every((d) => /locked/.test(d.why)));
+
+// Reports: only the kinds the requested ops produce; stored newest first.
+const rp = sanitizeOutput({ reports: [{ kind: 'typing', title: 'T', text: 'x' }, { kind: 'retro', title: 'R', text: 'y' }] }, ['cw-typing-coach'], ctx);
+assert.deepEqual(rp.output.reports.map((r) => r.kind), ['typing']);
+const rap = buildApply(planRows(rp.output, { booksById: books }), { booksById: books, ai: { reports: [{ at: 1, kind: 'old' }] }, now: 9 });
+assert.deepEqual(rap.aiNext.reports.map((r) => r.kind), ['typing', 'old']);
+
+// New books: only books not already in the library, with an author; created as to-read, undo lists them.
+const nbs = sanitizeOutput({ newBooks: [{ title: 'Alpha', author: 'X' }, { title: 'Delta', author: 'Q', why: 'fits' }, { title: 'No Author' }, { title: 'delta', author: 'Q' }] }, ['cw-add-recs'], ctx);
+assert.deepEqual(nbs.output.newBooks.map((b) => b.title), ['Delta']);
+const nap = buildApply(planRows(nbs.output, { booksById: books }), { booksById: books, ai: {}, now: 9 });
+assert.equal(nap.bookUpdates.length, 1);
+assert.deepEqual([nap.bookUpdates[0].title, nap.bookUpdates[0].recBy, nap.bookUpdates[0].completion, nap.undo.created.length], ['Delta', 'Cowork agent', false, 1]);
 console.log('coworkOps: all cases pass');

@@ -8,7 +8,7 @@
 //   ai.syncMachine  { deviceId, name, at } | null                    — the designated sync device
 //   ai.coworkDirPath  string                                         — user-annotated full folder path
 
-import { COWORK_OPS, opsInstruction } from './coworkOps.js';
+import { COWORK_OPS, OP_GROUPS, opsInstruction } from './coworkOps.js';
 
 // ── The action tree ─────────────────────────────────────────────────────────
 // Three groups = the three transports. `needsKey` gates the whole group on an Anthropic key —
@@ -22,7 +22,9 @@ export const SYNC_ACTION_GROUPS = [
     // is gone: a reply could ask for anything; now the app only accepts what the ticked ops allow.
     actions: [
       { id: 'cw-snapshot', icon: '📸', label: 'Write activity snapshot', desc: 'Read-only files for observing agents — changes nothing in Tachyread' },
-      ...Object.entries(COWORK_OPS).map(([id, op]) => ({ id, icon: op.icon, label: op.label, desc: op.explain.changes, op: true })),
+      ...Object.entries(COWORK_OPS)
+        .sort((x, y) => OP_GROUPS.findIndex((g) => g.id === x[1].group) - OP_GROUPS.findIndex((g) => g.id === y[1].group)) // stable: group order, catalog order within
+        .map(([id, op]) => ({ id, icon: op.icon, label: op.label, desc: op.explain.changes, op: true })),
     ],
   },
   {

@@ -16,12 +16,16 @@
 //   answer                                                     — a text answer (AI record only)
 //   queueOrder                                                 — reorder a queue (same books, new order)
 //   duplicates                                                 — suggest duplicate pairs for the Reconcile table
+//   reports: kind                                              — a titled report text (AI record only)
+//   newBooks                                                   — CREATE new to-read books (never edit existing)
+// A book marked LOCKED (book.locked) is never changed by any operation — such items are dropped.
 // Pure; see coworkOps.test.mjs.
-import { readStatus } from './journeyLibrary.js';
+import { readStatus, deriveId, setReadStatus } from './journeyLibrary.js';
+import { dupKey } from './journeyCleanup.js';
 import { liveQueues, queueBooks } from './readingQueues.js';
 import { AI_NOTE_TYPES } from './journeyAi.js';
 
-const NEVER = 'Titles, authors, ids, reading/finished status and dates, ratings, your own notes, queues, reading progress and history, file links that already exist.';
+const NEVER = 'Titles, authors, ids, reading/finished status and dates, ratings, your own notes, queues, reading progress and history, file links that already exist — and anything about a book you have locked (🔒).';
 
 // id → { icon, group, label, heavy, instruction, allow, explain: { sends, changes, review } }
 export const COWORK_OPS = {
@@ -53,6 +57,36 @@ export const COWORK_OPS = {
       sends: 'The compact dataset (library summary, last 20 finishes, top 40 unread candidates, reading progress).',
       changes: 'Replaces the Dashboard\'s analysis paragraph (the old one is archived under "Previous AI analyses") and the read-next list. No book changes — rec scores are a separate operation now.',
       review: 'Report only — applied automatically when scheduled via the API.',
+    },
+  },
+  'cw-retro': {
+    icon: '📆', group: 'report', label: 'Weekly review / monthly retrospective', heavy: false,
+    instruction: 'RETROSPECTIVE. From the snapshot/ files (activity-log.md, reading-days.json, goals.json, queues.json, typing.json, speaking.json) write a review of the last 7 days and the last 30 days: totals against the previous period, trends in speed and consistency, best and weakest days, goal pace, queue movement, what slipped — then 3 specific suggestions. Ground every number in the data. Return it as `reports` [{kind: "retro", title, text (Markdown)}].',
+    allow: { reports: 'retro' },
+    explain: {
+      sends: 'The compact dataset; the agent reads the snapshot/ files for the detail.',
+      changes: 'Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.',
+      review: 'Report only. Undo removes it.',
+    },
+  },
+  'cw-typing-coach': {
+    icon: '⌨️', group: 'report', label: 'Typing coach', heavy: false,
+    instruction: 'TYPING COACH. From snapshot/typing.json analyse typing practice: net/gross WPM and accuracy trends, consistency, the most-missed keys and what they suggest (fingers, rows, symbols), whether recent runs are improving, and give 3–5 concrete drills or settings to try next. Return it as `reports` [{kind: "typing", title, text (Markdown)}].',
+    allow: { reports: 'typing' },
+    explain: {
+      sends: 'The compact dataset; the agent reads snapshot/typing.json (runs, weekly aggregates, most-missed keys).',
+      changes: 'Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.',
+      review: 'Report only. Undo removes it.',
+    },
+  },
+  'cw-speak-coach': {
+    icon: '🗣', group: 'report', label: 'Reading-aloud coach', heavy: false,
+    instruction: 'READING-ALOUD COACH. From snapshot/speaking.json (reading-aloud sessions: match quality, exact/near/skipped words, voice scores and per-minute trends) and snapshot/narration.json (self-recorded narration quality), describe how reading aloud is going and trending, the weakest voice attributes, and give 3–5 concrete practice cues. Return it as `reports` [{kind: "speaking", title, text (Markdown)}].',
+    allow: { reports: 'speaking' },
+    explain: {
+      sends: 'The compact dataset; the agent reads snapshot/speaking.json and snapshot/narration.json.',
+      changes: 'Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.',
+      review: 'Report only. Undo removes it.',
     },
   },
   'cw-ask': {
@@ -145,6 +179,17 @@ export const COWORK_OPS = {
       review: 'Row per book, old → new type. Untick anything you disagree with; types you set by hand are worth a look. Undo restores.',
     },
   },
+  'cw-add-recs': {
+    icon: '➕', group: 'add', label: 'Add recommendations as to-read books', heavy: true,
+    instruction: 'ADD RECOMMENDATIONS. Suggest up to 15 books NOT already in allBooks that fit the reading profile. Return `newBooks` [{title, author, genre?, pages?, why}]. Never repeat a book that is in the library.',
+    allow: { newBooks: true },
+    never: 'Every book already in your library — this only creates new ones.',
+    explain: {
+      sends: 'The full library list (so it can avoid what you already have).',
+      changes: 'Creates NEW to-read books (recommended by "Cowork agent", with the reason as a note in their description field). Anything matching a book you already have (same title + author surname) is dropped.',
+      review: 'Row per new book; untick any. Undo removes the books it created.',
+    },
+  },
   'cw-queue-advice': {
     icon: '🧭', group: 'targeted', label: 'Queue-order advice', heavy: false,
     instruction: 'QUEUE ADVICE. dataset.queues lists each queue in its current order with each book\'s status, length and progress. Suggest a better reading order for any queue that would benefit (variety, momentum, series order, finishing what is nearly done). Return `queueOrder` [{queueId, ids: [EVERY book id of that queue, in the new order], why}].',
@@ -197,6 +242,7 @@ export const queuesForDataset = (queues, books) => liveQueues(queues || []).map(
 export const OP_GROUPS = [
   { id: 'report', label: 'Reports — change no books' },
   { id: 'fill', label: 'Fill blanks — never overwrite' },
+  { id: 'add', label: 'Add-only — never edit what you have' },
   { id: 'targeted', label: 'Targeted changes — always reviewed' },
 ];
 export const NEVER_CHANGED = NEVER;
@@ -211,6 +257,8 @@ export function combinedAllow(ids) {
     if (!a) continue;
     for (const k of ['analysis', 'recommendations', 'brief', 'weeklies', 'treeMeta', 'aiNotes', 'crossNotes', 'answer', 'queueOrder', 'duplicates']) if (a[k]) out[k] = true;
     if (a.bindings) out.bindings = a.bindings;
+    if (a.reports) out.reports = [...(out.reports || []), a.reports];
+    if (a.newBooks) out.newBooks = true;
     for (const [f, rule] of Object.entries(a.fields || {})) {
       const cur = out.fields[f];
       out.fields[f] = !cur ? { ...rule, op: id } : (Object.keys(rule).length === 0 ? { op: id } : cur);
@@ -236,6 +284,8 @@ export function schemaFor(ids) {
   if (a.answer) parts.push('"answer": "markdown"');
   if (a.queueOrder) parts.push('"queueOrder": [{"queueId", "ids": ["<every id of that queue>"], "why"}]');
   if (a.duplicates) parts.push('"duplicates": [{"keepId", "foldId", "why"}]');
+  if (a.reports) parts.push(`"reports": [{"kind": ${a.reports.map((k) => `"${k}"`).join(' | ')}, "title", "text": "markdown"}]`);
+  if (a.newBooks) parts.push('"newBooks": [{"title", "author", "genre"?, "pages"?, "why"}]');
   return `{ ${parts.join(', ')} }`;
 }
 
@@ -272,6 +322,7 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
   for (const p of raw?.bookPatches || []) {
     const book = booksById[p?.id];
     if (!book) { drop(`patch for unknown book ${p?.id}`, 'no such book'); continue; }
+    if (book.locked) { drop(`${book.title}: ${Object.keys(p).filter((k) => k !== 'id').join(', ')}`, 'book is locked 🔒'); continue; }
     const keep = { id: p.id };
     for (const [f, v] of Object.entries(p)) {
       if (f === 'id') continue;
@@ -288,7 +339,13 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
   if (patches.length) out.bookPatches = patches;
   for (const k of ['aiNotes', 'crossNotes']) {
     if (!raw?.[k]?.length) continue;
-    if (a[k]) out[k] = raw[k]; else drop(`${raw[k].length} ${k}`, 'not part of the requested operations');
+    if (!a[k]) { drop(`${raw[k].length} ${k}`, 'not part of the requested operations'); continue; }
+    out[k] = raw[k].filter((n) => {
+      const ids = k === 'aiNotes' ? [n?.bookId] : (n?.bookIds || []);
+      const locked = ids.map((id) => booksById[id]).find((b) => b?.locked);
+      if (locked) { drop(`note on ${locked.title}`, 'book is locked 🔒'); return false; }
+      return true;
+    });
   }
   if (raw?.bindings?.length) {
     if (!a.bindings) drop(`${raw.bindings.length} file link(s)`, 'not part of the requested operations');
@@ -296,6 +353,25 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
       out.bindings = raw.bindings.filter((b) => {
         if (!b?.checksum || !booksById[b.bookId]) { drop(`link ${b?.checksum || '?'}`, 'unknown file or book'); return false; }
         if (bindMap[b.checksum]) { drop(`link ${b.checksum.slice(0, 8)}…`, 'file is already linked — links are never replaced'); return false; }
+        return true;
+      });
+    }
+  }
+  if (raw?.reports?.length) {
+    out.reports = raw.reports.filter((r) => {
+      if (!(a.reports || []).includes(r?.kind) || !String(r?.text || '').trim()) { drop(`report ${r?.kind || '?'}`, 'not part of the requested operations'); return false; }
+      return true;
+    });
+  }
+  if (raw?.newBooks?.length) {
+    if (!a.newBooks) drop(`${raw.newBooks.length} new book(s)`, 'not part of the requested operations');
+    else {
+      const have = new Set(Object.values(booksById).filter((b) => !b.deleted).map(dupKey).filter(Boolean));
+      out.newBooks = raw.newBooks.slice(0, 30).filter((nb) => {
+        const k = dupKey(nb || {});
+        if (!k || !String(nb.author || '').trim()) { drop(`new book ${nb?.title || '?'}`, 'needs a title and an author'); return false; }
+        if (have.has(k)) { drop(`new book ${nb.title}`, 'already in your library'); return false; }
+        have.add(k);
         return true;
       });
     }
@@ -320,6 +396,7 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
     else {
       out.duplicates = raw.duplicates.filter((d) => {
         if (!booksById[d?.keepId] || !booksById[d?.foldId] || d.keepId === d.foldId) { drop(`pair ${d?.keepId} + ${d?.foldId}`, 'unknown or identical books'); return false; }
+        if (booksById[d.keepId].locked || booksById[d.foldId].locked) { drop(`pair ${booksById[d.keepId].title} + ${booksById[d.foldId].title}`, 'a locked book 🔒'); return false; }
         return true;
       });
     }
@@ -356,6 +433,8 @@ export function planRows(output, { booksById = {}, files = {} } = {}) {
     rows.push({ key: `x:${i}`, kind: 'cross', label: `Shared note — ${n.series || ids.map(title).join(' + ')}`, to: short(n.text), value: { bookIds: ids, series: n.series || null, type: AI_NOTE_TYPES[n.type] ? n.type : 'other', text: String(n.text).trim() } });
   });
   for (const b of output.bindings || []) rows.push({ key: `l:${b.checksum}`, kind: 'link', label: `Link ${files[b.checksum]?.fileName || `${b.checksum.slice(0, 8)}…`}`, from: '(unlinked)', to: title(b.bookId), value: b });
+  (output.reports || []).forEach((r, i) => rows.push({ key: `r:${i}`, kind: 'report', label: `Report — ${r.title || r.kind}`, to: short(r.text), value: { kind: r.kind, title: String(r.title || r.kind), text: String(r.text) } }));
+  (output.newBooks || []).forEach((nb, i) => rows.push({ key: `nb:${i}`, kind: 'newBook', label: `New to-read book — ${nb.title} — ${nb.author}`, from: '(not in library)', to: short(String(nb.why || '')), value: nb }));
   if (output.answer) rows.push({ key: 'answer', kind: 'answer', label: 'Answer to your question', to: short(output.answer), value: output.answer });
   for (const qo of output.queueOrder || []) {
     rows.push({ key: `q:${qo.queueId}`, kind: 'queueOrder', label: `Reorder queue — ${qo.why ? short(String(qo.why)) : ''}`.replace(/ — $/, ''), from: '(current order)', to: qo.ids.slice(0, 6).map(title).join(' → ') + (qo.ids.length > 6 ? ' → …' : ''), value: { queueId: qo.queueId, ids: qo.ids } });
@@ -372,7 +451,8 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now() } =
   const aiNext = { ...(ai || {}) };
   const undo = { at: now, books: [], links: [], crossTexts: [], ai: {} };
   const keepAi = (k) => { if (!(k in undo.ai)) undo.ai[k] = ai?.[k] === undefined ? null : ai[k]; };
-  const crossNoteAdds = [], bindingAdds = [], queueOrders = [];
+  const crossNoteAdds = [], bindingAdds = [], queueOrders = [], created = [];
+  undo.created = [];
   for (const r of rows) {
     if (r.kind === 'field') book(r.bookId)[r.field] = r.value;
     else if (r.kind === 'note') {
@@ -392,6 +472,13 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now() } =
     else if (r.kind === 'weekly') { keepAi('weeklies'); aiNext.weeklies = { ...(aiNext.weeklies || {}), [r.value.week]: { text: r.value.text, at: now } }; }
     else if (r.kind === 'answer') { keepAi('answers'); aiNext.answers = [{ at: now, question: ai?.question || '', text: String(r.value) }, ...(aiNext.answers || [])].slice(0, 30); }
     else if (r.kind === 'queueOrder') queueOrders.push(r.value);
+    else if (r.kind === 'report') { keepAi('reports'); aiNext.reports = [{ at: now, ...r.value }, ...(aiNext.reports || [])].slice(0, 60); }
+    else if (r.kind === 'newBook') {
+      const nb = r.value;
+      const rec = setReadStatus({ title: String(nb.title).trim(), author: String(nb.author).trim(), ...(nb.genre ? { genre: String(nb.genre) } : {}), ...(Number(nb.pages) > 0 ? { pages: Number(nb.pages) } : {}), recBy: 'Cowork agent', description: String(nb.why || '').trim() || undefined, addedAt: now }, 'toread');
+      rec.id = deriveId(rec);
+      if (!booksById[rec.id] && !created.some((c) => c.id === rec.id)) { created.push(rec); undo.created.push(rec.id); }
+    }
     else if (r.kind === 'dupe') {
       keepAi('dupeSuggestions');
       const list = (aiNext.dupeSuggestions || []).filter((x) => !(x.keepId === r.value.keepId && x.foldId === r.value.foldId));
@@ -404,7 +491,7 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now() } =
     }
   }
   for (const id of working.keys()) undo.books.push(booksById[id]);
-  return { bookUpdates: [...working.values()], crossNoteAdds, bindingAdds, queueOrders, aiNext, undo };
+  return { bookUpdates: [...working.values(), ...created], crossNoteAdds, bindingAdds, queueOrders, aiNext, undo };
 }
 
 // Short "what was applied" line for the log.
@@ -419,6 +506,8 @@ export function applySummary(rows) {
     n('queueOrder') && `${n('queueOrder')} queue order${n('queueOrder') === 1 ? '' : 's'}`,
     n('dupe') && `${n('dupe')} duplicate suggestion${n('dupe') === 1 ? '' : 's'}`,
     n('answer') && 'answer',
+    n('report') && `${n('report')} report${n('report') === 1 ? '' : 's'}`,
+    n('newBook') && `${n('newBook')} new book${n('newBook') === 1 ? '' : 's'}`,
     n('analysis') && 'analysis', n('recommendations') && 'read-next list', n('treeMeta') && 'tree layout', n('brief') && 'morning brief',
   ].filter(Boolean);
   return parts.join(', ') || 'nothing';

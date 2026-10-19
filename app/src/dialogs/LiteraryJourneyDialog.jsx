@@ -1092,7 +1092,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                             {showCovers && (cov
                               ? <img className="lj-row-cover" src={cov} alt="" loading="lazy" onError={(e) => { e.target.style.visibility = 'hidden'; }} />
                               : <span className="lj-row-cover lj-row-cover-none" />)}
-                            <b>{b.title}</b>
+                            <b>{b.title}</b>{b.locked && <span title="Locked — cowork operations never change this book"> 🔒</span>}
                             {(b.series || rc > 1 || tgs.length > 0 || recommender(b) !== 'Claude') && (
                               <em>{b.series ? `${b.series}${b.seriesNum ? ' #' + b.seriesNum : ''}` : ''}{rc > 1 ? ` ↻×${rc}` : ''}{tgs.length ? ` 🏷${tgs.slice(0, 2).join(', ')}` : ''}{recommender(b) !== 'Claude' ? ` ✦${recommender(b)}` : ''}</em>
                             )}
@@ -1743,6 +1743,9 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
         <label className={dcls('finishTime')}>Finished<input type="date" value={(finishMs(b) ? new Date(finishMs(b)).toISOString().slice(0, 10) : '')} onChange={(e) => set({ finishTime: e.target.value })} /></label>
         <label className={dcls('recBy')}>Rec. by<input value={b.recBy || ''} placeholder="Claude" onChange={(e) => set({ recBy: e.target.value })} /></label>
         <label className={dcls('rating')}>Rating<input type="number" min="0" max="5" value={bookRating(b) || ''} onChange={(e) => set({ rating: Number(e.target.value) })} /></label>
+        <label className={dcls('locked')} title="A locked book is never changed by any cowork operation (fills, rescoring, notes, duplicates) — those changes are discarded before review">
+          🔒 Lock from AI<input type="checkbox" checked={!!b.locked} onChange={(e) => set({ locked: e.target.checked || undefined })} />
+        </label>
         <label className={dcls('difficultyLevel')}>Difficulty<input type="number" min="1" max="5" value={b.difficultyLevel || ''} onChange={(e) => set({ difficultyLevel: Number(e.target.value) })} /></label>
         <label className={dcls('recScore')}>Rec score<input type="number" min="0" max="10" value={b.recScore || ''} onChange={(e) => set({ recScore: Number(e.target.value) })} /></label>
         <label className={dcls('pages')}>Pages<input type="number" value={b.pages || ''} onChange={(e) => set({ pages: Number(e.target.value) })} /></label>
@@ -3915,6 +3918,17 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
         </>
       )}
 
+      {(ai?.reports || []).length > 0 && (
+        <>
+          <div className="rh-section-h">Reports</div>
+          {ai.reports.slice(0, 15).map((x, i) => (
+            <details key={`${x.at}-${i}`} className="lj-hist" open={i === 0}>
+              <summary><span>{fmtDateTime(x.at)} — {x.title || x.kind}</span></summary>
+              <p className="lj-analysis cw-brief">{x.text}</p>
+            </details>
+          ))}
+        </>
+      )}
       {(ai?.answers || []).length > 0 && (
         <>
           <div className="rh-section-h">Answers</div>
