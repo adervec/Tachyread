@@ -58,7 +58,9 @@ export default function TabBar() {
     if (!q) return;
     const csOf = {};
     for (const [c, id] of Object.entries(bindings)) if (!csOf[id]) csOf[id] = c;
-    const { book } = await nextInQueue(queueBooks(q, books), bookId, (b) => !!csOf[b.id]);
+    // Books already open in a tab (any of their linked files — editions included) aren't "next": skip them.
+    const openBookIds = new Set(tabs.map((t) => bindings[t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum]).filter(Boolean));
+    const { book } = await nextInQueue(queueBooks(q, books), bookId, (b) => !!csOf[b.id] && !openBookIds.has(b.id));
     setMenuQ({ tabId: tab.id, queue: q, next: book ? { book, cs: csOf[book.id] } : null });
   }
   async function openQueueNext() {
@@ -254,7 +256,7 @@ export default function TabBar() {
       ...(menuQ && menuQ.tabId === menu.tabId ? [
         menuQ.next
           ? { label: `▶ Open next in “${menuQ.queue.name}”: ${menuQ.next.book.title}`, fn: openQueueNext }
-          : { label: `▶ Nothing unfinished left in “${menuQ.queue.name}”`, n: 0, fn: () => {} },
+          : { label: `▶ Nothing else to open in “${menuQ.queue.name}” (the rest are finished, already open, or have no file)`, n: 0, fn: () => {} },
         { label: `↗ Go to queue “${menuQ.queue.name}” in Trackyread`, fn: () => openDialog?.({ kind: 'literary-journey', tab: 'queue', focusQueueId: menuQ.queue.id }) },
         { sep: true },
       ] : []),
