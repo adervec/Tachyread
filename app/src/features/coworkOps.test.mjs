@@ -48,7 +48,7 @@ const rows = planRows(output, { booksById: books });
 assert.deepEqual(rows.map((r) => r.key), ['brief', 'f:a:genre', 'f:a:recScore']);
 const picked = rows.filter((r) => r.key !== 'f:a:recScore'); // user unticks the score
 const ap = buildApply(picked, { booksById: books, ai: { briefs: {} }, now: Date.parse('2026-10-19T08:00:00Z') });
-assert.deepEqual(ap.bookUpdates, [{ ...books.a, genre: 'Fantasy' }]);
+assert.deepEqual(ap.bookUpdates, [{ ...books.a, genre: 'Fantasy', aiSet: { genre: { at: Date.parse('2026-10-19T08:00:00Z'), by: 'cowork' } } }], 'the field change carries its provenance');
 assert.deepEqual(ap.undo.books, [books.a]);
 assert.equal(ap.aiNext.briefs['2026-10-19'].text, 'Good morning');
 assert.deepEqual(ap.undo.ai, { briefs: {} });
@@ -107,4 +107,12 @@ assert.deepEqual(nbs.output.newBooks.map((b) => b.title), ['Delta']);
 const nap = buildApply(planRows(nbs.output, { booksById: books }), { booksById: books, ai: {}, now: 9 });
 assert.equal(nap.bookUpdates.length, 1);
 assert.deepEqual([nap.bookUpdates[0].title, nap.bookUpdates[0].recBy, nap.bookUpdates[0].completion, nap.undo.created.length], ['Delta', 'Cowork agent', false, 1]);
+
+// Tags: add only, skipping ones the book has (case-insensitive), max 5 new.
+const tagged = { ...books, a: { ...books.a, tags: 'Space, war' } };
+const tg = sanitizeOutput({ addTags: [{ id: 'a', tags: ['space', 'Desert', 'ecology', 'politics', 'religion', 'family', 'extra'] }] }, ['cw-tags'], { ...ctx, booksById: tagged });
+assert.deepEqual(tg.output.addTags, [{ id: 'a', tags: ['Desert', 'ecology', 'politics', 'religion', 'family'] }]);
+const tap = buildApply(planRows(tg.output, { booksById: tagged }), { booksById: tagged, now: 3, source: 'cw-tags' });
+assert.deepEqual(tap.bookUpdates[0].tags, ['Space', 'war', 'Desert', 'ecology', 'politics', 'religion', 'family']);
+assert.equal(tap.bookUpdates[0].aiSet.tags.by, 'cw-tags');
 console.log('coworkOps: all cases pass');

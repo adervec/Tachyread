@@ -80,38 +80,50 @@ export async function moveInbox(dir, name, to = 'processed') {
 // kept as ai.lastApply; every commit is logged in ai.applyLog.
 export async function commitRows(rows, { books, ai, ops = [], source = '', auto = false, now = Date.now() }) {
   const booksById = Object.fromEntries((books || []).map((b) => [b.id, b]));
-  const { bookUpdates, crossNoteAdds, bindingAdds, queueOrders, aiNext, undo } = buildApply(rows, { booksById, ai, now });
+  const { bookUpdates, crossNoteAdds, bindingAdds, queueOrders, aiNext, undo } = buildApply(rows, { booksById, ai, now, source: ops.join(',') || source });
   if (queueOrders.length) {
     const before = (await getLibraryRef('queues').catch(() => null)) || [];
     undo.queues = before; // the whole array as it was — undo puts it back
     await saveLibraryRef('queues', queueOrders.reduce((qs, qo) => setQueueIds(qs, qo.queueId, qo.ids), before));
   }
-  for (const b of bookUpdates) await saveLibraryBook(b);
+  // Remember each book's save stamp: undo only restores a book that is still EXACTLY as this apply
+  // left it (any later edit — yours or a later apply — wins).
+  undo.savedAt = {};
+  for (const b of bookUpdates) { const rec = await saveLibraryBook(b); if (rec) undo.savedAt[b.id] = rec.updatedAt; }
   if (crossNoteAdds.length) await addCrossNotes(crossNoteAdds);
   for (const l of bindingAdds) await setBinding(l.checksum, l.bookId);
   const summary = applySummary(rows);
+  const entry = { ...undo, ops, source, summary };
   const next = {
     ...aiNext,
-    lastApply: { ...undo, ops, source, summary },
+    lastApply: entry,
+    // The last 10 applies stay undoable (newest first) — not only the most recent one.
+    undoStack: [entry, ...(ai?.undoStack || []).filter((u) => u.at !== entry.at)].slice(0, 10),
     applyLog: [{ at: now, ops, source, summary, auto, n: rows.length }, ...(ai?.applyLog || [])].slice(0, 100),
   };
   await saveJourneyAi(next);
   return { ai: next, summary };
 }
 
-// Put back everything the last commit changed. A book edited AFTER the commit is left alone (undoing
-// it would throw your later edit away) and counted in the summary.
-export async function undoLastApply(ai) {
-  const u = ai?.lastApply;
+// Put back everything a commit changed (the latest by default, or the one stamped `at`). A book changed
+// AFTER that commit — by you or by a later apply — is left alone and counted in the summary.
+export async function undoLastApply(ai, at = null) {
+  const stack = ai?.undoStack?.length ? ai.undoStack : (ai?.lastApply ? [ai.lastApply] : []);
+  const u = at == null ? stack[0] : stack.find((x) => x.at === at);
   if (!u) return { ai, summary: 'nothing to undo' };
   let kept = 0;
   for (const b of u.books || []) {
     const cur = await getLibraryBook(b.id).catch(() => null);
-    if (cur && (cur.updatedAt || 0) > (u.at || 0) + 60000) { kept++; continue; }
+    const stamp = u.savedAt?.[b.id];
+    if (cur && (stamp != null ? cur.updatedAt !== stamp : (cur.updatedAt || 0) > (u.at || 0) + 60000)) { kept++; continue; }
     await saveLibraryBook(b);
   }
   for (const cs of u.links || []) await setBinding(cs, null);
-  for (const id of u.created || []) await deleteLibraryBook(id); // books the apply created (tombstoned)
+  for (const id of u.created || []) {
+    const cur = await getLibraryBook(id).catch(() => null);
+    if (cur && u.savedAt?.[id] != null && cur.updatedAt !== u.savedAt[id]) { kept++; continue; } // you've since edited it — keep
+    await deleteLibraryBook(id); // books the apply created (tombstoned)
+  }
   if (u.queues) await saveLibraryRef('queues', u.queues);
   if (u.crossTexts?.length) {
     const texts = new Set(u.crossTexts);
@@ -119,8 +131,9 @@ export async function undoLastApply(ai) {
   }
   const next = { ...ai };
   for (const [k, v] of Object.entries(u.ai || {})) { if (v === null) delete next[k]; else next[k] = v; }
-  delete next.lastApply;
+  next.undoStack = stack.filter((x) => x !== u);
+  if (next.undoStack.length) next.lastApply = next.undoStack[0]; else delete next.lastApply;
   next.applyLog = [{ at: Date.now(), ops: u.ops, source: 'undo', summary: `undid: ${u.summary}`, n: 0 }, ...(ai.applyLog || [])].slice(0, 100);
   await saveJourneyAi(next);
-  return { ai: next, summary: `Undone — ${u.summary}${kept ? ` (${kept} book${kept === 1 ? '' : 's'} you edited since were left as they are)` : ''}` };
+  return { ai: next, summary: `Undone — ${u.summary}${kept ? ` (${kept === 1 ? '1 book was' : `${kept} books were`} changed since — by you or a later apply — and left as ${kept === 1 ? 'it is' : 'they are'})` : ''}` };
 }
