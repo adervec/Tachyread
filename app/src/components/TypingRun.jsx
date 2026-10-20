@@ -688,10 +688,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     resultsRef.current = [...resultsRef.current, entry];
     setResults((r) => [...r, entry]);
     setBuf('');
-    // SETBACK mode: a mistyped word erases committed progress — you're knocked back and have to
-    // retype your way forward. Runs BEFORE the limit checks so a penalised word can't also end
-    // the run, and the char stats stand (you really typed those keys).
-    if (penaltyWords > 0 && !perfect) {
+    // SETBACK mode: a word still WRONG when committed erases progress — you're knocked back and have
+    // to retype your way forward. A word you fixed before committing (green when you hit space)
+    // isn't a mistake here: only the final result counts. Runs BEFORE the limit checks so a
+    // penalised word can't also end the run, and the char stats stand (you really typed those keys).
+    if (penaltyWords > 0 && !perfect && !corrected) {
       const back = penaltyRewind(resultsRef.current, pos + 1, penaltyWords);
       if (back.dropped > 0) {
         const lost = resultsRef.current.slice(back.kept.length);
@@ -1166,7 +1167,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               icon="💥" label="Setback" state={penaltyWords ? `−${penaltyWords} word${penaltyWords > 1 ? 's' : ''}` : 'off'}
               on={penaltyWords > 0} disabled={locked}
               onClick={() => patchCfg({ penaltyWords: { 0: 1, 1: 3, 3: 5 }[penaltyWords] ?? 0 })}
-              title="Mistakes ERASE progress: a mistyped word knocks you back and you retype your way forward. Click to cycle off → 1 → 3 → 5 words." />
+              title="Mistakes ERASE progress: a word still wrong when you commit it knocks you back and you retype your way forward (fixing it before space is fine). Click to cycle off → 1 → 3 → 5 words." />
             <div className="tt-group">Extras</div>
             <Tile icon="🏁" label="Race voice" state={raceVoice ? 'on' : 'off'} on={raceVoice}
               onClick={() => patchCfg({ raceVoice: !raceVoice })} disabled={locked}
