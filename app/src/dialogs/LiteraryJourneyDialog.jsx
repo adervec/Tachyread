@@ -1746,6 +1746,11 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
         <label className={dcls('locked')} title="A locked book is never changed by any cowork operation (fills, rescoring, notes, duplicates) — those changes are discarded before review">
           🔒 Lock from AI<input type="checkbox" checked={!!b.locked} onChange={(e) => set({ locked: e.target.checked || undefined })} />
         </label>
+        {b.aiSet && Object.keys(b.aiSet).length > 0 && (
+          <span className="settings-note lj-aiset" title="Fields a cowork operation filled or changed — edit any of them to make it yours (the marker stays as history)">
+            🤖 Set by cowork: {Object.entries(b.aiSet).map(([f, v]) => `${f} (${String(new Date(v.at).toISOString()).slice(0, 10)}${v.by ? ` · ${v.by}` : ''})`).join(', ')}
+          </span>
+        )}
         <label className={dcls('difficultyLevel')}>Difficulty<input type="number" min="1" max="5" value={b.difficultyLevel || ''} onChange={(e) => set({ difficultyLevel: Number(e.target.value) })} /></label>
         <label className={dcls('recScore')}>Rec score<input type="number" min="0" max="10" value={b.recScore || ''} onChange={(e) => set({ recScore: Number(e.target.value) })} /></label>
         <label className={dcls('pages')}>Pages<input type="number" value={b.pages || ''} onChange={(e) => set({ pages: Number(e.target.value) })} /></label>
@@ -2441,6 +2446,8 @@ function QueueView({ initialSel = null, books, onOpen, fileStats = {}, bindMap =
     </div>
   );
 }
+
+const APPLY_CAP = 200; // most changes one apply may write (bigger replies are reviewed in pages)
 
 // Dashboard: every queue's progress and what's left, plus totals across all of them.
 // Dashboard with whole-queue tools: tick queues to merge them; ✂ splits one (both undoable via ↶).
@@ -3570,7 +3577,7 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
     const files = Object.fromEntries((await allFiles().catch(() => [])).map((f) => [f.checksum, f]));
     const rows = planRows(output, { booksById, files });
     setReview({ rows, dropped, ops, source, hash, ...extra });
-    setPicked(new Set(rows.map((r) => r.key)));
+    setPicked(new Set(rows.slice(0, APPLY_CAP).map((r) => r.key))); // a huge reply goes in pages, never one click
     setMsg(rows.length
       ? `Reply ready for review: ${rows.length} proposed change(s)${dropped.length ? `, ${dropped.length} out-of-scope item(s) discarded` : ''}. Nothing is written until you apply.`
       : `Nothing in that reply is allowed by the requested operation(s)${dropped.length ? ` — ${dropped.length} item(s) discarded` : ''}.`);
@@ -3579,10 +3586,19 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
     if (!review) return;
     const rows = review.rows.filter((r) => picked.has(r.key));
     if (!rows.length) { setMsg('Nothing ticked.'); return; }
+    if (rows.length > APPLY_CAP) { setMsg(`At most ${APPLY_CAP} changes per apply — untick some, apply, then do the rest.`); return; }
     setBusy(true);
     try {
       const base = { ...(ai || {}), ledger: [...(ai?.ledger || []), review.hash].slice(-50) };
       const r = await commitRows(rows, { books, ai: base, ops: review.ops, source: review.source });
+      const left = review.rows.filter((x) => !picked.has(x.key));
+      // Rows not applied this time stay up for the next page (only for big replies split by the cap).
+      if (left.length && review.rows.length > APPLY_CAP) {
+        setReview({ ...review, rows: left, hash: `${review.hash}+${Date.now()}` });
+        setPicked(new Set(left.slice(0, APPLY_CAP).map((x) => x.key)));
+        setMsg(`Applied: ${r.summary}. ${left.length} more change(s) still to review below.`);
+        onReload(); setBusy(false); return;
+      }
       if (review.inboxFile) await moveInbox(dir, review.inboxFile).catch(() => {});
       setMsg(`Applied: ${r.summary}. ↶ Undo puts it all back.`);
       setReview(null);
@@ -3591,9 +3607,9 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
     } catch (e) { setMsg('Apply failed: ' + (e?.message || e)); }
     setBusy(false);
   }
-  async function undoApply() {
+  async function undoApply(at = null) {
     setBusy(true);
-    try { const r = await undoLastApply(ai); setMsg(r.summary); onReload(); }
+    try { const r = await undoLastApply(ai, at); setMsg(r.summary); onReload(); }
     catch (e) { setMsg('Undo failed: ' + (e?.message || e)); }
     setBusy(false);
   }
@@ -3911,7 +3927,8 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
             </details>
           )}
           <div className="lj-inline">
-            <button className="toggle-on" disabled={busy || !picked.size} onClick={applyReview}>Apply {picked.size} ticked</button>
+            <button className="toggle-on" disabled={busy || !picked.size || picked.size > APPLY_CAP} onClick={applyReview} title={picked.size > APPLY_CAP ? `At most ${APPLY_CAP} per apply` : undefined}>Apply {picked.size} ticked</button>
+            {review.rows.length > APPLY_CAP && <span className="settings-note" style={{ margin: 0 }}>{review.rows.length} changes — applied in pages of up to {APPLY_CAP}</span>}
             <button onClick={() => setPicked(new Set(review.rows.map((r) => r.key)))}>Tick all</button>
             <button onClick={() => setPicked(new Set())}>Untick all</button>
             <button onClick={async () => { if (review.inboxFile) { await moveInbox(dir, review.inboxFile).catch(() => {}); refreshInbox(); } setReview(null); setMsg('Reply discarded — nothing was changed.'); }}>Discard reply</button>
@@ -3924,12 +3941,16 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
           {ai?.lastApply && !viewer && (
             <div className="lj-inline">
               <span className="settings-note" style={{ margin: 0 }}>Last apply {fmtDateTime(ai.lastApply.at)}: {ai.lastApply.summary}</span>
-              <button disabled={busy} onClick={undoApply} title="Restore every book, link, note and AI field the last apply changed (books you edited since are left alone)">↶ Undo last apply</button>
+              <button disabled={busy} onClick={() => undoApply()} title="Restore every book, link, note and AI field the last apply changed (books you edited since are left alone)">↶ Undo last apply</button>
             </div>
           )}
           <details className="lj-fold">
             <summary>Apply log ({(ai?.applyLog || []).length})</summary>
-            <ul className="lj-clean-list">{(ai?.applyLog || []).slice(0, 50).map((e, i) => <li key={i}>{fmtDateTime(e.at)} — {e.summary}{e.source ? ` · ${e.source}` : ''}{e.auto ? ' · auto' : ''}</li>)}</ul>
+            <ul className="lj-clean-list">{(ai?.applyLog || []).slice(0, 50).map((e, i) => (
+              <li key={i}>{fmtDateTime(e.at)} — {e.summary}{e.source ? ` · ${e.source}` : ''}{e.auto ? ' · auto' : ''}
+                {!viewer && (ai?.undoStack || []).some((u) => u.at === e.at) && <button className="link-btn" disabled={busy} onClick={() => undoApply(e.at)} title="Undo this apply (books you or a later apply changed since are left alone)"> ↶ undo</button>}
+              </li>
+            ))}</ul>
           </details>
         </>
       )}

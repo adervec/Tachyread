@@ -18,9 +18,10 @@
 //   duplicates                                                 — suggest duplicate pairs for the Reconcile table
 //   reports: kind                                              — a titled report text (AI record only)
 //   newBooks                                                   — CREATE new to-read books (never edit existing)
+//   addTags                                                    — add tags to books (never remove one)
 // A book marked LOCKED (book.locked) is never changed by any operation — such items are dropped.
 // Pure; see coworkOps.test.mjs.
-import { readStatus, deriveId, setReadStatus } from './journeyLibrary.js';
+import { readStatus, deriveId, setReadStatus, bookTags } from './journeyLibrary.js';
 import { dupKey } from './journeyCleanup.js';
 import { liveQueues, queueBooks } from './readingQueues.js';
 import { AI_NOTE_TYPES } from './journeyAi.js';
@@ -85,6 +86,26 @@ export const COWORK_OPS = {
     allow: { reports: 'speaking' },
     explain: {
       sends: 'The compact dataset; the agent reads snapshot/speaking.json and snapshot/narration.json.',
+      changes: 'Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.',
+      review: 'Report only. Undo removes it.',
+    },
+  },
+  'cw-narration-qa': {
+    icon: '🎙', group: 'report', label: 'Narration QA', heavy: false,
+    instruction: 'NARRATION QA. From snapshot/narration.json list the self-recorded audiobook chunks worth re-recording (low score, accuracy or completeness), grouped by book with the line number and why, plus overall patterns in the recordings. Return it as `reports` [{kind: "narration", title, text (Markdown)}].',
+    allow: { reports: 'narration' },
+    explain: {
+      sends: 'The compact dataset; the agent reads snapshot/narration.json (per-take quality only — no audio).',
+      changes: 'Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.',
+      review: 'Report only. Undo removes it.',
+    },
+  },
+  'cw-health': {
+    icon: '🩺', group: 'report', label: 'Data-health report', heavy: false,
+    instruction: 'DATA HEALTH. Using allBooks and snapshot/books.json, list inconsistencies worth fixing by hand: finished books without a rating or finish date, implausible page or word counts, genre or author name variants that look like the same thing, books stuck as reading for months, files read past 99% but not marked finished. A list only — suggest the fix for each. Return it as `reports` [{kind: "health", title, text (Markdown)}].',
+    allow: { reports: 'health' },
+    explain: {
+      sends: 'The full library list; the agent reads snapshot/books.json.',
       changes: 'Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.',
       review: 'Report only. Undo removes it.',
     },
@@ -190,6 +211,27 @@ export const COWORK_OPS = {
       review: 'Row per new book; untick any. Undo removes the books it created.',
     },
   },
+  'cw-series-gaps': {
+    icon: '📚', group: 'add', label: 'Fill series gaps', heavy: true,
+    instruction: 'SERIES GAPS. For series in allBooks that the reader has started or finished, return `newBooks` [{title, author, genre?, pages?, why}] for the volumes NOT already in the library (why = "Series #n of <series>"). Never repeat a book that is in the library.',
+    allow: { newBooks: true },
+    never: 'Every book already in your library — this only creates new ones.',
+    explain: {
+      sends: 'The full library list (series names and numbers included).',
+      changes: 'Creates NEW to-read books for missing series volumes (recommended by "Cowork agent"). Anything matching a book you already have is dropped.',
+      review: 'Row per new book. Undo removes the books it created.',
+    },
+  },
+  'cw-tags': {
+    icon: '🏷', group: 'add', label: 'Tag suggestions (add only)', heavy: true,
+    instruction: 'TAGS. Suggest up to 5 short, reusable tags per book that would help find it (themes, setting, form). Prefer tags already used elsewhere in the library. Return `addTags` [{id, tags: [..]}].',
+    allow: { addTags: true },
+    explain: {
+      sends: 'The full library list with current tags.',
+      changes: 'ADDS tags to books (at most 5 new per book). Existing tags are never removed or renamed; tags a book already has are skipped.',
+      review: 'Row per book showing current → added tags. Undo restores the books.',
+    },
+  },
   'cw-queue-advice': {
     icon: '🧭', group: 'targeted', label: 'Queue-order advice', heavy: false,
     instruction: 'QUEUE ADVICE. dataset.queues lists each queue in its current order with each book\'s status, length and progress. Suggest a better reading order for any queue that would benefit (variety, momentum, series order, finishing what is nearly done). Return `queueOrder` [{queueId, ids: [EVERY book id of that queue, in the new order], why}].',
@@ -259,6 +301,7 @@ export function combinedAllow(ids) {
     if (a.bindings) out.bindings = a.bindings;
     if (a.reports) out.reports = [...(out.reports || []), a.reports];
     if (a.newBooks) out.newBooks = true;
+    if (a.addTags) out.addTags = true;
     for (const [f, rule] of Object.entries(a.fields || {})) {
       const cur = out.fields[f];
       out.fields[f] = !cur ? { ...rule, op: id } : (Object.keys(rule).length === 0 ? { op: id } : cur);
@@ -286,6 +329,7 @@ export function schemaFor(ids) {
   if (a.duplicates) parts.push('"duplicates": [{"keepId", "foldId", "why"}]');
   if (a.reports) parts.push(`"reports": [{"kind": ${a.reports.map((k) => `"${k}"`).join(' | ')}, "title", "text": "markdown"}]`);
   if (a.newBooks) parts.push('"newBooks": [{"title", "author", "genre"?, "pages"?, "why"}]');
+  if (a.addTags) parts.push('"addTags": [{"id", "tags": ["…"]}]');
   return `{ ${parts.join(', ')} }`;
 }
 
@@ -376,6 +420,19 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
       });
     }
   }
+  if (raw?.addTags?.length) {
+    if (!a.addTags) drop(`${raw.addTags.length} tag suggestion(s)`, 'not part of the requested operations');
+    else {
+      out.addTags = raw.addTags.map((t) => {
+        const book = booksById[t?.id];
+        if (!book) { drop(`tags for ${t?.id}`, 'no such book'); return null; }
+        if (book.locked) { drop(`tags for ${book.title}`, 'book is locked 🔒'); return null; }
+        const have = new Set(bookTags(book).map((x) => x.toLowerCase()));
+        const add = [...new Set((Array.isArray(t.tags) ? t.tags : []).map((x) => String(x).trim()).filter((x) => x && x.length <= 40 && !have.has(x.toLowerCase())))].slice(0, 5);
+        return add.length ? { id: t.id, tags: add } : null;
+      }).filter(Boolean);
+    }
+  }
   if (raw?.answer != null) { if (a.answer && String(raw.answer).trim()) out.answer = String(raw.answer); else drop('answer', 'not part of the requested operations'); }
   if (raw?.queueOrder?.length) {
     if (!a.queueOrder) drop(`${raw.queueOrder.length} queue order(s)`, 'not part of the requested operations');
@@ -435,6 +492,7 @@ export function planRows(output, { booksById = {}, files = {} } = {}) {
   for (const b of output.bindings || []) rows.push({ key: `l:${b.checksum}`, kind: 'link', label: `Link ${files[b.checksum]?.fileName || `${b.checksum.slice(0, 8)}…`}`, from: '(unlinked)', to: title(b.bookId), value: b });
   (output.reports || []).forEach((r, i) => rows.push({ key: `r:${i}`, kind: 'report', label: `Report — ${r.title || r.kind}`, to: short(r.text), value: { kind: r.kind, title: String(r.title || r.kind), text: String(r.text) } }));
   (output.newBooks || []).forEach((nb, i) => rows.push({ key: `nb:${i}`, kind: 'newBook', label: `New to-read book — ${nb.title} — ${nb.author}`, from: '(not in library)', to: short(String(nb.why || '')), value: nb }));
+  for (const t of output.addTags || []) rows.push({ key: `t:${t.id}`, kind: 'tags', label: `${title(t.id)} — tags`, from: bookTags(booksById[t.id]).join(', ') || '—', to: `+ ${t.tags.join(', ')}`, bookId: t.id, value: t.tags });
   if (output.answer) rows.push({ key: 'answer', kind: 'answer', label: 'Answer to your question', to: short(output.answer), value: output.answer });
   for (const qo of output.queueOrder || []) {
     rows.push({ key: `q:${qo.queueId}`, kind: 'queueOrder', label: `Reorder queue — ${qo.why ? short(String(qo.why)) : ''}`.replace(/ — $/, ''), from: '(current order)', to: qo.ids.slice(0, 6).map(title).join(' → ') + (qo.ids.length > 6 ? ' → …' : ''), value: { queueId: qo.queueId, ids: qo.ids } });
@@ -445,7 +503,7 @@ export function planRows(output, { booksById = {}, files = {} } = {}) {
 
 // Ticked rows → what to write, plus the undo snapshot. Pure: the caller does the I/O.
 // → { bookUpdates, crossNoteAdds, bindingAdds, aiNext, undo }
-export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now() } = {}) {
+export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now(), source = '' } = {}) {
   const working = new Map();
   const book = (id) => { if (!working.has(id)) working.set(id, { ...booksById[id] }); return working.get(id); };
   const aiNext = { ...(ai || {}) };
@@ -454,7 +512,15 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now() } =
   const crossNoteAdds = [], bindingAdds = [], queueOrders = [], created = [];
   undo.created = [];
   for (const r of rows) {
-    if (r.kind === 'field') book(r.bookId)[r.field] = r.value;
+    if (r.kind === 'field') {
+      const b = book(r.bookId);
+      b[r.field] = r.value;
+      b.aiSet = { ...(b.aiSet || {}), [r.field]: { at: now, by: source || 'cowork' } }; // provenance: which fields AI set, when, from what
+    } else if (r.kind === 'tags') {
+      const b = book(r.bookId);
+      b.tags = [...bookTags(b), ...r.value];
+      b.aiSet = { ...(b.aiSet || {}), tags: { at: now, by: source || 'cowork' } };
+    }
     else if (r.kind === 'note') {
       const b = book(r.value.bookId);
       const list = Array.isArray(b.aiNotes) ? [...b.aiNotes] : [];
@@ -508,6 +574,7 @@ export function applySummary(rows) {
     n('answer') && 'answer',
     n('report') && `${n('report')} report${n('report') === 1 ? '' : 's'}`,
     n('newBook') && `${n('newBook')} new book${n('newBook') === 1 ? '' : 's'}`,
+    n('tags') && `tags on ${n('tags')} book${n('tags') === 1 ? '' : 's'}`,
     n('analysis') && 'analysis', n('recommendations') && 'read-next list', n('treeMeta') && 'tree layout', n('brief') && 'morning brief',
   ].filter(Boolean);
   return parts.join(', ') || 'nothing';
