@@ -19,10 +19,16 @@
 //   reports: kind                                              — a titled report text (AI record only)
 //   newBooks                                                   — CREATE new to-read books (never edit existing)
 //   addTags                                                    — add tags to books (never remove one)
+//   vocab / typingPlan                                         — add vocab cards / one new typing plan (app settings)
+//   renames: [fields]                                          — rename a value of those fields on every book using it
+//   goalAdvice                                                 — set the yearly books / words goal
 // A book marked LOCKED (book.locked) is never changed by any operation — such items are dropped.
 // Pure; see coworkOps.test.mjs.
 import { readStatus, deriveId, setReadStatus, bookTags } from './journeyLibrary.js';
 import { dupKey } from './journeyCleanup.js';
+import { TYPING_MODES } from '../engine/typingModes.js';
+
+const TYPING_MODE_IDS = TYPING_MODES.filter((m) => m.kind !== 'doc').map((m) => m.id);
 import { liveQueues, queueBooks } from './readingQueues.js';
 import { AI_NOTE_TYPES } from './journeyAi.js';
 
@@ -232,6 +238,60 @@ export const COWORK_OPS = {
       review: 'Row per book showing current → added tags. Undo restores the books.',
     },
   },
+  'cw-vocab': {
+    icon: '🔤', group: 'add', label: 'Vocabulary cards', heavy: true,
+    instruction: 'VOCABULARY. From the books read or being read (allBooks), propose up to 25 challenging but useful words the reader has likely met, each with a short definition or context. Skip anything in dataset.vocabWords (already in the deck). Return `vocabCards` [{word, context}].',
+    allow: { vocab: true },
+    never: 'Existing vocabulary cards and their review progress; all books.',
+    explain: {
+      sends: 'The full library list and the words already in your vocabulary deck.',
+      changes: 'Adds NEW cards to Train → Vocabulary. Words already in the deck are skipped; existing cards are never edited.',
+      review: 'Row per word. Undo removes the added cards you haven\'t started reviewing.',
+    },
+  },
+  'cw-typing-plan': {
+    icon: '🏋️', group: 'add', label: 'Suggest a typing plan', heavy: false,
+    instruction: `TYPING PLAN. From snapshot/typing.json design ONE practice plan of 3–8 steps aimed at the weak spots. Each step: mode ∈ ${TYPING_MODE_IDS.join(' | ')}; runMode "seconds" | "words"; runLimit 10–600; sets 1–10; description = a short spoken cue. Return \`typingPlan\` {name, steps: [...]}.`,
+    allow: { typingPlan: true },
+    never: 'Your existing typing plans and runs.',
+    explain: {
+      sends: 'The compact dataset; the agent reads snapshot/typing.json.',
+      changes: 'Adds ONE new plan to Typing → Plans. Steps with an unknown drill or out-of-range numbers are dropped; your existing plans are untouched.',
+      review: 'One row with the plan\'s steps. Undo removes the plan.',
+    },
+  },
+  'cw-genre-merge': {
+    icon: '🔀', group: 'targeted', label: 'Merge genre-name variants', heavy: true,
+    instruction: 'GENRE VARIANTS. Find genre / subgenre values in allBooks that are the same thing spelled differently (e.g. "Sci-Fi", "SF", "Science fiction"). Return `renames` [{field: "genre" | "subgenre", from, to}] where `to` is the clearest existing spelling. Only clear cases.',
+    allow: { renames: ['genre', 'subgenre'] },
+    explain: {
+      sends: 'The full library list.',
+      changes: 'Renames a genre / subgenre value on every book that uses it (e.g. all "Sci-Fi" → "Science fiction"). Only those two fields. Locked books are skipped.',
+      review: 'One row PER BOOK affected, so you can keep any book as it was. Undo restores the books.',
+    },
+  },
+  'cw-author-tidy': {
+    icon: '✍️', group: 'targeted', label: 'Tidy author names', heavy: true,
+    instruction: 'AUTHOR NAMES. Find author values in allBooks that are the same person written differently (initials, punctuation, "Last, First"). Return `renames` [{field: "author", from, to}] where `to` is the fullest common form. Only clear cases.',
+    allow: { renames: ['author'] },
+    never: 'Titles, ids (a book keeps its id even when its author spelling changes), status, dates, ratings, notes, queues, links — and locked books.',
+    explain: {
+      sends: 'The full library list.',
+      changes: 'Changes the author spelling on every book using the old one. Nothing else.',
+      review: 'One row per book affected. Undo restores the books.',
+    },
+  },
+  'cw-goal-advice': {
+    icon: '🎯', group: 'targeted', label: 'Goal advice', heavy: false,
+    instruction: 'GOALS. From snapshot/goals.json (current goals, pace, streak) and the reading history, suggest realistic but stretching goals for this year. Return `goalAdvice` {books?: integer, words?: integer, why}.',
+    allow: { goalAdvice: true },
+    never: 'Any book, queue or link — only the yearly goal numbers.',
+    explain: {
+      sends: 'The compact dataset; the agent reads snapshot/goals.json.',
+      changes: 'Sets this year\'s books goal and/or words goal (Dashboard). Implausible numbers are dropped.',
+      review: 'Row per goal: current → proposed, with the reason. Undo restores the previous goals.',
+    },
+  },
   'cw-queue-advice': {
     icon: '🧭', group: 'targeted', label: 'Queue-order advice', heavy: false,
     instruction: 'QUEUE ADVICE. dataset.queues lists each queue in its current order with each book\'s status, length and progress. Suggest a better reading order for any queue that would benefit (variety, momentum, series order, finishing what is nearly done). Return `queueOrder` [{queueId, ids: [EVERY book id of that queue, in the new order], why}].',
@@ -302,6 +362,10 @@ export function combinedAllow(ids) {
     if (a.reports) out.reports = [...(out.reports || []), a.reports];
     if (a.newBooks) out.newBooks = true;
     if (a.addTags) out.addTags = true;
+    if (a.vocab) out.vocab = true;
+    if (a.typingPlan) out.typingPlan = true;
+    if (a.goalAdvice) out.goalAdvice = true;
+    if (a.renames) out.renames = [...new Set([...(out.renames || []), ...a.renames])];
     for (const [f, rule] of Object.entries(a.fields || {})) {
       const cur = out.fields[f];
       out.fields[f] = !cur ? { ...rule, op: id } : (Object.keys(rule).length === 0 ? { op: id } : cur);
@@ -330,6 +394,10 @@ export function schemaFor(ids) {
   if (a.reports) parts.push(`"reports": [{"kind": ${a.reports.map((k) => `"${k}"`).join(' | ')}, "title", "text": "markdown"}]`);
   if (a.newBooks) parts.push('"newBooks": [{"title", "author", "genre"?, "pages"?, "why"}]');
   if (a.addTags) parts.push('"addTags": [{"id", "tags": ["…"]}]');
+  if (a.vocab) parts.push('"vocabCards": [{"word", "context"}]');
+  if (a.typingPlan) parts.push('"typingPlan": {"name", "steps": [{"mode", "runMode", "runLimit", "sets", "description"}]}');
+  if (a.renames) parts.push(`"renames": [{"field": ${a.renames.map((f) => `"${f}"`).join(' | ')}, "from", "to"}]`);
+  if (a.goalAdvice) parts.push('"goalAdvice": {"books"?, "words"?, "why"}');
   return `{ ${parts.join(', ')} }`;
 }
 
@@ -353,7 +421,7 @@ const short = (v) => (typeof v === 'string' && v.length > 120 ? `${v.slice(0, 12
 
 // Keep only what the requested operations may change. ctx: { booksById, bindMap, queuedIds:Set }.
 // → { output (sanitized), dropped: [{ what, why }] }
-export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedIds = new Set(), queues = [] } = {}) {
+export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedIds = new Set(), queues = [], vocabWords = [] } = {}) {
   const a = combinedAllow(ids);
   const out = {}, dropped = [];
   const drop = (what, why) => dropped.push({ what, why });
@@ -433,6 +501,53 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
       }).filter(Boolean);
     }
   }
+  if (raw?.vocabCards?.length) {
+    if (!a.vocab) drop(`${raw.vocabCards.length} vocabulary card(s)`, 'not part of the requested operations');
+    else {
+      const have = new Set(vocabWords.map((w) => String(w).toLowerCase()));
+      out.vocabCards = raw.vocabCards.slice(0, 50).filter((c) => {
+        const w = String(c?.word || '').trim();
+        if (!/^[\p{L}'’-]{2,40}$/u.test(w)) { drop(`card “${w}”`, 'not a single word'); return false; }
+        if (have.has(w.toLowerCase())) { drop(`card “${w}”`, 'already in the deck'); return false; }
+        have.add(w.toLowerCase());
+        return true;
+      }).map((c) => ({ word: String(c.word).trim(), context: String(c.context || '').slice(0, 300) }));
+    }
+  }
+  if (raw?.typingPlan) {
+    if (!a.typingPlan) drop('typing plan', 'not part of the requested operations');
+    else {
+      const steps = (raw.typingPlan.steps || []).slice(0, 12).filter((st) => {
+        const ok = TYPING_MODE_IDS.includes(st?.mode) && ['seconds', 'words'].includes(st?.runMode)
+          && Number(st.runLimit) >= 10 && Number(st.runLimit) <= 600 && Number(st.sets || 1) >= 1 && Number(st.sets || 1) <= 10;
+        if (!ok) drop(`plan step ${st?.mode || '?'}`, 'unknown drill or out-of-range numbers');
+        return ok;
+      }).map((st) => ({ mode: st.mode, runMode: st.runMode, runLimit: Math.round(Number(st.runLimit)), sets: Math.round(Number(st.sets || 1)), description: String(st.description || '').slice(0, 200) }));
+      if (steps.length) out.typingPlan = { name: String(raw.typingPlan.name || 'Coach plan').slice(0, 60), steps };
+      else drop('typing plan', 'no usable steps');
+    }
+  }
+  if (raw?.renames?.length) {
+    if (!a.renames) drop(`${raw.renames.length} rename(s)`, 'not part of the requested operations');
+    else {
+      out.renames = raw.renames.filter((r) => {
+        const from = String(r?.from || '').trim(), to = String(r?.to || '').trim();
+        if (!a.renames.includes(r?.field)) { drop(`rename ${r?.field}: ${from}`, 'field not allowed by the requested operations'); return false; }
+        if (!from || !to || from === to) { drop(`rename ${r.field}: ${from}`, 'empty or unchanged'); return false; }
+        if (!Object.values(booksById).some((b) => !b.deleted && String(b[r.field] || '').trim() === from)) { drop(`rename ${r.field}: ${from}`, 'no book uses that value'); return false; }
+        return true;
+      }).map((r) => ({ field: r.field, from: String(r.from).trim(), to: String(r.to).trim() }));
+    }
+  }
+  if (raw?.goalAdvice) {
+    if (!a.goalAdvice) drop('goal advice', 'not part of the requested operations');
+    else {
+      const g = raw.goalAdvice, o = {};
+      if (g.books != null) { if (Number.isInteger(Number(g.books)) && g.books >= 1 && g.books <= 1000) o.books = Number(g.books); else drop(`books goal ${g.books}`, 'implausible'); }
+      if (g.words != null) { if (Number.isInteger(Number(g.words)) && g.words >= 10000 && g.words <= 100000000) o.words = Number(g.words); else drop(`words goal ${g.words}`, 'implausible'); }
+      if (Object.keys(o).length) out.goalAdvice = { ...o, why: String(g.why || '') };
+    }
+  }
   if (raw?.answer != null) { if (a.answer && String(raw.answer).trim()) out.answer = String(raw.answer); else drop('answer', 'not part of the requested operations'); }
   if (raw?.queueOrder?.length) {
     if (!a.queueOrder) drop(`${raw.queueOrder.length} queue order(s)`, 'not part of the requested operations');
@@ -462,7 +577,7 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
 }
 
 // Sanitized output → review rows: [{ key, kind, label, from, to, ...payload }], all ticked by default.
-export function planRows(output, { booksById = {}, files = {} } = {}) {
+export function planRows(output, { booksById = {}, files = {}, goals = {}, year = new Date().getFullYear() } = {}) {
   const rows = [];
   const title = (id) => booksById[id]?.title || id;
   if (output.brief) rows.push({ key: 'brief', kind: 'brief', label: `Morning brief ${output.brief.date || ''}`.trim(), to: short(output.brief.text), value: output.brief });
@@ -493,6 +608,19 @@ export function planRows(output, { booksById = {}, files = {} } = {}) {
   (output.reports || []).forEach((r, i) => rows.push({ key: `r:${i}`, kind: 'report', label: `Report — ${r.title || r.kind}`, to: short(r.text), value: { kind: r.kind, title: String(r.title || r.kind), text: String(r.text) } }));
   (output.newBooks || []).forEach((nb, i) => rows.push({ key: `nb:${i}`, kind: 'newBook', label: `New to-read book — ${nb.title} — ${nb.author}`, from: '(not in library)', to: short(String(nb.why || '')), value: nb }));
   for (const t of output.addTags || []) rows.push({ key: `t:${t.id}`, kind: 'tags', label: `${title(t.id)} — tags`, from: bookTags(booksById[t.id]).join(', ') || '—', to: `+ ${t.tags.join(', ')}`, bookId: t.id, value: t.tags });
+  for (const c of output.vocabCards || []) rows.push({ key: `v:${c.word}`, kind: 'vocab', label: `Vocabulary card — ${c.word}`, from: '(not in deck)', to: short(c.context), value: c });
+  if (output.typingPlan) rows.push({ key: 'plan', kind: 'typingPlan', label: `Typing plan — ${output.typingPlan.name}`, from: '(new)', to: output.typingPlan.steps.map((st) => `${st.mode} ${st.runLimit}${st.runMode === 'seconds' ? 's' : 'w'}×${st.sets}`).join(' → '), value: output.typingPlan });
+  for (const r of output.renames || []) {
+    for (const b of Object.values(booksById)) {
+      if (b.deleted || b.locked || String(b[r.field] || '').trim() !== r.from) continue;
+      rows.push({ key: `f:${b.id}:${r.field}`, kind: 'field', label: `${b.title} — ${r.field} (rename)`, from: r.from, to: r.to, bookId: b.id, field: r.field, value: r.to });
+    }
+  }
+  if (output.goalAdvice) {
+    const why = output.goalAdvice.why ? ` — ${short(output.goalAdvice.why)}` : '';
+    if (output.goalAdvice.books != null) rows.push({ key: 'g:books', kind: 'goal', label: `${year} books goal${why}`, from: goals[year] ?? '—', to: output.goalAdvice.books, value: { key: String(year), n: output.goalAdvice.books } });
+    if (output.goalAdvice.words != null) rows.push({ key: 'g:words', kind: 'goal', label: `${year} words goal${why}`, from: goals[`${year}-words`] ?? '—', to: output.goalAdvice.words, value: { key: `${year}-words`, n: output.goalAdvice.words } });
+  }
   if (output.answer) rows.push({ key: 'answer', kind: 'answer', label: 'Answer to your question', to: short(output.answer), value: output.answer });
   for (const qo of output.queueOrder || []) {
     rows.push({ key: `q:${qo.queueId}`, kind: 'queueOrder', label: `Reorder queue — ${qo.why ? short(String(qo.why)) : ''}`.replace(/ — $/, ''), from: '(current order)', to: qo.ids.slice(0, 6).map(title).join(' → ') + (qo.ids.length > 6 ? ' → …' : ''), value: { queueId: qo.queueId, ids: qo.ids } });
@@ -509,7 +637,7 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now(), so
   const aiNext = { ...(ai || {}) };
   const undo = { at: now, books: [], links: [], crossTexts: [], ai: {} };
   const keepAi = (k) => { if (!(k in undo.ai)) undo.ai[k] = ai?.[k] === undefined ? null : ai[k]; };
-  const crossNoteAdds = [], bindingAdds = [], queueOrders = [], created = [];
+  const crossNoteAdds = [], bindingAdds = [], queueOrders = [], created = [], vocabAdds = [], planAdds = [], goalSets = [];
   undo.created = [];
   for (const r of rows) {
     if (r.kind === 'field') {
@@ -538,6 +666,9 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now(), so
     else if (r.kind === 'weekly') { keepAi('weeklies'); aiNext.weeklies = { ...(aiNext.weeklies || {}), [r.value.week]: { text: r.value.text, at: now } }; }
     else if (r.kind === 'answer') { keepAi('answers'); aiNext.answers = [{ at: now, question: ai?.question || '', text: String(r.value) }, ...(aiNext.answers || [])].slice(0, 30); }
     else if (r.kind === 'queueOrder') queueOrders.push(r.value);
+    else if (r.kind === 'vocab') vocabAdds.push(r.value);
+    else if (r.kind === 'typingPlan') planAdds.push(r.value);
+    else if (r.kind === 'goal') goalSets.push(r.value);
     else if (r.kind === 'report') { keepAi('reports'); aiNext.reports = [{ at: now, ...r.value }, ...(aiNext.reports || [])].slice(0, 60); }
     else if (r.kind === 'newBook') {
       const nb = r.value;
@@ -557,7 +688,7 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now(), so
     }
   }
   for (const id of working.keys()) undo.books.push(booksById[id]);
-  return { bookUpdates: [...working.values(), ...created], crossNoteAdds, bindingAdds, queueOrders, aiNext, undo };
+  return { bookUpdates: [...working.values(), ...created], crossNoteAdds, bindingAdds, queueOrders, vocabAdds, planAdds, goalSets, aiNext, undo };
 }
 
 // Short "what was applied" line for the log.
@@ -575,6 +706,9 @@ export function applySummary(rows) {
     n('report') && `${n('report')} report${n('report') === 1 ? '' : 's'}`,
     n('newBook') && `${n('newBook')} new book${n('newBook') === 1 ? '' : 's'}`,
     n('tags') && `tags on ${n('tags')} book${n('tags') === 1 ? '' : 's'}`,
+    n('vocab') && `${n('vocab')} vocabulary card${n('vocab') === 1 ? '' : 's'}`,
+    n('typingPlan') && 'typing plan',
+    n('goal') && `${n('goal')} goal${n('goal') === 1 ? '' : 's'}`,
     n('analysis') && 'analysis', n('recommendations') && 'read-next list', n('treeMeta') && 'tree layout', n('brief') && 'morning brief',
   ].filter(Boolean);
   return parts.join(', ') || 'nothing';

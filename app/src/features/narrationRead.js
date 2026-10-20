@@ -45,7 +45,7 @@ export async function creditNarration({ doc, chunk, wpm, tabs = [], incognito = 
   const cs = doc.contentChecksum;
   await saveReadState(cs, {
     maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(), srcB64: tracker.serializeSrc(),
-    lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(), paraTsB64: tracker.serializeParaTs(),
+    lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(), sessions: tracker.sessionsArray(), paraTsB64: tracker.serializeParaTs(),
   });
   const rec = await loadFile(cs).catch(() => null);
   if (rec) {

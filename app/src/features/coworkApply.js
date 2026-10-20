@@ -8,6 +8,8 @@ import {
 import { buildSnapshot, diffSnapshots, changesMarkdown } from './coworkSnapshot.js';
 import { buildApply, applySummary } from './coworkOps.js';
 import { setQueueIds } from './readingQueues.js';
+import { newCard } from '../engine/srs.js';
+import { makePlan, makeStep } from '../engine/typingPlans.js';
 
 async function writeFile(dir, name, text) {
   const fh = await dir.getFileHandle(name, { create: true });
@@ -50,9 +52,11 @@ Nothing is applied automatically: the user reviews every file on the Cowork page
 Format: { "ops": ["<operation id>", …], …reply fields for those operations… }
 The reply fields are exactly those of a normal cowork reply (see journey-instructions.md / the
 operation's reply schema). Anything the declared operations may not change is discarded.
-Operation ids: cw-brief, cw-weeklies, cw-light, cw-retro, cw-typing-coach, cw-speak-coach, cw-ask,
-cw-fill-genre, cw-fill-desc, cw-fill-type, cw-fill-diff, cw-rescore, cw-links, cw-notes, cw-classify,
-cw-queue-advice, cw-dupes, cw-add-recs, cw-tree, cw-graph.
+Operation ids: cw-brief, cw-weeklies, cw-light, cw-retro, cw-typing-coach, cw-speak-coach,
+cw-narration-qa, cw-health, cw-ask, cw-fill-genre, cw-fill-desc, cw-fill-type, cw-fill-diff,
+cw-add-recs, cw-series-gaps, cw-tags, cw-vocab, cw-typing-plan, cw-rescore, cw-links, cw-notes,
+cw-classify, cw-genre-merge, cw-author-tidy, cw-goal-advice, cw-queue-advice, cw-dupes, cw-tree,
+cw-graph. (Vocabulary and typing plans can only be applied from the Cowork page.)
 Reviewed files move to inbox/processed/ (or inbox/rejected/ if unreadable).
 `;
 export async function listInbox(dir) {
@@ -78,9 +82,25 @@ export async function moveInbox(dir, name, to = 'processed') {
 // Apply the ticked rows. `ai` is the current AI record; returns the next one (already saved).
 // The undo snapshot (books as they were, new links, added shared notes, AI fields as they were) is
 // kept as ai.lastApply; every commit is logged in ai.applyLog.
-export async function commitRows(rows, { books, ai, ops = [], source = '', auto = false, now = Date.now() }) {
+// `global` + `patchGlobal` are needed only for vocabulary cards / typing plans (app settings).
+export async function commitRows(rows, { books, ai, ops = [], source = '', auto = false, now = Date.now(), global = null, patchGlobal = null }) {
   const booksById = Object.fromEntries((books || []).map((b) => [b.id, b]));
-  const { bookUpdates, crossNoteAdds, bindingAdds, queueOrders, aiNext, undo } = buildApply(rows, { booksById, ai, now, source: ops.join(',') || source });
+  const { bookUpdates, crossNoteAdds, bindingAdds, queueOrders, vocabAdds, planAdds, goalSets, aiNext, undo } = buildApply(rows, { booksById, ai, now, source: ops.join(',') || source });
+  if ((vocabAdds.length || planAdds.length) && !patchGlobal) throw new Error('vocabulary / typing plans can only be applied from the Cowork page');
+  if (vocabAdds.length) {
+    await patchGlobal({ vocabDeck: [...(global?.vocabDeck || []), ...vocabAdds.map((c) => newCard(c.word, c.context, now))] });
+    undo.vocabWords = vocabAdds.map((c) => c.word);
+  }
+  if (planAdds.length) {
+    const made = planAdds.map((pl) => makePlan(pl.name, pl.steps.map((st) => makeStep(st))));
+    await patchGlobal({ typingPlans: [...(global?.typingPlans || []), ...made] });
+    undo.planIds = made.map((pl) => pl.id);
+  }
+  if (goalSets.length) {
+    const before = (await getLibraryRef('goals').catch(() => null)) || {};
+    undo.goals = before;
+    await saveLibraryRef('goals', goalSets.reduce((g, x) => ({ ...g, [x.key]: x.n }), before));
+  }
   if (queueOrders.length) {
     const before = (await getLibraryRef('queues').catch(() => null)) || [];
     undo.queues = before; // the whole array as it was — undo puts it back
@@ -107,7 +127,7 @@ export async function commitRows(rows, { books, ai, ops = [], source = '', auto 
 
 // Put back everything a commit changed (the latest by default, or the one stamped `at`). A book changed
 // AFTER that commit — by you or by a later apply — is left alone and counted in the summary.
-export async function undoLastApply(ai, at = null) {
+export async function undoLastApply(ai, at = null, { global = null, patchGlobal = null } = {}) {
   const stack = ai?.undoStack?.length ? ai.undoStack : (ai?.lastApply ? [ai.lastApply] : []);
   const u = at == null ? stack[0] : stack.find((x) => x.at === at);
   if (!u) return { ai, summary: 'nothing to undo' };
@@ -125,6 +145,13 @@ export async function undoLastApply(ai, at = null) {
     await deleteLibraryBook(id); // books the apply created (tombstoned)
   }
   if (u.queues) await saveLibraryRef('queues', u.queues);
+  if (u.goals) await saveLibraryRef('goals', u.goals);
+  if ((u.vocabWords?.length || u.planIds?.length) && patchGlobal) {
+    const words = new Set((u.vocabWords || []).map((w) => w.toLowerCase()));
+    const deck = (global?.vocabDeck || []).filter((c) => !(words.has(String(c.word).toLowerCase()) && !c.reps && c.lastGrade == null)); // keep cards you've started reviewing
+    const ids = new Set(u.planIds || []);
+    await patchGlobal({ vocabDeck: deck, typingPlans: (global?.typingPlans || []).filter((pl) => !ids.has(pl.id)) });
+  }
   if (u.crossTexts?.length) {
     const texts = new Set(u.crossTexts);
     for (const n of await getCrossNotes()) if (n.source === 'ai' && texts.has(n.text)) await deleteCrossNote(n.id);

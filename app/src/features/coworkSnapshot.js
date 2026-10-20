@@ -30,7 +30,8 @@ export function buildSnapshot({ files = [], books = [], bindMap = {}, queues = [
   for (const [cs, f] of Object.entries(fileByCs)) {
     for (const d of f.dailyHistory || []) {
       if (!(d.wordsRead > 0 || d.activeTimeSecs > 0)) continue;
-      const cur = byDay.get(d.date) || { date: d.date, wordsRead: 0, activeSecs: 0, aloudWords: 0, aloudSecs: 0, hours: {}, methods: {}, files: [] };
+      const cur = byDay.get(d.date) || { date: d.date, wordsRead: 0, activeSecs: 0, aloudWords: 0, aloudSecs: 0, regressions: 0, hours: {}, methods: {}, files: [] };
+      cur.regressions += d.regressions || 0;
       cur.wordsRead += d.wordsRead || 0; cur.activeSecs += d.activeTimeSecs || 0;
       cur.aloudWords += d.aloudWords || 0; cur.aloudSecs += d.aloudSecs || 0;
       for (const [h, w] of Object.entries(d.hours || {})) cur.hours[h] = (cur.hours[h] || 0) + w;
@@ -120,6 +121,15 @@ export function buildSnapshot({ files = [], books = [], bindMap = {}, queues = [
     return { file: fileByCs[m.checksum]?.fileName || m.fileName || m.checksum.slice(0, 8), bookId: bindMap[m.checksum] || null, chunks: m.chunks ?? null, clips, recorded };
   }).filter((n) => n.clips > 0);
 
+  // ── reading sessions (every file's session log, newest last) ──
+  const sessions = [];
+  for (const [cs, f] of Object.entries(fileByCs)) {
+    for (const x of f.sessionLog || []) {
+      sessions.push({ start: new Date(x.start).toISOString(), end: new Date(x.end).toISOString(), file: f.fileName || cs.slice(0, 8), bookId: bindMap[cs] || null, words: x.words, minutes: r1((x.ms || 0) / 60000), wpm: wpmOf(x.words, (x.ms || 0) / 1000), methods: x.by || {} });
+    }
+  }
+  sessions.sort((a, b) => (a.start < b.start ? -1 : 1));
+
   // ── activity log (one line per day, last 60 days with anything) ──
   const typingByDay = {}, aloudByDay = {};
   for (const r of typingRuns) { const d = localDate(r.ts); (typingByDay[d] ||= []).push(r.netWpm); }
@@ -135,7 +145,7 @@ export function buildSnapshot({ files = [], books = [], bindMap = {}, queues = [
     return `- ${date} — ${bits.join(' · ')}`;
   });
 
-  const meta = { app: 'tachyread', kind: 'activity-snapshot', version: SNAPSHOT_VERSION, generatedAt: new Date(now).toISOString(), counts: { books: live.length, files: files.length, readingDays: days.length, typingRuns: runs.length, speechSessions: speechLog.length, focusSessions: focusSessions.length, narratedBooks: narration.length } };
+  const meta = { app: 'tachyread', kind: 'activity-snapshot', version: SNAPSHOT_VERSION, generatedAt: new Date(now).toISOString(), counts: { books: live.length, files: files.length, readingDays: days.length, sessions: sessions.length, typingRuns: runs.length, speechSessions: speechLog.length, focusSessions: focusSessions.length, narratedBooks: narration.length } };
   const json = (x) => JSON.stringify(x, null, 1);
   return {
     'README.md': README(meta),
@@ -147,6 +157,7 @@ export function buildSnapshot({ files = [], books = [], bindMap = {}, queues = [
     'typing.json': json(typing),
     'speaking.json': json(speechLog),
     'narration.json': json(narration),
+    'sessions.json': json(sessions.slice(-1000)),
     'focus.json': json(focusSessions.map((f) => ({ at: f.ts ? new Date(f.ts).toISOString() : null, watchedSecs: Math.round((f.watchedMs || 0) / 1000), awaySecs: Math.round((f.awayMs || 0) / 1000), distractions: f.distractions ?? null, text: f.docName || null }))),
     'activity-log.md': `# Activity log (last 60 active days, newest first)\n\n${log.join('\n') || '_Nothing yet._'}\n`,
   };
@@ -163,7 +174,8 @@ or keys are included.
 | File | What it holds |
 |---|---|
 | \`activity-log.md\` | One line per active day (newest first): reading, typing, reading aloud. Start here. |
-| \`reading-days.json\` | Per day: \`wordsRead\`, \`activeSecs\`, \`aloudWords\`/\`aloudSecs\` (part read aloud), \`wpm\` (silent reading speed; aloud excluded), \`hours\` {localHour 0–23: words} (when), \`methods\` {method: words} (how: auto = auto-play, word / line / para / page = stepping, scroll, listen = TTS, speak = aloud, other), \`files\` [{file, bookId, words, secs}]. Up to 400 days; hours/methods only on days recorded since that tracking began. |
+| \`reading-days.json\` | Per day: \`wordsRead\`, \`activeSecs\`, \`aloudWords\`/\`aloudSecs\` (part read aloud), \`wpm\` (silent reading speed; aloud excluded), \`hours\` {localHour 0–23: words} (when), \`methods\` {method: words} (how: auto = auto-play, word / line / para / page = stepping, scroll, listen = TTS, speak = aloud, other), \`regressions\` (backtracks over just-read text — a rough difficulty signal), \`files\` [{file, bookId, words, secs}]. Up to 400 days; hours/methods only on days recorded since that tracking began. |
+| \`sessions.json\` | Individual reading sessions (a pause over 5 min starts a new one): \`start\`/\`end\` (ISO), \`file\`, \`bookId\`, \`words\`, \`minutes\`, \`wpm\`, \`methods\` {method: words}. Up to 1,000, oldest first. |
 | \`books.json\` | Every tracker book: \`status\` (reading / queue / toread / finished / abandoned), \`started\`, \`finished\`, \`rating\`, \`recScore\` (0–10), \`words\`, \`queue\` {queue, position}, \`file\` {percentRead, wordsRead, pacedWords (words actually read in-app — excludes sections ticked as read elsewhere), activeHours, lastRead, completions}. |
 | \`queues.json\` | Reading queues in order: books, finished, % of words read, words/hours left, \`etaAllDone\` and per-book \`eta\` at the recent pace, \`next\`. |
 | \`goals.json\` | \`last30Days\` (words by local hour and by method), yearly books/words goals (on-track flag, projection, need per day/month), reading \`streak\`, \`recentPace\` (words/day and wpm over ~6 weeks, recent days weighted), and \`today\`. |

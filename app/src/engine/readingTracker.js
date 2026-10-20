@@ -149,6 +149,8 @@ function popcount(mask) {
 // ── per-word read-SOURCE trace: HOW each word was first read ────────────────
 // Sources change rarely along the text, so run-length encoding ((value, count16) triples) keeps a
 // whole book to a few hundred bytes instead of one byte per word.
+const SESSION_GAP_MS = 5 * 60000; // a pause longer than this starts a new reading session
+const MAX_SESSIONS = 300;
 export const READ_SRC = { auto: 1, word: 2, line: 3, para: 4, page: 5, scroll: 6, listen: 7, speak: 8, typing: 9, marked: 10 };
 export const READ_SRC_INFO = {
   1: { label: 'auto-play', color: '#5e60ce' },
@@ -190,7 +192,7 @@ function decodeRuns(b64, count) {
   return arr;
 }
 
-export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', srcB64 = '', lifetimeActiveMs = 0, daily = [], paragraphStarts = [], paraTsB64 = '', getIdleCapMs = () => DEFAULT_IDLE_CAP_MS } = {}) {
+export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', srcB64 = '', lifetimeActiveMs = 0, daily = [], sessions: savedSessions = [], paragraphStarts = [], paraTsB64 = '', getIdleCapMs = () => DEFAULT_IDLE_CAP_MS } = {}) {
   const mask = decodeMask(maskB64, wordCount); // 1 = read (cumulative, all sessions)
   const wpm = decodeWpm(wpmB64, wordCount); // per-word recorded reading pace
   const srcTrace = decodeRuns(srcB64, wordCount); // per-word READ_SRC code — how it was FIRST read
@@ -224,9 +226,23 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
   // Also per day: `hr` {localHour: words} — WHEN you read — and `by` {method: words} — HOW (auto-play,
   // scroll, line-by-line, aloud…; READ_SRC names, 'other' for untagged moves). Both feed the cowork
   // snapshot so an agent can see time-of-day and reading-method patterns.
-  const dayMap = new Map(daily.map((d) => [d.date, { date: d.date, words: d.words || 0, ms: d.ms || 0, sw: d.sw || 0, sms: d.sms || 0, hr: { ...(d.hr || {}) }, by: { ...(d.by || {}) } }]));
+  const dayMap = new Map(daily.map((d) => [d.date, { date: d.date, words: d.words || 0, ms: d.ms || 0, sw: d.sw || 0, sms: d.sms || 0, hr: { ...(d.hr || {}) }, by: { ...(d.by || {}) }, rg: d.rg || 0 }]));
+  // Reading SESSIONS: stretches of real reading with no gap over SESSION_GAP_MS — start/end, words,
+  // active ms and words by method. Capped; persisted with the read state and the file record.
+  const sessions = (savedSessions || []).map((x) => ({ ...x, by: { ...(x.by || {}) } }));
 
-  function bumpDay(words, ms, aloud = false, method = '') {
+  function noteSession(words, ms, method) {
+    const now = Date.now();
+    const cur = sessions[sessions.length - 1];
+    if (cur && now - cur.end <= SESSION_GAP_MS) {
+      cur.end = now; cur.words += words; cur.ms += ms;
+      if (words) cur.by[method] = (cur.by[method] || 0) + words;
+    } else if (words > 0) {
+      sessions.push({ start: now - ms, end: now, words, ms, by: { [method]: words } });
+      if (sessions.length > MAX_SESSIONS) sessions.shift();
+    }
+  }
+  function bumpDay(words, ms, aloud = false, method = '', live = true) {
     const d = today();
     const cur = dayMap.get(d) || { date: d, words: 0, ms: 0, sw: 0, sms: 0, hr: {}, by: {} };
     cur.words += words;
@@ -239,6 +255,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
       cur.by = { ...(cur.by || {}), [m]: ((cur.by || {})[m] || 0) + words };
     }
     dayMap.set(d, cur);
+    if (live) noteSession(words, ms, READ_SRC[method] ? method : 'other'); // imputed time (credit at a pace) isn't a session
   }
 
   function paraLowerBound(x) { // first paragraph index whose start >= x
@@ -310,6 +327,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
         processed = back; // re-read: eyes pace only
         // Regression bookkeeping (a near backward move over text just read). Classify by distance.
         regressionCount++;
+        { const d = today(); const cur = dayMap.get(d) || { date: d, words: 0, ms: 0, sw: 0, sms: 0, hr: {}, by: {}, rg: 0 }; cur.rg = (cur.rg || 0) + 1; dayMap.set(d, cur); } // per-day backtracks (persisted)
         if (back <= SHORT_REGRESSION) shortRegressions++;
         else longRegressions++;
         regress.push({ at: next, back, ms: activeMs, ts: now });
@@ -445,7 +463,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     if (added <= 0) return { added: 0, ms: 0 };
     const ms = Math.round((added / p) * 60000);
     lifetimeMs += ms;
-    bumpDay(added, ms, srcKind === 'speak', srcKind);
+    bumpDay(added, ms, srcKind === 'speak', srcKind, false);
     stampParas(a, b, Date.now());
     dirty = true;
     return { added, ms };
@@ -738,12 +756,14 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     },
     get paraCount() { return paraCount; },
     dailyArray: () => [...dayMap.values()],
+    sessionsArray: () => sessions.map((x) => ({ ...x, by: { ...x.by } })),
     // The file record's dailyHistory shape (aloud part only when there is one).
     dailyHistory: () => [...dayMap.values()].map((d) => ({
       date: d.date, wordsRead: d.words, activeTimeSecs: Math.round(d.ms / 1000),
       ...(d.sw || d.sms ? { aloudWords: d.sw, aloudSecs: Math.round(d.sms / 1000) } : {}),
       ...(d.hr && Object.keys(d.hr).length ? { hours: d.hr } : {}),
       ...(d.by && Object.keys(d.by).length ? { methods: d.by } : {}),
+      ...(d.rg ? { regressions: d.rg } : {}),
     })),
   };
 }

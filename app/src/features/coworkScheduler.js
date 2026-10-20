@@ -6,7 +6,7 @@
 // readwrite grant — otherwise the run is logged as skipped so the user knows to re-grant.
 
 import {
-  getJourneyAi, saveJourneyAi, getLibraryBooks, allFiles, getFsHandle, getDeviceId, getBinding, getLibraryRef,
+  getJourneyAi, saveJourneyAi, getLibraryBooks, allFiles, getFsHandle, getDeviceId, getBinding, getLibraryRef, loadGlobal,
 } from '../state/storage.js';
 import {
   buildDataset, buildProgress, buildDigest, buildCoworkRequest, buildCoworkManifest,
@@ -34,6 +34,7 @@ async function datasetWithProgress(light, books) {
   progress.weeklySummaries = weeklySummaries(progress.days, books, { weeks: 8 });
   const ds = buildDataset(books, { light, progress });
   ds.queues = queuesForDataset(await getLibraryRef('queues').catch(() => []), books);
+  ds.vocabWords = ((await loadGlobal().catch(() => null))?.vocabDeck || []).map((c) => c.word);
   return ds;
 }
 

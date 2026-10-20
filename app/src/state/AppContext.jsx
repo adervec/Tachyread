@@ -368,6 +368,7 @@ export function AppProvider({ children }) {
       srcB64: rs?.srcB64 || '',
       lifetimeActiveMs: rs?.lifetimeActiveMs || 0,
       daily: rs?.daily || [],
+      sessions: rs?.sessions || [],
       paragraphStarts,
       paraTsB64: rs?.paraTsB64 || '',
     });
@@ -505,6 +506,7 @@ export function AppProvider({ children }) {
       srcB64: tr.serializeSrc(),
       lifetimeActiveMs: tr.lifetimeActiveMs,
       daily: tr.dailyArray(),
+      sessions: tr.sessionsArray(),
       paraTsB64: tr.serializeParaTs(),
     }).catch(() => {});
     dispatch({
@@ -515,6 +517,7 @@ export function AppProvider({ children }) {
         persistentPacedWords: tr.pacedCount, // minus ticked-only words — what WPM figures divide by
         persistentActiveTimeSecs: Math.round(tr.lifetimeActiveMs / 1000),
         dailyHistory: tr.dailyHistory(),
+        sessionLog: tr.sessionsArray().slice(-200), // reading sessions (start/end/words/method) — for the cowork snapshot
       },
     });
     tr.markSaved();

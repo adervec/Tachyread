@@ -6,8 +6,8 @@ const now = new Date(2026, 9, 19, 9, 0).getTime(); // local 2026-10-19 09:00
 const today = localDate(now), yday = localDate(now - 86400000);
 const snap = buildSnapshot({
   now,
-  files: [{ checksum: 'c1', fileName: 'dune.epub', totalWords: 1000, persistentWordsRead: 500, persistentPacedWords: 400, persistentActiveTimeSecs: 600, completions: [],
-    dailyHistory: [{ date: yday, wordsRead: 300, activeTimeSecs: 60 }, { date: today, wordsRead: 200, activeTimeSecs: 90, aloudWords: 50, aloudSecs: 30, hours: { 8: 150, 9: 50 }, methods: { line: 150, speak: 50 } }] }],
+  files: [{ checksum: 'c1', fileName: 'dune.epub', totalWords: 1000, persistentWordsRead: 500, persistentPacedWords: 400, persistentActiveTimeSecs: 600, completions: [], sessionLog: [{ start: now - 600000, end: now - 300000, words: 300, ms: 60000, by: { line: 300 } }],
+    dailyHistory: [{ date: yday, wordsRead: 300, activeTimeSecs: 60 }, { date: today, wordsRead: 200, activeTimeSecs: 90, aloudWords: 50, aloudSecs: 30, hours: { 8: 150, 9: 50 }, methods: { line: 150, speak: 50 }, regressions: 4 }] }],
   books: [{ id: 'A', title: 'Dune', author: 'Herbert', words: 1000, inProgress: true }, { id: 'B', title: 'Emma', author: 'Austen', words: 2000 }, { id: 'X', title: 'Gone', deleted: true }],
   bindMap: { c1: 'A' },
   queues: [{ id: 'q', name: 'Now', ids: ['A', 'B'] }],
@@ -17,7 +17,7 @@ const snap = buildSnapshot({
   manifests: [{ checksum: 'c1', chunks: 10, lines: { 3: { clips: [{ source: 'mic', createdAt: now, durationMs: 5000, quality: { score: 88, accuracy: 95, completeness: 90 } }, { source: 'tts' }] } } }],
 });
 const J = (f) => JSON.parse(snap[f]);
-assert.deepEqual(Object.keys(snap).sort(), ['README.md', 'activity-log.md', 'books.json', 'focus.json', 'goals.json', 'meta.json', 'narration.json', 'queues.json', 'reading-days.json', 'speaking.json', 'typing.json']);
+assert.deepEqual(Object.keys(snap).sort(), ['README.md', 'activity-log.md', 'books.json', 'focus.json', 'goals.json', 'meta.json', 'narration.json', 'queues.json', 'reading-days.json', 'sessions.json', 'speaking.json', 'typing.json']);
 const days = J('reading-days.json');
 assert.deepEqual(days.map((d) => [d.date, d.wordsRead]), [[yday, 300], [today, 200]]);
 assert.equal(days[1].wpm, 150, '150 silent words in 60 silent seconds — read-aloud excluded');
@@ -33,6 +33,9 @@ assert.match(snap['activity-log.md'], new RegExp(`${today} — 200 words`));
 assert.match(snap['README.md'], /read-only/);
 assert.ok(!JSON.stringify(snap).includes('fullText'), 'no document text');
 assert.deepEqual(days[1].hours, { 8: 150, 9: 50 });
+assert.equal(days[1].regressions, 4);
+const sess = J('sessions.json');
+assert.deepEqual([sess.length, sess[0].words, sess[0].wpm, sess[0].file], [1, 300, 300, 'dune.epub']);
 assert.deepEqual(g.last30Days.wordsByMethod, { line: 150, speak: 50 });
 
 // Changes between two snapshots.
