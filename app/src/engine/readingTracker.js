@@ -221,14 +221,23 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
   const events = []; // {ts, processed, activeMs}
   // Per day: words + active ms, and the part of that read ALOUD (sw/sms — speaking pace is far slower
   // than reading, so pace estimates can set it aside instead of being dragged down by it).
-  const dayMap = new Map(daily.map((d) => [d.date, { date: d.date, words: d.words || 0, ms: d.ms || 0, sw: d.sw || 0, sms: d.sms || 0 }]));
+  // Also per day: `hr` {localHour: words} — WHEN you read — and `by` {method: words} — HOW (auto-play,
+  // scroll, line-by-line, aloud…; READ_SRC names, 'other' for untagged moves). Both feed the cowork
+  // snapshot so an agent can see time-of-day and reading-method patterns.
+  const dayMap = new Map(daily.map((d) => [d.date, { date: d.date, words: d.words || 0, ms: d.ms || 0, sw: d.sw || 0, sms: d.sms || 0, hr: { ...(d.hr || {}) }, by: { ...(d.by || {}) } }]));
 
-  function bumpDay(words, ms, aloud = false) {
+  function bumpDay(words, ms, aloud = false, method = '') {
     const d = today();
-    const cur = dayMap.get(d) || { date: d, words: 0, ms: 0, sw: 0, sms: 0 };
+    const cur = dayMap.get(d) || { date: d, words: 0, ms: 0, sw: 0, sms: 0, hr: {}, by: {} };
     cur.words += words;
     cur.ms += ms;
     if (aloud) { cur.sw = (cur.sw || 0) + words; cur.sms = (cur.sms || 0) + ms; }
+    if (words > 0) {
+      const h = new Date().getHours();
+      cur.hr = { ...(cur.hr || {}), [h]: ((cur.hr || {})[h] || 0) + words };
+      const m = READ_SRC[method] ? method : 'other';
+      cur.by = { ...(cur.by || {}), [m]: ((cur.by || {})[m] || 0) + words };
+    }
     dayMap.set(d, cur);
   }
 
@@ -312,7 +321,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     lifetimeMs += activeMs;
     sessionNewWords += freshWords;
     readCount += newWords;
-    if (activeMs > 0 || freshWords > 0) bumpDay(freshWords, activeMs, srcKind === 'speak');
+    if (activeMs > 0 || freshWords > 0) bumpDay(freshWords, activeMs, srcKind === 'speak', srcKind);
     if (activeMs > 0 || processed > 0) events.push({ ts: now, processed, activeMs });
     trim(now);
     dirty = true;
@@ -351,7 +360,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     lifetimeMs += ms;
     sessionNewWords += freshWords;
     readCount += newWords;
-    if (ms > 0 || freshWords > 0) bumpDay(freshWords, ms);
+    if (ms > 0 || freshWords > 0) bumpDay(freshWords, ms, false, 'scroll');
     if (ms > 0 || processed > 0) events.push({ ts: now, processed, activeMs: ms });
     trim(now);
     dirty = true;
@@ -436,7 +445,7 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     if (added <= 0) return { added: 0, ms: 0 };
     const ms = Math.round((added / p) * 60000);
     lifetimeMs += ms;
-    bumpDay(added, ms, srcKind === 'speak');
+    bumpDay(added, ms, srcKind === 'speak', srcKind);
     stampParas(a, b, Date.now());
     dirty = true;
     return { added, ms };
@@ -733,6 +742,8 @@ export function createReadingTracker({ wordCount, maskB64 = '', wpmB64 = '', src
     dailyHistory: () => [...dayMap.values()].map((d) => ({
       date: d.date, wordsRead: d.words, activeTimeSecs: Math.round(d.ms / 1000),
       ...(d.sw || d.sms ? { aloudWords: d.sw, aloudSecs: Math.round(d.sms / 1000) } : {}),
+      ...(d.hr && Object.keys(d.hr).length ? { hours: d.hr } : {}),
+      ...(d.by && Object.keys(d.by).length ? { methods: d.by } : {}),
     })),
   };
 }

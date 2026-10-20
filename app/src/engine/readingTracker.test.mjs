@@ -195,6 +195,8 @@ const dh = t17.dailyHistory()[0];
 assert.equal(dh.wordsRead, 30);
 assert.equal(dh.aloudWords, 10);
 assert.equal(dh.aloudSecs, 5);
+assert.equal(Object.values(dh.hours).reduce((a, x) => a + x, 0), 30, 'every word lands in some hour');
+assert.deepEqual(dh.methods, { other: 20, speak: 10 }, 'how: untagged steps vs read aloud');
 const wpmBefore = t17.lifetimeWpm();
 t17.markRangeRead(100, 400, 'typing');
 assert.equal(t17.lifetimeWpm(), wpmBefore, 'typed-through text does not inflate WPM');

@@ -53,7 +53,7 @@ import {
   syncRole, recordRun, mergedHistory, calendarCells, fmtAgo, dayKey,
 } from '../features/coworkActions.js';
 import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset } from '../features/coworkOps.js';
-import { writeSnapshot, commitRows, undoLastApply } from '../features/coworkApply.js';
+import { writeSnapshot, commitRows, undoLastApply, listInbox, readInbox, moveInbox } from '../features/coworkApply.js';
 import { getDeviceId } from '../state/storage.js';
 import { deviceKind } from '../state/device.js';
 import { AXES, READER_ARCHETYPES, readerProfile, matchArchetype, currentArchetype, archetypeTrend, archetypeAxes } from '../features/readerArchetype.js';
@@ -3561,7 +3561,7 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
 
   // Every reply — folder, paste or API — is filtered by the operations it was REQUESTED for
   // (coworkOps.sanitizeOutput: anything else is dropped, with the reason) and staged as review rows.
-  async function stageReply(text, ops, source) {
+  async function stageReply(text, ops, source, extra = {}) {
     const hash = contentHash(text);
     if ((ai?.ledger || []).includes(hash)) { setMsg('That reply was already applied.'); return; }
     const queues = (await getLibraryRef('queues').catch(() => null)) || [];
@@ -3569,7 +3569,7 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
     const { output, dropped } = sanitizeOutput(parseAiOutput(text), ops, { booksById, bindMap, queuedIds, queues });
     const files = Object.fromEntries((await allFiles().catch(() => [])).map((f) => [f.checksum, f]));
     const rows = planRows(output, { booksById, files });
-    setReview({ rows, dropped, ops, source, hash });
+    setReview({ rows, dropped, ops, source, hash, ...extra });
     setPicked(new Set(rows.map((r) => r.key)));
     setMsg(rows.length
       ? `Reply ready for review: ${rows.length} proposed change(s)${dropped.length ? `, ${dropped.length} out-of-scope item(s) discarded` : ''}. Nothing is written until you apply.`
@@ -3583,8 +3583,10 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
     try {
       const base = { ...(ai || {}), ledger: [...(ai?.ledger || []), review.hash].slice(-50) };
       const r = await commitRows(rows, { books, ai: base, ops: review.ops, source: review.source });
+      if (review.inboxFile) await moveInbox(dir, review.inboxFile).catch(() => {});
       setMsg(`Applied: ${r.summary}. ↶ Undo puts it all back.`);
       setReview(null);
+      refreshInbox();
       onReload();
     } catch (e) { setMsg('Apply failed: ' + (e?.message || e)); }
     setBusy(false);
@@ -3594,6 +3596,22 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
     try { const r = await undoLastApply(ai); setMsg(r.summary); onReload(); }
     catch (e) { setMsg('Undo failed: ' + (e?.message || e)); }
     setBusy(false);
+  }
+  // Agent inbox (inbox/*.json): suggestions dropped without a request — same filter, same review.
+  const [inbox, setInbox] = useState([]);
+  const refreshInbox = () => { if (dir) listInbox(dir).then(setInbox).catch(() => {}); };
+  useEffect(() => { refreshInbox(); }, [dir]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function reviewInbox(name) {
+    try {
+      const json = JSON.parse(await readInbox(dir, name));
+      const ops = (Array.isArray(json?.ops) ? json.ops : []).filter((id) => COWORK_OPS[id]);
+      if (!ops.length) { await moveInbox(dir, name, 'rejected'); setMsg(`${name}: no known operations declared ("ops") — moved to inbox/rejected/.`); refreshInbox(); return; }
+      const { ops: _o, ...reply } = json; // eslint-disable-line no-unused-vars
+      await stageReply(JSON.stringify(reply), ops, `inbox: ${name}`, { inboxFile: name });
+    } catch (e) {
+      await moveInbox(dir, name, 'rejected').catch(() => {});
+      setMsg(`${name} couldn't be read (${e?.message || e}) — moved to inbox/rejected/.`); refreshInbox();
+    }
   }
   async function snapshotNow() {
     if (!dir) { setMsg('Choose the cowork folder first.'); return; }
@@ -3856,6 +3874,15 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
         </div>
       )}
 
+      {!viewer && dir && (
+        <div className="lj-inline cw-inbox">
+          <span className="settings-note" style={{ margin: 0 }} title="Agents can drop suggestion files into the folder's inbox/ at any time (format in inbox/README.md). Each is filtered by the operations it declares and reviewed here — nothing is applied automatically.">
+            📬 Agent inbox: {inbox.length ? `${inbox.length} suggestion file${inbox.length === 1 ? '' : 's'}` : 'empty'}
+          </span>
+          {inbox.slice(0, 5).map((n) => <button key={n} disabled={busy || !!review} onClick={() => reviewInbox(n)} title={`Review ${n}`}>Review {n}</button>)}
+          <button onClick={refreshInbox} title="Look in inbox/ again">⟳</button>
+        </div>
+      )}
       {review && (
         <div className="cw-review">
           <div className="rh-section-h">Review the reply — {review.source} · {review.ops.map((id) => COWORK_OPS[id]?.label || id).join(', ')}</div>
@@ -3887,7 +3914,7 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
             <button className="toggle-on" disabled={busy || !picked.size} onClick={applyReview}>Apply {picked.size} ticked</button>
             <button onClick={() => setPicked(new Set(review.rows.map((r) => r.key)))}>Tick all</button>
             <button onClick={() => setPicked(new Set())}>Untick all</button>
-            <button onClick={() => { setReview(null); setMsg('Reply discarded — nothing was changed.'); }}>Discard reply</button>
+            <button onClick={async () => { if (review.inboxFile) { await moveInbox(dir, review.inboxFile).catch(() => {}); refreshInbox(); } setReview(null); setMsg('Reply discarded — nothing was changed.'); }}>Discard reply</button>
           </div>
         </div>
       )}

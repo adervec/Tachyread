@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildSnapshot } from './coworkSnapshot.js';
+import { buildSnapshot, diffSnapshots, changesMarkdown } from './coworkSnapshot.js';
 import { localDate } from './todaySummary.js';
 
 const now = new Date(2026, 9, 19, 9, 0).getTime(); // local 2026-10-19 09:00
@@ -7,7 +7,7 @@ const today = localDate(now), yday = localDate(now - 86400000);
 const snap = buildSnapshot({
   now,
   files: [{ checksum: 'c1', fileName: 'dune.epub', totalWords: 1000, persistentWordsRead: 500, persistentPacedWords: 400, persistentActiveTimeSecs: 600, completions: [],
-    dailyHistory: [{ date: yday, wordsRead: 300, activeTimeSecs: 60 }, { date: today, wordsRead: 200, activeTimeSecs: 90, aloudWords: 50, aloudSecs: 30 }] }],
+    dailyHistory: [{ date: yday, wordsRead: 300, activeTimeSecs: 60 }, { date: today, wordsRead: 200, activeTimeSecs: 90, aloudWords: 50, aloudSecs: 30, hours: { 8: 150, 9: 50 }, methods: { line: 150, speak: 50 } }] }],
   books: [{ id: 'A', title: 'Dune', author: 'Herbert', words: 1000, inProgress: true }, { id: 'B', title: 'Emma', author: 'Austen', words: 2000 }, { id: 'X', title: 'Gone', deleted: true }],
   bindMap: { c1: 'A' },
   queues: [{ id: 'q', name: 'Now', ids: ['A', 'B'] }],
@@ -32,4 +32,15 @@ assert.deepEqual(J('narration.json')[0].recorded.map((r) => r.score), [88]);
 assert.match(snap['activity-log.md'], new RegExp(`${today} — 200 words`));
 assert.match(snap['README.md'], /read-only/);
 assert.ok(!JSON.stringify(snap).includes('fullText'), 'no document text');
+assert.deepEqual(days[1].hours, { 8: 150, 9: 50 });
+assert.deepEqual(g.last30Days.wordsByMethod, { line: 150, speak: 50 });
+
+// Changes between two snapshots.
+const prevB = [{ id: 'A', title: 'Dune', status: 'reading', file: { percentRead: 10 }, queue: { queue: 'Now', position: 1 } }, { id: 'B', title: 'Emma', status: 'toread', queue: null }, { id: 'Z', title: 'Gone', status: 'toread' }];
+const nextB = [{ id: 'A', title: 'Dune', status: 'finished', file: { percentRead: 100 }, queue: { queue: 'Now', position: 1 }, rating: 5 }, { id: 'B', title: 'Emma', status: 'reading', queue: { queue: 'Now', position: 2 } }, { id: 'N', title: 'New', status: 'toread' }];
+const ch = diffSnapshots({ books: prevB, queues: [{ name: 'Now' }] }, { books: nextB, queues: [{ name: 'Now' }, { name: 'Later' }] });
+const kinds = ch.map((c) => `${c.kind}:${c.title}`);
+for (const k of ['finished:Dune', 'progress:Dune', 'rated:Dune', 'started:Emma', 'queue:Emma', 'added:New', 'removed:Gone', 'queue:Later']) assert.ok(kinds.includes(k), k);
+assert.match(changesMarkdown(ch, '2026-10-18T08:00:00Z', '2026-10-19T08:00:00Z'), /## finished\n- Dune — reading → finished/);
+assert.match(changesMarkdown([], null, 'x'), /First snapshot/);
 console.log('coworkSnapshot: all cases pass');
