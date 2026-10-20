@@ -1168,7 +1168,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
           {tab === 'genres' && <RefList kind="genre" items={refs.genres} subitems={refs.subgenres} books={books} onOpen={(name) => { setColF({ ...colF, genre: name, author: '' }); setLimit(100); setTab('library'); }} />}
           {tab === 'archetype' && <ArchetypeView books={books} />}
           {tab === 'constellation' && <ConstellationView books={books} ai={ai} />}
-          {tab === 'ai' && <AiView books={books} ai={ai} global={global} bindMap={bindMap || {}} onReload={reload} />}
+          {tab === 'ai' && <AiView books={books} ai={ai} global={global} onPatchGlobal={onPatch} bindMap={bindMap || {}} onReload={reload} />}
 
           {tab === 'data' && (
             <div className="lj-data">
@@ -3508,7 +3508,7 @@ async function readFromDir(dir, name) {
   try { const fh = await dir.getFileHandle(name); return await (await fh.getFile()).text(); } catch { return null; }
 }
 
-function AiView({ books, ai, global, bindMap = {}, onReload }) {
+function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
   // Reading-progress bundle (daily/weekly totals, streak, in-flight books) attached to every export,
   // so cowork daily/weekly summary tasks have the data. Built fresh at call time from the file records.
   // The algorithmic weekly summaries ride along so a cowork task can return dressed-up `weeklies`.
@@ -3517,6 +3517,7 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
     progress.weeklySummaries = weeklySummaries(progress.days, books, { weeks: 8 });
     const ds = buildDataset(books, { light, progress });
     ds.queues = queuesForDataset(await getLibraryRef('queues').catch(() => []), books); // for queue advice
+    ds.vocabWords = (global?.vocabDeck || []).map((c) => c.word); // so vocabulary suggestions skip known words
     return ds;
   };
   // Request builder: a checkbox TREE of every sync action (cowork folder / direct API / cloud),
@@ -3573,9 +3574,10 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
     if ((ai?.ledger || []).includes(hash)) { setMsg('That reply was already applied.'); return; }
     const queues = (await getLibraryRef('queues').catch(() => null)) || [];
     const queuedIds = new Set(liveQueues(queues).flatMap((q) => q.ids || []));
-    const { output, dropped } = sanitizeOutput(parseAiOutput(text), ops, { booksById, bindMap, queuedIds, queues });
+    const { output, dropped } = sanitizeOutput(parseAiOutput(text), ops, { booksById, bindMap, queuedIds, queues, vocabWords: (global?.vocabDeck || []).map((c) => c.word) });
     const files = Object.fromEntries((await allFiles().catch(() => [])).map((f) => [f.checksum, f]));
-    const rows = planRows(output, { booksById, files });
+    const goals = (await getLibraryRef('goals').catch(() => null)) || {};
+    const rows = planRows(output, { booksById, files, goals });
     setReview({ rows, dropped, ops, source, hash, ...extra });
     setPicked(new Set(rows.slice(0, APPLY_CAP).map((r) => r.key))); // a huge reply goes in pages, never one click
     setMsg(rows.length
@@ -3590,7 +3592,7 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
     setBusy(true);
     try {
       const base = { ...(ai || {}), ledger: [...(ai?.ledger || []), review.hash].slice(-50) };
-      const r = await commitRows(rows, { books, ai: base, ops: review.ops, source: review.source });
+      const r = await commitRows(rows, { books, ai: base, ops: review.ops, source: review.source, global, patchGlobal: onPatchGlobal });
       const left = review.rows.filter((x) => !picked.has(x.key));
       // Rows not applied this time stay up for the next page (only for big replies split by the cap).
       if (left.length && review.rows.length > APPLY_CAP) {
@@ -3609,7 +3611,7 @@ function AiView({ books, ai, global, bindMap = {}, onReload }) {
   }
   async function undoApply(at = null) {
     setBusy(true);
-    try { const r = await undoLastApply(ai, at); setMsg(r.summary); onReload(); }
+    try { const r = await undoLastApply(ai, at, { global, patchGlobal: onPatchGlobal }); setMsg(r.summary); onReload(); }
     catch (e) { setMsg('Undo failed: ' + (e?.message || e)); }
     setBusy(false);
   }

@@ -1258,7 +1258,7 @@ export async function importAllData(bundle, { replace = true } = {}) {
 // Reading-progress fields lifted out of a FileSettings record (cosmetic per-file prefs stay local).
 const PROGRESS_FILE_FIELDS = [
   'wordIndex', 'totalWords', 'persistentWordsRead', 'persistentPacedWords', 'persistentActiveTimeSecs',
-  'persistentTotalTimeSecs', 'dailyHistory', 'completions', 'rating', 'tocReadStats',
+  'persistentTotalTimeSecs', 'dailyHistory', 'sessionLog', 'completions', 'rating', 'tocReadStats',
   'posUpdatedAt', 'posDevice', // when + where the reading position last moved (newest-wins merge)
 ];
 
@@ -1288,7 +1288,7 @@ function mergeDaily(a = [], b = []) {
 // Merge FileSettings dailyHistory ({date,wordsRead,activeTimeSecs}) by date, by max.
 function mergeDailyHistory(a = [], b = []) {
   const m = new Map();
-  const one = (d) => ({ date: d.date, wordsRead: d.wordsRead || 0, activeTimeSecs: d.activeTimeSecs || 0, ...(d.aloudWords || d.aloudSecs ? { aloudWords: d.aloudWords || 0, aloudSecs: d.aloudSecs || 0 } : {}), ...(d.hours ? { hours: { ...d.hours } } : {}), ...(d.methods ? { methods: { ...d.methods } } : {}) });
+  const one = (d) => ({ date: d.date, wordsRead: d.wordsRead || 0, activeTimeSecs: d.activeTimeSecs || 0, ...(d.aloudWords || d.aloudSecs ? { aloudWords: d.aloudWords || 0, aloudSecs: d.aloudSecs || 0 } : {}), ...(d.hours ? { hours: { ...d.hours } } : {}), ...(d.methods ? { methods: { ...d.methods } } : {}), ...(d.regressions ? { regressions: d.regressions } : {}) });
   // Per-key max, like the totals (each device's record of the same day is a lower bound).
   const maxMerge = (a = {}, b = {}) => { const o = { ...a }; for (const [k, v] of Object.entries(b)) o[k] = Math.max(o[k] || 0, v || 0); return o; };
   for (const d of a || []) if (d?.date) m.set(d.date, one(d));
@@ -1301,6 +1301,7 @@ function mergeDailyHistory(a = [], b = []) {
       if (d.aloudWords || d.aloudSecs) { cur.aloudWords = Math.max(cur.aloudWords || 0, d.aloudWords || 0); cur.aloudSecs = Math.max(cur.aloudSecs || 0, d.aloudSecs || 0); }
       if (d.hours) cur.hours = maxMerge(cur.hours, d.hours);
       if (d.methods) cur.methods = maxMerge(cur.methods, d.methods);
+      if (d.regressions) cur.regressions = Math.max(cur.regressions || 0, d.regressions);
     }
   }
   return [...m.values()];
@@ -1460,6 +1461,10 @@ export async function importProgressData(bundle) {
     cur.persistentActiveTimeSecs = Math.max(cur.persistentActiveTimeSecs || 0, inc.persistentActiveTimeSecs || 0);
     cur.persistentTotalTimeSecs = Math.max(cur.persistentTotalTimeSecs || 0, inc.persistentTotalTimeSecs || 0);
     cur.dailyHistory = mergeDailyHistory(cur.dailyHistory, inc.dailyHistory);
+    if (cur.sessionLog || inc.sessionLog) { // union of both devices' sessions (by start time), capped
+      const m = new Map([...(cur.sessionLog || []), ...(inc.sessionLog || [])].map((x) => [x.start, x]));
+      cur.sessionLog = [...m.values()].sort((a, b) => a.start - b.start).slice(-200);
+    }
     cur.completions = unionCompletions(cur.completions, inc.completions);
     cur.rating = Math.max(cur.rating || 0, inc.rating || 0);
     cur.tocReadStats = { ...(inc.tocReadStats || {}), ...(cur.tocReadStats || {}) };

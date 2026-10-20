@@ -182,7 +182,7 @@ export function defaultFileSettings() {
 const NON_DEFAULT_FIELDS = new Set([
   'wordIndex', 'totalWords', 'contentChecksum', 'fileName',
   'persistentWordsRead', 'persistentPacedWords', 'persistentActiveTimeSecs', 'persistentTotalTimeSecs',
-  'dailyHistory', 'completions', 'rating', 'notes',
+  'dailyHistory', 'sessionLog', 'completions', 'rating', 'notes',
   'tocEntries', 'tocReadStats', 'skipRanges', 'sourceChecks',
   'properNames', 'properNameSeed', 'indexEntries', 'goal',
   'updatedAt', 'posUpdatedAt', 'posDevice', // sync stamps — never part of a tab's reusable look

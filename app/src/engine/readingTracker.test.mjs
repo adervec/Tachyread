@@ -197,6 +197,13 @@ assert.equal(dh.aloudWords, 10);
 assert.equal(dh.aloudSecs, 5);
 assert.equal(Object.values(dh.hours).reduce((a, x) => a + x, 0), 30, 'every word lands in some hour');
 assert.deepEqual(dh.methods, { other: 20, speak: 10 }, 'how: untagged steps vs read aloud');
+const ss = t17.sessionsArray();
+assert.equal(ss.length, 1, 'continuous reading is one session');
+assert.deepEqual([ss[0].words, ss[0].by], [30, { other: 20, speak: 10 }]);
+// Backtracks are counted per day; a fresh tracker keeps saved sessions.
+t17.recordMove(30, 25, T + 20000);
+assert.equal(t17.dailyHistory()[0].regressions, 1);
+assert.equal(createReadingTracker({ wordCount: 10, sessions: ss }).sessionsArray().length, 1);
 const wpmBefore = t17.lifetimeWpm();
 t17.markRangeRead(100, 400, 'typing');
 assert.equal(t17.lifetimeWpm(), wpmBefore, 'typed-through text does not inflate WPM');

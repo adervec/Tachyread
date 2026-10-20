@@ -115,4 +115,23 @@ assert.deepEqual(tg.output.addTags, [{ id: 'a', tags: ['Desert', 'ecology', 'pol
 const tap = buildApply(planRows(tg.output, { booksById: tagged }), { booksById: tagged, now: 3, source: 'cw-tags' });
 assert.deepEqual(tap.bookUpdates[0].tags, ['Space', 'war', 'Desert', 'ecology', 'politics', 'religion', 'family']);
 assert.equal(tap.bookUpdates[0].aiSet.tags.by, 'cw-tags');
+
+// Vocabulary: single words not already in the deck.
+const vc = sanitizeOutput({ vocabCards: [{ word: 'sesquipedalian', context: 'long words' }, { word: 'Petrichor' }, { word: 'two words' }, { word: 'petrichor' }] }, ['cw-vocab'], { ...ctx, vocabWords: ['Petrichor'] });
+assert.deepEqual(vc.output.vocabCards.map((c) => c.word), ['sesquipedalian']);
+// Typing plan: only known drills and sane numbers.
+const tp = sanitizeOutput({ typingPlan: { name: 'Fix e', steps: [{ mode: 'homeRow', runMode: 'seconds', runLimit: 60, sets: 2 }, { mode: 'hack', runMode: 'seconds', runLimit: 60 }, { mode: 'homeRow', runMode: 'seconds', runLimit: 9999 }] } }, ['cw-typing-plan'], ctx);
+assert.deepEqual(tp.output.typingPlan.steps.map((st) => st.mode), ['homeRow']);
+assert.equal(buildApply(planRows(tp.output, { booksById: books }), { booksById: books }).planAdds.length, 1);
+// Renames: one row per affected (unlocked) book, only for the allowed field.
+const rnBooks = { x: { id: 'x', title: 'X', genre: 'Sci-Fi' }, y: { id: 'y', title: 'Y', genre: 'Sci-Fi', locked: true }, z: { id: 'z', title: 'Z', genre: 'History', author: 'Tolkien' } };
+const rn = sanitizeOutput({ renames: [{ field: 'genre', from: 'Sci-Fi', to: 'Science fiction' }, { field: 'author', from: 'Tolkien', to: 'J.R.R. Tolkien' }, { field: 'genre', from: 'Nope', to: 'X' }] }, ['cw-genre-merge'], { booksById: rnBooks });
+assert.deepEqual(rn.output.renames.map((r) => r.field), ['genre']);
+assert.deepEqual(planRows(rn.output, { booksById: rnBooks }).map((r) => [r.bookId, r.from, r.to]), [['x', 'Sci-Fi', 'Science fiction']], 'the locked book is skipped');
+// Goal advice: plausible integers, current → proposed rows.
+const ga = sanitizeOutput({ goalAdvice: { books: 30, words: 5, why: 'pace' } }, ['cw-goal-advice'], ctx);
+assert.deepEqual(ga.output.goalAdvice, { books: 30, why: 'pace' });
+const grows = planRows(ga.output, { booksById: books, goals: { 2026: 24 }, year: 2026 });
+assert.deepEqual(grows.map((r) => [r.from, r.to]), [[24, 30]]);
+assert.deepEqual(buildApply(grows, { booksById: books }).goalSets, [{ key: '2026', n: 30 }]);
 console.log('coworkOps: all cases pass');

@@ -73,7 +73,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
       if (!wordCount) { setStoredTab({ missing: true }); return; }
       const tracker = createReadingTracker({
         wordCount, maskB64: rs?.maskB64 || '', wpmB64: rs?.wpmB64 || '', srcB64: rs?.srcB64 || '',
-        lifetimeActiveMs: rs?.lifetimeActiveMs || 0, daily: rs?.daily || [], paraTsB64: rs?.paraTsB64 || '',
+        lifetimeActiveMs: rs?.lifetimeActiveMs || 0, daily: rs?.daily || [], sessions: rs?.sessions || [], paraTsB64: rs?.paraTsB64 || '',
       });
       setStoredTab({ doc: { words: { length: wordCount } }, settings: fsRec, tracker });
     })();
@@ -236,7 +236,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
     if (!storedChecksum || !tracker) return;
     await saveReadState(storedChecksum, {
       maskB64: tracker.serializeMask(), wpmB64: tracker.serializeWpm(), srcB64: tracker.serializeSrc(),
-      lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(), paraTsB64: tracker.serializeParaTs(),
+      lifetimeActiveMs: tracker.lifetimeActiveMs, daily: tracker.dailyArray(), sessions: tracker.sessionsArray(), paraTsB64: tracker.serializeParaTs(),
     }).catch(() => {});
     const dailyHistory = tracker.dailyHistory();
     await saveFile({
