@@ -1288,7 +1288,9 @@ function mergeDaily(a = [], b = []) {
 // Merge FileSettings dailyHistory ({date,wordsRead,activeTimeSecs}) by date, by max.
 function mergeDailyHistory(a = [], b = []) {
   const m = new Map();
-  const one = (d) => ({ date: d.date, wordsRead: d.wordsRead || 0, activeTimeSecs: d.activeTimeSecs || 0, ...(d.aloudWords || d.aloudSecs ? { aloudWords: d.aloudWords || 0, aloudSecs: d.aloudSecs || 0 } : {}) });
+  const one = (d) => ({ date: d.date, wordsRead: d.wordsRead || 0, activeTimeSecs: d.activeTimeSecs || 0, ...(d.aloudWords || d.aloudSecs ? { aloudWords: d.aloudWords || 0, aloudSecs: d.aloudSecs || 0 } : {}), ...(d.hours ? { hours: { ...d.hours } } : {}), ...(d.methods ? { methods: { ...d.methods } } : {}) });
+  // Per-key max, like the totals (each device's record of the same day is a lower bound).
+  const maxMerge = (a = {}, b = {}) => { const o = { ...a }; for (const [k, v] of Object.entries(b)) o[k] = Math.max(o[k] || 0, v || 0); return o; };
   for (const d of a || []) if (d?.date) m.set(d.date, one(d));
   for (const d of b || []) {
     if (!d?.date) continue;
@@ -1297,6 +1299,8 @@ function mergeDailyHistory(a = [], b = []) {
     else {
       cur.wordsRead = Math.max(cur.wordsRead, d.wordsRead || 0); cur.activeTimeSecs = Math.max(cur.activeTimeSecs, d.activeTimeSecs || 0);
       if (d.aloudWords || d.aloudSecs) { cur.aloudWords = Math.max(cur.aloudWords || 0, d.aloudWords || 0); cur.aloudSecs = Math.max(cur.aloudSecs || 0, d.aloudSecs || 0); }
+      if (d.hours) cur.hours = maxMerge(cur.hours, d.hours);
+      if (d.methods) cur.methods = maxMerge(cur.methods, d.methods);
     }
   }
   return [...m.values()];

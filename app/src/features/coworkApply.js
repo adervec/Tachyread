@@ -5,7 +5,7 @@ import {
   allFiles, getLibraryBooks, getBinding, getLibraryRef, allTypingRuns, getSpeechLog, allFocusSessions,
   allAudiobookManifests, getLibraryBook, saveLibraryBook, saveLibraryRef, deleteLibraryBook, addCrossNotes, getCrossNotes, deleteCrossNote, setBinding, saveJourneyAi,
 } from '../state/storage.js';
-import { buildSnapshot } from './coworkSnapshot.js';
+import { buildSnapshot, diffSnapshots, changesMarkdown } from './coworkSnapshot.js';
 import { buildApply, applySummary } from './coworkOps.js';
 import { setQueueIds } from './readingQueues.js';
 
@@ -23,8 +23,56 @@ export async function writeSnapshot(dir, now = Date.now()) {
   ]);
   const out = buildSnapshot({ files, books, bindMap, queues: queues || [], goals: goals || {}, typingRuns, speechLog, focusSessions, manifests, now });
   const sub = await dir.getDirectoryHandle('snapshot', { create: true });
+  // What changed since the previous snapshot — read it back BEFORE overwriting.
+  const prevText = async (n) => { try { return await (await (await sub.getFileHandle(n)).getFile()).text(); } catch { return null; } };
+  const [pb, pq, pm] = await Promise.all([prevText('books.json'), prevText('queues.json'), prevText('meta.json')]);
+  let prev = null;
+  try { if (pb) prev = { books: JSON.parse(pb), queues: pq ? JSON.parse(pq) : [], at: pm ? JSON.parse(pm).generatedAt : null }; } catch { prev = null; }
+  const changes = prev ? diffSnapshots(prev, { books: JSON.parse(out['books.json']), queues: JSON.parse(out['queues.json']) }) : [];
+  const nowIso = new Date(now).toISOString();
+  out['changes.json'] = JSON.stringify({ since: prev?.at || null, until: nowIso, changes }, null, 1);
+  out['changes.md'] = changesMarkdown(changes, prev?.at || null, nowIso);
   for (const [name, text] of Object.entries(out)) await writeFile(sub, name, text);
+  await writeFile(await dir.getDirectoryHandle('inbox', { create: true }), 'README.md', INBOX_README);
   return Object.keys(out).length;
+}
+
+// ── Agent inbox ──────────────────────────────────────────────────────────────────────────────────
+// An agent may drop a suggestion file into inbox/ at any time (no request needed). The app lists
+// them on the Cowork page; reviewing one runs it through the SAME permission filter (the ops it
+// declares) and review table — nothing is applied without you. Afterwards the file moves to
+// inbox/processed/ (or inbox/rejected/ when unusable).
+export const INBOX_README = `# Tachyread agent inbox
+
+Drop a JSON file here (any name ending in .json) to suggest changes without waiting for a request.
+Nothing is applied automatically: the user reviews every file on the Cowork page, row by row.
+
+Format: { "ops": ["<operation id>", …], …reply fields for those operations… }
+The reply fields are exactly those of a normal cowork reply (see journey-instructions.md / the
+operation's reply schema). Anything the declared operations may not change is discarded.
+Operation ids: cw-brief, cw-weeklies, cw-light, cw-retro, cw-typing-coach, cw-speak-coach, cw-ask,
+cw-fill-genre, cw-fill-desc, cw-fill-type, cw-fill-diff, cw-rescore, cw-links, cw-notes, cw-classify,
+cw-queue-advice, cw-dupes, cw-add-recs, cw-tree, cw-graph.
+Reviewed files move to inbox/processed/ (or inbox/rejected/ if unreadable).
+`;
+export async function listInbox(dir) {
+  try {
+    const box = await dir.getDirectoryHandle('inbox', { create: true });
+    const names = [];
+    for await (const [n, h] of box.entries()) if (h.kind === 'file' && /\.json$/i.test(n)) names.push(n);
+    return names.sort();
+  } catch { return []; }
+}
+export async function readInbox(dir, name) {
+  const box = await dir.getDirectoryHandle('inbox');
+  return (await (await box.getFileHandle(name)).getFile()).text();
+}
+export async function moveInbox(dir, name, to = 'processed') {
+  const box = await dir.getDirectoryHandle('inbox');
+  const text = await (await (await box.getFileHandle(name)).getFile()).text();
+  const dest = await box.getDirectoryHandle(to, { create: true });
+  await writeFile(dest, `${new Date().toISOString().replace(/[:.]/g, '-')}-${name}`, text);
+  await box.removeEntry(name);
 }
 
 // Apply the ticked rows. `ai` is the current AI record; returns the next one (already saved).

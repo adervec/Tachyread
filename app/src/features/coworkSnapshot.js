@@ -30,9 +30,11 @@ export function buildSnapshot({ files = [], books = [], bindMap = {}, queues = [
   for (const [cs, f] of Object.entries(fileByCs)) {
     for (const d of f.dailyHistory || []) {
       if (!(d.wordsRead > 0 || d.activeTimeSecs > 0)) continue;
-      const cur = byDay.get(d.date) || { date: d.date, wordsRead: 0, activeSecs: 0, aloudWords: 0, aloudSecs: 0, files: [] };
+      const cur = byDay.get(d.date) || { date: d.date, wordsRead: 0, activeSecs: 0, aloudWords: 0, aloudSecs: 0, hours: {}, methods: {}, files: [] };
       cur.wordsRead += d.wordsRead || 0; cur.activeSecs += d.activeTimeSecs || 0;
       cur.aloudWords += d.aloudWords || 0; cur.aloudSecs += d.aloudSecs || 0;
+      for (const [h, w] of Object.entries(d.hours || {})) cur.hours[h] = (cur.hours[h] || 0) + w;
+      for (const [m, w] of Object.entries(d.methods || {})) cur.methods[m] = (cur.methods[m] || 0) + w;
       cur.files.push({ file: f.fileName || cs.slice(0, 8), bookId: bindMap[cs] || null, words: d.wordsRead || 0, secs: d.activeTimeSecs || 0 });
       byDay.set(d.date, cur);
     }
@@ -78,7 +80,16 @@ export function buildSnapshot({ files = [], books = [], bindMap = {}, queues = [
   const year = new Date(now).getFullYear();
   const bg = Number(goals?.[year]) || 0, wg = Number(goals?.[`${year}-words`]) || 0;
   const today = todaySummary({ dayAgg, fileStats, bookOf: (cs) => live.find((b) => b.id === bindMap[cs]) || null, books: live, now });
+  // When and how you read, over the last 30 days (only days recorded since hour/method tracking began).
+  const since = localDate(now - 30 * 86400000);
+  const byHour = {}, byMethod = {};
+  for (const d of days) {
+    if (d.date < since) continue;
+    for (const [h, w] of Object.entries(d.hours)) byHour[h] = (byHour[h] || 0) + w;
+    for (const [m, w] of Object.entries(d.methods)) byMethod[m] = (byMethod[m] || 0) + w;
+  }
   const goalsOut = {
+    last30Days: { wordsByLocalHour: byHour, wordsByMethod: byMethod },
     year, booksGoal: bg ? yearGoal(live, bg, now) : null, wordsGoal: wg ? yearWordsGoal(dayAgg, live, linkedIds, wg, now) : null,
     streak: readingStreak(dayAgg, now), recentPace: pace,
     today: { date: today.today, words: today.words, activeSecs: today.secs, wpm: today.wpm, aloudWords: today.aloudWords, books: today.files.map((x) => ({ title: x.book?.title || x.name, words: x.words, secs: x.secs, percentRead: Math.round(x.coverage * 100) })), finished: today.finished.map((b) => b.title) },
@@ -152,15 +163,16 @@ or keys are included.
 | File | What it holds |
 |---|---|
 | \`activity-log.md\` | One line per active day (newest first): reading, typing, reading aloud. Start here. |
-| \`reading-days.json\` | Per day: \`wordsRead\`, \`activeSecs\`, \`aloudWords\`/\`aloudSecs\` (part read aloud), \`wpm\` (silent reading speed; aloud excluded), \`files\` [{file, bookId, words, secs}]. Up to 400 days. |
+| \`reading-days.json\` | Per day: \`wordsRead\`, \`activeSecs\`, \`aloudWords\`/\`aloudSecs\` (part read aloud), \`wpm\` (silent reading speed; aloud excluded), \`hours\` {localHour 0–23: words} (when), \`methods\` {method: words} (how: auto = auto-play, word / line / para / page = stepping, scroll, listen = TTS, speak = aloud, other), \`files\` [{file, bookId, words, secs}]. Up to 400 days; hours/methods only on days recorded since that tracking began. |
 | \`books.json\` | Every tracker book: \`status\` (reading / queue / toread / finished / abandoned), \`started\`, \`finished\`, \`rating\`, \`recScore\` (0–10), \`words\`, \`queue\` {queue, position}, \`file\` {percentRead, wordsRead, pacedWords (words actually read in-app — excludes sections ticked as read elsewhere), activeHours, lastRead, completions}. |
 | \`queues.json\` | Reading queues in order: books, finished, % of words read, words/hours left, \`etaAllDone\` and per-book \`eta\` at the recent pace, \`next\`. |
-| \`goals.json\` | Yearly books/words goals (on-track flag, projection, need per day/month), reading \`streak\`, \`recentPace\` (words/day and wpm over ~6 weeks, recent days weighted), and \`today\`. |
+| \`goals.json\` | \`last30Days\` (words by local hour and by method), yearly books/words goals (on-track flag, projection, need per day/month), reading \`streak\`, \`recentPace\` (words/day and wpm over ~6 weeks, recent days weighted), and \`today\`. |
 | \`typing.json\` | Typing-practice \`runs\` (net/gross wpm, accuracy %, consistency %, words, seconds, mode, device), \`weekly\` aggregates, \`topErrorKeys\` [[key, count]]. |
 | \`speaking.json\` | Reading-aloud sessions — field meanings in its \`fields\` description below. |
 | \`narration.json\` | Audiobook narration per book: clip counts and each self-recorded take's quality \`score\`, \`accuracy\` (said words that were the text), \`completeness\` (text words said), \`wpm\`, \`voiceOverall\` (0–100). |
 | \`focus.json\` | Focus sessions: watched vs away seconds and distractions. |
 | \`meta.json\` | Generation time and record counts. |
+| \`changes.md\` / \`changes.json\` | What changed since the PREVIOUS snapshot: books finished / started / progressed / rated / added / linked / removed, queue moves. Good for "since yesterday…". |
 
 ## speaking.json fields
 Each session: \`at\`/\`end\` (epoch ms), \`name\` (document), \`words\` advanced by reading aloud, \`exact\`/\`near\`/\`skip\`
@@ -173,4 +185,36 @@ expressiveness, nonNasal, noUptalk, projection, breath — 0–100}, \`m\` per-m
 - "percentRead" is coverage (words actually covered), not the cursor position.
 - A streak counts consecutive local days with any reading; if today has none yet, it ends yesterday.
 `;
+}
+
+// ── changes since the previous snapshot ──────────────────────────────────────────────────────────
+// prev/next: the parsed books.json and queues.json of two snapshots. → [{ kind, title, detail }]
+export function diffSnapshots(prev, next) {
+  const out = [];
+  const pb = new Map((prev?.books || []).map((b) => [b.id, b]));
+  const nb = new Map((next?.books || []).map((b) => [b.id, b]));
+  for (const [id, b] of nb) {
+    const o = pb.get(id);
+    if (!o) { out.push({ kind: 'added', title: b.title, detail: `added to the library (${b.status})` }); continue; }
+    if (o.status !== b.status) out.push({ kind: b.status === 'finished' ? 'finished' : b.status === 'reading' ? 'started' : 'status', title: b.title, detail: `${o.status} → ${b.status}` });
+    const op = o.file?.percentRead ?? 0, np = b.file?.percentRead ?? 0;
+    if (np - op >= 1) out.push({ kind: 'progress', title: b.title, detail: `${op}% → ${np}% read` });
+    if (!o.file && b.file) out.push({ kind: 'linked', title: b.title, detail: `linked to ${b.file.name}` });
+    if (o.rating !== b.rating && b.rating) out.push({ kind: 'rated', title: b.title, detail: `rated ${b.rating}` });
+    const oq = o.queue ? `${o.queue.queue} #${o.queue.position}` : null, nq = b.queue ? `${b.queue.queue} #${b.queue.position}` : null;
+    if (oq !== nq && (oq?.split(' #')[0] !== nq?.split(' #')[0])) out.push({ kind: 'queue', title: b.title, detail: `${oq || 'no queue'} → ${nq || 'no queue'}` });
+  }
+  for (const [id, b] of pb) if (!nb.has(id)) out.push({ kind: 'removed', title: b.title, detail: 'removed from the library' });
+  const pq = new Set((prev?.queues || []).map((q) => q.name)), nq = new Set((next?.queues || []).map((q) => q.name));
+  for (const n of nq) if (!pq.has(n)) out.push({ kind: 'queue', title: n, detail: 'new queue' });
+  for (const n of pq) if (!nq.has(n)) out.push({ kind: 'queue', title: n, detail: 'queue removed' });
+  return out;
+}
+export function changesMarkdown(changes, sinceIso, nowIso) {
+  if (!sinceIso) return `# Changes\n\nFirst snapshot (${nowIso}) — nothing to compare with yet.\n`;
+  const groups = {};
+  for (const c of changes) (groups[c.kind] ||= []).push(c);
+  const order = ['finished', 'started', 'progress', 'rated', 'added', 'linked', 'queue', 'status', 'removed'];
+  const body = order.filter((k) => groups[k]).map((k) => `## ${k}\n${groups[k].map((c) => `- ${c.title} — ${c.detail}`).join('\n')}`).join('\n\n');
+  return `# Changes since the previous snapshot\n\nFrom ${sinceIso} to ${nowIso}.\n\n${body || '_No changes._'}\n`;
 }
