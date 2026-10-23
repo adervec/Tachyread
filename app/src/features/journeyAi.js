@@ -204,7 +204,9 @@ export function buildDigest(dataset, instruction) {
 export function buildCoworkRequest(dataset, instruction) {
   return {
     protocol: 'tachyread-journey', protocolVersion: 1, kind: 'cowork-request', generatedAt: Date.now(),
-    requestHash: contentHash(JSON.stringify(dataset)), // declared hash — agents echo it back (CoworkSyncHub COWORK-PROTOCOL.md)
+    // Declared hash — agents echo it back (CoworkSyncHub COWORK-PROTOCOL.md). Covers the operations
+    // too, so the app can match a reply to the exact request (and its permissions) it answers.
+    requestHash: contentHash(JSON.stringify(dataset) + JSON.stringify(instruction?.ops || instruction?.text || '')),
     instruction, ids: dataset.unreadCandidates.map((b) => b.id).concat(dataset.recentFinishes.map((b) => b.id)),
     dataset,
   };

@@ -12,7 +12,7 @@ import {
   buildDataset, buildProgress, buildDigest, buildCoworkRequest, buildCoworkManifest,
   buildApiMessages, parseAiOutput, contentHash,
 } from './journeyAi.js';
-import { opsInstruction, sanitizeOutput, planRows, isReportOnly, queuesForDataset } from './coworkOps.js';
+import { opsInstruction, sanitizeOutput, planRows, isReportOnly, queuesForDataset, logRequest } from './coworkOps.js';
 import { writeSnapshot, commitRows } from './coworkApply.js';
 import { liveQueues } from './readingQueues.js';
 import { weeklySummaries } from './journeyAnalytics.js';
@@ -74,15 +74,19 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
       else if (perm !== 'granted') { ok = false; note = 'skipped — folder permission needs re-granting (open the Cowork page once)'; }
       else {
         target = target || dir.name;
-        const instr = combineCoworkInstruction(coworkIds, { question: ai?.question || '' });
+        // One request file: if the last request hasn't been answered yet, fold its operations in
+        // rather than overwriting it (the agent would never see the earlier, often bigger, request).
+        const pending = ai?.requestLog?.[0] && ai.requestLog[0].at > (ai?.lastReplyAt || 0) ? ai.requestLog[0].ops : [];
+        const instr = combineCoworkInstruction([...new Set([...pending, ...coworkIds])], { question: ai?.question || '' });
         if (!instr) throw new Error('nothing to send ("Ask a question" needs a question)');
         const books = await getLibraryBooks();
         const dataset = await datasetWithProgress(instr.mode === 'light', books);
         await writeSnapshot(dir, now); // the request's agent reads snapshot/ too
-        await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(buildCoworkRequest(dataset, instr), null, 2));
+        const req = buildCoworkRequest(dataset, instr);
+        await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(req, null, 2));
         await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, instr));
         await writeToDir(dir, 'cowork.json', JSON.stringify(buildCoworkManifest(), null, 2));
-        ai.instruction = { ...instr, updatedAt: now }; // the reply is filtered by THESE ops when read back
+        ai = logRequest({ ...ai, instruction: { ...instr, updatedAt: now } }, { hash: req.requestHash, ops: instr.ops, at: now, auto: true }); // replies are matched back by hash
         note = `auto-wrote cowork request (${instr.mode})`;
       }
     } catch (e) { ok = false; note = `auto cowork write failed: ${e?.message || e}`; }

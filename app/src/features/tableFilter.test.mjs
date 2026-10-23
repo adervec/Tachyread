@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { textMatcher, inRange, inDates, anySet } from './tableFilter.js';
+import { textMatcher, inRange, inDates, anySet, filterSortRows } from './tableFilter.js';
 
 assert.equal(textMatcher('').test, null);
 assert.ok(textMatcher('^du').test('Dune'));
@@ -18,4 +18,11 @@ assert.ok(!inDates('', '2026-10-01', ''));
 assert.ok(inDates('', '', ''));
 assert.equal(anySet({ a: '', b: 'all', c: ['', ''] }), false);
 assert.equal(anySet({ a: '', c: ['', '5'] }), true);
+const rows = [{ n: 'beta', v: 5, at: '2026-10-02', k: 'x' }, { n: 'alpha', v: 9, at: '2026-10-05', k: 'y' }, { n: 'gamma', v: 1, at: '2026-09-30', k: 'x' }];
+const cols = [{ key: 'n', type: 'text', get: (r) => r.n }, { key: 'v', type: 'num', get: (r) => r.v }, { key: 'at', type: 'date', get: (r) => r.at }, { key: 'k', type: 'select', get: (r) => r.k }];
+assert.deepEqual(filterSortRows(rows, cols, {}, { key: 'n', dir: 1 }).map((r) => r.n), ['alpha', 'beta', 'gamma']);
+assert.deepEqual(filterSortRows(rows, cols, {}, { key: 'v', dir: -1 }).map((r) => r.n), ['alpha', 'beta', 'gamma']);
+assert.deepEqual(filterSortRows(rows, cols, { k: 'x', v: ['2', ''] }).map((r) => r.n), ['beta']);
+assert.deepEqual(filterSortRows(rows, cols, { at: ['2026-10-01', ''] }, { key: 'at', dir: 1 }).map((r) => r.n), ['beta', 'alpha']);
+assert.deepEqual(filterSortRows(rows, cols, { n: '^g' }).map((r) => r.n), ['gamma']);
 console.log('tableFilter: all cases pass');

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import TreeViews from './TreeViews.jsx';
+import DataTable from '../components/DataTable.jsx';
 import { genreHue } from '../features/bookGraph.js';
 import { useSessionState } from '../state/useSessionState.js';
 import { todaySummary, localDate } from '../features/todaySummary.js';
@@ -54,7 +55,7 @@ import {
   SYNC_ACTION_GROUPS, actionById, combineCoworkInstruction, SCHEDULE_OPTS,
   syncRole, recordRun, mergedHistory, calendarCells, fmtAgo, dayKey,
 } from '../features/coworkActions.js';
-import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset } from '../features/coworkOps.js';
+import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset, logRequest, opsForReply } from '../features/coworkOps.js';
 import { writeSnapshot, commitRows, undoLastApply, listInbox, readInbox, moveInbox } from '../features/coworkApply.js';
 import { getDeviceId } from '../state/storage.js';
 import { deviceKind } from '../state/device.js';
@@ -2196,6 +2197,7 @@ function QueueView({ initialSel = null, books, onOpen, fileStats = {}, bindMap =
   );
 }
 
+const ROW_KIND = { field: 'Book field', note: 'Book note', cross: 'Shared note', link: 'File link', analysis: 'Analysis', recommendations: 'Read-next list', weekly: 'Weekly summary', brief: 'Morning brief', treeMeta: 'Tree links', answer: 'Answer', queueOrder: 'Queue order', dupe: 'Duplicate pair', report: 'Report', newBook: 'New book', tags: 'Tags', vocab: 'Vocab card', typingPlan: 'Typing plan', goal: 'Goal' };
 const APPLY_CAP = 200; // most changes one apply may write (bigger replies are reviewed in pages)
 
 // Dashboard: every queue's progress and what's left, plus totals across all of them.
@@ -3299,6 +3301,16 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
   const schedules = ai?.schedules || {};
   const actionRuns = ai?.actionRuns || {};
   const history = useMemo(() => mergedHistory(ai), [ai]);
+  // Everything the AI has written for you, in one sortable table.
+  const outputs = useMemo(() => [
+    ...Object.entries(ai?.briefs || {}).map(([date, b]) => ({ key: `b:${date}`, at: b.at || Date.parse(date), date, kind: 'brief', title: `Morning brief ${date}`, text: b.text })),
+    ...(ai?.reports || []).map((r, i) => ({ key: `r:${r.at}:${i}`, at: r.at, kind: `report · ${r.kind}`, title: r.title || r.kind, text: r.text })),
+    ...(ai?.answers || []).map((a, i) => ({ key: `a:${a.at}:${i}`, at: a.at, kind: 'answer', title: a.question || 'Answer', text: a.text })),
+    ...(ai?.analysis ? [{ key: 'an:current', at: ai.updatedAt || 0, kind: 'analysis (current)', title: 'Dashboard analysis', text: ai.analysis }] : []),
+    ...(ai?.analysisHistory || []).map((h, i) => ({ key: `ah:${h.at}:${i}`, at: h.at, kind: 'analysis (archived)', title: 'Earlier analysis', text: h.text, analysisIndex: i })),
+  ], [ai]);
+  const [opQ, setOpQ] = useState('');
+  const [opGroup, setOpGroup] = useState('all');
   const coworkTarget = (dirPath || '').trim() || dir?.name || '';
 
   useEffect(() => { getFsHandle('journeyCoworkDir').then(setDir).catch(() => {}); }, []);
@@ -3435,10 +3447,11 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
           if (!ci) throw new Error('nothing to send — “Ask a question” needs a question');
           const dataset = await datasetWithProgress(ci.mode === 'light');
           if (!ids.includes('cw-snapshot')) await writeSnapshot(dir); // the agent reads snapshot/ too
-          await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(buildCoworkRequest(dataset, ci), null, 2));
+          const req = buildCoworkRequest(dataset, ci);
+          await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(req, null, 2));
           await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, ci));
           await writeToDir(dir, 'cowork.json', JSON.stringify(buildCoworkManifest(), null, 2)); // discovery manifest for hubs
-          cur = { ...cur, instruction: { ...ci, updatedAt: now } }; // the reply is filtered by these ops
+          cur = logRequest({ ...cur, instruction: { ...ci, updatedAt: now } }, { hash: req.requestHash, ops: ci.ops, at: now }); // replies are matched back to this
           note = `wrote request (${ci.mode})`; parts.push(`cowork request written (${ci.mode})`);
         } catch (e) { ok = false; note = String(e?.message || e); parts.push('cowork write failed'); }
       }
@@ -3470,10 +3483,16 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
       const t = await readFromDir(dir, 'journey-cowork-response.json');
       if (!t) { setMsg('No journey-cowork-response.json in the folder yet.'); }
       else {
-        // Filtered by the operations the last request asked for (an old request without ops is
-        // treated as the report-only analysis operation — the safest reading).
-        await stageReply(t, ai?.instruction?.ops || ['cw-light'], 'cowork folder');
+        // Filtered by the operations of the request this reply answers (matched by its echoed
+        // requestHash; otherwise every request from the last 3 days — still reviewed row by row).
+        let parsed = null; try { parsed = parseAiOutput(t); } catch { /* stageReply reports it */ }
+        const m = opsForReply(parsed, ai);
+        const how = m.how === 'matched' ? `matched to your request of ${fmtDateTime(m.at)}`
+          : m.how === 'recent' ? `no request id in the reply — checked against your ${m.count} request(s) from the last 3 days`
+            : 'checked against your last request';
+        await stageReply(t, m.ops, `cowork folder · ${how}`);
         const n = Date.now(); setLastRead(n);
+        await saveJourneyAi({ ...((await getJourneyAi().catch(() => null)) || ai || {}), lastReplyAt: n }); onReload(); // scheduler: request answered
         try { localStorage.setItem('tr-cowork-lastread', String(n)); } catch { /* quota */ }
       }
     } catch (e) { setMsg('Read failed: ' + (e?.message || e)); }
@@ -3490,7 +3509,10 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
   async function applyPasted() {
     setBusy(true);
     const ticked = [...sel].filter((id) => COWORK_OPS[id]);
-    try { await stageReply(pasted, ticked.length ? ticked : (ai?.instruction?.ops || ['cw-light']), 'pasted reply'); setPasted(''); }
+    try {
+      let parsed = null; try { parsed = parseAiOutput(pasted); } catch { /* stageReply reports it */ }
+      await stageReply(pasted, ticked.length ? ticked : opsForReply(parsed, ai).ops, 'pasted reply'); setPasted('');
+    }
     catch (e) { setMsg('Could not parse that reply: ' + (e?.message || e)); }
     setBusy(false);
   }
@@ -3551,6 +3573,13 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
       </div>
 
       <div className="rh-section-h">{viewer ? 'Sync status (view-only)' : 'Request builder'}</div>
+      <div className="lj-inline cw-opfilter">
+        <TextF value={opQ} onChange={setOpQ} label="operations (name or description)" />
+        <select value={opGroup} onChange={(e) => setOpGroup(e.target.value)} aria-label="Operation group">
+          <option value="all">All kinds</option><option value="snapshot">Snapshot</option>{OP_GROUPS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+        </select>
+        {(opQ || opGroup !== 'all') && <button onClick={() => { setOpQ(''); setOpGroup('all'); }}>Show all</button>}
+      </div>
       {SYNC_ACTION_GROUPS.map((g) => {
         if (g.needsKey && !keyOk) return null; // no key → the whole group vanishes, no nagging note
         const onCount = g.actions.filter((a) => sel.has(a.id)).length;
@@ -3569,6 +3598,8 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
             {g.actions.map((a, ai2) => {
               const run = actionRuns[a.id];
               const op = COWORK_OPS[a.id];
+              const opT = textMatcher(opQ).test;
+              if ((opT && !opT(`${a.label} ${a.desc || ''}`)) || (opGroup !== 'all' && g.id === 'cowork' && (op ? op.group : 'snapshot') !== opGroup)) return null;
               const prevOp = COWORK_OPS[g.actions[ai2 - 1]?.id];
               const sub = op && op.group !== prevOp?.group ? OP_GROUPS.find((x) => x.id === op.group) : null;
               const ex = op ? op.explain : a.id === 'cw-snapshot' ? {
@@ -3655,26 +3686,27 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
           <div className="rh-section-h">Review the reply — {review.source} · {review.ops.map((id) => COWORK_OPS[id]?.label || id).join(', ')}</div>
           <p className="settings-note">Nothing has been written yet. Untick anything you don&rsquo;t want, then apply. Applied changes can be undone in one step.</p>
           {review.rows.length > 0 && (
-            <div className="lj-q-box cw-review-box">
-              <table className="lj-cand cw-review-table">
-                <thead><tr><th aria-label="Apply" /><th>Change</th><th>Now</th><th>Proposed</th></tr></thead>
-                <tbody>
-                  {review.rows.map((r) => (
-                    <tr key={r.key}>
-                      <td><input type="checkbox" checked={picked.has(r.key)} aria-label={`Apply: ${r.label}`} onChange={() => setPicked((s0) => { const s1 = new Set(s0); if (s1.has(r.key)) s1.delete(r.key); else s1.add(r.key); return s1; })} /></td>
-                      <td title={r.label}>{r.label}</td>
-                      <td title={String(r.from ?? '')} className="lj-qdim">{r.from == null || r.from === '' ? '—' : String(r.from)}</td>
-                      <td title={String(r.to ?? '')}>{String(r.to ?? '')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable stateKey="cw-review" rows={review.rows} rowKey={(r) => r.key} maxRows={1000} className="cw-review-dt"
+              lead={{ header: '', cell: (r) => <input type="checkbox" checked={picked.has(r.key)} aria-label={`Apply: ${r.label}`} onChange={() => setPicked((s0) => { const s1 = new Set(s0); if (s1.has(r.key)) s1.delete(r.key); else s1.add(r.key); return s1; })} /> }}
+              toolbar={(vis) => (<>
+                <button onClick={() => setPicked((s0) => new Set([...s0, ...vis.map((r) => r.key)]))} title="Tick every row the filters show">Tick shown ({vis.length})</button>
+                <button onClick={() => setPicked((s0) => { const s1 = new Set(s0); vis.forEach((r) => s1.delete(r.key)); return s1; })}>Untick shown</button>
+              </>)}
+              columns={[
+                { key: 'kind', label: 'Type', type: 'select', get: (r) => r.kind, render: (r) => ROW_KIND[r.kind] || r.kind, options: [...new Set(review.rows.map((r) => r.kind))].map((k) => [k, ROW_KIND[k] || k]) },
+                { key: 'label', label: 'Change', type: 'text', get: (r) => r.label },
+                { key: 'from', label: 'Now', type: 'text', get: (r) => (r.from == null || r.from === '' ? '—' : String(r.from)) },
+                { key: 'to', label: 'Proposed', type: 'text', get: (r) => String(r.to ?? '') },
+              ]} />
           )}
           {review.dropped.length > 0 && (
-            <details className="lj-fold">
+            <details className="lj-fold" open={!review.rows.length}>
               <summary>{review.dropped.length} item(s) in the reply were outside the requested operation(s) and were discarded</summary>
-              <ul className="lj-clean-list">{review.dropped.slice(0, 200).map((d, i) => <li key={i}><b>{d.what}</b> — {d.why}</li>)}</ul>
+              <DataTable stateKey="cw-dropped" rows={review.dropped.map((d, i) => ({ ...d, i }))} rowKey={(d) => d.i} maxRows={1000}
+                columns={[
+                  { key: 'what', label: 'Item', type: 'text', get: (d) => d.what },
+                  { key: 'why', label: 'Why it was discarded', type: 'select', get: (d) => d.why, options: [...new Set(review.dropped.map((d) => d.why))].map((w) => [w, w]) },
+                ]} />
             </details>
           )}
           <div className="lj-inline">
@@ -3697,46 +3729,34 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
           )}
           <details className="lj-fold">
             <summary>Apply log ({(ai?.applyLog || []).length})</summary>
-            <ul className="lj-clean-list">{(ai?.applyLog || []).slice(0, 50).map((e, i) => (
-              <li key={i}>{fmtDateTime(e.at)} — {e.summary}{e.source ? ` · ${e.source}` : ''}{e.auto ? ' · auto' : ''}
-                {!viewer && (ai?.undoStack || []).some((u) => u.at === e.at) && <button className="link-btn" disabled={busy} onClick={() => undoApply(e.at)} title="Undo this apply (books you or a later apply changed since are left alone)"> ↶ undo</button>}
-              </li>
-            ))}</ul>
+            <DataTable stateKey="cw-applylog" rows={(ai?.applyLog || []).map((e, i) => ({ ...e, i }))} rowKey={(e) => `${e.at}-${e.i}`}
+              columns={[
+                { key: 'at', label: 'When', type: 'date', get: (e) => e.at, render: (e) => fmtDateTime(e.at) },
+                { key: 'summary', label: 'What was applied', type: 'text', get: (e) => e.summary },
+                { key: 'source', label: 'Source', type: 'text', get: (e) => e.source || '' },
+                { key: 'auto', label: 'Auto', type: 'select', get: (e) => (e.auto ? 'yes' : 'no'), options: [['yes', 'auto'], ['no', 'manual']] },
+                { key: 'undo', label: 'Undo', type: 'select', get: (e) => ((ai?.undoStack || []).some((u) => u.at === e.at) ? 'available' : '—'), options: [['available', 'available']],
+                  render: (e) => (!viewer && (ai?.undoStack || []).some((u) => u.at === e.at) ? <button className="link-btn" disabled={busy} onClick={() => undoApply(e.at)} title="Undo this apply (books you or a later apply changed since are left alone)">↶ undo</button> : '—') },
+              ]} />
           </details>
         </>
       )}
-      {ai?.briefs && Object.keys(ai.briefs).length > 0 && (
+      {outputs.length > 0 && (
         <>
-          <div className="rh-section-h">Morning briefs</div>
-          {Object.entries(ai.briefs).sort((x, y) => (x[0] < y[0] ? 1 : -1)).slice(0, 10).map(([date, b], i) => (
-            <details key={date} className="lj-hist" open={i === 0}>
-              <summary><span>{date}</span></summary>
-              <p className="lj-analysis cw-brief">{b.text}</p>
-            </details>
-          ))}
-        </>
-      )}
-
-      {(ai?.reports || []).length > 0 && (
-        <>
-          <div className="rh-section-h">Reports</div>
-          {ai.reports.slice(0, 15).map((x, i) => (
-            <details key={`${x.at}-${i}`} className="lj-hist" open={i === 0}>
-              <summary><span>{fmtDateTime(x.at)} — {x.title || x.kind}</span></summary>
-              <p className="lj-analysis cw-brief">{x.text}</p>
-            </details>
-          ))}
-        </>
-      )}
-      {(ai?.answers || []).length > 0 && (
-        <>
-          <div className="rh-section-h">Answers</div>
-          {ai.answers.slice(0, 10).map((x, i) => (
-            <details key={x.at} className="lj-hist" open={i === 0}>
-              <summary><span>{fmtDateTime(x.at)}{x.question ? ` — ${x.question}` : ''}</span></summary>
-              <p className="lj-analysis cw-brief">{x.text}</p>
-            </details>
-          ))}
+          <div className="rh-section-h">AI outputs — briefs, reports, answers, analyses</div>
+          <DataTable stateKey="cw-outputs" rows={outputs} rowKey={(o) => o.key}
+            columns={[
+              { key: 'at', label: 'When', type: 'date', get: (o) => o.at, render: (o) => (o.date || fmtDateTime(o.at)) },
+              { key: 'kind', label: 'Type', type: 'select', get: (o) => o.kind, options: [...new Set(outputs.map((o) => o.kind))].map((k) => [k, k]) },
+              { key: 'text', label: 'Text (click to expand)', type: 'text', get: (o) => `${o.title} ${o.text}`,
+                render: (o) => (
+                  <details className="cw-out">
+                    <summary><b>{o.title}</b> <span className="lj-qdim">{String(o.text).slice(0, 110)}{String(o.text).length > 110 ? '…' : ''}</span></summary>
+                    <p className="lj-analysis cw-brief">{o.text}</p>
+                    {o.analysisIndex != null && !viewer && <button className="grab-trash" title="Delete this archived analysis" onClick={async () => { await saveJourneyAi({ ...ai, analysisHistory: ai.analysisHistory.filter((_, j) => j !== o.analysisIndex) }); onReload(); }}>🗑 Delete</button>}
+                  </details>
+                ) },
+            ]} />
         </>
       )}
 
@@ -3770,20 +3790,16 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
         </div>
       )}
       {(histView === 'list' || dayFilter) && (
-        <div className="cw-histlist">
-          {filteredHistory.length === 0 && <p className="settings-note">No sync runs yet{dayFilter ? ' on that day' : ''}.</p>}
-          {filteredHistory.slice(0, 80).map((h, i) => (
-            <div key={`${h.at}-${i}`} className={`cw-histrow${h.ok ? '' : ' err'}`}>
-              <span className="cw-hkind" aria-hidden="true">{{ cowork: '🤝', api: '🤖', cloud: '☁️', request: '📤', apply: '✅', digest: '📋' }[h.kind] || '·'}</span>
-              <span className="cw-hids">{h.ids?.length ? h.ids.map((id) => actionById(id)?.label || id).join(', ') : (h.note || '—')}</span>
-              {h.ids?.length > 0 && h.note ? <span className="cw-hnote">{h.note}</span> : null}
-              {h.target ? <span className="cw-htarget" title="Target">→ {h.target}</span> : null}
-              {h.auto && <span className="cw-hauto">auto</span>}
-              {!h.ok && <span className="cw-herr">failed</span>}
-              <em>{fmtDateTime(h.at)}</em>
-            </div>
-          ))}
-        </div>
+        <DataTable stateKey="cw-history" rows={filteredHistory.map((h, i) => ({ ...h, i }))} rowKey={(h) => `${h.at}-${h.i}`} empty={`No sync runs yet${dayFilter ? ' on that day' : ''}.`}
+          columns={[
+            { key: 'at', label: 'When', type: 'date', get: (h) => h.at, render: (h) => fmtDateTime(h.at) },
+            { key: 'kind', label: 'Kind', type: 'select', get: (h) => h.kind, render: (h) => `${{ cowork: '🤝', api: '🤖', cloud: '☁️', request: '📤', apply: '✅', digest: '📋' }[h.kind] || '·'} ${h.kind}`, options: [...new Set(history.map((h) => h.kind))].map((k) => [k, k]) },
+            { key: 'ids', label: 'Actions', type: 'text', get: (h) => (h.ids?.length ? h.ids.map((id) => actionById(id)?.label || id).join(', ') : '') },
+            { key: 'note', label: 'Note', type: 'text', get: (h) => h.note || '' },
+            { key: 'target', label: 'Target', type: 'text', get: (h) => h.target || '' },
+            { key: 'auto', label: 'Auto', type: 'select', get: (h) => (h.auto ? 'yes' : 'no'), options: [['yes', 'auto'], ['no', 'manual']] },
+            { key: 'ok', label: 'Result', type: 'select', get: (h) => (h.ok ? 'ok' : 'failed'), render: (h) => (h.ok ? '✓' : <span className="cw-herr">failed</span>), options: [['ok', 'ok'], ['failed', 'failed']] },
+          ]} />
       )}
 
       {!viewer && (
@@ -3793,22 +3809,6 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
           <textarea className="lj-instr" rows={3} placeholder="Paste Claude's JSON reply here…" value={pasted} onChange={(e) => setPasted(e.target.value)} />
           <div className="lj-inline"><button disabled={busy || !pasted.trim()} onClick={applyPasted}>Review pasted reply</button><span className="settings-note" style={{ margin: 0 }}>Filtered by the ticked operations (or the last request&rsquo;s).</span></div>
         </details>
-      )}
-
-      {(ai?.analysisHistory || []).length > 0 && (
-        <>
-          <div className="rh-section-h">Previous AI analyses ({ai.analysisHistory.length})</div>
-          <p className="settings-note">Each new analysis archives the one it replaced — review or delete them here (the current one lives on the Dashboard).</p>
-          {ai.analysisHistory.map((h, i) => (
-            <details key={`${h.at}-${i}`} className="lj-hist">
-              <summary>
-                <span>{fmtDateTime(h.at)}</span>
-                <button className="grab-trash" title="Delete this archived analysis" onClick={async (e) => { e.preventDefault(); e.stopPropagation(); await saveJourneyAi({ ...ai, analysisHistory: ai.analysisHistory.filter((_, j) => j !== i) }); onReload(); }}>🗑</button>
-              </summary>
-              <p className="lj-analysis">{h.text}</p>
-            </details>
-          ))}
-        </>
       )}
 
       {msg && <p className="settings-note lj-aimsg">{msg}</p>}
