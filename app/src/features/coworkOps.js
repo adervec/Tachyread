@@ -315,22 +315,22 @@ export const COWORK_OPS = {
     },
   },
   'cw-tree': {
-    icon: '🌳', group: 'targeted', label: 'Rebuild tech tree', heavy: true,
-    instruction: 'TECH TREE. Return treeMeta.pos (x,y in -500..500 per book id) and treeMeta.edges ([idA, idB, "influence"|"prereq"|"series"]) for lineage between books in the library.',
+    icon: '🌳', group: 'targeted', label: 'Rebuild tech-tree links', heavy: true,
+    instruction: 'TECH TREE LINKS. Return treeMeta.edges as [idA, idB, kind] meaning "read A before B": kind "prereq" (B builds on A), "influence" (A shaped B), or "responds" (B answers A). Only real, specific relationships between books in the library — cover as much of the library as you can. (No positions needed: the app lays the map out itself. Series order is added automatically from series numbers.)',
     allow: { treeMeta: true },
     explain: {
       sends: 'The full library list.',
-      changes: 'Replaces the Tech Tree layout (positions + edges). No book changes.',
+      changes: 'Replaces the AI links behind the Tech tree and Neighbourhood views (read-before chains). The map places books itself, so only links matter. No book changes.',
       review: 'One row. Undo restores the previous layout.',
     },
   },
   'cw-graph': {
     icon: '🕸', group: 'targeted', label: 'Rebuild knowledge graph', heavy: true,
-    instruction: 'KNOWLEDGE GRAPH. Return treeMeta.pos and treeMeta.edges as [idA, idB, kind], kind ∈ "influence" | "prereq" | "series" | "same-author" | "theme" | "contrast" | "responds" | "similarity" | "opposed" | "same-universe". 1–4 real edges per book.',
+    instruction: 'KNOWLEDGE GRAPH. Return treeMeta.edges as [idA, idB, kind] (no positions — the app lays books out itself), kind ∈ "influence" | "prereq" | "series" | "same-author" | "theme" | "contrast" | "responds" | "similarity" | "opposed" | "same-universe". 1–4 real edges per book.',
     allow: { treeMeta: true },
     explain: {
       sends: 'The full library list.',
-      changes: 'Replaces the constellation\'s layout and typed edges. No book changes.',
+      changes: 'Replaces the AI links (typed: influence, theme, similar work…) shown in the Neighbourhood, Tech tree and on the map. The map places books itself. No book changes.',
       review: 'One row. Undo restores the previous layout.',
     },
   },
