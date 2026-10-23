@@ -5348,3 +5348,14 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .vf-num { text-align: right; font-variant-numeric: tabular-nums; }
 .vf-note { margin-top: 6px; color: var(--status-fg); line-height: 1.35; }
 @media (max-width: 520px) { .vf-card { left: 16px; right: 16px; width: auto; top: 96px; } }
+
+/* Shared sortable/filterable table (components/DataTable.jsx) */
+.dt { margin: 6px 0; }
+.dt-scroll { max-height: 60vh; overflow: auto; border: 1px solid var(--divider); border-radius: 6px; }
+.dt-table { table-layout: auto; }
+.dt-table td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+.dt-table thead th { position: sticky; top: 0; background: var(--panel-bg, var(--bg)); z-index: 1; }
+.dt-table .ab-filter-row th { top: 22px; }
+.dt-sortable { cursor: pointer; user-select: none; }
+.cw-out summary { cursor: pointer; }
+.cw-opfilter { margin: 4px 0 8px; }

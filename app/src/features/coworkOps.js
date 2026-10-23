@@ -713,3 +713,21 @@ export function applySummary(rows) {
   ].filter(Boolean);
   return parts.join(', ') || 'nothing';
 }
+
+// ── Which request does a reply answer? ───────────────────────────────────────────────────────────
+// Every request is logged (ai.requestLog: [{hash, ops, at, auto}], newest first). A reply that echoes
+// its requestHash is checked against exactly that request's operations. Without one, it's checked
+// against every request sent in the last `days` (all still reviewed row by row) — so a scheduled run
+// writing a newer request can't silently narrow the permissions for the reply you were waiting for.
+export function logRequest(ai, { hash, ops, at = Date.now(), auto = false }) {
+  const log = [{ hash, ops, at, auto }, ...((ai?.requestLog || []).filter((r) => r.hash !== hash))].slice(0, 30);
+  return { ...(ai || {}), requestLog: log };
+}
+export function opsForReply(reply, ai, { now = Date.now(), days = 3 } = {}) {
+  const log = ai?.requestLog || [];
+  const hit = reply?.requestHash && log.find((r) => r.hash === reply.requestHash);
+  if (hit) return { ops: hit.ops, how: 'matched', at: hit.at };
+  const recent = log.filter((r) => now - r.at <= days * 86400000);
+  if (recent.length) return { ops: [...new Set(recent.flatMap((r) => r.ops))], how: 'recent', at: recent[0].at, count: recent.length };
+  return { ops: ai?.instruction?.ops || ['cw-light'], how: 'last', at: ai?.instruction?.updatedAt || null };
+}

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { COWORK_OPS, combinedAllow, opsInstruction, sanitizeOutput, planRows, buildApply, isReportOnly, schemaFor, queuesForDataset } from './coworkOps.js';
+import { logRequest, opsForReply, COWORK_OPS, combinedAllow, opsInstruction, sanitizeOutput, planRows, buildApply, isReportOnly, schemaFor, queuesForDataset } from './coworkOps.js';
 
 const books = {
   a: { id: 'a', title: 'Alpha', author: 'X', genre: '', recScore: 5 },                    // to-read, no genre
@@ -134,4 +134,13 @@ assert.deepEqual(ga.output.goalAdvice, { books: 30, why: 'pace' });
 const grows = planRows(ga.output, { booksById: books, goals: { 2026: 24 }, year: 2026 });
 assert.deepEqual(grows.map((r) => [r.from, r.to]), [[24, 30]]);
 assert.deepEqual(buildApply(grows, { booksById: books }).goalSets, [{ key: '2026', n: 30 }]);
+
+// Matching replies to requests: by echoed hash, else every recent request (a newer scheduled request
+// must not narrow the permissions for the reply to an earlier full sync).
+let al = logRequest({}, { hash: 'full', ops: ['cw-brief', 'cw-fill-genre', 'cw-classify'], at: 1000 });
+al = logRequest(al, { hash: 'sched', ops: ['cw-classify'], at: 2000, auto: true });
+assert.deepEqual(opsForReply({ requestHash: 'full' }, al, { now: 3000 }).ops, ['cw-brief', 'cw-fill-genre', 'cw-classify']);
+const noHash = opsForReply({}, al, { now: 3000 });
+assert.deepEqual([noHash.how, noHash.ops.sort()], ['recent', ['cw-brief', 'cw-classify', 'cw-fill-genre']]);
+assert.equal(opsForReply({}, al, { now: 1000 + 5 * 86400000 }).how, 'last');
 console.log('coworkOps: all cases pass');
