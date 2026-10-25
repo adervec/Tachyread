@@ -3,16 +3,26 @@ import { createPortal } from 'react-dom';
 import { createLiveAnalyzer } from '../features/voice/liveMetrics.js';
 import { voiceScores, VOICE_ATTRS } from '../features/voice/voiceScore.js';
 import { STRICTNESS, strictnessOf, speakParams } from '../features/speakAlign.js';
+import { createRing, downsample } from '../features/voice/ringBuffer.js';
+import { encodeWav } from '../features/audiobookExport.js';
 
 // The reading-aloud card: what the speech recogniser is hearing right now, what it expects next and
 // how far it last moved the text (so a stall is visible, not a mystery), plus optional live
 // voice-quality scores (SpeechImprover's acoustic attributes averaged over the session, with a
 // trend). Draggable by its grip (position remembered per device), collapsible, and ✕ turns reading
-// aloud off. No audio is kept; the session's average scores go into the speech log (features/speechLog.js).
+// aloud off. The session's average scores go into the speech log (features/speechLog.js). The last
+// REPLAY_SECS of your voice sit in a memory-only ring (oldest overwritten) so you can hear how you
+// sound right now — nothing reaches disk unless you press Save. (Whole-book recording is the
+// Audiobook Manager's self-narration, not this.)
 const TICK_MS = 110;
 const PUBLISH_EVERY = 5; // ticks → scores refresh ~every 0.5 s
 const TREND_CAP = 120;   // ~1 min of trend
 const POS_KEY = 'tachyread-vf-pos';
+const REPLAY_SECS = 180;
+const REPLAY_RATE = 16000;
+// ponytail: module-level so ✕ (which closes the card) doesn't throw away what you just read; reload clears it.
+let ring = null;
+const fmtSecs = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
 const STATUS = {
   starting: '⏳ Starting…',
@@ -82,10 +92,17 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
   const cardRef = useRef(null);
   const drag = useRef(null);
   const voicedSince = useRef(0); // when our own mic analysis first heard a voice
+  const [kept, setKept] = useState(() => Math.floor(ring?.seconds() || 0));
+  const [clip, setClip] = useState(null); // object URL of the replay WAV
+  const replaying = useRef(false); // don't record our own playback back into the ring
+  useEffect(() => () => { if (clip) URL.revokeObjectURL(clip); }, [clip]);
+  const makeClip = () => {
+    if (!ring?.seconds()) return;
+    setClip(URL.createObjectURL(new Blob([encodeWav(ring.read(), ring.rate)], { type: 'audio/wav' })));
+  };
 
   useEffect(() => {
-    if (!showScores) return undefined;
-    let stream, ctx, timer, dead = false;
+    let stream, ctx, timer, tap, dead = false;
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -94,7 +111,19 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
         const la = createLiveAnalyzer(ctx.sampleRate);
         const an = ctx.createAnalyser();
         an.fftSize = la.win;
-        ctx.createMediaStreamSource(stream).connect(an);
+        const src = ctx.createMediaStreamSource(stream);
+        src.connect(an);
+        // Rolling replay: ScriptProcessor is deprecated but universal and this is one tiny tap.
+        const k = Math.max(1, Math.round(ctx.sampleRate / REPLAY_RATE));
+        if (!ring || ring.rate !== ctx.sampleRate / k) ring = createRing(REPLAY_SECS, ctx.sampleRate / k);
+        tap = ctx.createScriptProcessor(4096, 1, 1);
+        tap.onaudioprocess = (e) => {
+          if (replaying.current) return;
+          ring.push(downsample(e.inputBuffer.getChannelData(0), k));
+          setKept(Math.floor(ring.seconds()));
+        };
+        src.connect(tap); tap.connect(ctx.destination); // outputs silence; connected so it runs
+        if (!showScores) return;
         const buf = new Float32Array(la.win);
         let n = 0;
         const t0 = performance.now();
@@ -114,12 +143,13 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
           setTrend((tr) => [...tr.slice(-(TREND_CAP - 1)), next.overall]);
         }, TICK_MS);
       } catch (e) {
-        setMicErr(e?.name === 'NotAllowedError' ? 'Microphone blocked — voice scores are off.' : `No voice scores: ${e?.message || e}`);
+        setMicErr(e?.name === 'NotAllowedError' ? 'Microphone blocked — voice scores and replay are off.' : `No voice scores / replay: ${e?.message || e}`);
       }
     })();
     return () => {
       dead = true;
       clearInterval(timer);
+      if (tap) tap.onaudioprocess = null;
       stream?.getTracks().forEach((t) => t.stop());
       ctx?.close().catch(() => {});
     };
@@ -191,9 +221,18 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
           <span />
         </label>
       )}
+      {open && micErr && <div className="vf-note">{micErr}</div>}
+      {open && !micErr && (
+        <div className="vf-replay">
+          <span title={`Your last ${REPLAY_SECS / 60} minutes are kept in memory only, oldest overwritten`}>⏺ last {fmtSecs(kept)} kept</span>
+          <button type="button" className="vf-btn" disabled={!kept} onClick={makeClip} title="Hear the last few minutes (recording pauses while it plays)">▶ Listen</button>
+          {clip && <a className="vf-btn" href={clip} download={`reading-aloud-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}.wav`} title="Save this replay as a WAV file">💾 Save</a>}
+          {clip && <audio className="vf-audio" src={clip} controls autoPlay
+            onPlay={() => { replaying.current = true; }} onPause={() => { replaying.current = false; }} onEnded={() => { replaying.current = false; }} />}
+        </div>
+      )}
       {open && showScores && (
         <>
-          {micErr && <div className="vf-note">{micErr}</div>}
           {v && (
             <div className="vf-bars">
               {Object.entries(VOICE_ATTRS).map(([k, [label]]) => (v.scores[k] == null ? null : (
