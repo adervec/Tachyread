@@ -278,6 +278,7 @@ export function defaultGlobalSettings() {
     // Bundled open fonts + the device's installed fonts work offline regardless of this setting.
     enableGoogleFonts: false,
     audioCtrlMode: 'Both', // Voice | Claps | Both
+    replayMins: 3, // reading-aloud replay kept in memory (0 = off, max 10)
     voiceProfile: 'neutral', // neutral | male | female — centres the voice-quality "depth" score
     fileDefaults: defaultFileSettings(),
     recentFiles: [], // {name, checksum, lastOpened}

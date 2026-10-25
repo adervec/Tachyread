@@ -3309,6 +3309,8 @@ function AppInner() {
           wordsRef={spokenWordsRef}
           sessionRef={speechSessRef}
           profile={state.global.voiceProfile || 'neutral'}
+          replayMins={state.global.replayMins ?? 3}
+          onReplayMins={(m) => updateGlobal({ replayMins: m })}
         />
       )}
       <div className="app-status">
