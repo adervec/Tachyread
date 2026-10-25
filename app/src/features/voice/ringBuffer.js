@@ -17,7 +17,15 @@ export function createRing(seconds, rate) {
       return out;
     },
     seconds: () => filled / rate,
+    capacity: () => buf.length / rate,
   };
+}
+
+// A new length keeps the newest audio that still fits.
+export function resizeRing(ring, seconds, rate) {
+  const next = createRing(seconds, rate);
+  if (ring && ring.rate === rate) next.push(ring.read());
+  return next;
 }
 
 // Block-average by k (a crude low-pass) — speech at ~16 kHz is plenty to hear how you sound.

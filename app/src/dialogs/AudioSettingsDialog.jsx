@@ -120,6 +120,11 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
           style={{ width: '100%' }}
         />
       </Field>
+      <Field label={`Reading-aloud replay: ${(global.replayMins ?? 3) ? `last ${global.replayMins ?? 3} min` : 'off'}`}>
+        <input type="range" min={0} max={10} step={0.5} value={global.replayMins ?? 3} onChange={(e) => onPatchGlobal({ replayMins: Number(e.target.value) })}
+          aria-valuetext={(global.replayMins ?? 3) ? `${global.replayMins ?? 3} minutes` : 'off'}
+          title="While reading aloud, keep this much of your voice in memory (oldest overwritten) so the card can play it back. 0 = off. Never saved unless you press Save." style={{ width: '100%' }} />
+      </Field>
       <Field label="Voice profile">
         <select value={global.voiceProfile || 'neutral'} onChange={(e) => onPatchGlobal({ voiceProfile: e.target.value })}
           title="Used by the voice-quality scores on your own recordings and read-aloud: “depth” is judged against a typical pitch for this voice type">
