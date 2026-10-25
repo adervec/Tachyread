@@ -5359,3 +5359,6 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .dt-sortable { cursor: pointer; user-select: none; }
 .cw-out summary { cursor: pointer; }
 .cw-opfilter { margin: 4px 0 8px; }
+.vf-replay { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; margin-top: 6px; }
+.vf-replay a.vf-btn { text-decoration: none; }
+.vf-audio { width: 100%; height: 30px; }
