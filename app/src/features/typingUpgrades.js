@@ -8,6 +8,17 @@
 // Keystroke-timing consistency as a percentage: 100 × (1 − coefficient of variation) of the
 // inter-key intervals, clamped to 0..100 (Monkeytype's definition, near enough). Pauses over 2s
 // are thinking, not typing rhythm, and batch-scored keys (0ms) carry no timing — both filtered.
+// WPM over just the trailing `secs` (snaps = [{ts, chars, ok}] oldest first): how fast this sprint is,
+// inside a longer run. `key` 'ok' = net (letters of words that ended up right), 'chars' = raw.
+// Under a second of history → 0 (too jumpy to mean anything).
+export function windowWpm(snaps, now, secs, key = 'ok') {
+  const from = snaps.find((s) => s.ts >= now - secs * 1000);
+  const last = snaps[snaps.length - 1];
+  const dt = from && (now - from.ts) / 60000;
+  if (!from || dt < 1 / 60) return 0;
+  return Math.max(0, (last[key] - from[key]) / 5 / dt);
+}
+
 export function consistencyPct(intervals) {
   const xs = (intervals || []).filter((v) => Number.isFinite(v) && v > 0 && v < 2000);
   if (xs.length < 5) return null;
