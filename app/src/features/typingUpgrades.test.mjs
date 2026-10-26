@@ -6,6 +6,7 @@ import {
   penaltyRewind,
   consistencyPct, pbFlags, bestNet, typingStreak, problemWords, reviewPassage,
   keyFinger, aggregateKeys, fingerStats, buildCum, paceChars, paceWordIndex, FINGERS,
+  windowWpm,
 } from './typingUpgrades.js';
 
 // ── consistency ─────────────────────────────────────────────────────────────
@@ -137,5 +138,16 @@ assert.equal(deep.pos, 0, 'never rewinds past the start');
 assert.equal(deep.dropped, 2);
 assert.deepEqual(deep.kept, []);
 assert.equal(penaltyRewind([], 0, 3).pos, 0, 'empty run is safe');
+
+// trailing-window WPM: 50 ok chars (10 words) in the last 5 s = 120 wpm, whatever came before
+{
+  const now = 100000;
+  const snaps = [{ ts: now - 9000, ok: 0, chars: 0 }, { ts: now - 5000, ok: 10, chars: 12 }, { ts: now, ok: 60, chars: 70 }];
+  assert.equal(windowWpm(snaps, now, 5), 120);
+  assert.equal(Math.round(windowWpm(snaps, now, 10)), 80, 'window wider than the history uses what there is (9 s)');
+  assert.equal(windowWpm(snaps, now, 5, 'chars'), (58 / 5) / (5 / 60));
+  assert.equal(windowWpm([{ ts: now - 300, ok: 0 }, { ts: now, ok: 5 }], now, 5), 0, 'under a second → 0');
+  assert.equal(windowWpm([{ ts: now - 2000, ok: 20 }, { ts: now, ok: 5 }], now, 5), 0, 'a rewind never goes negative');
+}
 
 console.log('typingUpgrades: all checks passed');

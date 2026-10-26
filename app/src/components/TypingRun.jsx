@@ -11,7 +11,7 @@ import { rateFromIndex } from '../features/tts.js';
 import { fmtTime } from '../features/dateFmt.js';
 import { allTypingRuns } from '../state/storage.js';
 import { applyTheme, THEME_NAMES } from '../state/themes.js';
-import { consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress, penaltyRewind } from '../features/typingUpgrades.js';
+import { windowWpm, consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress, penaltyRewind } from '../features/typingUpgrades.js';
 import { currentSession, sessionStats, bookForecast } from '../features/typingSession.js';
 import { splitRun, splitsFor } from '../features/typingSplits.js';
 import { typingEyeColor } from '../features/avatarMood.js';
@@ -271,7 +271,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const [, setTick] = useState(0);
   const [trend, setTrend] = useState([]);     // {t, gross, net, acc, burst}
   const trendRef = useRef([]);                // mirror for endRun (avoids a stale closure)
-  const snapsRef = useRef([]);                // recent {ts, chars} snapshots → burst WPM
+  const snapsRef = useRef([]);                // recent {ts, chars, ok} snapshots → burst + sprint WPM
+  const [sprint, setSprint] = useState(0);    // net WPM over the trailing sprintSecs
   const [summary, setSummary] = useState(null);
   const [voicePos, setVoicePos] = useState(-1); // word the racing voice is currently speaking
 
@@ -338,6 +339,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // your last run, your personal best, or a custom speed. Resolved per run start (phase dep) so the
   // async history load and fresh session runs are picked up.
   const paceMode = cfg.pace || 'off';
+  const sprintSecs = Math.min(15, Math.max(2, Number(cfg.sprintSecs) || 5));
   const paceWpmVal = useMemo(() => {
     if (paceMode === 'off') return 0;
     if (paceMode === 'custom') return Math.max(10, Math.min(400, Number(cfg.paceWpm) || 60));
@@ -465,10 +467,12 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       const m = metrics();
       const now = Date.now();
       const snaps = snapsRef.current;
-      snaps.push({ ts: now, chars: stats.current.chars });
-      while (snaps.length > 1 && snaps[0].ts < now - 2200) snaps.shift();
-      const dt = (now - snaps[0].ts) / 1000;
-      const burst = dt >= 0.4 ? ((stats.current.chars - snaps[0].chars) / 5) / (dt / 60) : 0;
+      snaps.push({ ts: now, chars: stats.current.chars, ok: stats.current.okChars });
+      while (snaps.length > 1 && snaps[0].ts < now - 15500) snaps.shift(); // the slider's max window
+      const b0 = snaps.find((x) => x.ts >= now - 2200);
+      const dt = (now - b0.ts) / 1000;
+      const burst = dt >= 0.4 ? ((stats.current.chars - b0.chars) / 5) / (dt / 60) : 0;
+      setSprint(windowWpm(snaps, now, sprintSecs));
       setTick((n) => n + 1);
       const st = stats.current;
       setTrend((tr) => {
@@ -484,7 +488,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       if (mode !== 'endless' && mode !== 'words' && m.secs >= effLimitSecs) endRun();
     }, 500);
     return () => { if (tickTimer.current) { clearInterval(tickTimer.current); tickTimer.current = null; } };
-  }, [phase, mode, effLimitSecs, metrics, endRun, paceWpmVal, paceCum]);
+  }, [phase, mode, effLimitSecs, metrics, endRun, paceWpmVal, paceCum, sprintSecs]);
 
   // Countdown clock: tick once a second in a timed run, then accelerate + sharpen over the final ~10s.
   useEffect(() => {
@@ -1026,6 +1030,12 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             );
           })()}
           <Stat v={live.net} l="net wpm" hero />
+          <div className="tr-stat tr-sprint" title="Net WPM over just the last few seconds — how fast this sprint is, inside the longer run">
+            <span className="tr-v">{phase === 'running' ? Math.round(sprint) : '—'}</span>
+            <span className="tr-l">{sprintSecs}s wpm</span>
+            <input type="range" min={2} max={15} step={1} value={sprintSecs} onChange={(e) => patchCfg({ sprintSecs: Number(e.target.value) })}
+              aria-label="Sprint window (seconds)" aria-valuetext={`${sprintSecs} seconds`} />
+          </div>
           <Stat v={live.gross} l="gross wpm" />
           <Stat v={`${live.acc}%`} l="accuracy" />
           <Stat v={progressLabel} l="run" />

@@ -5363,3 +5363,4 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .vf-replay a.vf-btn { text-decoration: none; }
 .vf-audio { width: 100%; height: 30px; }
 .vf-replay-len { flex-basis: 100%; }
+.tr-sprint input[type=range] { width: 64px; height: 12px; margin: 2px 0 0; }
