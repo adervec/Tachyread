@@ -6,7 +6,7 @@ import {
   penaltyRewind,
   consistencyPct, pbFlags, bestNet, typingStreak, problemWords, reviewPassage,
   keyFinger, aggregateKeys, fingerStats, buildCum, paceChars, paceWordIndex, FINGERS,
-  windowWpm,
+  windowWpm, windowSeries,
 } from './typingUpgrades.js';
 
 // ── consistency ─────────────────────────────────────────────────────────────
@@ -148,6 +148,15 @@ assert.equal(penaltyRewind([], 0, 3).pos, 0, 'empty run is safe');
   assert.equal(windowWpm(snaps, now, 5, 'chars'), (58 / 5) / (5 / 60));
   assert.equal(windowWpm([{ ts: now - 300, ok: 0 }, { ts: now, ok: 5 }], now, 5), 0, 'under a second → 0');
   assert.equal(windowWpm([{ ts: now - 2000, ok: 20 }, { ts: now, ok: 5 }], now, 5), 0, 'a rewind never goes negative');
+}
+
+// sprint line over a trend: matches windowWpm at each sample
+{
+  const tr = [0, 1, 2, 3, 4, 5, 6].map((t) => ({ t, ok: t < 3 ? t * 5 : 10 + (t - 2) * 25 }));
+  const s = windowSeries(tr, 2);
+  assert.equal(s[0], 0, 'no history yet');
+  s.forEach((v, i) => assert.equal(v, windowWpm(tr.slice(0, i + 1).map((p) => ({ ts: p.t * 1000, ok: p.ok })), tr[i].t * 1000, 2)));
+  assert.equal(s[6], 300, '25 ok chars/s = 300 wpm');
 }
 
 console.log('typingUpgrades: all checks passed');

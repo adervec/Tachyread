@@ -3244,6 +3244,9 @@
 .tr-trend path { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .trend-gross { stroke: var(--toggle-active-bg); opacity: .5; }
 .trend-net { stroke: #2e9d4f; }
+.trend-sprint { stroke: #e08a1e; stroke-width: 1.4; fill: none; }
+.trch-dot.dot-sprint { fill: #e08a1e; }
+.lg-sprint::before { color: #e08a1e; }
 .trend-acc { stroke: var(--orp-fg); opacity: .8; stroke-dasharray: 4 3; }
 .tr-viewport { width: 100%; max-width: 820px; align-self: center; flex: 1 1 auto; min-height: 180px; overflow: hidden; position: relative; }
 /* Ticker display: one horizontal line, vertically centred; the active word holds a fixed point

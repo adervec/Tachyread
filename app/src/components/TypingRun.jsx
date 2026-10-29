@@ -11,7 +11,7 @@ import { rateFromIndex } from '../features/tts.js';
 import { fmtTime } from '../features/dateFmt.js';
 import { allTypingRuns } from '../state/storage.js';
 import { applyTheme, THEME_NAMES } from '../state/themes.js';
-import { windowWpm, consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress, penaltyRewind } from '../features/typingUpgrades.js';
+import { windowWpm, windowSeries, consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress, penaltyRewind } from '../features/typingUpgrades.js';
 import { currentSession, sessionStats, bookForecast } from '../features/typingSession.js';
 import { splitRun, splitsFor } from '../features/typingSplits.js';
 import { typingEyeColor } from '../features/avatarMood.js';
@@ -1219,7 +1219,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           </aside>
         )}
         <div className="tr-main">
-      <Trend trend={trend} />
+      <Trend trend={trend} sprintSecs={sprintSecs} />
 
       {/* The passage hides on the done screen so the results (chart included) get the room —
           otherwise they overflow beneath the bottom dock, which also swallows chart hovers. */}
@@ -1365,7 +1365,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               </div>
             );
           })()}
-          <RunChart trend={summary.trend} />
+          <RunChart trend={summary.trend} sprintSecs={sprintSecs} />
           <RunSplits trend={summary.trend} secs={summary.durationMs / 1000} />
           <div className="tr-results-actions">
             {plan ? (
@@ -1469,17 +1469,19 @@ function RunSplits({ trend, secs }) {
 // Monkeytype-style results chart: raw (gross), effective (net) and burst WPM over the run, with
 // accuracy overlaid on a 0–100 scale. Move the mouse (or finger) across it to inspect the exact
 // values at any moment of the run.
-function RunChart({ trend }) {
+function RunChart({ trend: raw, sprintSecs = 5 }) {
   const [hover, setHover] = useState(null); // nearest sample index
   const svgRef = useRef(null);
-  if (!trend || trend.length < 3) return null;
+  if (!raw || raw.length < 3) return null;
+  const sp = windowSeries(raw, sprintSecs);
+  const trend = raw.map((p, i) => ({ ...p, sprint: sp[i] }));
   const W = 760;
   const H = 210;
   const PAD = { l: 38, r: 12, t: 12, b: 20 };
   const iw = W - PAD.l - PAD.r;
   const ih = H - PAD.t - PAD.b;
   const maxT = trend[trend.length - 1].t || 1;
-  const maxW = Math.max(60, ...trend.map((p) => Math.max(p.gross || 0, p.net || 0, p.burst || 0))) * 1.06;
+  const maxW = Math.max(60, ...trend.map((p) => Math.max(p.gross || 0, p.net || 0, p.burst || 0, p.sprint))) * 1.06;
   const x = (t) => PAD.l + (t / maxT) * iw;
   const yW = (v) => PAD.t + ih - Math.min(1, Math.max(0, v) / maxW) * ih;
   const yA = (v) => PAD.t + ih - (Math.min(100, v) / 100) * ih;
@@ -1519,6 +1521,7 @@ function RunChart({ trend }) {
         <path d={path('burst', yW)} className="trend-burst" />
         <path d={path('gross', yW)} className="trend-gross" />
         <path d={path('net', yW)} className="trend-net" />
+        <path d={path('sprint', yW)} className="trend-sprint" />
         <path d={path('acc', yA)} className="trend-acc" />
         {h && (
           <g>
@@ -1526,12 +1529,14 @@ function RunChart({ trend }) {
             <circle className="trch-dot dot-burst" cx={x(h.t)} cy={yW(h.burst || 0)} r={3} />
             <circle className="trch-dot dot-gross" cx={x(h.t)} cy={yW(h.gross || 0)} r={3} />
             <circle className="trch-dot dot-net" cx={x(h.t)} cy={yW(h.net || 0)} r={3} />
+            <circle className="trch-dot dot-sprint" cx={x(h.t)} cy={yW(h.sprint)} r={3} />
           </g>
         )}
       </svg>
       <div className="tr-chart-legend">
         <span className="lg lg-net">effective {h ? Math.round(h.net) : ''}</span>
         <span className="lg lg-gross">raw {h ? Math.round(h.gross) : ''}</span>
+        <span className="lg lg-sprint" title="Net WPM over the trailing window set by the slider above">{sprintSecs}s sprint {h ? Math.round(h.sprint) : ''}</span>
         <span className="lg lg-burst">burst {h ? Math.round(h.burst || 0) : ''}</span>
         <span className="lg lg-acc">accuracy {h ? `${h.acc.toFixed(0)}%` : ''}</span>
         <span className="lg lg-t">{h ? `at ${h.t.toFixed(1)}s` : 'hover to inspect'}</span>
@@ -1541,11 +1546,13 @@ function RunChart({ trend }) {
 }
 
 // Tiny live trendline: gross WPM, net (effective) WPM, and accuracy over the run.
-function Trend({ trend }) {
-  if (trend.length < 2) return <div className="tr-trend tr-trend-empty" />;
+function Trend({ trend: raw, sprintSecs = 5 }) {
+  if (raw.length < 2) return <div className="tr-trend tr-trend-empty" />;
+  const sp = windowSeries(raw, sprintSecs);
+  const trend = raw.map((p, i) => ({ ...p, sprint: sp[i] }));
   const W = 600, H = 54;
   const maxT = trend[trend.length - 1].t || 1;
-  const maxW = Math.max(40, ...trend.map((p) => Math.max(p.gross, p.net)));
+  const maxW = Math.max(40, ...trend.map((p) => Math.max(p.gross, p.net, p.sprint)));
   const line = (key, scaleMax) =>
     trend
       .map((p, i) => `${i ? 'L' : 'M'} ${((p.t / maxT) * W).toFixed(1)} ${(H - Math.min(1, p[key] / scaleMax) * H).toFixed(1)}`)
@@ -1554,6 +1561,7 @@ function Trend({ trend }) {
     <svg className="tr-trend" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" title="WPM · effective WPM · accuracy">
       <path d={line('gross', maxW)} className="trend-gross" />
       <path d={line('net', maxW)} className="trend-net" />
+      <path d={line('sprint', maxW)} className="trend-sprint" />
       <path d={line('acc', 100)} className="trend-acc" />
     </svg>
   );
