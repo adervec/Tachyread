@@ -3399,6 +3399,8 @@
 .trc.correct { color: var(--nav-session-read-fg); }
 .trc.pending { color: var(--line-number-fg); }
 .trc.wrong { color: #fff; background: var(--orp-fg); border-radius: 2px; }
+/* A letter that was wrong at some point, then fixed: a faint residue of the mistake. */
+.trc.stain { background: color-mix(in srgb, var(--orp-fg) 16%, transparent); border-radius: 2px; }
 .trc.missed { color: var(--line-number-fg); text-decoration: underline; text-decoration-color: var(--orp-fg); text-underline-offset: 3px; }
 .trc.extra { color: var(--orp-fg); opacity: .75; }
 /* Display-only ghosts: characters stripped by no-special (and fully-decorative tokens) shown dim
