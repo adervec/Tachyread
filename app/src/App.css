@@ -3398,6 +3398,13 @@
 .trw.active { color: var(--menu-fg); }
 .trc.correct { color: var(--nav-session-read-fg); }
 .trc.pending { color: var(--line-number-fg); }
+.tr-runs-wrap { flex-shrink: 0; max-height: 180px; overflow: auto; margin-top: 8px; }
+.tr-runs { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.tr-runs caption { text-align: left; font-weight: 600; padding-bottom: 4px; }
+.tr-runs th { position: sticky; top: 0; background: var(--rsvp-bg, var(--pane-bg)); text-align: right; font-weight: 600; color: var(--line-number-fg); }
+.tr-runs th, .tr-runs td { padding: 2px 10px 2px 0; text-align: right; border-bottom: 1px solid var(--divider); }
+.tr-runs td:last-child, .tr-runs th:last-child { text-align: left; }
+.tr-runs-net { font-weight: 700; }
 .trc.wrong { color: #fff; background: var(--orp-fg); border-radius: 2px; }
 /* A letter that was wrong at some point, then fixed: a faint residue of the mistake. */
 .trc.stain { background: color-mix(in srgb, var(--orp-fg) 16%, transparent); border-radius: 2px; }
@@ -3528,10 +3535,6 @@
 .tr-splits .g-A { color: #2e9d4f; font-weight: 700; } .tr-splits .g-B { color: #4a90d9; font-weight: 700; }
 .tr-splits .g-D { color: #d98324; font-weight: 700; } .tr-splits .g-F { color: #c0392b; font-weight: 700; }
 .tr-results-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.tr-killfeed { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 11px; color: var(--status-fg); justify-content: center; }
-.tr-kf-label { font-weight: 600; }
-.tr-kf-item { color: var(--menu-fg); font-family: Consolas, monospace; }
-.tr-kf-ts { color: var(--status-fg); }
 
 /* Typing plans editor */
 .tp-steps { display: flex; flex-direction: column; gap: 8px; max-height: 44vh; overflow-y: auto; margin-bottom: 8px; }
