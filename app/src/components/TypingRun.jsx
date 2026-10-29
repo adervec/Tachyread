@@ -79,7 +79,7 @@ function cellsFor(orig, w, { bypassSym, noSpecial, wantCaps, wantGhosts }) {
 // Committed and pending words only change when a word commits (or a voice/pace marker crosses
 // them) — memo() lets every keystroke re-render JUST the active word instead of reconciling
 // thousands of per-char spans across the whole passage. This is the typing-lag fix.
-const CommittedWord = memo(function CommittedWord({ w, orig, typed, perfect, vc, caseSensitive, bypassSym, noSpecial, wantCaps, wantGhosts }) {
+const CommittedWord = memo(function CommittedWord({ w, orig, typed, perfect, stains, vc, caseSensitive, bypassSym, noSpecial, wantCaps, wantGhosts }) {
   const cells = cellsFor(orig, w, { bypassSym, noSpecial, wantCaps, wantGhosts });
   const chars = [];
   if (cells) {
@@ -87,7 +87,7 @@ const CommittedWord = memo(function CommittedWord({ w, orig, typed, perfect, vc,
       if (c.t == null) { chars.push(<span key={`g${ci}`} className="trc ghost">{c.ch}</span>); return; }
       const j = c.t;
       const cls = j >= typed.length ? 'trc missed'
-        : charOkWith(typed[j], w[j], caseSensitive, bypassSym) ? 'trc correct' : 'trc wrong';
+        : charOkWith(typed[j], w[j], caseSensitive, bypassSym) ? `trc correct${stains?.includes(j) ? ' stain' : ''}` : 'trc wrong';
       chars.push(<span key={ci} className={cls}>{wantCaps ? c.ch : w[j]}</span>);
     });
     const extra = Math.min(typed.length, w.length + OVERTYPE_MAX);
@@ -97,7 +97,7 @@ const CommittedWord = memo(function CommittedWord({ w, orig, typed, perfect, vc,
     for (let j = 0; j < len; j++) {
       const cls = j >= w.length ? 'trc extra'
         : j >= typed.length ? 'trc missed'
-          : charOkWith(typed[j], w[j], caseSensitive, bypassSym) ? 'trc correct' : 'trc wrong';
+          : charOkWith(typed[j], w[j], caseSensitive, bypassSym) ? `trc correct${stains?.includes(j) ? ' stain' : ''}` : 'trc wrong';
       chars.push(<span key={j} className={cls}>{j >= w.length ? typed[j] : w[j]}</span>);
     }
   }
@@ -278,6 +278,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
   const stats = useRef(freshStats());
   const wordErrors = useRef(0);
+  const stainRef = useRef(new Set()); // letter positions of the current word that were ever typed wrong
   const intervalsRef = useRef([]);  // inter-key gaps (ms) → the consistency % at run end
   const lastKeyTsRef = useRef(0);
   const wordStartRef = useRef(0);   // when the current word's first char landed → per-word ms
@@ -610,7 +611,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     clearCount();
     stopRace(); setVoicePos(-1); voiceRef.current = 0; caughtRef.current = false; racedRef.current = false;
     setPos(0); setTrim(0); setBuf(''); setResults([]); setSummary(null); setTrend([]);
-    stats.current = freshStats(); wordErrors.current = 0; lastGiRef.current = null;
+    stats.current = freshStats(); wordErrors.current = 0; stainRef.current = new Set(); lastGiRef.current = null;
     resultsRef.current = []; intervalsRef.current = []; lastKeyTsRef.current = 0; wordStartRef.current = 0;
     setPacePos(-1);
     seg.current = { line: true, sent: true, para: true };
@@ -663,7 +664,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     // clear the buffer and let them retype. A mistyped-then-fixed word still matches, so it advances.
     if (oneWord) {
       const exact = typed.length === target.length && [...typed].every((c, j) => charOk(c, target[j]));
-      if (!exact) { ping(sounds.wordError); wordErrors.current = 0; setBuf(''); return; }
+      if (!exact) { ping(sounds.wordError); wordErrors.current = 0; stainRef.current = new Set(); setBuf(''); return; }
     }
     const perfect = wordErrors.current === 0 && typed.length === target.length;
     // Corrected: reads right in the end, but a wrong key landed on the way.
@@ -684,11 +685,13 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       if (segEnds.para[pos]) { if (seg.current.para) ping(sounds.paragraphPerfect); seg.current.para = true; }
     }
     wordErrors.current = 0;
+    const stains = stainRef.current.size ? [...stainRef.current] : undefined;
+    stainRef.current = new Set();
     lastGiRef.current = prepared[pos]?.gi ?? lastGiRef.current;
     // Per-word time (first char → commit) feeds the problem-word mining ("unusually slow" words).
     const ms = wordStartRef.current ? Date.now() - wordStartRef.current : 0;
     wordStartRef.current = 0;
-    const entry = { typed, perfect, corrected, okLen: perfect || corrected ? target.length : 0, ms };
+    const entry = { typed, perfect, corrected, okLen: perfect || corrected ? target.length : 0, ms, stains };
     resultsRef.current = [...resultsRef.current, entry];
     setResults((r) => [...r, entry]);
     setBuf('');
@@ -742,6 +745,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     if (prev?.corrected) s.corrected -= 1;
     s.okChars -= prev?.okLen || 0;
     wordErrors.current = 0;
+    stainRef.current = new Set(prev?.stains || []); // reopened word keeps its stains
     lastGiRef.current = prevPos - 1 >= 0 ? (prepared[prevPos - 1]?.gi ?? null) : null;
   }
 
@@ -769,6 +773,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       } else {
         s.errors += 1;
         wordErrors.current += 1;
+        if (p < target.length) stainRef.current.add(p);
         ping(sounds.charWrong);
         if (kk) kk.err += 1;
         if (key) s.errorKeys[key] = (s.errorKeys[key] || 0) + 1;
@@ -816,6 +821,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       s.chars += 1;
       s.errors += 1;
       wordErrors.current += 1;
+      if (p < target.length) stainRef.current.add(p);
       ping(sounds.charWrong);
       pain();
       const ch = target[p];
@@ -1253,7 +1259,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               // actually typed stays visible — wrong chars, chars you never typed, and (capped)
               // extra chars beyond the word.
               const r = results[i];
-              wordEl = <CommittedWord w={w} orig={prepared[i]?.orig} typed={r?.typed ?? w} perfect={!r || !!r.perfect} vc={vc} caseSensitive={caseSensitive} bypassSym={bypassSym} noSpecial={noSpecial} wantCaps={wantCaps} wantGhosts={wantGhosts} />;
+              wordEl = <CommittedWord w={w} orig={prepared[i]?.orig} typed={r?.typed ?? w} perfect={!r || !!r.perfect} stains={r?.stains} vc={vc} caseSensitive={caseSensitive} bypassSym={bypassSym} noSpecial={noSpecial} wantCaps={wantCaps} wantGhosts={wantGhosts} />;
             } else if (i > pos) {
               wordEl = <PendingWord w={w} orig={prepared[i]?.orig} vc={vc} bypassSym={bypassSym} noSpecial={noSpecial} wantCaps={wantCaps} wantGhosts={wantGhosts} />;
             } else {
@@ -1269,7 +1275,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                   if (c.t === shownBuf.length) { chars.push(<span key={`k${ci}`} className="trc caret-anchor" />); anchored = true; }
                   const typedHere = c.t < shownBuf.length;
                   const cls = !typedHere ? 'trc pending'
-                    : charOk(shownBuf[c.t], w[c.t]) ? 'trc correct' : 'trc wrong';
+                    : charOk(shownBuf[c.t], w[c.t]) ? `trc correct${stainRef.current.has(c.t) ? ' stain' : ''}` : 'trc wrong';
                   chars.push(<span key={ci} className={cls}>{wantCaps ? c.ch : w[c.t]}</span>);
                 });
                 for (let j = w.length; j < shownBuf.length; j++) chars.push(<span key={`x${j}`} className="trc extra">{shownBuf[j]}</span>);
@@ -1281,7 +1287,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                   const typed = j < shownBuf.length;
                   const cls = !typed ? 'trc pending'
                     : j >= w.length ? 'trc extra'
-                      : charOk(shownBuf[j], w[j]) ? 'trc correct' : 'trc wrong';
+                      : charOk(shownBuf[j], w[j]) ? `trc correct${stainRef.current.has(j) ? ' stain' : ''}` : 'trc wrong';
                   chars.push(<span key={j} className={cls}>{j >= w.length ? shownBuf[j] : w[j]}</span>);
                 }
                 if (shownBuf.length >= len) chars.push(<span key="ce" className="trc caret-anchor" />);
