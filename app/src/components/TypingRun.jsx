@@ -837,6 +837,10 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     return accept;
   }
 
+  function continueExit() {
+    onExitContinue?.(lastGiRef.current != null ? lastGiRef.current + 1 : startIndex.current + stats.current.words);
+  }
+
   function onChange(e) {
     lastTypedAt.current = Date.now();
     let val = e.target.value;
@@ -925,7 +929,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         else { escArmRef.current = now; setEscArmed(true); clearTimeout(escArmTimer.current); escArmTimer.current = setTimeout(() => setEscArmed(false), 2500); }
         return;
       }
-      onExitDiscard?.(discardCreditWi());
+      // Esc out of typing = Continue (count as read) when typing your book; drills just exit.
+      if (isDocMode) continueExit(); else onExitDiscard?.(discardCreditWi());
       return;
     }
     // Confidence mode: backspace is off entirely — within the word AND back into the previous one.
@@ -1395,7 +1400,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                 )}
                 <button className={moreAhead ? '' : 'toggle-on'} onClick={stageRun} title="Re-type the exact same passage (starts when you type)">↻ Reattempt</button>
                 {isDocMode && (
-                  <button onClick={() => onExitContinue?.(lastGiRef.current != null ? lastGiRef.current + 1 : startIndex.current + stats.current.words)}>Continue (count as read)</button>
+                  <button onClick={continueExit} title="Close typing and move the reading position past what you typed (Esc)">Continue (count as read)</button>
                 )}
                 <button onClick={() => onExitDiscard?.(discardCreditWi())} title={isDocMode ? 'Close typing — the typed words still count as read; only the reading position stays put' : undefined}>{isDocMode ? 'Discard' : 'Exit'}</button>
               </>
@@ -1405,11 +1410,27 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       )}
 
       {sessionRuns && sessionRuns.length > 0 && (
-        <div className="tr-killfeed" title="Typing runs this session">
-          <span className="tr-kf-label">🏁 Runs:</span>
-          {sessionRuns.map((r, i) => (
-            <span key={i} className="tr-kf-item">{r.netWpm}wpm · {r.accuracy}% <span className="tr-kf-ts">{fmtTime(r.ts, true)}</span></span>
-          ))}
+        <div className="tr-runs-wrap">
+          <table className="tr-runs">
+            <caption>🏁 Runs this session</caption>
+            <thead><tr><th>#</th><th>Time</th><th>Net</th><th>Gross</th><th>Acc</th><th>Grade</th><th>Words</th><th>Errors</th><th>Length</th><th>Mode</th></tr></thead>
+            <tbody>
+              {sessionRuns.map((r, i) => ({ r, n: i + 1 })).reverse().map(({ r, n }) => (
+                <tr key={n}>
+                  <td>{n}</td>
+                  <td>{fmtTime(r.ts, true)}</td>
+                  <td className="tr-runs-net">{r.netWpm}</td>
+                  <td>{r.grossWpm ?? '—'}</td>
+                  <td>{r.accuracy}%</td>
+                  <td>{r.grade || '—'}</td>
+                  <td>{r.words ?? '—'}</td>
+                  <td>{r.errors ?? '—'}</td>
+                  <td>{r.durationMs ? `${Math.round(r.durationMs / 1000)}s` : '—'}</td>
+                  <td>{r.mode || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
         </div>
