@@ -19,6 +19,19 @@ export function windowWpm(snaps, now, secs, key = 'ok') {
   return Math.max(0, (last[key] - from[key]) / 5 / dt);
 }
 
+// The same, for every sample of a run trend ([{t (s), ok}]): the sprint line on the charts. Two
+// pointers, so a 600-sample run is one pass.
+export function windowSeries(trend, secs) {
+  const out = new Array(trend.length);
+  let j = 0;
+  for (let i = 0; i < trend.length; i++) {
+    while (trend[j].t < trend[i].t - secs) j++;
+    const dt = (trend[i].t - trend[j].t) / 60;
+    out[i] = dt < 1 / 60 ? 0 : Math.max(0, ((trend[i].ok || 0) - (trend[j].ok || 0)) / 5 / dt);
+  }
+  return out;
+}
+
 export function consistencyPct(intervals) {
   const xs = (intervals || []).filter((v) => Number.isFinite(v) && v > 0 && v < 2000);
   if (xs.length < 5) return null;
