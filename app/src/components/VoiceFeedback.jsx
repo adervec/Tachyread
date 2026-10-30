@@ -5,6 +5,7 @@ import { voiceScores, VOICE_ATTRS } from '../features/voice/voiceScore.js';
 import { STRICTNESS, strictnessOf, speakParams } from '../features/speakAlign.js';
 import { resizeRing, downsample } from '../features/voice/ringBuffer.js';
 import { encodeWav } from '../features/audiobookExport.js';
+import VideoReplay from './VideoReplay.jsx';
 
 // The reading-aloud card: what the speech recogniser is hearing right now, what it expects next and
 // how far it last moved the text (so a stall is visible, not a mystery), plus optional live
@@ -81,7 +82,7 @@ function Lineup({ info, docWords, wordIndex }) {
   );
 }
 
-export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0, speakCfg = {}, onTune, onStop, showScores = true, wordsRef, sessionRef, profile = 'neutral', replayMins = 3, onReplayMins }) {
+export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0, speakCfg = {}, onTune, onStop, showScores = true, wordsRef, sessionRef, profile = 'neutral', replayMins = 3, onReplayMins, replayVideo = false, onReplayVideo }) {
   const strict = strictnessOf(speakParams(speakCfg));
   const [v, setV] = useState(null);
   const [trend, setTrend] = useState([]);
@@ -243,8 +244,15 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
           {clip && <a className="vf-btn" href={clip} download={`reading-aloud-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}.wav`} title="Save this replay as a WAV file">💾 Save</a>}
           {clip && <audio className="vf-audio" src={clip} controls autoPlay
             onPlay={() => { replaying.current = true; }} onPause={() => { replaying.current = false; }} onEnded={() => { replaying.current = false; }} />}
+          {onReplayVideo && !!replayMins && (
+            <label className="vf-vidtoggle" title="Also keep the last few minutes of camera video (with sound) to see how you look while reading — memory only, same length as the slider">
+              <input type="checkbox" checked={replayVideo} onChange={(e) => onReplayVideo(e.target.checked)} /> 📹 Video
+            </label>
+          )}
         </div>
       )}
+      {/* kept mounted while collapsed so recording carries on */}
+      {replayVideo && !!replayMins && <div hidden={!open}><VideoReplay mins={replayMins} /></div>}
       {open && showScores && (
         <>
           {v && (

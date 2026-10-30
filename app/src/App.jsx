@@ -3311,6 +3311,8 @@ function AppInner() {
           profile={state.global.voiceProfile || 'neutral'}
           replayMins={state.global.replayMins ?? 3}
           onReplayMins={(m) => updateGlobal({ replayMins: m })}
+          replayVideo={!!state.global.replayVideo}
+          onReplayVideo={(on) => updateGlobal({ replayVideo: on })}
         />
       )}
       <div className="app-status">
