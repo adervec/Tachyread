@@ -62,6 +62,27 @@ export function orderSectionItems(sectionTitle, chunkItems, extras = {}, firstLi
   return out;
 }
 
+// Subtitles for one exported track: a cue per narrated chunk (and the spoken section title), timed by
+// the clips' own durations in play order — so the audio can be captions on a video, a karaoke-style
+// read-along, or fed to other tools. Music extras just advance the clock.
+const stamp = (ms, sep) => {
+  const t = Math.max(0, Math.round(ms));
+  const p = (n, w = 2) => String(n).padStart(w, '0');
+  return `${p(Math.floor(t / 3600000))}:${p(Math.floor(t / 60000) % 60)}:${p(Math.floor(t / 1000) % 60)}${sep}${p(t % 1000, 3)}`;
+};
+export function buildSubtitles(items, format = 'srt') {
+  const cues = [];
+  let t = 0;
+  for (const it of items || []) {
+    const text = it.kind === 'sec' ? (it.role === 'title' ? it.sectionTitle : '') : (it.text || '');
+    if (text && it.ms > 0) cues.push({ from: t, to: t + it.ms, text: text.replace(/\s+/g, ' ').trim() });
+    t += it.ms || 0;
+  }
+  const NL = String.fromCharCode(10);
+  if (format === 'vtt') return ['WEBVTT', '', ...cues.map((c) => `${stamp(c.from, '.')} --> ${stamp(c.to, '.')}${NL}${c.text}${NL}`)].join(NL);
+  return cues.map((c, i) => `${i + 1}${NL}${stamp(c.from, ',')} --> ${stamp(c.to, ',')}${NL}${c.text}${NL}`).join(NL);
+}
+
 // Zero-padded "NN Title.ext" so a phone's file browser sorts them in reading order.
 export function trackFileName(track, total, ext) {
   const pad = String(total).length;

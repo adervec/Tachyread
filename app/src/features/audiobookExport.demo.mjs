@@ -1,6 +1,6 @@
 // Self-check for audiobookExport.js — run: node app/src/features/audiobookExport.demo.mjs
 import assert from 'node:assert';
-import { planTracks, trackFileName, buildM3u, encodeWav, buildId3v2, sanitizeFilename, estimateBytes, fmtDuration, orderSectionItems } from './audiobookExport.js';
+import { planTracks, trackFileName, buildM3u, encodeWav, buildId3v2, sanitizeFilename, estimateBytes, fmtDuration, orderSectionItems, buildSubtitles } from './audiobookExport.js';
 
 // Build 40 chunks across 3 sections, 60s each.
 const items = [];
@@ -85,4 +85,23 @@ assert.deepEqual(orderSectionItems('Ch 1', chunkItems, {}, 10, 15), chunkItems);
 // a music-only section (no narration) is just the extras
 assert.deepEqual(orderSectionItems('Interlude', [], { intro: { id: 'i', durationMs: 500 } }, 5, 5).map((x) => x.role), ['intro']);
 
+// subtitles: cues per chunk + spoken title, music only advances the clock
+{
+  const items = [
+    { kind: 'sec', role: 'intro', ms: 2000, sectionTitle: 'One' },
+    { kind: 'sec', role: 'title', ms: 1500, sectionTitle: 'Chapter One' },
+    { text: 'Fear is the  mind-killer.', ms: 2250 },
+    { text: '', ms: 100 },
+    { text: 'I will face my fear.', ms: 3661001 - 5850 },
+  ];
+  const srt = [
+    '1', '00:00:02,000 --> 00:00:03,500', 'Chapter One', '',
+    '2', '00:00:03,500 --> 00:00:05,750', 'Fear is the mind-killer.', '',
+    '3', '00:00:05,850 --> 01:01:01,001', 'I will face my fear.', '',
+  ].join(String.fromCharCode(10));
+  assert.equal(buildSubtitles(items), srt, 'SRT: numbered cues, comma millis, music only advances the clock');
+  const vtt = buildSubtitles(items, 'vtt').split(String.fromCharCode(10));
+  assert.deepEqual(vtt.slice(0, 4), ['WEBVTT', '', '00:00:02.000 --> 00:00:03.500', 'Chapter One'], 'WebVTT header + dot millis');
+  assert.equal(buildSubtitles([]), '');
+}
 console.log('audiobookExport.demo: all assertions passed ✅');

@@ -128,6 +128,7 @@ export const HELP_SECTIONS = [
     body: [
       'Audio menu: the Audiobook Manager records/plays per-line narration; the Text-to-Speech Reader is a standalone TTS popup; Ambient Sound plays a low soundscape under your reading.',
       'Audio Settings holds the TTS voice & rate (the default voice follows your document language), the speak-along follow mode, and the auto-stop timer.',
+      'Audiobook export can also write a SUBTITLE file (.srt or .vtt) beside each track — one cue per narrated chunk, timed to the audio — for video captions, read-along players or other tools.',
       'Listen with the screen off: read-aloud keeps playing when you lock the phone or switch apps, and your lock-screen / notification media controls (play·pause·next·previous) drive it — next/previous jump paragraphs.',
     ],
   },
