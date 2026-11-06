@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
-import { orpIndex } from '../document/readerDocument.js';
+import { useEffect, useMemo, useState } from 'react';
+import { orpIndex, getLineIndex } from '../document/readerDocument.js';
+import { chunkLen, hyphenSplit, wordDurationMs } from '../engine/rsvpEngine.js';
 import { useReportVisibility } from '../state/useReportVisibility.js';
 import { swapLookup, applySwap } from '../features/wordSwaps.js';
 
@@ -26,13 +27,26 @@ function ContextWordChar({ word, highlightOrp }) {
 
 // RSVP word display only — the ORP word, context words, and guide lines.
 // Animated faces and stats live in DashboardPane so the panes resize independently.
-export default function RsvpPane({ tab, onVisible }) {
+export default function RsvpPane({ tab, onVisible, playing = false }) {
   const { settings, doc } = tab;
   const visRef = useReportVisibility(onVisible || (() => {}));
   const idx = settings.wordIndex;
   // Per-document display substitutions (Tab Settings → Word substitutions).
   const swaps = useMemo(() => swapLookup(settings.wordSwaps), [settings.wordSwaps]);
-  const word = applySwap(doc.words[idx] || '', swaps);
+  // Phrase chunking: the flash shows the same n words the playback driver will step over.
+  const n = chunkLen(doc.words, idx, Math.max(1, Math.min(3, settings.rsvpChunk || 1)), (i) => getLineIndex(doc, i));
+  const full = n > 1 ? doc.words.slice(idx, idx + n).map((w) => applySwap(w, swaps)).join(' ') : applySwap(doc.words[idx] || '', swaps);
+  // Very long words split in two while playing: first half for half the word's time, then the rest.
+  const split = n === 1 && playing ? hyphenSplit(full, settings.rsvpHyphenLen || 0) : null;
+  const [second, setSecond] = useState(false);
+  useEffect(() => {
+    setSecond(false);
+    if (!split) return undefined;
+    const t = setTimeout(() => setSecond(true), wordDurationMs(full, settings) / 2);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx, !!split, playing]);
+  const word = split ? split[second ? 1 : 0] : full;
   const orp = orpIndex(word.length);
   const left = word.slice(0, orp);
   const orpCh = orp < word.length ? word[orp] : '';
@@ -49,9 +63,9 @@ export default function RsvpPane({ tab, onVisible }) {
   }, [doc, idx, before, swaps]);
   const afterWords = useMemo(() => {
     const out = [];
-    for (let i = idx + 1; i < Math.min(doc.words.length, idx + 1 + after); i++) out.push(applySwap(doc.words[i], swaps));
+    for (let i = idx + n; i < Math.min(doc.words.length, idx + n + after); i++) out.push(applySwap(doc.words[i], swaps));
     return out;
-  }, [doc, idx, after, swaps]);
+  }, [doc, idx, after, swaps, n]);
 
   const themeClass = `rsvp-pane ${settings.serif ? 'serif' : 'sans'} guide-${settings.guideColor || 'Red'}`;
   const gc = settings.guideColor || 'Red';
