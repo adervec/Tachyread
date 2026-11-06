@@ -170,9 +170,10 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
       if (!checksum) continue;
       const daily = (f.dailyHistory || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
       for (const e of daily) {
-        const cur = byDay.get(e.date) || { words: 0, secs: 0 };
+        const cur = byDay.get(e.date) || { words: 0, secs: 0, books: [] };
         cur.words += e.wordsRead || 0;
         cur.secs += e.activeTimeSecs || 0;
+        if (e.wordsRead || e.activeTimeSecs) cur.books.push({ checksum, name: recentName[checksum] || f.fileName || f.name || 'Untitled', words: e.wordsRead || 0, secs: e.activeTimeSecs || 0 });
         byDay.set(e.date, cur);
       }
       const totalWords = f.totalWords || 0;
@@ -241,6 +242,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, nameMap, shelves, state.global.recentFiles]);
 
+  const [calDay, setCalDay] = useState(null); // calendar day whose books are listed
   const heatmap = useMemo(() => {
     if (!model) return null;
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -383,10 +385,14 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
                 {heatmap.weeks.map((week, wi) => (
                   <div key={wi} className="rh-hm-col">
                     {week.map((day, di) => (
-                      <div
+                      <button
+                        type="button"
                         key={di}
-                        className={`rh-hm-cell lvl-${day ? heatmap.level(day.words) : 0}`}
-                        title={day ? `${day.key}: ${fmtInt(day.words)} words` : ''}
+                        disabled={!day}
+                        className={`rh-hm-cell lvl-${day ? heatmap.level(day.words) : 0}${day && calDay === day.key ? ' sel' : ''}`}
+                        title={day ? `${day.key}: ${fmtInt(day.words)} words — click for the books` : ''}
+                        aria-label={day ? `${day.key}: ${fmtInt(day.words)} words` : undefined}
+                        onClick={() => day && setCalDay(calDay === day.key ? null : day.key)}
                       />
                     ))}
                   </div>
@@ -394,12 +400,27 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
               </div>
               <div className="rh-hm-legend"><span>Less</span><i className="lvl-0" /><i className="lvl-1" /><i className="lvl-2" /><i className="lvl-3" /><i className="lvl-4" /><span>More</span></div>
 
+              {calDay && (
+                <>
+                  <div className="rh-section-h">{calDay} — what you read <button className="link-btn" onClick={() => setCalDay(null)}>✕</button></div>
+                  {(model.byDay.get(calDay)?.books || []).length ? (
+                    <table className="history-table">
+                      <thead><tr><th>Book</th><th>Words</th><th>Active</th><th>WPM</th></tr></thead>
+                      <tbody>
+                        {[...model.byDay.get(calDay).books].sort((a, b) => b.secs - a.secs || b.words - a.words).map((bk) => (
+                          <tr key={bk.checksum}><td>{bk.name}</td><td>{fmtInt(bk.words)}</td><td>{fmtDur(bk.secs)}</td><td>{wpmOf(bk.words, bk.secs)}</td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : <p className="settings-note">No reading recorded that day.</p>}
+                </>
+              )}
               <div className="rh-section-h">Recent days</div>
               <table className="history-table">
                 <thead><tr><th>Date</th><th>Words</th><th>Active</th><th>WPM</th></tr></thead>
                 <tbody>
                   {[...model.byDay.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 30).map(([date, d]) => (
-                    <tr key={date}><td>{date}</td><td>{fmtInt(d.words)}</td><td>{fmtDur(d.secs)}</td><td>{wpmOf(d.words, d.secs)}</td></tr>
+                    <tr key={date} className={calDay === date ? 'sel' : ''}><td><button className="link-btn" onClick={() => setCalDay(calDay === date ? null : date)} title="Show the books read that day">{date}</button></td><td>{fmtInt(d.words)}</td><td>{fmtDur(d.secs)}</td><td>{wpmOf(d.words, d.secs)}</td></tr>
                   ))}
                 </tbody>
               </table>

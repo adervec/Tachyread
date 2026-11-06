@@ -142,6 +142,9 @@ export const HELP_SECTIONS = [
       'Covers: a book can carry several cover images — upload, add by URL, fetch from Open Library, generate a stylised one with Auto, or have Claude design one (✨ AI cover). Pick the master shown on tiles; batch-cover the coverless books in view. AI covers use Claude’s text design plus local SVG — no image service.',
       'List view: toggle the library between a table and a cover-tile grid (▤/▦). Trackyread can also fix miscategorised content and spot what seems to be in the process of being forgotten.',
       'Tab tiles: right-click the tab bar → Tab tiles to show open documents as a scrollable row of cover tiles.',
+      'Saved views: in the Library, ☆ Save view stores the current filters and sort under a name; 📌 pinned views sit on the Dashboard with a live count — click one to jump straight into it.',
+      'Re-reads: ↻ Log re-read keeps the earlier finish in the book’s history, and goals, the timeline, the finish heatmap, pace-by-year and Year in Books count each finish in the year it happened.',
+      'Reading History → Calendar: click any day (or a date in Recent days) to see which books you read that day, with words, active time and pace.',
     ],
   },
   {

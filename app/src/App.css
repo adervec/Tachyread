@@ -1619,6 +1619,14 @@
 .line-row.status-SessionRead .text { color: var(--session-read-fg); background: color-mix(in srgb, var(--session-read-fg) 10%, transparent); border-radius: 3px; }
 .line-row.status-NavSessionRead .text { color: var(--nav-session-read-fg); background: color-mix(in srgb, var(--nav-session-read-fg) 10%, transparent); border-radius: 3px; }
 .line-row.status-Current { background: var(--current-line-bg); }
+.lj-view-chip { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--divider); border-radius: 12px; padding: 0 6px; font-size: 12px; }
+.lj-view-name { display: inline-flex; gap: 4px; align-items: center; }
+.lj-pinned-views { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.lj-pinned-view { display: flex; flex-direction: column; align-items: flex-start; padding: 6px 12px; border-radius: 8px; min-width: 110px; }
+.lj-pinned-view b { font-size: 20px; }
+button.rh-hm-cell { padding: 0; border: 0; cursor: pointer; }
+button.rh-hm-cell:disabled { cursor: default; }
+.rh-hm-cell.sel { outline: 2px solid var(--toggle-active-bg); outline-offset: 1px; }
 /* Reading aids (Tab Settings → Reading aids) */
 .line-pane.aid-ruler .line-row:not(.status-Current) .text { opacity: .32; transition: opacity .15s; }
 .line-pane.aid-ruler .line-row.status-Current { box-shadow: inset 0 2px 0 var(--toggle-active-bg), inset 0 -2px 0 var(--toggle-active-bg); }

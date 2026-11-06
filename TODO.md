@@ -3,12 +3,6 @@
 Backlog from the 2026-11 GitHub sweep (sharing/lending items excluded by choice). Built in chunks;
 delete an item when it ships.
 
-## Chunk 4 — Trackyread quick wins
-- Saved filter views ("smart shelves") pinned to the dashboard.
-- Rereads kept as separate readings.
-- Calendar of reading days with time per book.
-- Year-in-review recap.
-
 ## Chunk 5 — Notes, highlights, dictionary
 - Text-range highlights + quotes; export notes/highlights to Markdown / Readwise (user token).
 - Tap-a-word dictionary / Wikipedia popup → add to Vocabulary deck; offline StarDict import.
