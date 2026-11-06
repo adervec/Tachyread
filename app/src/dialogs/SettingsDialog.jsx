@@ -931,6 +931,28 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       </Field>
       */}
 
+      <Section>Reading aids</Section>
+      <Field label="Focus aid">
+        <select value={s.focusAid || 'off'} onChange={(e) => patch({ focusAid: e.target.value })}
+          title="Ruler: a band on the current line, everything else dimmed. Paragraph: only the current paragraph stays bright.">
+          <option value="off">Off</option>
+          <option value="ruler">Reading ruler (current line)</option>
+          <option value="paragraph">Paragraph focus</option>
+        </select>
+      </Field>
+      <Field label="Line colour gradient (BeeLine-style)">
+        <input type="checkbox" checked={!!s.beeline} onChange={(e) => patch({ beeline: e.target.checked })}
+          title="Text fades into blue across one line and back out across the next (then red), so your eye follows the colour from the end of a line to the start of the next" />
+      </Field>
+      {s.beeline && (
+        <Field label="Gradient strength (%)">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="range" min={20} max={100} step={5} value={s.beelineStrength ?? 70} onChange={(e) => patch({ beelineStrength: Number(e.target.value) })} />
+            <span style={{ fontSize: 12, color: 'var(--status-fg)' }}>{s.beelineStrength ?? 70}%</span>
+          </div>
+        </Field>
+      )}
+
       <Section>Focus window (obscure before / after)</Section>
       <Field label="Obscure with">
         <select value={s.obscureMode || 'blur'} onChange={(e) => patch({ obscureMode: e.target.value })}>

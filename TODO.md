@@ -3,10 +3,6 @@
 Backlog from the 2026-11 GitHub sweep (sharing/lending items excluded by choice). Built in chunks;
 delete an item when it ships.
 
-## Chunk 2 — Lines pane aids
-- Reading ruler (band following the current line) + paragraph-at-a-time mode.
-- BeeLine-style colour gradient across lines.
-
 ## Chunk 3 — Typing quick wins
 - Read-ahead mode (only next N words visible) and memory mode (hide the current word).
 - Tape mode (single scrolling line).

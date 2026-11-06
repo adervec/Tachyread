@@ -13,6 +13,7 @@ import { translateText, translateConfigured, cacheKey } from '../features/transl
 import { getCachedTranslation, putCachedTranslation, appendAppLog } from '../state/storage.js';
 import { swapLookup, applySwap } from '../features/wordSwaps.js';
 import CrosshairOverlay from './CrosshairOverlay.jsx';
+import { beelineMix } from '../features/beeline.js';
 
 // Reading-pointer feature archived for now (not useful). Flip to true to restore it, and uncomment
 // its Settings section in dialogs/SettingsDialog.jsx.
@@ -150,6 +151,17 @@ function renderWords(line, opts) {
   return elems;
 }
 
+// BeeLine gradient: measure where each word sits (so wrapped lines alternate per VISUAL line) and
+// hand it its accent mix as CSS vars; the colour itself is CSS (.beeline rules in App.css).
+function paintBeeline(el, lineIndex, strength) {
+  const spans = el.querySelectorAll('.word');
+  if (!spans.length) return;
+  const box = el.getBoundingClientRect();
+  if (!box.width) return; // hidden right now — the pane's ResizeObserver repaints once it shows
+  const mix = beelineMix([...spans].map((s) => { const r = s.getBoundingClientRect(); return { top: r.top, left: r.left, width: r.width }; }), box.left, box.width, lineIndex, strength);
+  spans.forEach((s, i) => { s.style.setProperty('--blc', `var(--beeline-${mix[i].accent})`); s.style.setProperty('--blp', `${mix[i].pct}%`); });
+}
+
 function statusForLine(li, ctx) {
   if (li === ctx.currentLine) return ReadStatus.Current;
   if (li < ctx.currentLine) {
@@ -232,6 +244,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
   const wantJustifyWrap = textStyle.textAlign === 'justify' && !line.isEmpty;
   const justifyWrapRef = (el) => {
     if (!el) return;
+    if (dsettings.beeline) paintBeeline(el, dsettings.beelineOrd?.[index] ?? index, dsettings.beelineStrength);
     if (!wantJustifyWrap) { el.classList.remove('tx-wrapped'); return; }
     const lh = parseFloat(getComputedStyle(el).lineHeight);
     el.classList.toggle('tx-wrapped', Number.isFinite(lh) && lh > 0 && el.scrollHeight > lh * 1.6);
@@ -624,6 +637,12 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   // Stable display-settings subset handed to each line. Unlike `settings` (new identity on every
   // word step, via patchSettings), this keeps the same reference until a display option actually
   // changes — the precondition that lets memo(LineRow) skip unchanged lines during playback.
+  // BeeLine cycles per TEXT line — blank lines between paragraphs mustn't break the alternation.
+  const beelineOrd = useMemo(() => {
+    if (!settings.beeline) return null;
+    let k = 0;
+    return doc.lines.map((l) => (l.isEmpty ? k : k++));
+  }, [settings.beeline, doc]);
   const dsettings = useMemo(
     () => ({
       blurLinesBefore: settings.blurLinesBefore || 0,
@@ -652,6 +671,9 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       ghostFontDelta: settings.ghostWordFontDelta || 0,
       swaps: swapLookup(settings.wordSwaps),
       hlAlgo: settings.highlightAlgo || 'off',
+      beeline: !!settings.beeline,
+      beelineStrength: settings.beelineStrength ?? 70,
+      beelineOrd,
     }),
     [
       settings.blurLinesBefore, settings.blurLinesAfter, settings.blurGradient, settings.obscureMode, settings.parallelTranslation, settings.altSentenceColors,
@@ -660,7 +682,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP, settings.orpStyles,
       settings.currentWordStyles, settings.currentWordStyle, settings.doneWordStyles, settings.currentWordFontDelta, settings.wordSwaps, wall,
       settings.ghostWordStyles, settings.ghostWordFontDelta, settings.headingDetails, settings.wpm,
-      settings.highlightAlgo,
+      settings.highlightAlgo, settings.beeline, settings.beelineStrength, beelineOrd,
     ]
   );
 
@@ -670,6 +692,22 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   // rounding + a 0.5px change gate keep row remeasures from churning.
   const autoCpl = Math.max(0, Math.min(200, Number(settings.autoFontCpl) || 0));
   const [autoSize, setAutoSize] = useState(0);
+  // BeeLine: rows paint themselves when they render, but a row rendered while the pane was hidden
+  // (a dialog tab in front) measured zero — repaint every row when the pane shows up or resizes.
+  useEffect(() => {
+    const root = paneVisRef.current;
+    if (!settings.beeline || !root || typeof ResizeObserver === 'undefined') return undefined;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => root.querySelectorAll('.line-row').forEach((r) => {
+        const t = r.querySelector('.text');
+        if (t) paintBeeline(t, beelineOrd?.[Number(r.dataset.line)] ?? Number(r.dataset.line), settings.beelineStrength ?? 70);
+      }));
+    });
+    ro.observe(root);
+    return () => { ro.disconnect(); cancelAnimationFrame(raf); };
+  }, [settings.beeline, settings.beelineStrength, beelineOrd]);
   useEffect(() => {
     if (!autoCpl) { setAutoSize(0); return undefined; }
     const root = paneVisRef.current;
@@ -1210,7 +1248,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   if (hlOn && settings.highlightColor) paneStyle['--lines-hl'] = settings.highlightColor;
   return (
     <div
-      className={`line-pane${headingPack ? ` hsp-${headingPack}` : ''}${settings.currentLineHighlight === false ? ' no-curline' : ''}${hlOn ? ` hl-s-${settings.highlightStyle || 'bold'}` : ''}`}
+      className={`line-pane${settings.focusAid && settings.focusAid !== 'off' ? ` aid-${settings.focusAid}` : ''}${settings.beeline ? ' beeline' : ''}${headingPack ? ` hsp-${headingPack}` : ''}${settings.currentLineHighlight === false ? ' no-curline' : ''}${hlOn ? ` hl-s-${settings.highlightStyle || 'bold'}` : ''}`}
       ref={paneVisRef}
       style={Object.keys(paneStyle).length ? paneStyle : undefined}
     >

@@ -113,6 +113,9 @@ export function defaultFileSettings() {
     annunciateVoice: '', // voice used by read-aloud + TTS reader
     annunciateRate: 0, // -5..+8 → 0.5..2.0×
     hideMode: 'None',
+    focusAid: 'off',        // Lines pane: 'ruler' (dim all but the current line) | 'paragraph' (dim outside it)
+    beeline: false,         // BeeLine-style colour gradient across lines
+    beelineStrength: 70,    // % of accent colour at a line's coloured end
     adaptivePace: false, // comprehension-gated adaptive pacing: periodic cloze probes raise/lower WPM
     surprisalDwell: false, // spend more time on rare/informative words, less on common ones (mean pace preserved)
     surprisalStrength: 1, // 0 = off, 1 = full redistribution
