@@ -979,6 +979,24 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
           onChange={(e) => patch({ paragraphBreakSecs: Number(e.target.value) })}
         />
       </Field>
+      <Field label="Fast Reader words per flash">
+        <select value={s.rsvpChunk || 1} onChange={(e) => patch({ rsvpChunk: Number(e.target.value) })}
+          title="Flash short phrases instead of single words — a phrase never runs past punctuation or a line end, and lasts as long as its words would one by one">
+          <option value={1}>1 word</option><option value={2}>up to 2 words</option><option value={3}>up to 3 words</option>
+        </select>
+      </Field>
+      <Field label="Ease in after Play">
+        <input type="checkbox" checked={s.rsvpRamp !== false} onChange={(e) => patch({ rsvpRamp: e.target.checked })}
+          title="The first 20 words after Play run from 70% of your WPM up to full speed" />
+      </Field>
+      <Field label="Resume hold (ms)">
+        <input type="number" min={0} max={2000} step={50} value={s.rsvpResumeHoldMs ?? 300} onChange={(e) => patch({ rsvpResumeHoldMs: Number(e.target.value) })}
+          title="Extra time on the word you press Play on, so your eye can find it" />
+      </Field>
+      <Field label="Split words longer than (letters, 0 = off)">
+        <input type="number" min={0} max={30} value={s.rsvpHyphenLen || 0} onChange={(e) => patch({ rsvpHyphenLen: Number(e.target.value) })}
+          title="In the Fast Reader, very long words show in two hyphenated halves (e.g. extraor- / dinarily) so they stay big" />
+      </Field>
       <Field label="Line break pause (ms)">
         <input
           type="number"

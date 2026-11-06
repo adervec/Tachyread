@@ -83,6 +83,10 @@ export function defaultFileSettings() {
     bionicFont: false,
     paragraphBreakSecs: 0,
     lineBreakPauseMs: 0,
+    rsvpChunk: 1,           // Fast Reader words per flash (1–3; phrases stop at punctuation / line end)
+    rsvpRamp: true,         // ease in from ~70% WPM over the first 20 words after Play
+    rsvpResumeHoldMs: 300,  // extra time on the word you resume on
+    rsvpHyphenLen: 0,       // split words longer than this in two in the Fast Reader (0 = off)
     contentChecksum: '',
     highlightORP: false,
     orpColor: '', // ORP letter colour in the Lines pane ('' = theme default, usually red)

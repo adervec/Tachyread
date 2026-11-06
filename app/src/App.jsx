@@ -48,7 +48,7 @@ import TocWizard from './dialogs/TocWizard.jsx';
 import ResourceWizard from './dialogs/ResourceWizard.jsx';
 import IndexPane from './components/IndexPane.jsx';
 import { buildProperNamesFromList } from './document/resourceWizard.js';
-import { createEngine, wordDurationMs } from './engine/rsvpEngine.js';
+import { createEngine, wordDurationMs, chunkLen, rampFactor } from './engine/rsvpEngine.js';
 import { createModeDetector } from './engine/readingMode.js';
 import { startMediaSession, updateMediaSession, stopMediaSession, nudgeMediaKeepAlive, getSpeechAudio } from './features/mediaSession.js';
 import DisclaimerDialog from './dialogs/DisclaimerDialog.jsx';
@@ -214,6 +214,7 @@ function AppInner() {
   const touchRef = useRef(null); // swipe-gesture start point
   const engineRef = useRef(null);
   if (!engineRef.current) engineRef.current = createEngine();
+  const playStartIdxRef = useRef(null); // word Play started on (start ramp / resume hold)
   const [playing, setPlaying] = useState(false);
 
   // Document language (Application Settings) → speech recognition + TTS voice matching.
@@ -662,6 +663,7 @@ function AppInner() {
   useEffect(() => {
     if (!activeTab || !playing || activeTab.settings.readAloud || activeTab.settings.typing?.enabled) {
       engineRef.current.cancel();
+      playStartIdxRef.current = null; // next Play ramps in again
       return;
     }
     const { doc, settings } = activeTab;
@@ -671,17 +673,27 @@ function AppInner() {
       setPlaying(false);
       return;
     }
-    const word = doc.words[idx];
-    const lineIdx = getLineIndex(doc, idx);
-    const nextLine = idx + 1 < doc.words.length ? getLineIndex(doc, idx + 1) : lineIdx;
-    const atLineEnd = nextLine !== lineIdx;
-    const isHF = doc.headerFooterLines.has(lineIdx);
-    // Paragraph end = sentence end + next line is empty
-    const atParaEnd =
-      atLineEnd && nextLine < doc.lines.length && doc.lines[nextLine].isEmpty;
-    const isProperName = doc.properNames?.has?.((word || '').toLowerCase().replace(/[^\p{L}\p{N}]+$/u, ''));
-
-    const sw = surprisalWeights ? (surprisalWeights[idx] || 1) : 1;
+    // Phrase chunking: a flash of n words lasts as long as those words would one by one.
+    const n = chunkLen(doc.words, idx, Math.max(1, Math.min(3, settings.rsvpChunk || 1)), (i) => getLineIndex(doc, i));
+    let wordsMs = 0;
+    for (let i = idx; i < idx + n; i++) {
+      const word = doc.words[i];
+      const lineIdx = getLineIndex(doc, i);
+      const nextLine = i + 1 < doc.words.length ? getLineIndex(doc, i + 1) : lineIdx;
+      const atLineEnd = nextLine !== lineIdx;
+      const isHF = doc.headerFooterLines.has(lineIdx);
+      // Paragraph end = sentence end + next line is empty
+      const atParaEnd =
+        atLineEnd && nextLine < doc.lines.length && doc.lines[nextLine].isEmpty;
+      const isProperName = doc.properNames?.has?.((word || '').toLowerCase().replace(/[^\p{L}\p{N}]+$/u, ''));
+      wordsMs += wordDurationMs(word, settings, isProperName, isHF, atParaEnd, atLineEnd) * (surprisalWeights ? (surprisalWeights[i] || 1) : 1);
+    }
+    // Start ramp + resume hold: the first words after Play ease in, and the word you resume on
+    // stays up a beat longer so the eye can find it.
+    if (playStartIdxRef.current == null) playStartIdxRef.current = idx;
+    const since = idx - playStartIdxRef.current;
+    const ramp = settings.rsvpRamp === false ? 1 : rampFactor(since);
+    const hold = since === 0 ? (settings.rsvpResumeHoldMs ?? 300) : 0;
     // Optional sinusoidal breathing: pace speeds up and slows down around the setpoint so the eye
     // gets brief rests. Averages to 1 over a cycle, so the mean WPM is unchanged. Divides the delay
     // (higher effective WPM = shorter gap).
@@ -691,10 +703,10 @@ function AppInner() {
       const period = Math.max(4, settings.wpmWavePeriodSec || 18);
       wave = 1 + depth * Math.sin((Date.now() / 1000) * (2 * Math.PI / period));
     }
-    const ms = wordDurationMs(word, settings, isProperName, isHF, atParaEnd, atLineEnd) * sw / wave;
+    const ms = (wordsMs / wave) / ramp + hold;
 
     engineRef.current.scheduleNext(ms, () => {
-      stepWord(1);
+      stepWord(n);
     });
     return () => engineRef.current.cancel();
     // eslint-disable-next-line
@@ -2802,7 +2814,7 @@ function AppInner() {
       else if (mobileView === 'rsvp') { showRsvpPane = true; showLinesPane = false; }
       else { showRsvpPane = false; showLinesPane = true; }
     }
-    if (showRsvpPane) arr.push({ id: 'rsvp', label: 'Fast Reader', node: <RsvpPane tab={activeTab} onVisible={onRsvpVisible} /> });
+    if (showRsvpPane) arr.push({ id: 'rsvp', label: 'Fast Reader', node: <RsvpPane tab={activeTab} onVisible={onRsvpVisible} playing={playing} /> });
     if (state.showSource && activeTab.doc.source)
       arr.push({ id: 'source', label: 'Source', node: <SourcePane tab={activeTab} onPatch={(p) => patchSettings(activeTab.id, p)} onSourcePage={jumpSourcePage} /> });
     if (state.showIndex)
