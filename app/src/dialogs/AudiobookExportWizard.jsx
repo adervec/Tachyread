@@ -3,7 +3,7 @@ import Dialog from './Dialog.jsx';
 import { getAudioClip, getSectionExtraBlob, entryClips } from '../state/storage.js';
 import { saveBlobToFile } from '../features/fileSystem.js';
 import {
-  planTracks, trackFileName, buildM3u, encodeWav, buildId3v2, estimateBytes, fmtDuration, sanitizeFilename, orderSectionItems,
+  planTracks, trackFileName, buildM3u, encodeWav, buildId3v2, estimateBytes, fmtDuration, sanitizeFilename, orderSectionItems, buildSubtitles,
 } from '../features/audiobookExport.js';
 
 const fmtBytes = (b) => (b >= 1073741824 ? `${(b / 1073741824).toFixed(2)} GB` : b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
@@ -51,7 +51,7 @@ export function buildExportItems(sections, manifest) {
     for (const c of sec.chunks) {
       const clips = entryClips(manifest.lines[c.startLine]);
       if (!clips.length) continue;
-      chunkItems.push({ startLine: c.startLine, endLine: c.endLine, ms: clips[0].durationMs || 0, sectionTitle: sec.title, voiceId: clips[0].voiceId, clipId: clips[0].id });
+      chunkItems.push({ startLine: c.startLine, endLine: c.endLine, ms: clips[0].durationMs || 0, sectionTitle: sec.title, voiceId: clips[0].voiceId, clipId: clips[0].id, text: c.text || '' });
     }
     const extras = firstLine != null ? (manifest.sections?.[firstLine] || {}) : {};
     // A section with neither narration nor extras contributes nothing.
@@ -70,6 +70,7 @@ export default function AudiobookExportWizard({ checksum, fileName, sections, ma
   const [mode, setMode] = useState('chapter');
   const [targetMin, setTargetMin] = useState(12);
   const [forceWav, setForceWav] = useState(false);
+  const [subs, setSubs] = useState(''); // '' | 'srt' | 'vtt' — a timed subtitle file beside each track
   const [prog, setProg] = useState(null); // { done, total, label }
   const [msg, setMsg] = useState('');
   const abort = useRef(false);
@@ -105,6 +106,12 @@ export default function AudiobookExportWizard({ checksum, fileName, sections, ma
           const w = await fh.createWritable(); await w.write(blob); await w.close();
         } else {
           await saveBlobToFile(blob, names[i], [{ description: 'Audio', accept: { [format === 'mp3' ? 'audio/mpeg' : 'audio/wav']: [`.${ext}`] } }]);
+        }
+        if (subs) {
+          const subName = names[i].replace(/\.[a-z0-9]+$/i, `.${subs}`);
+          const sb = new Blob([buildSubtitles(tracks[i].items, subs)], { type: subs === 'vtt' ? 'text/vtt' : 'application/x-subrip' });
+          if (dir) { const fh = await dir.getFileHandle(subName, { create: true }); const w = await fh.createWritable(); await w.write(sb); await w.close(); }
+          else await saveBlobToFile(sb, subName, [{ description: 'Subtitles', accept: { [sb.type]: [`.${subs}`] } }]);
         }
         setProg({ done: i + 1, total: tracks.length, label: tracks[i].title });
       }
@@ -148,6 +155,13 @@ export default function AudiobookExportWizard({ checksum, fileName, sections, ma
                 : 'WAV, mono 22 kHz — mixed / offline voices are re-encoded to one universal format.'}
             </span>
             {allMp3 && <label><input type="checkbox" checked={forceWav} onChange={(e) => setForceWav(e.target.checked)} /> Force WAV</label>}
+          </div>
+          <div className="lj-inline">
+            <label title="A subtitle file beside each track, one cue per narrated chunk timed to the audio — for video captions, read-along players or other tools">
+              Subtitles <select value={subs} onChange={(e) => setSubs(e.target.value)}>
+                <option value="">none</option><option value="srt">.srt (SubRip)</option><option value="vtt">.vtt (WebVTT)</option>
+              </select>
+            </label>
           </div>
 
           <p className="settings-note">
