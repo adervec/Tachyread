@@ -3403,6 +3403,9 @@ function AppInner() {
           onPeek={(li) => peekToLine(li)}
           onSetGoal={(wi, label) => { const cur = activeTab.settings.wordIndex || 0; setSectionGoal(Math.min(cur, wi), Math.max(cur, wi) + 1, label); }}
           onClose={closeDialog}
+          key={`${activeTab.id}:${dialog.query || ''}`}
+          initialQuery={dialog.query || ''}
+          onOpenDoc={async (cs, q) => { if (await openRecent(cs)) openDialog({ kind: 'find', query: q }); }}
         />
       )}
       {dialog?.kind === 'goto' && activeTab && (

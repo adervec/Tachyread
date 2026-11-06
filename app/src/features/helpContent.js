@@ -55,6 +55,7 @@ export const HELP_SECTIONS = [
       '"Reading now" is your live pace over the recent window; "session efficiency" is new words actually read per active minute — re-reading, skims and idle time lower it honestly.',
       'Jumps (ToC, Find, Go-to) are never counted as reading. Deliberate forward moves (line/paragraph/page-down/scroll) credit the text you passed.',
       'Coverage (📖 %) is how much of the countable book you have actually read — front/back matter can be excluded via skip ranges.',
+      'Find (Ctrl+F) can search ALL documents: switch its scope to “All documents” to search the text of every book saved on this device, see the matches per book with context, and click one to open that book with the search already showing its matches.',
       'Stats menu: Statistics, Progress Detail, Regression Report, Attention Check, and Reading History keep the long-term numbers. Status-bar updates carry a timestamp and fade after a while.',
     ],
   },

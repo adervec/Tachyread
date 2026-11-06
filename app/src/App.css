@@ -1620,6 +1620,13 @@
 .line-row.status-NavSessionRead .text { color: var(--nav-session-read-fg); background: color-mix(in srgb, var(--nav-session-read-fg) 10%, transparent); border-radius: 3px; }
 .line-row.status-Current { background: var(--current-line-bg); }
 .word.user-hl { background: color-mix(in srgb, #f5c518 42%, transparent); border-radius: 2px; }
+.ft-results { max-height: 60vh; overflow: auto; }
+.ft-doc { padding: 6px 0; border-bottom: 1px solid var(--divider); }
+.ft-doc-h { display: flex; gap: 8px; align-items: baseline; }
+.ft-doc-h .link-btn { margin-left: auto; }
+.ft-hit { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 2px 0; font-size: 12px; color: inherit; cursor: pointer; }
+.ft-hit:hover { background: var(--current-line-bg); }
+.ft-hit mark { background: color-mix(in srgb, #f5c518 55%, transparent); color: inherit; }
 .define-backdrop { position: fixed; inset: 0; z-index: 6000; }
 .define-pop { position: fixed; z-index: 6001; width: 340px; max-height: 60vh; overflow: auto; background: var(--menu-bg); color: var(--menu-fg); border: 1px solid var(--divider); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.25); padding: 10px 12px; font-size: 13px; }
 .define-head { display: flex; align-items: baseline; gap: 6px; font-size: 16px; margin-bottom: 4px; }

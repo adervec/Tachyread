@@ -5,7 +5,6 @@ delete an item when it ships.
 
 ## Chunk 5 — Notes, highlights, dictionary
 - Offline StarDict dictionary import (the 📖 Define popup currently uses dictionaryapi.dev + Wikipedia).
-- Library-wide full-text search.
 
 ## Chunk 6 — Typing training
 - Weak-spot drills from the whole history (slow/missed keys, trigrams, words) + missed-word SRS.
