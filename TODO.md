@@ -7,7 +7,6 @@ delete an item when it ships.
 - Barcode scanning on Windows/Linux desktop Chrome (no BarcodeDetector there; would need a zxing-wasm dependency). Typed ISBN works everywhere.
 - Shelf-photo intake via AI, reviewed through Cowork.
 - OPDS catalogue browsing.
-- Bionic EPUB export for e-ink.
 - Side-by-side parallel reading.
 
 ## Chunk 8 — Audio & speaking

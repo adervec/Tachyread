@@ -118,6 +118,7 @@ import { createMetronome } from './features/metronome.js';
 import { saveTextToFile, saveBlobToFile } from './features/fileSystem.js';
 import { challengeFromHash } from './features/typingChallenge.js';
 import { sharedPayload, shareFileName } from './features/shareTarget.js';
+import { buildEpub, docChapters } from './features/bionicEpub.js';
 const SHARE_INBOX = 'tachyread-share-inbox';
 import { buildTabPdf } from './features/exportPdf.js';
 import { ambient } from './features/ambient.js';
@@ -2453,6 +2454,14 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     if (action === 'save-tab' && activeTab) return doSaveTab();
     if (action === 'open-clip') return openClipboard();
     if (action === 'grab') return openDialog({ kind: 'grab' });
+    if (action === 'export-bionic') {
+      if (!activeTab?.doc) return setStatus('Open a document first, then export it as a bionic EPUB.');
+      const base = (activeTab.doc.fileName || activeTab.fileName || 'Document').replace(/\.[a-z0-9]+$/i, '');
+      const chapters = docChapters(activeTab.doc, getTocEntries(activeTab) || []);
+      const bytes = buildEpub({ title: base, chapters, lang: (state.global.language || 'en').slice(0, 2) });
+      return saveBlobToFile(new Blob([bytes], { type: 'application/epub+zip' }), `${base} (bionic).epub`, [{ description: 'EPUB', accept: { 'application/epub+zip': ['.epub'] } }])
+        .then(() => setStatus(`📗 Saved “${base} (bionic).epub” — ${chapters.length} chapter(s). Send it to your Kindle / Kobo.`)).catch(() => {});
+    }
     if (action === 'web-grab') return openDialog({ kind: 'web-grab' });
     if (action === 'html-tools') return openDialog({ kind: 'html-tools' });
     if (action === 'api-usage') return openDialog({ kind: 'api-usage' });
