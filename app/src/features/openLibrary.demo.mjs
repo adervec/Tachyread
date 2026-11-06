@@ -33,4 +33,18 @@ assert.ok(bookCoverUrl({ isbn: '9780441172719' }).includes('/b/isbn/978044117271
 assert.equal(bookCoverUrl({ title: 'x' }), null);
 assert.equal(bookCoverUrl({ coverUrl: 'https://img.example/c.jpg', coverId: 44 }), 'https://img.example/c.jpg', 'custom cover URL wins');
 
+// ISBN validation + result → book
+{
+  const { validIsbn, isbnBook } = await import('./openLibrary.js');
+  assert.equal(validIsbn('978-0-441-01359-3'), '9780441013593');
+  assert.equal(validIsbn('9780441013594'), null, 'bad check digit');
+  assert.equal(validIsbn('0-441-01359-7'), '0441013597');
+  assert.equal(validIsbn('080442957X'), '080442957X', 'X check digit');
+  assert.equal(validIsbn('5012345678900'), null, 'a grocery EAN is not a book');
+  assert.equal(validIsbn(''), null);
+  assert.deepEqual(isbnBook({ docs: [{ title: 'Dune', author_name: ['Frank Herbert'], number_of_pages_median: 604, first_publish_year: 1965, cover_i: 7 }] }, '9780441013593'),
+    { title: 'Dune', author: 'Frank Herbert', isbn: '9780441013593', fnf: 'F', type: 'long', genre: '', pages: 604, pubDate: '1965', coverId: 7 });
+  assert.equal(isbnBook({ docs: [] }, 'x'), null);
+}
+
 console.log('openLibrary.demo: all assertions passed ✅');

@@ -49,6 +49,7 @@ import { olFetch, bookCoverUrl } from '../features/openLibrary.js';
 import { HistoryView } from './HistoryDialog.jsx';
 import AllNotesView from './AllNotesView.jsx';
 import ShelfImportPanel from './ShelfImportPanel.jsx';
+import IsbnAdd from '../components/IsbnAdd.jsx';
 import ProgressDetailDialog from './ProgressDetailDialog.jsx';
 import { getSyncProvider } from '../features/sync/syncProviders.js';
 import { syncLibraryWithProvider, syncWithProvider } from '../features/sync/syncManager.js';
@@ -1053,11 +1054,12 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                 <CoverBatchButton books={filtered} legacyOf={(b) => bookCoverUrl(b)} apiKey={global?.anthropicKey} onSaveBook={saveBook} onReload={reload} />
                 <span className="lj-spacer" />
                 <button onClick={() => setAdding(true)}>+ Add book</button>
+                <IsbnAdd books={books || []} onFound={(b) => { setSelected(null); setAdding(b); }} onOpenExisting={(id) => setSelected(id)} />
                 <button onClick={() => exportView('json')}>Export view (JSON)</button>
                 <button onClick={() => exportView('md')}>Export view (Markdown)</button>
               </div>
 
-              {adding && <BookEditor book={{ id: '', title: '', author: '', genre: '', fnf: 'F', type: 'long' }} isNew apiKey={global?.anthropicKey} onCancel={() => setAdding(false)} onSave={async (b) => { await saveBook({ ...b, id: deriveId(b) }); setAdding(false); }} />}
+              {adding && <BookEditor key={adding === true ? 'blank' : adding.isbn || 'new'} book={adding === true ? { id: '', title: '', author: '', genre: '', fnf: 'F', type: 'long' } : { id: '', ...adding }} isNew apiKey={global?.anthropicKey} onCancel={() => setAdding(false)} onSave={async (b) => { await saveBook({ ...b, id: deriveId(b) }); setAdding(false); }} />}
               {selBook && <BookEditor book={selBook} books={books} docMeta={docMeta} bindMap={bindMap} fileStats={fileStats} groups={global?.bookGroups} crossNotes={crossNotes} apiKey={global?.anthropicKey} onSaveCross={async (n) => { await saveCrossNote(n); setCrossNotes(await getCrossNotes()); }} onDeleteCross={async (id) => { await deleteCrossNote(id); setCrossNotes(await getCrossNotes()); }} onBind={bind} onProgress={setProgressFor} onCancel={() => setSelected(null)} onSave={saveBook} onDelete={() => removeBook(selBook.id)} />}
 
               {ljView === 'tiles' ? (
