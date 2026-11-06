@@ -48,6 +48,7 @@ import { readingTimeSummary, estimateTotalSecs, audiobookSecs, fmtDur, bookWordC
 import { olFetch, bookCoverUrl } from '../features/openLibrary.js';
 import { HistoryView } from './HistoryDialog.jsx';
 import AllNotesView from './AllNotesView.jsx';
+import ShelfImportPanel from './ShelfImportPanel.jsx';
 import ProgressDetailDialog from './ProgressDetailDialog.jsx';
 import { getSyncProvider } from '../features/sync/syncProviders.js';
 import { syncLibraryWithProvider, syncWithProvider } from '../features/sync/syncManager.js';
@@ -1219,6 +1220,9 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               </div>
               <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={onImportFile} />
               <button onClick={() => fileRef.current?.click()}>Choose file…</button>
+
+              <div className="rh-section-h">Import from Goodreads / StoryGraph</div>
+              <ShelfImportPanel books={books} onDone={reload} />
 
               <div className="rh-section-h">Export everything</div>
               <div className="lj-inline">
