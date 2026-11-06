@@ -94,6 +94,7 @@ const MENUS = {
   ],
   audio: [
     { label: 'Audiobook Command Centre...', shortcut: 'Ctrl+Shift+A', action: 'audiobook', icon: '🎧'},
+    { label: 'Sync My Audiobook to This Book...', action: 'audio-sync', icon: '🔗'},
     { label: 'Text-to-Speech Reader...', shortcut: 'Ctrl+Shift+T', action: 'tts-popup', icon: '🔊'},
     { label: 'Ambient Sound...', action: 'ambient', icon: '🌊'},
     { kind: 'separator' },

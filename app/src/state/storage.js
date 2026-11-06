@@ -568,6 +568,36 @@ export async function reorderAudioClips(checksum, line, orderedIds) {
   await db.put('audiobookManifest', manifest, checksum);
 }
 
+// ── Your own audiobook, synced to the text (features/audioSync.js) ─────────────────────────────────
+// The audio files live in the audiobook store under `${checksum}/sync/${i}`; the manifest's `sync`
+// holds { files: [{ name, type, durationMs }], anchors: [[wordIndex, fileIndex, ms]], model, at }.
+export async function saveAudioSync(checksum, { files, blobs, anchors, model }) {
+  const db = await getDB();
+  const old = (await db.get('audiobookManifest', checksum)) || { lines: {} };
+  for (let i = 0; i < (old.sync?.files?.length || 0); i++) await db.delete('audiobook', `${checksum}/sync/${i}`);
+  for (let i = 0; i < blobs.length; i++) await db.put('audiobook', { blob: blobs[i] }, `${checksum}/sync/${i}`);
+  const manifest = (await db.get('audiobookManifest', checksum)) || { lines: {} };
+  manifest.sync = { files, anchors, model, at: Date.now() };
+  await db.put('audiobookManifest', manifest, checksum);
+}
+export async function getAudioSync(checksum) {
+  if (!checksum) return null;
+  const db = await getDB();
+  return (await db.get('audiobookManifest', checksum))?.sync || null;
+}
+export async function getSyncFile(checksum, i) {
+  const db = await getDB();
+  return (await db.get('audiobook', `${checksum}/sync/${i}`))?.blob || null;
+}
+export async function deleteAudioSync(checksum) {
+  const db = await getDB();
+  const manifest = await db.get('audiobookManifest', checksum);
+  if (!manifest?.sync) return;
+  for (let i = 0; i < manifest.sync.files.length; i++) await db.delete('audiobook', `${checksum}/sync/${i}`);
+  delete manifest.sync;
+  await db.put('audiobookManifest', manifest, checksum);
+}
+
 export async function getAudiobookManifest(checksum) {
   const db = await getDB();
   return (await db.get('audiobookManifest', checksum)) || { lines: {} };

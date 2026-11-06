@@ -9,9 +9,12 @@
 //   • …unless "fill gaps with Kokoro" is on (getLiveVoice → a kokoro: voice): then a chunk with no
 //     clip is synthesized on the device as you reach it (the next one while this one plays) and SAVED
 //     as a clip, so each chunk is generated once. A failed synthesis still falls back to native.
+//   • a book synced to YOUR audiobook (Audio → Sync My Audiobook) plays those files instead: from the
+//     time mapped to the reading position, with the position following the audio's word map.
 
 import { getSpeechAudio } from './mediaSession.js';
-import { getAudioClip, addAudioClip } from '../state/storage.js';
+import { getAudioClip, addAudioClip, getAudioSync, getSyncFile } from '../state/storage.js';
+import { timeForWord, wordForTime } from './audioSync.js';
 import { createLocalEngine, isKokoro, blobDurationMs } from './localTts.js';
 import { audiobookChunks } from '../document/readerDocument.js';
 
@@ -116,21 +119,65 @@ export function createOfflineReadAloud({ getDoc, getIndex, setIndex, getVoiceNam
     prefetch = { ci: ni, promise };
   }
 
+  // ── synced audiobook mode ──
+  let sync = null, syncDoc = null, syncFile = -1, syncUrl = null;
+  async function loadSync(doc) {
+    if (doc !== syncDoc) { syncDoc = doc; sync = await getAudioSync(doc?.contentChecksum).catch(() => null); }
+    return sync?.anchors?.length ? sync : null;
+  }
+  async function playSynced(s, fileIndex, ms) {
+    const myGen = gen;
+    const a = getSpeechAudio();
+    if (!a) { onStatus?.('error'); return; }
+    if (fileIndex !== syncFile || !syncUrl) {
+      const blob = await getSyncFile(getDoc().contentChecksum, fileIndex);
+      if (myGen !== gen || !active) return;
+      if (!blob) { onStatus?.('error'); return; }
+      revoke(syncUrl); syncUrl = URL.createObjectURL(blob); urls.add(syncUrl); syncFile = fileIndex;
+      a.src = syncUrl;
+      await new Promise((r) => { a.onloadedmetadata = r; a.onerror = r; });
+      if (myGen !== gen || !active) return;
+    }
+    a.loop = false;
+    a.playbackRate = getRate?.() || 1;
+    a.currentTime = Math.max(0, ms / 1000);
+    a.ontimeupdate = () => {
+      if (myGen !== gen || !active) return;
+      const wi = wordForTime(s.anchors, fileIndex, a.currentTime * 1000);
+      if (wi != null && wi > getIndex()) setIndex(wi);
+    };
+    a.onended = () => {
+      if (myGen !== gen || !active) return;
+      if (fileIndex + 1 < s.files.length) playSynced(s, fileIndex + 1, 0);
+      else { onStatus?.('idle'); stop(); onEnd?.(); }
+    };
+    onStatus?.('playing');
+    try { await a.play(); } catch { /* gesture-unlocked element; ignore transient */ }
+  }
+  async function begin() {
+    const doc = getDoc();
+    const s = await loadSync(doc);
+    if (!active) return;
+    if (s) { const t = timeForWord(s.anchors, getIndex()); playSynced(s, t.file, t.ms); return; }
+    ensureChunks(doc);
+    playChunk(chunkIndexForWord(getIndex()));
+  }
+
   function start() {
     if (active) return;
     active = true;
     gen++;
-    ensureChunks(getDoc());
-    playChunk(chunkIndexForWord(getIndex()));
+    begin();
   }
   function stop() {
     active = false;
     gen++;
     const a = getSpeechAudio();
-    if (a) { try { a.pause(); a.onended = null; a.onerror = null; } catch { /* ignore */ } }
+    if (a) { try { a.pause(); a.onended = null; a.onerror = null; a.ontimeupdate = null; } catch { /* ignore */ } }
     try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
     prefetch = null;
     for (const u of [...urls]) revoke(u);
+    syncUrl = null; syncFile = -1;
   }
   function resync() {
     if (!active) return;
@@ -138,8 +185,7 @@ export function createOfflineReadAloud({ getDoc, getIndex, setIndex, getVoiceNam
     const a = getSpeechAudio();
     if (a) { try { a.pause(); } catch { /* ignore */ } }
     prefetch = null;
-    ensureChunks(getDoc());
-    playChunk(chunkIndexForWord(getIndex()));
+    begin(); // synced audio seeks to the new position; generated clips restart at its chunk
   }
 
   return { start, stop, resync, isActive: () => active };
