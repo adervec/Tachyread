@@ -26,6 +26,7 @@ import TypingRun from './components/TypingRun.jsx';
 import FindDialog from './dialogs/FindDialog.jsx';
 import GoToLineDialog from './dialogs/GoToLineDialog.jsx';
 import OpdsDialog from './dialogs/OpdsDialog.jsx';
+import CompanionPane from './components/CompanionPane.jsx';
 import SettingsDialog from './dialogs/SettingsDialog.jsx';
 import StatisticsDialog from './dialogs/StatisticsDialog.jsx';
 import ProperNamesDialog from './dialogs/ProperNamesDialog.jsx';
@@ -2524,6 +2525,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     if (action === 'biometric-settings') return openDialog({ kind: 'biometric-settings' });
     if (action === 'comfort-settings') return openDialog({ kind: 'comfort-settings' });
     if (action === 'toggle-lines') { dispatch({ type: 'TOGGLE_LINES' }); return; }
+    if (action === 'companion' && activeTab) { patchSettings(activeTab.id, { companion: activeTab.settings.companion ? null : { checksum: null, follow: true } }); return; }
     if (action === 'typing-settings' && activeTab) return openDialog({ kind: 'typing-settings' });
     if (action === 'audio-settings' && activeTab) return openDialog({ kind: 'audio-settings' });
     if (action === 'font-manager' && activeTab) return openDialog({ kind: 'font-manager' });
@@ -2893,6 +2895,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       arr.push({ id: 'source', label: 'Source', node: <SourcePane tab={activeTab} onPatch={(p) => patchSettings(activeTab.id, p)} onSourcePage={jumpSourcePage} /> });
     if (state.showIndex)
       arr.push({ id: 'index', label: 'Index', node: <IndexPane tab={activeTab} onJumpWord={jumpWord} onWizard={() => openDialog({ kind: 'resource-wizard', resourceKind: 'index' })} /> });
+    if (activeTab.settings.companion && !isCompact) arr.push({ id: 'companion', label: 'Side by side', node: <CompanionPane tab={activeTab} tabs={state.tabs} onSet={(c) => patchSettings(activeTab.id, { companion: c })} hydrate={hydrateTab} /> });
     if (showLinesPane) arr.push({
       id: 'lines',
       label: 'Lines',
@@ -2915,7 +2918,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     });
     return arr;
     // eslint-disable-next-line
-  }, [activeTab, state.showToc, state.showStats, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances, scrollActive, scrollCmd, recenterKey, ghostOn, ghostIdx]);
+  }, [activeTab, state.showToc, state.showStats, state.showSource, state.showIndex, state.showLines, hideWord, peek, tocFlash, isCompact, mobileView, auxOpen, onRsvpVisible, onLinesVisible, state.global.scrollAdvances, scrollActive, scrollCmd, recenterKey, ghostOn, ghostIdx, activeTab?.settings.companion && state.tabs]);
 
   // One derived `dialog` drives the whole render block below: a blocking modal wins, otherwise the
   // focused dialog tab. When it's a panel (no modal), `dialogDocked` restyles it from a centered
