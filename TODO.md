@@ -4,8 +4,7 @@ Backlog from the 2026-11 GitHub sweep (sharing/lending items excluded by choice)
 delete an item when it ships.
 
 ## Chunk 6 — Typing training
-- Weak-spot drills from the whole history (slow/missed keys, trigrams, words) + missed-word SRS.
-- Per-key speed heatmap, left vs right hand speed.
+- Missed-word spaced repetition (weak spots currently weight recent misses; no per-word schedule).
 - On-screen keyboard; Colemak/Dvorak emulation.
 - keybr-style key-unlock course.
 

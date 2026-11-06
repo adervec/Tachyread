@@ -147,9 +147,11 @@ export function aggregateKeys(runs) {
   const agg = {};
   for (const r of runs || []) {
     for (const [ch, v] of Object.entries(r?.keys || {})) {
-      const a = (agg[ch] ||= { n: 0, err: 0 });
+      const a = (agg[ch] ||= { n: 0, err: 0, ms: 0, t: 0 });
       a.n += v?.n || 0;
       a.err += v?.err || 0;
+      a.ms += v?.ms || 0; // time spent reaching the key (timed keystrokes only — see TypingRun)
+      a.t += v?.t || 0;
     }
   }
   return agg;
@@ -169,6 +171,47 @@ export function fingerStats(keyAgg) {
   return Object.values(by)
     .map((b) => ({ ...b, rate: b.n ? b.err / b.n : 0 }))
     .sort((a, b) => b.rate - a.rate);
+}
+
+// Speed on one key as a WPM equivalent (5 chars a word) from its average reach time; null until
+// it has `min` timed keystrokes.
+export const keyWpm = (v, min = 5) => (v?.t >= min && v.ms > 0 ? 12000 / (v.ms / v.t) : null);
+
+// Left vs right hand speed (QWERTY fingers) over an aggregated key profile.
+export function handSpeed(keyAgg) {
+  const h = { L: { ms: 0, t: 0 }, R: { ms: 0, t: 0 } };
+  for (const [ch, v] of Object.entries(keyAgg || {})) {
+    const f = keyFinger(ch);
+    if (!f || !v?.t) continue;
+    h[f[0]].ms += v.ms; h[f[0]].t += v.t;
+  }
+  return { L: keyWpm(h.L, 20), R: keyWpm(h.R, 20) };
+}
+
+// Weak spots across your whole history: the keys that are both error-prone and slow (relative to
+// your own median), and the words you most often miss or crawl through (each run's problemWords).
+export function weakSpots(runs, { keys = 6, words = 30, minN = 12 } = {}) {
+  const agg = aggregateKeys(runs);
+  const letters = Object.entries(agg).filter(([ch, v]) => /^[a-z]$/.test(ch) && v.n >= minN);
+  const speeds = letters.map(([, v]) => keyWpm(v)).filter((x) => x != null).sort((a, b) => a - b);
+  const median = speeds.length ? speeds[speeds.length >> 1] : null;
+  const score = ([, v]) => {
+    const err = v.err / v.n;
+    const w = keyWpm(v);
+    const slow = median && w ? Math.max(0, median / w - 1) : 0; // 0 = at your median, 0.5 = half again slower
+    return err * 4 + slow;
+  };
+  // Score > 0.1 ≈ 2.5% errors, or 10% below your median speed — a 1% slip on a fast key isn't weak.
+  const weakKeys = letters.map((e) => [e[0], score(e)]).filter(([, s]) => s > 0.1).sort((a, b) => b[1] - a[1]).slice(0, keys).map(([ch]) => ch);
+  const freq = new Map();
+  [...(runs || [])].sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 60).forEach((r, i) => {
+    for (const w of r.problemWords || []) {
+      const k = String(w).toLowerCase();
+      freq.set(k, (freq.get(k) || 0) + 1 / (1 + i / 20)); // recent runs weigh more
+    }
+  });
+  const weakWords = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, words).map(([w]) => w);
+  return { keys: weakKeys, words: weakWords };
 }
 
 // ── pace caret ──────────────────────────────────────────────────────────────

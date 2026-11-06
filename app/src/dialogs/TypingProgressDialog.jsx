@@ -5,7 +5,7 @@ import { allTypingRuns, clearTypingRuns } from '../state/storage.js';
 import { TYPING_MODE_BY_ID } from '../engine/typingModes.js';
 import { fmtDateTime } from '../features/dateFmt.js';
 import { typingWeekly, typingOverall } from '../features/typingStats.js';
-import { typingStreak, aggregateKeys, fingerStats, keyFinger } from '../features/typingUpgrades.js';
+import { typingStreak, aggregateKeys, fingerStats, keyFinger, keyWpm, handSpeed } from '../features/typingUpgrades.js';
 import { runsCsv } from '../features/typingChallenge.js';
 import { saveTextToFile } from '../features/fileSystem.js';
 import { keyboardRows } from '../features/keyboards.js';
@@ -46,9 +46,12 @@ function TpChart({ runs }) {
 // Keyboard-shaped error-rate heatmap (Keybr/TIPP10-style) from the aggregated per-key profile.
 // Keys with under 5 attempts stay neutral — one early slip shouldn't paint a key red for weeks.
 const HEAT_ROWS = ['1234567890', 'qwertyuiop', 'asdfghjkl;', 'zxcvbnm,.'];
-function KeyHeatmap({ agg }) {
+function KeyHeatmap({ agg, mode = 'errors' }) {
   const rates = Object.values(agg).filter((v) => v.n >= 5).map((v) => v.err / v.n);
   const maxRate = Math.max(0.02, ...rates);
+  // Speed view: each key's reach-time WPM against your median — slower keys glow amber→red.
+  const speeds = Object.values(agg).map((v) => keyWpm(v)).filter((x) => x != null).sort((a, b) => a - b);
+  const median = speeds.length ? speeds[speeds.length >> 1] : null;
   return (
     <div className="tp-heat">
       {HEAT_ROWS.map((row, ri) => (
@@ -57,12 +60,20 @@ function KeyHeatmap({ agg }) {
             const v = agg[ch];
             const rate = v && v.n >= 5 ? v.err / v.n : null;
             const heat = rate != null ? Math.min(1, rate / maxRate) : 0;
+            const w = keyWpm(v);
+            const slow = w && median ? Math.max(0, Math.min(1, (median / w - 1) / 0.6)) : 0; // 60% slower than median = full colour
+            const style = mode === 'speed'
+              ? (w ? { background: slow > 0 ? `color-mix(in srgb, #e0861e ${Math.round(12 + slow * 70)}%, transparent)` : 'color-mix(in srgb, #2e9d4f 18%, transparent)' } : undefined)
+              : (rate != null && rate > 0 ? { background: `color-mix(in srgb, #d9534f ${Math.round(12 + heat * 70)}%, transparent)` } : undefined);
+            const title = mode === 'speed'
+              ? (w ? `${ch} · ~${Math.round(w)} wpm reach speed (${v.t} timed keystrokes) · ${keyFinger(ch) || ''}` : `${ch} — no timing yet (new runs record it)`)
+              : (v?.n ? `${ch} · ${v.err}/${v.n} errors (${((v.err / v.n) * 100).toFixed(1)}%) · ${keyFinger(ch) || ''}` : `${ch} — not enough data yet`);
             return (
               <span
                 key={ch}
-                className={`tp-heat-key${v?.n ? '' : ' unused'}`}
-                style={rate != null && rate > 0 ? { background: `color-mix(in srgb, #d9534f ${Math.round(12 + heat * 70)}%, transparent)` } : undefined}
-                title={v?.n ? `${ch} · ${v.err}/${v.n} errors (${((v.err / v.n) * 100).toFixed(1)}%) · ${keyFinger(ch) || ''}` : `${ch} — not enough data yet`}
+                className={`tp-heat-key${(mode === 'speed' ? w : v?.n) ? '' : ' unused'}`}
+                style={style}
+                title={title}
               >
                 {ch}
               </span>
@@ -80,6 +91,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
   // On by default: raw WPM tracks the text as much as the typist, so an un-normalised trend calls a
   // week of dense text a slump. The toggle is there because the raw number is still what you felt.
   const [adjust, setAdjust] = useState(true);
+  const [heatMode, setHeatMode] = useState('errors'); // keyboard heatmap: errors | speed
   // Column filters: weekly summaries and recent runs (regex text · min/max numbers · from/to dates).
   const NO_WF = { week: ['', ''], runs: ['', ''], avg: ['', ''], best: ['', ''], acc: ['', ''], words: ['', ''] };
   const NO_RUNF = { when: ['', ''], mode: '', device: 'all', text: ['', ''], net: ['', ''], gross: ['', ''], acc: ['', ''], cons: ['', ''], words: ['', ''], time: ['', ''], tier: '' };
@@ -108,7 +120,8 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
     const streak = typingStreak(runs, Date.now());
     const keyAgg = aggregateKeys(runs);       // per-key attempts+errors (runs since the upgrade)
     const fingers = fingerStats(keyAgg);
-    return { n, best, avgNet, avgAcc, topErr, streak, keyAgg, fingers };
+    const hands = handSpeed(keyAgg);
+    return { n, best, avgNet, avgAcc, topErr, streak, keyAgg, fingers, hands };
   }, [runs]);
 
   async function clearAll() {
@@ -288,12 +301,25 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
 
           {Object.keys(stats.keyAgg).length > 0 && (
             <>
-              <div className="tp-section">Keyboard heatmap</div>
+              <div className="tp-section">Keyboard heatmap
+                <span className="lj-viewtoggle" role="tablist" aria-label="Heatmap" style={{ marginLeft: 8 }}>
+                  <button className={heatMode === 'errors' ? 'on' : ''} onClick={() => setHeatMode('errors')}>Errors</button>
+                  <button className={heatMode === 'speed' ? 'on' : ''} onClick={() => setHeatMode('speed')}>Speed</button>
+                </span>
+              </div>
               <p className="settings-note" style={{ margin: '0 0 4px' }}>
                 Error rate per key across your runs — the redder, the more that key misfires under
                 your fingers. Pick the matching row drill to work on it.
               </p>
-              <KeyHeatmap agg={stats.keyAgg} />
+              <KeyHeatmap agg={stats.keyAgg} mode={heatMode} />
+              {heatMode === 'speed' && (
+                <p className="settings-note" style={{ margin: '4px 0' }}>
+                  {stats.hands.L && stats.hands.R
+                    ? <>Left hand ~<b>{Math.round(stats.hands.L)}</b> wpm · right hand ~<b>{Math.round(stats.hands.R)}</b> wpm{Math.abs(stats.hands.L - stats.hands.R) / Math.max(stats.hands.L, stats.hands.R) > 0.1 ? ` — your ${stats.hands.L < stats.hands.R ? 'left' : 'right'} hand is the slower one` : ' — evenly matched'}.</>
+                    : 'Key timing is recorded from now on — type a few runs to fill this in.'}
+                  {' '}Amber keys are slower than your median; 🩹 Weak spots (typing mode list) drills them.
+                </p>
+              )}
               {stats.fingers.length > 0 && (
                 <div className="tp-fingers">
                   {stats.fingers.map((f) => (
