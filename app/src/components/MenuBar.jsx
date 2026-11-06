@@ -26,6 +26,7 @@ const MENUS = {
     { label: 'Open Unfinished Only (skip what is finished)...', action: 'open-unfinished', icon: '📖'},
     { label: 'Bulk Add from Folder...', action: 'bulk-add', icon: '📂'},
     { label: 'Open from Clipboard', shortcut: 'Ctrl+B', action: 'open-clip', icon: '📋'},
+    { label: 'Export as Bionic EPUB (e-ink)...', action: 'export-bionic', icon: '📗'},
     { label: 'Grab Text (OCR)...', shortcut: 'Ctrl+Shift+G', action: 'grab', icon: '📸'},
     { label: 'Grab from Web URL...', action: 'web-grab', icon: '🕸️'},
     { label: 'Show File Location...', action: 'reveal-file', icon: '📁'},
