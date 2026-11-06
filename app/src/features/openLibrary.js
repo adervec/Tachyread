@@ -68,3 +68,37 @@ export async function olFetch(book) {
   const doc = pickOlMatch(await r.json(), book);
   return { doc, patch: doc ? olPatch(book, doc) : {} };
 }
+
+// ── Add by ISBN (typed or scanned) ────────────────────────────────────────────────────────────────
+// ISBN-10 / ISBN-13 checksum check (a camera misread or a non-book EAN fails it). Returns the clean
+// digits, or null.
+export function validIsbn(raw) {
+  const s = String(raw || '').replace(/[^0-9Xx]/g, '').toUpperCase();
+  if (s.length === 13 && /^97[89]\d{10}$/.test(s)) {
+    const sum = [...s.slice(0, 12)].reduce((a, d, i) => a + Number(d) * (i % 2 ? 3 : 1), 0);
+    return (10 - (sum % 10)) % 10 === Number(s[12]) ? s : null;
+  }
+  if (s.length === 10 && /^\d{9}[\dX]$/.test(s)) {
+    const sum = [...s].reduce((a, d, i) => a + (d === 'X' ? 10 : Number(d)) * (10 - i), 0);
+    return sum % 11 === 0 ? s : null;
+  }
+  return null;
+}
+
+// An ISBN search result → a new tracker book (to-read), or null when Open Library doesn't know it.
+export function isbnBook(json, isbn) {
+  const d = json?.docs?.[0];
+  if (!d?.title) return null;
+  const b = { title: d.title, author: d.author_name?.[0] || '', isbn, fnf: 'F', type: 'long', genre: '' };
+  if (d.number_of_pages_median) b.pages = d.number_of_pages_median;
+  if (d.first_publish_year) b.pubDate = String(d.first_publish_year);
+  if (d.cover_i) b.coverId = d.cover_i;
+  return b;
+}
+export async function lookupIsbn(raw) {
+  const isbn = validIsbn(raw);
+  if (!isbn) throw new Error('That isn’t a valid ISBN (check the digits).');
+  const r = await fetch(olSearchUrl({ isbn }));
+  if (!r.ok) throw new Error(`Open Library: HTTP ${r.status}`);
+  return isbnBook(await r.json(), isbn);
+}

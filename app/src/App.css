@@ -1620,6 +1620,8 @@
 .line-row.status-NavSessionRead .text { color: var(--nav-session-read-fg); background: color-mix(in srgb, var(--nav-session-read-fg) 10%, transparent); border-radius: 3px; }
 .line-row.status-Current { background: var(--current-line-bg); }
 .word.user-hl { background: color-mix(in srgb, #f5c518 42%, transparent); border-radius: 2px; }
+.isbn-add { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.isbn-scan video { width: 280px; max-width: 100%; border-radius: 6px; background: #000; display: block; margin: 6px 0; }
 .ft-results { max-height: 60vh; overflow: auto; }
 .ft-doc { padding: 6px 0; border-bottom: 1px solid var(--divider); }
 .ft-doc-h { display: flex; gap: 8px; align-items: baseline; }

@@ -4,7 +4,7 @@ Backlog from the 2026-11 GitHub sweep (sharing/lending items excluded by choice)
 delete an item when it ships.
 
 ## Chunk 7 — Getting books in
-- ISBN barcode scan (BarcodeDetector / zxing).
+- Barcode scanning on Windows/Linux desktop Chrome (no BarcodeDetector there; would need a zxing-wasm dependency). Typed ISBN works everywhere.
 - Shelf-photo intake via AI, reviewed through Cowork.
 - URL / share-target article import (Readability).
 - OPDS catalogue browsing.
