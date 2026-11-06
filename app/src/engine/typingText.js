@@ -18,13 +18,16 @@ export function normalizeTypography(t) {
 }
 
 const ASCII_PRINTABLE = /[\x20-\x7E]/;
+// Letters NFD can't split into base + accent (so they'd otherwise vanish): ø→o, ł→l, đ→d, ı→i.
+const ACCENT_MAP = { ø: 'o', Ø: 'O', ł: 'l', Ł: 'L', đ: 'd', Đ: 'D', ı: 'i' };
 
 // Reduce a token to only what a US-QWERTY keyboard can produce: normalize typographic look-alikes,
 // strip combining accents to their base letter (café → cafe), and drop any remaining non-ASCII. The
 // point is WYSIWYG — the drill shows exactly what you type, never a character you can't reach.
 export function toKeyboard(s) {
   let out = '';
-  for (const ch of normalizeTypography(s).normalize('NFD')) {
+  for (const ch0 of normalizeTypography(s).normalize('NFD')) {
+    const ch = ACCENT_MAP[ch0] || ch0; // ø ł đ ı have no combining accent to strip
     const cp = ch.codePointAt(0);
     if (cp >= 0x0300 && cp <= 0x036f) continue; // combining diacritic → drop (base letter stays)
     if (cp >= 0x20 && cp <= 0x7e) out += ch;    // keep only typeable ASCII

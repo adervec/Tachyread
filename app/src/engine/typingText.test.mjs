@@ -92,3 +92,6 @@ const pool = ghostCharsAt('end.)', 3);
 assert.ok(pool.has('.') && pool.has(')'), 'consecutive ghosts pool at the boundary');
 
 console.log('ok — transforms compose, accents transliterate, decorative tokens skipped, WYSIWYG, ghosts absorbable');
+
+// letters with no separable accent still map to their base letter (they used to vanish)
+assert.equal(toKeyboard('smørrebrød Łódź Đakovo'), 'smorrebrod Lodz Dakovo');

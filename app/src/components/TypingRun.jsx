@@ -154,6 +154,10 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // the previous one — so a mistake means retyping the word, not nibbling a letter.
   const wordBackOnly = !!cfg.wordBackOnly && !confidence;
   const fixErrors = !!cfg.fixErrors;     // middle ground: errors land, backspace works, but space only advances a CORRECT word
+  // Read-ahead: how many words past the current one stay visible (null = all); memory hides the
+  // current word's letters once you start typing it.
+  const readAhead = cfg.readAhead == null ? null : Math.max(0, Math.min(3, Number(cfg.readAhead)));
+  const memoryMode = !!cfg.memoryMode;
   const blind = !!cfg.blind;             // hide per-char verdicts while running; the numbers tell the tale at the end
   const penaltyWords = Math.max(0, Math.min(9, Number(cfg.penaltyWords) || 0)); // setback mode: words erased per mistyped word
   // Display-only variants of the transforms (the REQUIRED typing is identical either way):
@@ -289,6 +293,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const tickTimer = useRef(null);
   const linesRef = useRef(null);
   const activeRef = useRef(null);
+  const [capsOn, setCapsOn] = useState(false); // ⇪ warning, read off each keystroke
   const caretRef = useRef(null);
   // Esc-during-run guard: first press arms (hint shows), second within 2.5s actually ends.
   const escArmRef = useRef(0);
@@ -910,6 +915,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     focus();
   }
   function onKeyDown(e) {
+    const caps = !!e.getModifierState?.('CapsLock');
+    if (caps !== capsOn) setCapsOn(caps);
     if (wordBackOnly && e.key === 'Backspace' && phase === 'running') {
       e.preventDefault();
       if (e.ctrlKey || e.altKey || e.metaKey) clearWord();
@@ -1160,6 +1167,12 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             <Tile icon="📟" label="Ticker" state={cfg.ticker ? 'single line' : 'off'} on={!!cfg.ticker}
               onClick={() => patchCfg({ ticker: !cfg.ticker })} disabled={locked || oneWord}
               title="Show the passage as one horizontal ticker line — the active word holds a fixed point while committed words stream off to the left" />
+            <Tile icon="👁" label="Read-ahead" state={readAhead == null ? 'all words' : readAhead === 0 ? 'current only' : `next ${readAhead}`} on={readAhead != null}
+              onClick={() => patchCfg({ readAhead: readAhead == null ? 3 : readAhead === 0 ? null : readAhead - 1 })} disabled={locked}
+              title="Only show this many words past the one you're typing — trains reading ahead while you type (all → 3 → 2 → 1 → current only)" />
+            <Tile icon="🧠" label="Memory" state={memoryMode ? 'on' : 'off'} on={memoryMode}
+              onClick={() => patchCfg({ memoryMode: !memoryMode })} disabled={locked}
+              title="The word you're typing vanishes as soon as you start it — glance, then type it from memory" />
             <div className="tt-group">Discipline</div>
             <Tile icon="①" label="One word" state={oneWord ? 'on' : 'off'} on={oneWord}
               onClick={() => patchCfg({ oneWord: !oneWord })} disabled={locked}
@@ -1237,6 +1250,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       <div className={`tr-viewport${ticker ? ' ticker-vp' : ''}`} style={{ display: phase === 'done' ? 'none' : undefined, ...(settings.fontFamily ? { fontFamily: settings.fontFamily } : null) }}>
         {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{count}</div>}
         {escArmed && phase === 'running' && <div className="tr-esc-hint" role="status">Esc again to end the run</div>}
+        {capsOn && !escArmed && <div className="tr-esc-hint tr-caps" role="status">⇪ Caps Lock is on</div>}
         {hotBlocked && phase === 'running' && !escArmed && <div className="tr-esc-hint" role="status">Shortcut ignored while you’re typing — pause a moment to use it</div>}
         {painAt > 0 && stopOnError && phase === 'running' && <div className={`tr-pain ${painFx}`} key={painAt} aria-hidden="true" />}
         {penalty && <div className="tr-penalty" role="status" key={penalty.at}>💥 −{penalty.n} word{penalty.n > 1 ? 's' : ''}</div>}
@@ -1249,7 +1263,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             if (oneWord && i !== pos) return null; // one-word mode shows only the current word
             if (ticker && i < pos - 12) return null; // ticker: far-committed words have slid off left
             const vc = (i === voicePos ? ' voice' : '') // word the racing voice is speaking…
-              + (i === pacePos && phase === 'running' && paceWpmVal > 0 ? ' pace' : ''); // …and the 👻 ghost's word
+              + (i === pacePos && phase === 'running' && paceWpmVal > 0 ? ' pace' : '') // …and the 👻 ghost's word
+              + (readAhead != null && i > pos + readAhead ? ' ra-hidden' : ''); // beyond the read-ahead: kept in layout, not shown
             // Display-only extras: fully-skipped decorative tokens ahead of this word render as
             // ghost words, and the book's own line breaks can show — the typed words are identical.
             // With punctuation shown they can't be typed either (no letter/digit), so they read as
@@ -1297,7 +1312,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                 }
                 if (shownBuf.length >= len) chars.push(<span key="ce" className="trc caret-anchor" />);
               }
-              wordEl = <span className={`trw active${vc}`} ref={activeRef}>{chars}{' '}</span>;
+              wordEl = <span className={`trw active${vc}${memoryMode && buf ? ' mem' : ''}`} ref={activeRef}>{chars}{' '}</span>;
             }
             return <Fragment key={i}>{preEl}{wordEl}{brkEl}</Fragment>;
           })}
