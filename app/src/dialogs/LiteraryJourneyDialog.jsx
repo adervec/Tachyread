@@ -1224,7 +1224,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               <button onClick={() => fileRef.current?.click()}>Choose file…</button>
 
               <div className="rh-section-h">Import from Goodreads / StoryGraph</div>
-              <ShelfImportPanel books={books} onDone={reload} />
+              <ShelfImportPanel books={books} onDone={reload} apiKey={global?.anthropicKey || ''} model={global?.anthropicModel || 'claude-sonnet-5'} />
 
               <div className="rh-section-h">Export everything</div>
               <div className="lj-inline">

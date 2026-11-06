@@ -5,7 +5,6 @@ delete an item when it ships.
 
 ## Chunk 7 — Getting books in
 - Barcode scanning on Windows/Linux desktop Chrome (no BarcodeDetector there; would need a zxing-wasm dependency). Typed ISBN works everywhere.
-- Shelf-photo intake via AI, reviewed through Cowork.
 - OPDS catalogue browsing.
 - Side-by-side parallel reading.
 
