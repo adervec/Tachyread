@@ -206,6 +206,10 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
       <div className={`vf-status${errKey ? ' err' : ''}`} role="status" aria-live="polite">
         {errText || STATUS[info.status] || STATUS.starting}{info.lang ? <span className="vf-lang"> · {info.lang}</span> : ''}
         {info.move && !errKey && <span className={`vf-move${info.move.startsWith('+') ? ' ok' : ''}`}> · {info.move}</span>}
+        {info.fillers > 0 && !errKey && (() => {
+          const mins = Math.max(1, (Date.now() - (info.since || Date.now())) / 60000); // eslint-disable-line react-hooks/purity
+          return <span className="vf-fillers" title="Filler words heard that aren't in the text (um, uh, er, like, you know…) — kept in the speech log"> · {info.fillers} filler{info.fillers === 1 ? '' : 's'} ({(info.fillers / mins).toFixed(1)}/min)</span>;
+        })()}
       </div>
       <Lineup info={info} docWords={docWords} wordIndex={wordIndex} />
       {onTune && (

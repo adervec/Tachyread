@@ -15,20 +15,21 @@ export const SPEECH_LOG_FIELDS = {
   exact: 'words read exactly', near: 'words read approximately (misheard / mispronounced)', skip: 'words skipped over',
   q: 'mean match quality of advanced words, 0–100',
   voice: 'session-average voice scores 0–100 {overall, scores:{pace, clarity, resonantDepth, expressiveness, nonNasal, noUptalk, projection, breath}}; null when live voice feedback was off',
-  m: 'per-minute trend: [minute since start, words advanced, mean quality 0–100, voice overall or null]',
+  m: 'per-minute trend: [minute since start, words advanced, mean quality 0–100, voice overall or null, filler words]',
+  f: 'filler words heard that were not in the text (um, uh, er, like, you know…)',
 };
 
 export const SPEECH_LOG_CAP = 2000; // ~1–2 KB each → a few MB at most
 
 export function speechSession({ at = Date.now(), cs = null, name = '', lang = '', strict = null, from = 0 } = {}) {
-  const rec = { v: 1, at, end: at, cs, name, lang, strict, from, to: from, words: 0, moves: 0, misses: 0, exact: 0, near: 0, skip: 0, q: 0, voice: null, m: [] };
+  const rec = { v: 1, at, end: at, cs, name, lang, strict, from, to: from, words: 0, moves: 0, misses: 0, exact: 0, near: 0, skip: 0, q: 0, voice: null, f: 0, m: [] };
   let qSum = 0, qN = 0;
   const vSum = {}, vN = {};
   let overallSum = 0, overallN = 0;
   const minutes = new Map(); // minute → { words, qSum, qN, oSum, oN }
   const bucket = (t) => {
     const k = Math.max(0, Math.floor((t - at) / 60000));
-    if (!minutes.has(k)) minutes.set(k, { words: 0, qSum: 0, qN: 0, oSum: 0, oN: 0 });
+    if (!minutes.has(k)) minutes.set(k, { words: 0, qSum: 0, qN: 0, oSum: 0, oN: 0, f: 0 });
     return minutes.get(k);
   };
   return {
@@ -44,6 +45,7 @@ export function speechSession({ at = Date.now(), cs = null, name = '', lang = ''
       }
     },
     miss() { rec.misses++; },
+    fillers(n, t = Date.now()) { if (n > 0) { rec.f += n; bucket(t).f += n; } },
     // A live voice-score snapshot ({ scores, overall }) — averaged over the session.
     voice(v, t = Date.now()) {
       if (!v?.scores) return;
@@ -60,7 +62,7 @@ export function speechSession({ at = Date.now(), cs = null, name = '', lang = ''
         rec.voice = { overall: Math.round(overallSum / overallN), scores };
       }
       rec.m = [...minutes.entries()].sort((a, b) => a[0] - b[0])
-        .map(([k, b]) => [k, b.words, b.qN ? Math.round((b.qSum / b.qN) * 100) : 0, b.oN ? Math.round(b.oSum / b.oN) : null]);
+        .map(([k, b]) => [k, b.words, b.qN ? Math.round((b.qSum / b.qN) * 100) : 0, b.oN ? Math.round(b.oSum / b.oN) : null, b.f]);
       return rec;
     },
   };
@@ -68,3 +70,19 @@ export function speechSession({ at = Date.now(), cs = null, name = '', lang = ''
 
 // Worth keeping? (Not a session that was switched on and straight off again.)
 export const keepSession = (rec) => rec.words > 0 || (rec.voice && rec.end - rec.at > 30000);
+
+// Filler words in what the recogniser heard — only the ones that AREN'T in the text you're reading
+// there ("like" in the book is just reading). Multi-word fillers ("you know", "i mean") count once.
+// ponytail: browser recognisers often drop "um"/"uh" themselves, so this undercounts; fine for a trend.
+const FILLER_1 = new Set(['um', 'umm', 'uh', 'uhh', 'er', 'erm', 'ah', 'eh', 'hmm', 'mm', 'like', 'basically', 'actually', 'literally']);
+const FILLER_2 = ['you know', 'i mean', 'kind of', 'sort of'];
+const norm = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\s']/gu, ' ').replace(/\s+/g, ' ').trim();
+export function countFillers(heard, textWindow) {
+  const h = ` ${norm(heard)} `, t = ` ${norm(textWindow)} `;
+  const occ = (hay, w) => hay.split(` ${w} `).length - 1;
+  let n = 0;
+  let rest = h;
+  for (const p of FILLER_2) { const k = Math.max(0, occ(rest, p) - occ(t, p)); n += k; rest = rest.split(` ${p} `).join(' '); }
+  for (const w of new Set(rest.trim().split(' '))) if (FILLER_1.has(w)) n += Math.max(0, occ(rest, w) - occ(t, w));
+  return n;
+}

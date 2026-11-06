@@ -9,7 +9,6 @@ delete an item when it ships.
 ## Chunk 8 — Audio & speaking
 - M4B export with chapters + cover.
 - Pause/voice tags in narration text; SRT/VTT timing export.
-- Filler-word counter + speaking-pace trend in the speech log.
 - Teleprompter mode (mirror, voice-follow scroll, saved take).
 - Kokoro in-browser TTS with word-exact highlighting.
 - Audiobook-to-text sync (forced alignment of a user's own audiobook).
