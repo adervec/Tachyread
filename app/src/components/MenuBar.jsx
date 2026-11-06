@@ -29,6 +29,7 @@ const MENUS = {
     { label: 'Export as Bionic EPUB (e-ink)...', action: 'export-bionic', icon: '📗'},
     { label: 'Grab Text (OCR)...', shortcut: 'Ctrl+Shift+G', action: 'grab', icon: '📸'},
     { label: 'Grab from Web URL...', action: 'web-grab', icon: '🕸️'},
+    { label: 'Browse Online Catalogs (OPDS)...', action: 'opds', icon: '🏛️'},
     { label: 'Show File Location...', action: 'reveal-file', icon: '📁'},
     { label: 'Save Tab Text...', action: 'save-tab', icon: '💾'},
     { label: 'HTML Tools (guide & print to HTML)...', action: 'html-tools', icon: '🧰'},

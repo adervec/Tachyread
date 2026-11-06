@@ -222,7 +222,7 @@ export function countOffDefaultSettings(settings, defaults) {
 // restores every preference to its default but preserves these so a reset never destroys the
 // user's library, history, saved work, sync setup, or their separate Default Tab Settings.
 export const GLOBAL_DATA_KEYS = new Set([
-  'recentFiles', 'ocrTemplates', 'ocrProfiles', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey', 'translateKey', 'readwiseKey', 'settingsProfiles',
+  'recentFiles', 'ocrTemplates', 'ocrProfiles', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey', 'translateKey', 'readwiseKey', 'opdsCatalogs', 'settingsProfiles',
   'readingList', 'drillBestSpan', 'bestFlowWpm', 'bestDictationWpm', 'webcamCalib', 'handCalib', 'sync',
   'deviceName', 'fileDefaults', 'ambient', 'customCursors', 'crosshairStable',
   // The narration queue and its measured run history are DATA, not preferences: a saved settings
