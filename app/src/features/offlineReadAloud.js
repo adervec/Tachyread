@@ -6,9 +6,13 @@
 //     the app's gesture-unlocked <audio> element (real media → survives an Android screen lock);
 //   • otherwise fall back to the light native Web Speech voice for that chunk (not lock-proof, but no
 //     heavy on-device synthesis). The status/coverage nudges you to pre-generate for lock-screen play.
+//   • …unless "fill gaps with Kokoro" is on (getLiveVoice → a kokoro: voice): then a chunk with no
+//     clip is synthesized on the device as you reach it (the next one while this one plays) and SAVED
+//     as a clip, so each chunk is generated once. A failed synthesis still falls back to native.
 
 import { getSpeechAudio } from './mediaSession.js';
-import { getAudioClip } from '../state/storage.js';
+import { getAudioClip, addAudioClip } from '../state/storage.js';
+import { createLocalEngine, isKokoro, blobDurationMs } from './localTts.js';
 import { audiobookChunks } from '../document/readerDocument.js';
 
 // Stored-clip object URL for a chunk, or null if nothing is generated (we do NOT synthesize here).
@@ -18,7 +22,19 @@ async function storedUrl(doc, chunk) {
 }
 
 // getDoc() → the active doc ({words, lines, wordToLine, contentChecksum}).
-export function createOfflineReadAloud({ getDoc, getIndex, setIndex, getVoiceName, getRate, onEnd, onStatus }) {
+export function createOfflineReadAloud({ getDoc, getIndex, setIndex, getVoiceName, getRate, onEnd, onStatus, getLiveVoice }) {
+  let engine = null; // Kokoro, created on first gap-fill and kept for the driver's life (model stays loaded)
+  // A chunk's audio: its stored clip, else (gap-fill on) a fresh Kokoro synthesis saved as its clip.
+  async function chunkUrl(doc, chunk) {
+    const u = await storedUrl(doc, chunk).catch(() => null);
+    const voice = getLiveVoice?.();
+    if (u || !isKokoro(voice) || !(chunk.text || '').trim()) return u;
+    try {
+      const blob = await (engine ||= createLocalEngine()).synth(chunk.text.trim(), voice);
+      await addAudioClip(doc.contentChecksum, chunk.startLine, blob, { source: 'tts', voiceId: voice, durationMs: await blobDurationMs(blob), spanEndLine: chunk.endLine });
+      return URL.createObjectURL(blob);
+    } catch { return null; }
+  }
   let active = false;
   let gen = 0;
   let prefetch = null; // { ci, promise }
@@ -61,7 +77,10 @@ export function createOfflineReadAloud({ getDoc, getIndex, setIndex, getVoiceNam
 
     let url;
     if (prefetch && prefetch.ci === ci) url = await prefetch.promise;
-    else url = await storedUrl(doc, chunk).catch(() => null);
+    else {
+      if (isKokoro(getLiveVoice?.())) onStatus?.('synth');
+      url = await chunkUrl(doc, chunk);
+    }
     prefetch = null;
     if (myGen !== gen || !active) { revoke(url); return; }
 
@@ -79,18 +98,22 @@ export function createOfflineReadAloud({ getDoc, getIndex, setIndex, getVoiceNam
       a.onerror = advance;
       onStatus?.('playing');
       try { await a.play(); } catch { /* element is gesture-unlocked; ignore transient */ }
-      // Prefetch the next STORED clip while this one plays (no synthesis).
-      const ni = ci + 1;
-      if (ni < chunks.length && myGen === gen && active) {
-        const promise = storedUrl(doc, chunks[ni]).then((u) => { if (u) urls.add(u); return u; }).catch(() => null);
-        prefetch = { ci: ni, promise };
-      }
+      prefetchNext(doc, ci, myGen);
     } else if (text) {
       onStatus?.('native'); // no pre-generated clip → light native voice, no heavy Piper synth
       speakNative(text, advance);
+      prefetchNext(doc, ci, myGen);
     } else {
       playChunk(ci + 1); // empty chunk
     }
+  }
+
+  // Get the next chunk's audio ready while this one plays (a stored clip, or a Kokoro gap-fill).
+  function prefetchNext(doc, ci, myGen) {
+    const ni = ci + 1;
+    if (ni >= chunks.length || myGen !== gen || !active) return;
+    const promise = chunkUrl(doc, chunks[ni]).then((u) => { if (u) urls.add(u); return u; }).catch(() => null);
+    prefetch = { ci: ni, promise };
   }
 
   function start() {

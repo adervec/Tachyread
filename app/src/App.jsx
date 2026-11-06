@@ -760,6 +760,7 @@ function AppInner() {
             getRate: () => ttsSpeedRef.current,
             onEnd: () => setPlaying(false),
             onStatus: (s) => setTtsStatus(s),
+            getLiveVoice: () => stateGlobalRef.current.kokoroLive || null, // fill gaps with Kokoro
           })
         : createReadAloud({
             getWords: () => activeTabRef.current?.doc.words || [],
@@ -3428,9 +3429,9 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
         <StatusText text={state.appStatus} seq={state.appStatusSeq} />
         {playing && !!activeTab?.settings?.readAloud && (
           <span className="webcam-badge wb-watching" title="Read-aloud voice + how much of this book is pre-generated as an audiobook. Pre-generate more in Audio → Audiobook Manager for lock-screen playback (ungenerated parts use the light native voice).">
-            🗣 {state.global.offlineVoice ? voiceLabel(state.global.offlineVoiceId || defaultVoiceForLang(state.global.language || 'en')).split(' · ')[0] : (activeTab.settings.annunciateVoice || 'browser voice')}
+            🗣 {state.global.offlineVoice ? voiceLabel(state.global.offlineVoiceId || defaultVoiceForLang(state.global.language || 'en')).split(' · ')[0] : (activeTab.settings.annunciateVoice || 'browser voice')}{state.global.offlineVoice && state.global.kokoroLive ? ' + Kokoro gaps' : ''}
             {abCoverage ? ` · 📚 ${abCoverage.pct}%` : ''}
-            {ttsStatus === 'native' ? ' · native' : ''}
+            {ttsStatus === 'native' ? ' · native' : ttsStatus === 'synth' ? ' · Kokoro…' : ''}
           </span>
         )}
         {/* ONE unified biometric badge (was three separate 📷 / 🖐 / 🎤 buttons): every active
