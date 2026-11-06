@@ -32,7 +32,6 @@ assert.equal(buildPassage('passage', { docWords: doc, startIndex: 3990, max: 186
 // Regression guard: the old constant is no longer the ceiling for a long run.
 assert.ok(buildPassage('passage', { docWords: doc, startIndex: 0, max: passageWordsFor('words', 1000) }).length > 600);
 
-console.log('typingPassage: all cases pass');
 
 // Gibberish + numbers drills: every token keeps a letter/digit (symbol-only tokens get dropped by
 // the run's transform), and gibberish really mixes case, digits and symbols.
@@ -63,12 +62,15 @@ console.log('typingPassage: all cases pass');
 // weak-spot passage
 {
   const { weakspotPassage } = await import('./typingModes.js');
-  const p = weakspotPassage({ keys: ['q'], words: ['rhythm'] }, 40, 1);
+  const p = weakspotPassage({ keys: ['w'], words: ['rhythm'] }, 40, 1);
   assert.equal(p.length, 40);
   assert.ok(p.includes('rhythm'));
-  assert.ok(p.filter((w) => w !== 'rhythm').every((w) => w.includes('q')), 'everything else drills the weak key');
+  assert.ok(p.filter((w) => w.includes('w')).length >= 6, 'weak key drilled');
+  assert.ok(new Set(weakspotPassage({ keys: [], words: ['rhythm'] }, 30, 0)).size > 10, 'one missed word is padded, not repeated 30×');
   assert.equal(weakspotPassage(null, 20).length, 20, 'no history → common words');
   const fromBook = weakspotPassage({ keys: ['q'], words: [] }, 30, 0, ['The', 'Queen’s', 'quiet', 'garden.', 'quiet']);
-  assert.ok(fromBook.includes('quiet') && fromBook.every((w) => w.includes('q')), 'book words on the weak key, cleaned + deduped');
+  assert.ok(fromBook.includes('quiet') && fromBook.filter((w) => w.includes('q')).length >= 2, 'book words on the weak key, cleaned + deduped (then padded)');
   assert.equal(buildPassage('weakspot', { max: 10, weak: { keys: [], words: ['abc'] } }).filter((w) => w === 'abc').length > 0, true);
 }
+
+console.log('typingPassage: all cases pass');
