@@ -12,6 +12,8 @@ import { reviewPassage } from '../features/typingUpgrades.js';
 export const TYPING_MODES = [
   { id: 'passage', label: 'Passage', kind: 'doc', desc: 'Type your book from where you are (Monkeytype-style).' },
   { id: 'commonWords', label: 'Common words', kind: 'drill', desc: 'The most frequent English words — build raw speed.' },
+  { id: 'bigrams', label: 'Bigrams', kind: 'drill', desc: 'The most common English letter pairs (th, he, in…), each typed three times.' },
+  { id: 'trigrams', label: 'Trigrams', kind: 'drill', desc: 'The most common English letter triples (the, and, ing…), each typed three times.' },
   { id: 'homeRow', label: 'Home row', kind: 'drill', desc: 'a s d f j k l ; drill.' },
   { id: 'topRow', label: 'Top row', kind: 'drill', desc: 'q w e r t y u i o p drill.' },
   { id: 'bottomRow', label: 'Bottom row', kind: 'drill', desc: 'z x c v b n m drill.' },
@@ -55,6 +57,22 @@ function shuffled(arr, seed = 0) {
 }
 
 const LOWER = 'abcdefghijklmnopqrstuvwxyz';
+
+// Most frequent English letter n-grams inside words (cross-word ones like "nth"/"oft" left out).
+const BIGRAMS = 'th he in er an re on at en nd ti es or te of ed is it al ar st to nt ng se ha as ou io le ve co me de hi ri ro ic ne ea ra ce li ch ll be ma si om ur'.split(' ');
+const TRIGRAMS = 'the and ing ion ent her for tha ter tio ere ate ati hat est all ver his ith ers res are ons rea ear was sta thi tin ted con men pro com per ess ive int ound ight'.split(' ').filter((t) => t.length === 3);
+
+// ngram-type-style pattern drill: each n-gram typed `reps` times in a row, patterns shuffled.
+export function ngramDrill(list, count, seed = 0, reps = 3) {
+  const out = [];
+  for (let round = 0; out.length < count; round++) {
+    for (const g of shuffled(list, seed + round)) {
+      for (let r = 0; r < reps && out.length < count; r++) out.push(g);
+      if (out.length >= count) break;
+    }
+  }
+  return out;
+}
 
 // Random "words" built from a character set — the Mavis-Beacon-style key drills.
 function drillWords(chars, count, seed = 0) {
@@ -101,6 +119,8 @@ export function buildPassage(mode, { docWords = [], startIndex = 0, max = 600, s
       while (out.length < max) out.push(...shuffled(COMMON_WORDS, seed + i++));
       return out.slice(0, max);
     }
+    case 'bigrams': return ngramDrill(BIGRAMS, max, seed);
+    case 'trigrams': return ngramDrill(TRIGRAMS, max, seed);
     case 'homeRow': return drillWords('asdfghjkl;', max, seed);
     case 'topRow': return drillWords('qwertyuiop', max, seed);
     case 'bottomRow': return drillWords('zxcvbnm,.', max, seed);

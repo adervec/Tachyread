@@ -116,6 +116,7 @@ import { startMicScope, micScopeSupported } from './features/micScope.js';
 import { playLineClick } from './features/clickSound.js';
 import { createMetronome } from './features/metronome.js';
 import { saveTextToFile, saveBlobToFile } from './features/fileSystem.js';
+import { challengeFromHash } from './features/typingChallenge.js';
 import { buildTabPdf } from './features/exportPdf.js';
 import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
@@ -311,6 +312,9 @@ function AppInner() {
   const onGoalComplete = useCallback((label) => {
     setGoalKills((k) => [...k, { label, time: fmtTime(Date.now(), true) }]);
   }, []);
+  // Typing challenge from a #challenge= link: the drill to type and the sender's speed to beat.
+  const [challenge, setChallenge] = useState(null);
+  const [pendingChallenge, setPendingChallenge] = useState(() => challengeFromHash(window.location.hash));
   const [typingRuns, setTypingRuns] = useState([]); // session killfeed of completed typing runs
   const onSaveTypingRun = useCallback((run) => {
     setTypingRuns((r) => [...r, run]);
@@ -1701,6 +1705,35 @@ function AppInner() {
     window.addEventListener('pagehide', onHide);
     return () => window.removeEventListener('pagehide', onHide);
   }, []);
+
+  // A challenge link opens straight into its drill — on the active tab (drills don't use its text),
+  // or on a small placeholder document when nothing is open. The fragment is cleared so a reload
+  // doesn't re-run it.
+  useEffect(() => {
+    const c = pendingChallenge;
+    if (!c) return;
+    if (window.location.hash.includes('challenge=')) window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    if (!activeTab) {
+      if (!state.tabs.length) openFiles([new File(['Typing challenge. The drill is generated from the link, so this page only hosts it.'], 'Typing challenge.txt', { type: 'text/plain' })]);
+      return; // re-runs once the tab is active
+    }
+    patchSettings(activeTab.id, {
+      typing: { ...activeTab.settings.typing, enabled: true, mode: c.mode, runMode: c.runMode, runLimit: c.limit },
+      readAloud: false,
+      speaking: { ...activeTab.settings.speaking, enabled: false },
+    });
+    setChallenge(c);
+    setPendingChallenge(null);
+    setStatus(`🔗 Typing challenge: ${c.limit} ${c.runMode === 'words' ? 'words' : 's'} of ${c.mode}${c.wpm ? ` — beat ${c.wpm} wpm` : ''}.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingChallenge, activeTab?.id]);
+  // Closing typing ends the challenge (only on a real on → off, not while a tab is still arriving).
+  const typingWasOn = useRef(false);
+  useEffect(() => {
+    const on = !!activeTab?.settings.typing?.enabled;
+    if (typingWasOn.current && !on) setChallenge(null);
+    typingWasOn.current = on;
+  }, [activeTab?.settings.typing?.enabled]);
 
   // ── Typing plan runner ──────────────────────────────────────────────────────────────────────
   // A plan runs step by step, set by set; each step's drill config is pushed into the typing
@@ -3123,7 +3156,10 @@ function AppInner() {
                   steps: planState.plan.steps.length,
                   set: planState.set + 1,
                   sets: Math.max(1, planState.plan.steps[planState.step].sets || 1),
+                  passWpm: planState.plan.steps[planState.step].passWpm || 0,
+                  passAcc: planState.plan.steps[planState.step].passAcc || 0,
                 } : null}
+                challenge={challenge}
                 onPlanNext={advancePlan}
                 onPlanExit={exitPlan}
               />

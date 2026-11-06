@@ -11,6 +11,8 @@ import { rateFromIndex } from '../features/tts.js';
 import { fmtTime } from '../features/dateFmt.js';
 import { allTypingRuns } from '../state/storage.js';
 import { applyTheme, THEME_NAMES } from '../state/themes.js';
+import { passesMarks } from '../engine/typingPlans.js';
+import { encodeChallenge } from '../features/typingChallenge.js';
 import { windowWpm, windowSeries, consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress, penaltyRewind } from '../features/typingUpgrades.js';
 import { currentSession, sessionStats, bookForecast } from '../features/typingSession.js';
 import { splitRun, splitsFor } from '../features/typingSplits.js';
@@ -119,12 +121,12 @@ const PendingWord = memo(function PendingWord({ w, orig, vc, bypassSym, noSpecia
 
 const HOT_GUARD_MS = 2000; // how recently you must have typed for shortcuts to be held back
 
-export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns, endFanfare = true, plan = null, onPlanNext, onPlanExit, globalCfg = null, onPatchCfg = null }) {
+export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue, onSaveRun, sessionRuns, endFanfare = true, plan = null, onPlanNext, onPlanExit, globalCfg = null, onPatchCfg = null, challenge = null }) {
   const { doc, settings } = tab;
   // Typing OPTIONS are APP-LEVEL (global.typingCfg): they persist across tabs and launches. Only
   // `enabled` lives per-tab. Old per-tab options act as fallback defaults beneath the global
   // layer; in plan mode the plan's pushed per-tab step config (mode/runMode/runLimit) wins.
-  const cfg = plan
+  const cfg = plan || challenge
     ? { ...(globalCfg || {}), ...(settings.typing || {}) }
     : { ...(settings.typing || {}), ...(globalCfg || {}) };
   // ALL option writes go through here → the app-level store when wired, per-tab otherwise.
@@ -199,7 +201,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // Mavis-Beacon-style drills generated independently of the document. `seed` varies drills on
   // reattempt. 'review' only makes sense right after a run mined problem words — never restored.
   const [gameMode, setGameMode] = useState(cfg.mode === 'review' ? 'passage' : (cfg.mode || 'passage'));
-  const [seed, setSeed] = useState(0);
+  const [seed, setSeed] = useState(() => challenge?.seed ?? 0); // a challenge link pins the drill's seed
   // The last run's problem words, feeding the 🎯 Review-misses drill (Amphetype-style).
   const reviewRef = useRef([]);
   // Persisted run history, loaded once: personal-best detection, the 👻 pace ghost's
@@ -293,7 +295,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const tickTimer = useRef(null);
   const linesRef = useRef(null);
   const activeRef = useRef(null);
-  const [capsOn, setCapsOn] = useState(false); // ⇪ warning, read off each keystroke
+  const [capsOn, setCapsOn] = useState(false);
+  const [shareMsg, setShareMsg] = useState(''); // ⇪ warning, read off each keystroke
   const caretRef = useRef(null);
   // Esc-during-run guard: first press arms (hint shows), second within 2.5s actually ends.
   const escArmRef = useRef(0);
@@ -347,6 +350,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const paceMode = cfg.pace || 'off';
   const sprintSecs = Math.min(15, Math.max(2, Number(cfg.sprintSecs) || 5));
   const paceWpmVal = useMemo(() => {
+    if (challenge?.wpm) return challenge.wpm; // race the challenger
     if (paceMode === 'off') return 0;
     if (paceMode === 'custom') return Math.max(10, Math.min(400, Number(cfg.paceWpm) || 60));
     const all = [...(pastRunsRef.current || []), ...(sessionRuns || [])];
@@ -354,7 +358,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     const last = [...all].sort((a, b) => (a.ts || 0) - (b.ts || 0)).at(-1);
     return last?.netWpm || 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paceMode, cfg.paceWpm, sessionRuns, phase]);
+  }, [paceMode, cfg.paceWpm, sessionRuns, phase, challenge]);
   const paceCum = useMemo(() => buildCum(passage), [passage]);
 
   const focus = () => inputRef.current?.focus();
@@ -842,6 +846,13 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     return accept;
   }
 
+  async function copyChallenge() {
+    const code = encodeChallenge({ mode: gameMode, runMode: mode, limit, seed, wpm: summary?.netWpm || 0 });
+    const url = `${window.location.origin}${window.location.pathname}#challenge=${code}`;
+    try { await navigator.clipboard.writeText(url); setShareMsg('Challenge link copied.'); }
+    catch { setShareMsg(url); } // clipboard blocked: show it to copy by hand
+  }
+
   function continueExit() {
     onExitContinue?.(lastGiRef.current != null ? lastGiRef.current + 1 : startIndex.current + stats.current.words);
   }
@@ -1021,7 +1032,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       {plan && (
         <div className="tr-plan-bar">
           📋 {plan.name} · Step {plan.step}/{plan.steps} · Set {plan.set}/{plan.sets}
+          {(plan.passWpm > 0 || plan.passAcc > 0) && <> · pass mark {[plan.passWpm > 0 && `${plan.passWpm} wpm`, plan.passAcc > 0 && `${plan.passAcc}%`].filter(Boolean).join(' & ')}</>}
         </div>
+      )}
+      {challenge && (
+        <div className="tr-plan-bar">🔗 Challenge{challenge.wpm ? ` — beat ${challenge.wpm} wpm (the 👻 ghost runs at their pace)` : ''}</div>
       )}
 
       <div className="tr-bar">
@@ -1393,11 +1408,15 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           })()}
           <RunChart trend={summary.trend} sprintSecs={sprintSecs} />
           <RunSplits trend={summary.trend} secs={summary.durationMs / 1000} />
+          {shareMsg && <p className="settings-note tr-share-msg" role="status">{shareMsg}</p>}
           <div className="tr-results-actions">
             {plan ? (
               <>
-                <button onClick={beginCountdown}>↻ Redo set</button>
-                <button className="toggle-on" onClick={onPlanNext}>{plan.step >= plan.steps && plan.set >= plan.sets ? '🏁 Finish plan' : 'Next set →'}</button>
+                {!passesMarks(plan, summary) && (
+                  <span className="tr-pass-fail" role="status">Below the pass mark ({[plan.passWpm > 0 && `${plan.passWpm} wpm`, plan.passAcc > 0 && `${plan.passAcc}%`].filter(Boolean).join(' & ')}) — redo the set to move on</span>
+                )}
+                <button className={passesMarks(plan, summary) ? '' : 'toggle-on'} onClick={beginCountdown}>↻ Redo set</button>
+                <button className={passesMarks(plan, summary) ? 'toggle-on' : ''} disabled={!passesMarks(plan, summary)} onClick={onPlanNext}>{plan.step >= plan.steps && plan.set >= plan.sets ? '🏁 Finish plan' : 'Next set →'}</button>
                 <button onClick={onPlanExit}>Exit plan</button>
               </>
             ) : (
@@ -1414,6 +1433,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                   </button>
                 )}
                 <button className={moreAhead ? '' : 'toggle-on'} onClick={stageRun} title="Re-type the exact same passage (starts when you type)">↻ Reattempt</button>
+                {!isDocMode && gameMode !== 'review' && (mode === 'seconds' || mode === 'words') && (
+                  <button onClick={copyChallenge} title="Copy a link to this exact drill — whoever opens it races a ghost at your speed">🔗 Challenge link</button>
+                )}
                 {isDocMode && (
                   <button onClick={continueExit} title="Close typing and move the reading position past what you typed (Esc)">Continue (count as read)</button>
                 )}
