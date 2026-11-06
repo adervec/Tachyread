@@ -3,13 +3,14 @@
 
 import { openDB } from 'idb';
 import { findInText } from '../features/fullTextSearch.js';
+import { parseIfo, parseIdx, entryText, gunzip, pickStardictFiles } from '../features/stardict.js';
 import { defaultGlobalSettings, defaultFileSettings, syncableGlobalSettings } from './settings.js';
 import { mergePresence, presenceList } from '../features/presence.js';
 import { writeBackup, readBackup, BACKUP_VERSION } from '../features/backupStream.js';
 import { SPEECH_LOG_CAP } from '../features/speechLog.js';
 
 const DB_NAME = 'Tachyread';
-const DB_VERSION = 12;
+const DB_VERSION = 13;
 
 // A stable per-device id, kept in localStorage so it never syncs (each device must stay distinct).
 // Drives cross-device "open files" presence.
@@ -53,6 +54,12 @@ function getDB() {
         // key: checksum → { checksum, fileName, fullText, source, wordToSegment, segmentCount }
         // Rebuildable doc payload so the previous session's tabs can be reopened on reconnect.
         db.createObjectStore('docs', { keyPath: 'checksum' });
+      }
+      if (!db.objectStoreNames.contains('dicts')) {
+        // Imported offline StarDict dictionaries: { id, name, wordcount, type, offsetBits, idx, dict }
+        // (raw .idx bytes + decompressed .dict). Reference files the user still has — left out of
+        // backups (ALL_STORES) so a backup isn't dominated by a 30 MB dictionary.
+        db.createObjectStore('dicts', { keyPath: 'id' });
       }
       if (!db.objectStoreNames.contains('grabSessions')) {
         // In-progress (not-yet-opened) capture sessions, so an abandoned grab can be resumed
@@ -352,6 +359,47 @@ export async function loadDocPayload(checksum) {
   if (!checksum) return null;
   const db = await getDB();
   return (await db.get('docs', checksum)) || null;
+}
+
+// ── Offline dictionaries (StarDict) ─────────────────────────────────────────────────────────────
+export async function importStardict(files) {
+  const { ifo, idx, dict, compressed } = pickStardictFiles(files);
+  const info = parseIfo(await ifo.text());
+  const idxBytes = new Uint8Array(await idx.arrayBuffer());
+  const raw = new Uint8Array(await dict.arrayBuffer());
+  const dictBytes = compressed ? await gunzip(raw) : raw;
+  const words = parseIdx(idxBytes, info.offsetBits).size;
+  if (!words) throw new Error('That .idx file has no entries');
+  const rec = { id: `d_${Date.now().toString(36)}`, name: info.bookname, wordcount: words, type: info.type, offsetBits: info.offsetBits, idx: idxBytes, dict: dictBytes, createdAt: Date.now() };
+  const db = await getDB();
+  await db.put('dicts', rec);
+  _dictCache = null;
+  return { id: rec.id, name: rec.name, wordcount: words };
+}
+export async function listDicts() {
+  const db = await getDB();
+  return (await db.getAll('dicts')).map(({ id, name, wordcount, createdAt, dict }) => ({ id, name, wordcount, createdAt, bytes: dict?.byteLength || 0 }));
+}
+export async function deleteDict(id) {
+  const db = await getDB();
+  await db.delete('dicts', id);
+  _dictCache = null;
+}
+// Word → [{ dict, text }] across every imported dictionary. Index maps are built once per session.
+let _dictCache = null;
+export async function lookupOffline(word) {
+  const w = String(word || '').toLowerCase();
+  if (!w) return [];
+  if (!_dictCache) {
+    const db = await getDB();
+    _dictCache = (await db.getAll('dicts')).map((d) => ({ name: d.name, type: d.type, dict: d.dict, map: parseIdx(d.idx, d.offsetBits) }));
+  }
+  const out = [];
+  for (const d of _dictCache) {
+    const hit = d.map.get(w);
+    if (hit) out.push({ dict: d.name, text: entryText(d.dict, hit[0], hit[1], d.type) });
+  }
+  return out;
 }
 
 // Search every stored document's text (see features/fullTextSearch.js). One record at a time off a

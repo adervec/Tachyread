@@ -3,9 +3,6 @@
 Backlog from the 2026-11 GitHub sweep (sharing/lending items excluded by choice). Built in chunks;
 delete an item when it ships.
 
-## Chunk 5 — Notes, highlights, dictionary
-- Offline StarDict dictionary import (the 📖 Define popup currently uses dictionaryapi.dev + Wikipedia).
-
 ## Chunk 6 — Typing training
 - Weak-spot drills from the whole history (slow/missed keys, trigrams, words) + missed-word SRS.
 - Per-key speed heatmap, left vs right hand speed.

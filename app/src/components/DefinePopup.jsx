@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { lookupWord, glossOf } from '../features/dictionary.js';
+import { lookupWord, glossOf, lookupForm } from '../features/dictionary.js';
 import { newCard } from '../engine/srs.js';
 import { useApp } from '../state/AppContext.jsx';
+import { lookupOffline } from '../state/storage.js';
 
 // 📖 Define: definitions (English) + a Wikipedia summary for one word, with ＋ Add to Vocabulary
 // (the word, its sentence from the book, and a short gloss go on a spaced-repetition card).
@@ -11,7 +12,9 @@ export default function DefinePopup({ at, onClose }) {
   const lang = (state.global.language || 'en').slice(0, 2);
   useEffect(() => {
     let dead = false;
-    lookupWord(at.word, lang).then((r) => { if (!dead) setRes(r); });
+    // Offline dictionaries answer first (any language, no network); online fills in the rest.
+    Promise.all([lookupOffline(lookupForm(at.word)).catch(() => []), lookupWord(at.word, lang)])
+      .then(([offline, r]) => { if (!dead) setRes({ ...r, offline }); });
     return () => { dead = true; };
   }, [at.word, lang]);
   useEffect(() => {
@@ -22,7 +25,7 @@ export default function DefinePopup({ at, onClose }) {
   const deck = state.global.vocabDeck || [];
   const word = res?.word || at.word;
   const inDeck = deck.some((c) => String(c.word).toLowerCase() === word.toLowerCase());
-  const add = () => updateGlobal({ vocabDeck: [...deck, { ...newCard(word, at.context || '', Date.now()), definition: res ? glossOf(res.senses) || res.wiki?.extract?.slice(0, 300) || '' : '' }] });
+  const add = () => updateGlobal({ vocabDeck: [...deck, { ...newCard(word, at.context || '', Date.now()), definition: res ? glossOf(res.senses) || res.offline?.[0]?.text.slice(0, 300) || res.wiki?.extract?.slice(0, 300) || '' : '' }] });
   const style = { left: Math.min(at.x, window.innerWidth - 360), top: Math.min(at.y, window.innerHeight - 320) };
   return (
     <>
@@ -33,7 +36,13 @@ export default function DefinePopup({ at, onClose }) {
           <button className="link-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
         {!res && <p className="settings-note">Looking up…</p>}
-        {res && !res.senses.length && !res.wiki && <p className="settings-note">No definition found{lang !== 'en' ? ' (dictionary definitions are English-only; Wikipedia had nothing either)' : ''}.</p>}
+        {res?.offline?.map((o) => (
+          <div key={o.dict} className="define-sense">
+            <i>{o.dict}</i>
+            <p className="define-offline">{o.text.length > 700 ? `${o.text.slice(0, 700)}…` : o.text}</p>
+          </div>
+        ))}
+        {res && !res.offline?.length && !res.senses.length && !res.wiki && <p className="settings-note">No definition found{lang !== 'en' ? ' (dictionary definitions are English-only; Wikipedia had nothing either)' : ''}.</p>}
         {res?.senses.map((s) => (
           <div key={s.pos} className="define-sense">
             <i>{s.pos}</i>
