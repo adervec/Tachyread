@@ -2,13 +2,15 @@ import { useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
 import { parseCsv, detectSource, rowToBook, planShelfImport } from '../features/shelfImport.js';
 import { saveLibraryBook } from '../state/storage.js';
+import { SHELF_PROMPT, parseShelfReply, shelfBooks, photoToBase64 } from '../features/shelfPhoto.js';
+import { askClaude } from '../features/anthropic.js';
 
 // Trackyread → Data: import a Goodreads or StoryGraph CSV export. Every row is planned first (new
 // book / fill blanks on a match / nothing to add) and shown for review; only ticked rows are written,
 // and a match never has anything you've recorded overwritten.
 const ACTION = { new: '＋ New book', fill: '✎ Fill blanks', same: '= Already there' };
 
-export default function ShelfImportPanel({ books, onDone }) {
+export default function ShelfImportPanel({ books, onDone, apiKey = '', model = 'claude-sonnet-5' }) {
   const [plan, setPlan] = useState(null);
   const [src, setSrc] = useState('');
   const [picked, setPicked] = useState(new Set());
@@ -30,6 +32,25 @@ export default function ShelfImportPanel({ books, onDone }) {
       setMsg('');
     } catch (err) { setMsg(`Couldn’t read that file: ${err?.message || err}`); }
   }
+  // Shelf photo: Claude lists the spines it can read; they go through the same review table.
+  async function onPhoto(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!apiKey) { setMsg('Add your Anthropic API key in Application Settings to read shelf photos.'); return; }
+    setBusy(true); setMsg('Reading the spines…');
+    try {
+      const data = await photoToBase64(file);
+      const reply = await askClaude([{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data } }, { type: 'text', text: SHELF_PROMPT }] }], { key: apiKey, model, maxTokens: 2000, source: 'shelf-photo' });
+      const found = parseShelfReply(reply);
+      if (!found.length) { setMsg('No readable titles in that photo — try closer, straighter, or in better light.'); setBusy(false); return; }
+      const p = planShelfImport(shelfBooks(found), books || []).map((x, i) => ({ ...x, key: i }));
+      setSrc('the shelf photo'); setPlan(p);
+      setPicked(new Set(p.filter((x) => x.action !== 'same').map((x) => x.key)));
+      setMsg(`Read ${found.length} title(s) — check them before importing (spines can be misread).`);
+    } catch (err) { setMsg(`Couldn’t read the photo: ${err?.message || err}`); }
+    setBusy(false);
+  }
   async function apply() {
     setBusy(true);
     const rows = plan.filter((x) => picked.has(x.key) && x.action !== 'same');
@@ -44,6 +65,10 @@ export default function ShelfImportPanel({ books, onDone }) {
     <div className="shelf-import">
       <p className="settings-note">Goodreads: My Books → Import and export → <i>Export Library</i>. StoryGraph: Manage account → <i>Export StoryGraph library</i>. Matching books only get their <b>empty</b> fields filled — your ratings, dates and notes are never overwritten.</p>
       <label className="lj-inline"><span>CSV file</span><input type="file" accept=".csv,text/csv" onChange={onFile} /></label>
+      <label className="lj-inline" title="Claude reads the book spines in the photo (your own API key; only the downscaled photo is sent). Every title is shown for review before anything is added.">
+        <span>📷 Shelf photo</span><input type="file" accept="image/*" capture="environment" onChange={onPhoto} disabled={busy} />
+        {!apiKey && <span className="lj-qdim">(needs an Anthropic API key)</span>}
+      </label>
       {msg && <p className="settings-note" role="status">{msg}</p>}
       {plan && (
         <>
