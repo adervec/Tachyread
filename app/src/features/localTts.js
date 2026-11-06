@@ -10,6 +10,18 @@ export const KOKORO_VOICES = [
   ['bf_emma', 'Emma (UK, female)'], ['bf_isabella', 'Isabella (UK, female)'], ['bm_george', 'George (UK, male)'], ['bm_fable', 'Fable (UK, male)'],
 ].map(([id, label]) => ({ id: `kokoro:${id}`, label: `Kokoro — ${label}` }));
 
+// Clip length: a WAV's own header gives its byte rate (Piper 22 kHz/16-bit, Kokoro 24 kHz/float…);
+// mp3 (ElevenLabs) ≈ 128 kbps.
+export async function blobDurationMs(blob) {
+  if (/mpe?g|mp3/i.test(blob.type)) return Math.max(200, Math.round((blob.size / 16000) * 1000));
+  try {
+    const head = new DataView(await blob.slice(0, 44).arrayBuffer());
+    const byteRate = head.getUint32(28, true);
+    if (head.getUint32(0) === 0x52494646 && byteRate > 0) return Math.max(200, Math.round(((blob.size - 44) / byteRate) * 1000));
+  } catch { /* not a WAV header */ }
+  return Math.max(200, Math.round(((blob.size - 44) / (22050 * 2)) * 1000));
+}
+
 export const isKokoro = (voiceId) => String(voiceId || '').startsWith('kokoro:');
 export const kokoroLabel = (voiceId) => KOKORO_VOICES.find((v) => v.id === voiceId)?.label || `Kokoro — ${String(voiceId).slice(7)}`;
 

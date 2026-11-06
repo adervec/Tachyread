@@ -16,7 +16,7 @@ import {
 } from '../state/storage.js';
 import { planTracks, trackFileName, buildM3u, sanitizeFilename, encodeWav } from '../features/audiobookExport.js';
 import { hasNarrationTags, synthTagged } from '../features/narrationTags.js';
-import { createLocalEngine, KOKORO_VOICES, isKokoro, kokoroLabel } from '../features/localTts.js';
+import { createLocalEngine, KOKORO_VOICES, isKokoro, kokoroLabel, blobDurationMs } from '../features/localTts.js';
 import {
   diffSync, addFolder, removeFolder, patchFolder, assignBook, unassignBook, setFolderBook, foldersForBook, shelfFor,
 } from '../features/audiobookSync.js';
@@ -39,17 +39,7 @@ import { sessionConsistency, narrationMix } from '../features/narrationQuality.j
 import { bookTracker, chunkRange, creditNarration, textReadShare } from '../features/narrationRead.js';
 
 // Rough clip duration from the blob: mp3 (~128 kbps, ElevenLabs) vs 16-bit 22.05 kHz WAV (Piper).
-// Clip length: a WAV's own header says its byte rate (Piper 22 kHz/16-bit, Kokoro 24 kHz/float…);
-// ElevenLabs mp3 ≈ 128 kbps.
-const estMs = async (blob) => {
-  if (/mpe?g|mp3/i.test(blob.type)) return Math.max(200, Math.round((blob.size / 16000) * 1000));
-  try {
-    const head = new DataView(await blob.slice(0, 44).arrayBuffer());
-    const byteRate = head.getUint32(28, true);
-    if (head.getUint32(0) === 0x52494646 && byteRate > 0) return Math.max(200, Math.round(((blob.size - 44) / byteRate) * 1000));
-  } catch { /* not a WAV header */ }
-  return Math.max(200, Math.round(((blob.size - 44) / (22050 * 2)) * 1000));
-};
+const estMs = blobDurationMs;
 const fmtBytes = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 const fmtDur = (ms) => `${(Math.round((ms || 0) / 100) / 10).toFixed(1)}s`;
 const fmtWhen = (ts) => (ts ? fmtDateTime(ts) : '—');

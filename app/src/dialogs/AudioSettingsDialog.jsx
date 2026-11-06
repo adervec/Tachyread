@@ -3,6 +3,7 @@ import Dialog from './Dialog.jsx';
 import ProfilesBar from '../components/ProfilesBar.jsx';
 import { useVoices } from '../features/tts.js';
 import { ENGLISH_VOICES, defaultVoiceForLang, downloadVoice, isVoiceDownloaded, piperSupported } from '../features/piperTts.js';
+import { KOKORO_VOICES } from '../features/localTts.js';
 import { elevenVoices, ELEVEN_MODELS } from '../features/elevenLabs.js';
 
 // Audio settings, reachable from the Audio menu: the read-aloud voice + rate (per tab), the
@@ -86,6 +87,13 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
                 >
                   <option value="">Auto (matches document language)</option>
                   {ENGLISH_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Fill gaps with Kokoro">
+                <select value={global.kokoroLive || ''} onChange={(e) => onPatchGlobal({ kokoroLive: e.target.value })}
+                  title="Chunks you haven't pre-generated are narrated with a Kokoro voice as you reach them (the next one is prepared while the current one plays) and saved, so they're ready next time. Needs a reasonably fast device; the ~90 MB model downloads once.">
+                  <option value="">Off — use the light browser voice for gaps</option>
+                  {KOKORO_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
                 </select>
               </Field>
               <Field label="Model">
