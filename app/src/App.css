@@ -1622,6 +1622,12 @@
 .word.user-hl { background: color-mix(in srgb, #f5c518 42%, transparent); border-radius: 2px; }
 .isbn-add { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .isbn-scan video { width: 280px; max-width: 100%; border-radius: 6px; background: #000; display: block; margin: 6px 0; }
+.opds-list { max-height: 60vh; overflow: auto; margin-top: 6px; }
+.opds-entry { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid var(--divider); }
+.opds-entry img { width: 40px; height: 60px; object-fit: cover; border-radius: 2px; flex: none; }
+.opds-meta { flex: 1; min-width: 0; }
+.opds-sum { font-size: 12px; }
+.opds-acts { display: flex; gap: 6px; align-items: center; flex: none; }
 .ft-results { max-height: 60vh; overflow: auto; }
 .ft-doc { padding: 6px 0; border-bottom: 1px solid var(--divider); }
 .ft-doc-h { display: flex; gap: 8px; align-items: baseline; }

@@ -25,6 +25,7 @@ import BiometricFeed from './components/BiometricFeed.jsx';
 import TypingRun from './components/TypingRun.jsx';
 import FindDialog from './dialogs/FindDialog.jsx';
 import GoToLineDialog from './dialogs/GoToLineDialog.jsx';
+import OpdsDialog from './dialogs/OpdsDialog.jsx';
 import SettingsDialog from './dialogs/SettingsDialog.jsx';
 import StatisticsDialog from './dialogs/StatisticsDialog.jsx';
 import ProperNamesDialog from './dialogs/ProperNamesDialog.jsx';
@@ -2463,6 +2464,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
         .then(() => setStatus(`📗 Saved “${base} (bionic).epub” — ${chapters.length} chapter(s). Send it to your Kindle / Kobo.`)).catch(() => {});
     }
     if (action === 'web-grab') return openDialog({ kind: 'web-grab' });
+    if (action === 'opds') return openDialog({ kind: 'opds' });
     if (action === 'html-tools') return openDialog({ kind: 'html-tools' });
     if (action === 'api-usage') return openDialog({ kind: 'api-usage' });
     if (action === 'open-html-pick') {
@@ -3589,6 +3591,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
         <AttentionDialog tab={dlgTab} recentScores={probeScoresRef.current} onClose={closeDialog} />
       )}
       {dialog?.kind === 'grab' && <GrabWizard onClose={closeDialog} />}
+      {dialog?.kind === 'opds' && <OpdsDialog onClose={closeDialog} />}
       {dialog?.kind === 'web-grab' && <WebGrabWizard onClose={closeDialog} initialUrl={dialog.url || ''} />}
       {dialog?.kind === 'html-structure' && <HtmlStructureWizard html={dialog.html} fileName={dialog.fileName} sourceUrl={dialog.sourceUrl} onClose={closeDialog} />}
       {dialog?.kind === 'html-tools' && <HtmlToolsDialog onClose={closeDialog} />}
