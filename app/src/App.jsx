@@ -214,7 +214,11 @@ function AppInner() {
   const [bioFeedPos, setBioFeedPos] = useState(() => state.global.bioFeedPos || null); // draggable Biometric Control Feed
   const [controlsCollapsed, setControlsCollapsed] = useState(false); // minimize the bottom dock for text room
   const [chromeHidden, setChromeHidden] = useState(false); // mobile: hide menu+tabs above the reader for text room
-  const [immersive, setImmersive] = useState(false); // reading area fills the whole screen (tiny ⛶ overlay / Esc to exit)
+  const [immersive, setImmersive] = useState(false);
+  // Teleprompter: full-screen Lines restyled (huge centred text, black stage, optional mirror for
+  // prompter glass). Pair it with Advance by reading aloud so the text follows your voice.
+  const [prompter, setPrompter] = useState(null); // null | 'plain' | 'mirror'
+  useEffect(() => { if (!immersive) setPrompter(null); }, [immersive]); // reading area fills the whole screen (tiny ⛶ overlay / Esc to exit)
   const immersiveRef = useRef(false);
   immersiveRef.current = immersive;
   const touchRef = useRef(null); // swipe-gesture start point
@@ -2562,6 +2566,14 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       setImmersive('lines');
       return;
     }
+    if (action === 'teleprompter' || action === 'teleprompter-mirror') {
+      if (!activeTab) return;
+      if (state.showLines === false) dispatch({ type: 'TOGGLE_LINES' });
+      setImmersive('lines');
+      setPrompter(action === 'teleprompter-mirror' ? 'mirror' : 'plain');
+      setStatus(activeTab.settings.speaking?.enabled ? '🎬 Teleprompter — the text follows your voice. Esc exits.' : '🎬 Teleprompter — turn on Advance by reading aloud (Biometric) so the text follows your voice; 📹 Video on its card keeps your take. Esc exits.');
+      return;
+    }
     if (action === 'fullscreen-source') {
       // Same, for the Source pane. Only meaningful when the tab actually has a source view.
       if (!activeTab?.doc?.source) { setStatus('This tab has no source view to full-screen.'); return; }
@@ -2938,7 +2950,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
 
   return (
     <div
-      className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}${forcePortrait != null ? ' force-portrait' : ''}${immersive ? ' immersive' : ''}${!isCompact && immersive === 'lines' ? ' lines-full' : ''}${!isCompact && immersive === 'source' ? ' source-full' : ''}${idleBlurred ? ' idle-blurred' : ''}`}
+      className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}${forcePortrait != null ? ' force-portrait' : ''}${immersive ? ' immersive' : ''}${!isCompact && immersive === 'lines' ? ' lines-full' : ''}${prompter ? ` prompter${prompter === 'mirror' ? ' prompter-mirror' : ''}` : ''}${!isCompact && immersive === 'source' ? ' source-full' : ''}${idleBlurred ? ' idle-blurred' : ''}`}
       style={forcePortrait != null ? { transform: `translate(-50%, -50%) rotate(${forcePortrait}deg)` } : undefined}
     >
       {/* Idle veil. A sibling of the blurred content, not a child — a CSS filter blurs its own

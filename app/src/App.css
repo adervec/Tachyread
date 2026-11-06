@@ -4095,6 +4095,17 @@ button.rh-hm-cell:disabled { cursor: default; }
 }
 .app.lines-full .splitter { display: none; }
 .app.lines-full .line-pane { height: 100vh; }
+/* Teleprompter: the full-screen Lines restyled as a prompter — big centred text on black, the line
+   you're on at full brightness, optional horizontal mirror for beam-splitter glass. */
+.app.prompter .line-pane, .app.prompter .line-pane-list { background: #000 !important; }
+.app.prompter .line-pane-list { font-size: clamp(30px, 4.2vw, 76px) !important; line-height: 1.35 !important; padding: 0 6vw; }
+.app.prompter .line-pane-toolbar, .app.prompter .line-row .num, .app.prompter .line-row .accent { display: none !important; }
+.app.prompter .line-row { grid-template-columns: 1fr !important; } /* the number + accent columns are gone */
+.app.prompter .line-row .text { color: #9a9a9a !important; background: none !important; text-align: center !important; }
+.app.prompter .line-row.status-Current { background: none !important; }
+.app.prompter .line-row.status-Current .text { color: #fff !important; }
+.app.prompter .line-row.status-Read .text, .app.prompter .line-row.status-SessionRead .text { color: #555 !important; }
+.app.prompter.prompter-mirror .line-pane-list { transform: scaleX(-1); }
 /* Desktop full-screen Source: same collapse, targeting the Source pane instead. */
 .app.source-full .main-split { display: block; height: 100vh; overflow: hidden; }
 .app.source-full .main-split > .pane { display: none !important; }

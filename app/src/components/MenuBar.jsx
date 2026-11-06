@@ -47,6 +47,8 @@ const MENUS = {
     { label: 'Notes & Annotations...', shortcut: 'Ctrl+Shift+N', action: 'notes', icon: '📝'},
     { label: 'Show / Hide Lines Pane', action: 'toggle-lines', icon: '📃'},
     { label: 'Side-by-Side Companion (read two documents)', action: 'companion', icon: '📖'},
+    { label: 'Teleprompter', action: 'teleprompter', icon: '🎬'},
+    { label: 'Teleprompter (mirrored, for prompter glass)', action: 'teleprompter-mirror', icon: '🪞'},
     { label: 'Proper Names Index...', shortcut: 'Ctrl+I', action: 'proper-names', icon: '🏷️'},
     { label: 'Preview Footnote', shortcut: 'Ctrl+Shift+F', action: 'footnote', icon: '📑'},
     { label: 'Incognito Reading (no tracking)', action: 'toggle-incognito', icon: '🕶️'},
