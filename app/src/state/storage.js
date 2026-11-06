@@ -2,6 +2,7 @@
 // but keyed by content checksum so renamed/moved files keep their progress.
 
 import { openDB } from 'idb';
+import { findInText } from '../features/fullTextSearch.js';
 import { defaultGlobalSettings, defaultFileSettings, syncableGlobalSettings } from './settings.js';
 import { mergePresence, presenceList } from '../features/presence.js';
 import { writeBackup, readBackup, BACKUP_VERSION } from '../features/backupStream.js';
@@ -351,6 +352,21 @@ export async function loadDocPayload(checksum) {
   if (!checksum) return null;
   const db = await getDB();
   return (await db.get('docs', checksum)) || null;
+}
+
+// Search every stored document's text (see features/fullTextSearch.js). One record at a time off a
+// cursor so a big library never sits in memory whole; `shouldStop()` lets a newer query cancel.
+export async function searchAllDocs(query, { caseSensitive = false, perDoc = 3, shouldStop = () => false } = {}) {
+  const db = await getDB();
+  const out = [];
+  let cursor = await db.transaction('docs').store.openCursor();
+  while (cursor && !shouldStop()) {
+    const rec = cursor.value;
+    const r = findInText(rec?.fullText || '', query, { caseSensitive, max: perDoc });
+    if (r.count) out.push({ checksum: rec.checksum, fileName: rec.fileName || rec.checksum.slice(0, 8), ...r });
+    cursor = await cursor.continue();
+  }
+  return out.sort((a, b) => b.count - a.count);
 }
 
 export async function deleteDocPayload(checksum) {
