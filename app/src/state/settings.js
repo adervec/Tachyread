@@ -222,7 +222,7 @@ export function countOffDefaultSettings(settings, defaults) {
 // restores every preference to its default but preserves these so a reset never destroys the
 // user's library, history, saved work, sync setup, or their separate Default Tab Settings.
 export const GLOBAL_DATA_KEYS = new Set([
-  'recentFiles', 'ocrTemplates', 'ocrProfiles', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey', 'translateKey', 'settingsProfiles',
+  'recentFiles', 'ocrTemplates', 'ocrProfiles', 'vocabDeck', 'bookGroups', 'remoteGrabs', 'remoteAudiobooks', 'typingPlans', 'elevenLabsKey', 'anthropicKey', 'translateKey', 'readwiseKey', 'settingsProfiles',
   'readingList', 'drillBestSpan', 'bestFlowWpm', 'bestDictationWpm', 'webcamCalib', 'handCalib', 'sync',
   'deviceName', 'fileDefaults', 'ambient', 'customCursors', 'crosshairStable',
   // The narration queue and its measured run history are DATA, not preferences: a saved settings
@@ -369,6 +369,7 @@ export function defaultGlobalSettings() {
     // parallel view). Key is a secret and stays on this device; the rest are preferences.
     translateProvider: 'mymemory', // mymemory | google | libre (see features/translateService.js)
     translateKey: '',
+    readwiseKey: '', // Readwise access token for exporting highlights — device-only like the other keys
     translateEndpoint: '',         // LibreTranslate base URL
     translateTarget: 'ja',         // language the text is translated INTO
     // On a typing run's end, show a grade + final statement and play a grade-matched sound.

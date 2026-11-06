@@ -10,7 +10,7 @@ import Pointer from './Pointer.jsx';
 import { useReportVisibility } from '../state/useReportVisibility.js';
 import { useApp } from '../state/AppContext.jsx';
 import { translateText, translateConfigured, cacheKey } from '../features/translateService.js';
-import { getCachedTranslation, putCachedTranslation, appendAppLog } from '../state/storage.js';
+import { getCachedTranslation, putCachedTranslation, appendAppLog, getNotes, saveNote } from '../state/storage.js';
 import { swapLookup, applySwap } from '../features/wordSwaps.js';
 import CrosshairOverlay from './CrosshairOverlay.jsx';
 import { beelineMix } from '../features/beeline.js';
@@ -120,6 +120,7 @@ function renderWords(line, opts) {
       inner = tok;
     }
     const hidden = wordIdx > opts.hideBeyond;
+    const userHl = opts.userHl?.length && opts.userHl.some(([a, b]) => wordIdx >= a && wordIdx <= b);
     const styleClasses = isCurrentWord && Array.isArray(opts.currentWordStyles)
       ? opts.currentWordStyles.map((st) => `style-${st}`)
       : [];
@@ -139,6 +140,7 @@ function renderWords(line, opts) {
       ...(isDone ? ['done', ...opts.doneStyles.map((st) => `done-${st}`)] : []),
       isProperName ? 'proper-name' : '',
       hidden ? 'hidden-word' : '',
+      userHl ? 'user-hl' : '',
       hlCls || '',
     ].filter(Boolean).join(' ');
     const cwStyle = isCurrentWord && opts.cwFontDelta ? { fontSize: `calc(1em + ${opts.cwFontDelta}pt)` }
@@ -302,6 +304,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
               swaps: dsettings.swaps,
               cwFontDelta: dsettings.currentWordFontDelta,
               hlAlgo: dsettings.hlAlgo,
+              userHl: dsettings.userHl,
               // Sentence-start seed: a paragraph's first line always starts one; otherwise the
               // previous line must have ended a sentence.
               hlSentenceLead: dsettings.hlAlgo === 'sentence'
@@ -445,7 +448,7 @@ function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, li
   );
 }
 
-function WordMenu({ menu, onClose, onJumpWord, onAddNote }) {
+function WordMenu({ menu, onClose, onJumpWord, onAddNote, onHighlight }) {
   if (!menu) return null;
   const w = menu.word;
   const enc = encodeURIComponent(w);
@@ -453,7 +456,9 @@ function WordMenu({ menu, onClose, onJumpWord, onAddNote }) {
     window.open(url, '_blank', 'noopener');
     onClose();
   };
+  const sel = menu.sel;
   const items = [
+    ...(sel ? [{ label: `🖍 Highlight “${sel.text.length > 28 ? `${sel.text.slice(0, 28)}…` : sel.text}”`, fn: () => { onHighlight?.(sel); onClose(); } }] : []),
     { label: '📝 Add note here', fn: () => { onAddNote?.(menu.start >= 0 ? menu.start : 0); onClose(); } },
     { label: `Copy “${w}”`, fn: () => { navigator.clipboard?.writeText(w).catch(() => {}); onClose(); } },
     { label: 'Translate (Google)', fn: () => open(`https://translate.google.com/?sl=auto&tl=en&text=${enc}&op=translate`) },
@@ -579,7 +584,16 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     const start = rowEl ? Number(rowEl.getAttribute('data-start')) : -1;
     const word = (wordEl.textContent || '').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
     if (!word) return;
-    setMenu({ x: Math.min(e.clientX, window.innerWidth - 240), y: Math.min(e.clientY, window.innerHeight - 180), word, start });
+    // A text selection in the pane offers "Highlight": map its ends to word indices (data-wi), falling
+    // back to the clicked word when an end sits in the gap between words.
+    let sel = null;
+    const ws = window.getSelection?.();
+    if (ws && !ws.isCollapsed && ws.toString().trim()) {
+      const wiOf = (n) => { const el = (n?.nodeType === 1 ? n : n?.parentElement)?.closest?.('[data-wi]'); return el ? Number(el.dataset.wi) : Number(wordEl.dataset.wi); };
+      const a = wiOf(ws.anchorNode), b = wiOf(ws.focusNode);
+      if (Number.isFinite(a) && Number.isFinite(b)) sel = { start: Math.min(a, b), end: Math.max(a, b), text: ws.toString().replace(/\s+/g, ' ').trim() };
+    }
+    setMenu({ x: Math.min(e.clientX, window.innerWidth - 240), y: Math.min(e.clientY, window.innerHeight - 180), word, start, sel });
   }
   const currentLine = getLineIndex(doc, idx);
   // No paragraph highlight in wall mode — merged blocks have no blank-line boundaries to bound it.
@@ -637,6 +651,23 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   // Stable display-settings subset handed to each line. Unlike `settings` (new identity on every
   // word step, via patchSettings), this keeps the same reference until a display option actually
   // changes — the precondition that lets memo(LineRow) skip unchanged lines during playback.
+  // Highlights (kind 'highlight' notes) drawn under their words; reloads whenever this doc's notes change.
+  const notesCs = doc.contentChecksum || settings.contentChecksum;
+  const [userHl, setUserHl] = useState([]);
+  useEffect(() => {
+    if (!notesCs) return undefined;
+    let dead = false;
+    const load = () => getNotes(notesCs).then((ns) => { if (!dead) setUserHl(ns.filter((n) => n.kind === 'highlight' && n.wordIndex != null).map((n) => [n.wordIndex, n.endWordIndex ?? n.wordIndex])); }).catch(() => {});
+    load();
+    const on = (e) => { if (e.detail === notesCs) load(); };
+    window.addEventListener('tr-notes', on);
+    return () => { dead = true; window.removeEventListener('tr-notes', on); };
+  }, [notesCs]);
+  const addHighlight = (sel) => {
+    if (!notesCs) return;
+    saveNote(notesCs, { kind: 'highlight', wordIndex: sel.start, endWordIndex: sel.end, quote: sel.text, text: '' }).catch(() => {});
+    window.getSelection?.()?.removeAllRanges();
+  };
   // BeeLine cycles per TEXT line — blank lines between paragraphs mustn't break the alternation.
   const beelineOrd = useMemo(() => {
     if (!settings.beeline) return null;
@@ -674,6 +705,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       beeline: !!settings.beeline,
       beelineStrength: settings.beelineStrength ?? 70,
       beelineOrd,
+      userHl,
     }),
     [
       settings.blurLinesBefore, settings.blurLinesAfter, settings.blurGradient, settings.obscureMode, settings.parallelTranslation, settings.altSentenceColors,
@@ -682,7 +714,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       settings.pointerSize, settings.pointerBlinkMs, settings.bionicFont, settings.highlightORP, settings.orpStyles,
       settings.currentWordStyles, settings.currentWordStyle, settings.doneWordStyles, settings.currentWordFontDelta, settings.wordSwaps, wall,
       settings.ghostWordStyles, settings.ghostWordFontDelta, settings.headingDetails, settings.wpm,
-      settings.highlightAlgo, settings.beeline, settings.beelineStrength, beelineOrd,
+      settings.highlightAlgo, settings.beeline, settings.beelineStrength, beelineOrd, userHl,
     ]
   );
 
@@ -1293,7 +1325,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
         settings={settings}
         onChange={(pl) => patchSettings(tab.id, { linesCrosshairs: pl })}
       />
-      <WordMenu menu={menu} onClose={() => setMenu(null)} onJumpWord={onJumpWord} onAddNote={onAddNote} />
+      <WordMenu menu={menu} onClose={() => setMenu(null)} onJumpWord={onJumpWord} onAddNote={onAddNote} onHighlight={addHighlight} />
     </div>
   );
 }
