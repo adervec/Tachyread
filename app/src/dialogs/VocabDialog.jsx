@@ -67,6 +67,7 @@ export default function VocabDialog({ doc, onClose }) {
                   : (
                     <>
                       {card.context && <div className="vc-context">“…{card.context}…”</div>}
+                      {card.definition && <div className="vc-def">{card.definition}</div>}
                       <a className="vc-dict" href={dictUrl(card.word)} target="_blank" rel="noopener noreferrer">Merriam-Webster ↗</a>
                       <div className="vc-grades">
                         {GRADES.map(({ g, label }) => <button key={g} className={`vc-grade g${g}`} onClick={() => grade(g)}>{label}</button>)}
