@@ -226,3 +226,17 @@ export function exportJourneyMarkdown(books, { title = 'Reading Journey' } = {})
   }
   return out.join('\n');
 }
+
+// For COUNTING finishes (goals, timelines, heatmaps, pace by year): every earlier finish in a book's
+// finishHistory (see logReread) becomes its own finished entry dated when that reading ended, so a
+// re-read counts in both years. Everything else keeps using the book itself.
+export function withRereads(books) {
+  if (!books?.some((b) => b.finishHistory?.length)) return books;
+  const out = [...books];
+  for (const b of books) {
+    (b.finishHistory || []).forEach((t, i) => {
+      if (t) out.push({ ...b, id: `${b.id}#r${i + 1}`, finishHistory: undefined, completion: true, inProgress: false, shelf: undefined, finishTime: t, reread: true });
+    });
+  }
+  return out;
+}

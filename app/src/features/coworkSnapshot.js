@@ -3,7 +3,7 @@
 // morning brief or progress review — without any request/response round trip and without being
 // able to change anything. No document text, no audio, no API keys. Pure: data in, files out (name
 // → string); see coworkSnapshot.test.mjs. README.md documents every file and field.
-import { readStatus, finishMs, contentType } from './journeyLibrary.js';
+import { readStatus, finishMs, contentType, withRereads } from './journeyLibrary.js';
 import { yearGoal, yearWordsGoal } from './journeyAnalytics.js';
 import { queueBooks, queueStats, liveQueues, recentPace } from './readingQueues.js';
 import { readingStreak, todaySummary, localDate } from './todaySummary.js';
@@ -91,7 +91,7 @@ export function buildSnapshot({ files = [], books = [], bindMap = {}, queues = [
   }
   const goalsOut = {
     last30Days: { wordsByLocalHour: byHour, wordsByMethod: byMethod },
-    year, booksGoal: bg ? yearGoal(live, bg, now) : null, wordsGoal: wg ? yearWordsGoal(dayAgg, live, linkedIds, wg, now) : null,
+    year, booksGoal: bg ? yearGoal(withRereads(live), bg, now) : null, wordsGoal: wg ? yearWordsGoal(dayAgg, live, linkedIds, wg, now) : null,
     streak: readingStreak(dayAgg, now), recentPace: pace,
     today: { date: today.today, words: today.words, activeSecs: today.secs, wpm: today.wpm, aloudWords: today.aloudWords, books: today.files.map((x) => ({ title: x.book?.title || x.name, words: x.words, secs: x.secs, percentRead: Math.round(x.coverage * 100) })), finished: today.finished.map((b) => b.title) },
   };

@@ -29,7 +29,7 @@ import {
   normalizeSeed, filterBooks, libraryStats, exportJourneyMarkdown,
   readStatus, setReadStatus, recommender, STATUS_LABEL,
   distinctValues, pubYear, finishMs, deriveId, bookRating,
-  bookTags, allTags, finishCount, logReread, CONTENT_TYPES, contentType,
+  bookTags, allTags, finishCount, logReread, CONTENT_TYPES, contentType, withRereads,
 } from '../features/journeyLibrary.js';
 import {
   cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, estHours,
@@ -127,7 +127,7 @@ function GoalCard({ books, goals, onSetGoal }) {
   const now = useMemo(() => Date.now(), []); // eslint-disable-line react-hooks/purity
   const year = new Date(now).getUTCFullYear();
   const target = Number(goals?.[year]) || 0;
-  const g = useMemo(() => yearGoal(books, target, now), [books, target, now]);
+  const g = useMemo(() => yearGoal(withRereads(books), target, now), [books, target, now]); // a re-read counts in each year it was finished
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState('');
   const pct = g.target ? Math.min(100, (g.finished / g.target) * 100) : 0;
@@ -535,12 +535,11 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     for (const b of books) { const lr = fileStats[csForBook[b.id]]?.lastRead; if (lr) lastReadOf[b.id] = lr; }
     return driftingScan(books, lastReadOf);
   }, [books, fileStats, csForBook]);
-  const filtered = useMemo(() => {
+  // Toolbar + column filters → matching books (unsorted). Shared by the table and the saved views.
+  const libMatches = (flt, colF) => {
     if (!books) return [];
-    let base = filterBooks(books, flt);
-    // Column filters (header row): text includes on title/author, exact on the rest.
     const tq = textMatcher(colF.title).test, aq = textMatcher(colF.author).test;
-    base = base.filter((b) => {
+    return filterBooks(books, flt).filter((b) => {
       if (colF.status !== 'all' && readStatus(b) !== colF.status) return false;
       if (tq && !tq(`${b.title || ''} ${b.series || ''}`)) return false;
       if (aq && !aq(b.author || '')) return false;
@@ -553,6 +552,10 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
       if (colF.file !== 'all' && !!csForBook[b.id] !== (colF.file === 'linked')) return false;
       return true;
     });
+  };
+  const filtered = useMemo(() => {
+    if (!books) return [];
+    const base = libMatches(flt, colF);
     const num = (v) => (v == null || v === '' ? -Infinity : Number(v));
     const cmp = {
       rec: (a, b) => num(b.recScore) - num(a.recScore),
@@ -574,6 +577,15 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [books, flt, colF, sort, csForBook, fileStats]);
   const shown = filtered.slice(0, limit);
+  // Saved views ("smart shelves"): a named snapshot of the toolbar + column filters + sort, kept
+  // with the app settings. Pinned ones sit on the dashboard with a live count.
+  const views = global?.ljViews || [];
+  const saveViews = (v) => onPatch?.({ ljViews: v });
+  const [naming, setNaming] = useState(null); // draft name while saving a view
+  const applyView = (v) => { setFlt({ ...flt, ...v.flt }); setColF({ ...NO_COLF, ...v.colF }); setSort(v.sort || { key: 'rec', dir: 1 }); setLimit(100); setTab('library'); setSelected(null); };
+  const viewCounts = useMemo(() => Object.fromEntries(views.filter((v) => v.pinned).map((v) => [v.id, libMatches({ ...flt, ...v.flt }, { ...NO_COLF, ...v.colF }).length])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [views, books, csForBook, fileStats]);
   const sortBy = (key) => setSort((s) => ({ key, dir: s.key === key ? -s.dir : 1 }));
   const sortMark = (key) => (sort.key === key ? (sort.dir > 0 ? ' ▾' : ' ▴') : '');
   const selBook = useMemo(() => books?.find((b) => b.id === selected) || null, [books, selected]);
@@ -835,6 +847,15 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
             <div className="lj-dash">
               <TodayCard books={books} goals={goals} dayAgg={dayAgg} fileStats={fileStats} bindMap={bindMap || {}} linkedIds={linkedIds} openChecksums={openChecksums}
                 onOpenBook={(id) => { setTab('library'); setSelected(id); }} onOpenFile={async (cs) => { if (await openRecent(cs)) handleClose(); }} onQueues={() => setTab('queue')} />
+              {views.some((v) => v.pinned) && (
+                <div className="lj-pinned-views">
+                  {views.filter((v) => v.pinned).map((v) => (
+                    <button key={v.id} className="lj-pinned-view" onClick={() => applyView(v)} title="Open the library with this saved view">
+                      <b>{viewCounts[v.id] ?? '…'}</b><span>📌 {v.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <GoalCard books={books} goals={goals} onSetGoal={setGoalTarget} />
               <WordsGoalCard books={books} goals={goals} dayAgg={dayAgg} linkedIds={linkedIds} onSetGoal={setGoalTarget} />
               <div className="rh-stat-grid">
@@ -1002,6 +1023,22 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               </div>
               <div className="lj-toolbar2">
                 <span className="settings-note">{filtered.length} match{filtered.length === 1 ? '' : 'es'}</span>
+                {views.map((v) => (
+                  <span key={v.id} className="lj-view-chip">
+                    <button className="link-btn" onClick={() => applyView(v)} title="Apply this saved view">{v.pinned ? '📌 ' : '☆ '}{v.name}</button>
+                    <button className="link-btn" title={v.pinned ? 'Unpin from the dashboard' : 'Pin to the dashboard'} onClick={() => saveViews(views.map((x) => (x.id === v.id ? { ...x, pinned: !x.pinned } : x)))}>{v.pinned ? '⊖' : '📌'}</button>
+                    <button className="link-btn" title="Delete this saved view" aria-label={`Delete view ${v.name}`} onClick={() => saveViews(views.filter((x) => x.id !== v.id))}>✕</button>
+                  </span>
+                ))}
+                {naming == null
+                  ? <button onClick={() => setNaming('')} title="Save the current filters and sort as a named view you can re-apply (or pin to the dashboard)">☆ Save view</button>
+                  : (
+                    <form className="lj-view-name" onSubmit={(e) => { e.preventDefault(); const name = naming.trim(); if (name) saveViews([...views, { id: `v${Date.now().toString(36)}`, name, flt, colF, sort, pinned: true }]); setNaming(null); }}>
+                      <input autoFocus value={naming} onChange={(e) => setNaming(e.target.value)} placeholder="View name" aria-label="Saved view name" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setNaming(null); } }} />
+                      <button type="submit" className="toggle-on" disabled={!naming.trim()}>Save</button>
+                      <button type="button" onClick={() => setNaming(null)}>Cancel</button>
+                    </form>
+                  )}
                 {anySet(colF) && <button onClick={() => { setColF(NO_COLF); setLimit(100); }} title="Clear the filters under the table's column headers">Clear column filters</button>}
                 <span className="lj-viewtoggle" role="tablist" aria-label="List view">
                   <button className={ljView !== 'tiles' ? 'on' : ''} onClick={() => onPatch?.({ ljView: 'table' })} title="Table view">▤ Table</button>
@@ -3030,8 +3067,8 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
 // Past→present: an animated replay that walks chronologically through the finishes (growth curve +
 // the book being "read" at each step) plus a month heatmap. Pure geometry over cumulativeFinishes.
 function TimelineView({ books }) {
-  const cum = useMemo(() => cumulativeFinishes(books), [books]);
-  const hm = useMemo(() => finishHeatmap(books), [books]);
+  const cum = useMemo(() => cumulativeFinishes(withRereads(books)), [books]);
+  const hm = useMemo(() => finishHeatmap(withRereads(books)), [books]);
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [monthPick, setMonthPick] = useState(null); // { y, m } — clicked heat tile → that month's finishes
@@ -3120,7 +3157,7 @@ function TimelineView({ books }) {
 // One year's wrap-up card — Goodreads-style "Year in Books" superlatives, per selectable year.
 function YearWrap({ books, years }) {
   const [year, setYear] = useState(years[years.length - 1]);
-  const w = useMemo(() => yearInBooks(books, year), [books, year]);
+  const w = useMemo(() => yearInBooks(withRereads(books), year), [books, year]);
   if (!w) return null;
   return (
     <div className="lj-wrap">
@@ -3176,7 +3213,7 @@ function WeeklySummaries({ books, dayAgg, ai }) {
 
 // ── Analytics view ───────────────────────────────────────────────────────────────────────────────
 function AnalyticsView({ books, dayAgg = [], ai = null, splitTypes = false, onSplitTypes }) {
-  const pace = useMemo(() => paceByYear(books), [books]);
+  const pace = useMemo(() => paceByYear(withRereads(books)), [books]);
   const gt = useMemo(() => genreTrend(books, 6), [books]);
   const rb = useMemo(() => recommenderBreakdown(books), [books]);
   if (pace.length === 0 && rb.length <= 1 && !dayAgg.length) return <p className="settings-note">Not much to chart yet — mark some books finished (with dates) and attribute a few recommendations.</p>;
