@@ -177,4 +177,19 @@ assert.equal(penaltyRewind([], 0, 3).pos, 0, 'empty run is safe');
   assert.deepEqual(weakSpots([]), { keys: [], words: [] });
 }
 
+// missed-word spaced repetition
+{
+  const { updateMissDeck, dueMissWords } = await import('./typingUpgrades.js');
+  const t0 = Date.UTC(2026, 10, 1);
+  let deck = updateMissDeck([], ['rhythm', 'the'], [{ perfect: false }, { perfect: true }], ['Rhythm'], t0);
+  assert.deepEqual(deck.map((c) => c.word), ['rhythm']);
+  assert.deepEqual(dueMissWords(deck, t0), ['rhythm'], 'new card is due now');
+  deck = updateMissDeck(deck, ['rhythm'], [{ perfect: true }], [], t0 + 1000);
+  assert.ok(deck[0].due > t0 + 86400000 * 0.9, 'typed perfectly when due → about a day out');
+  assert.deepEqual(dueMissWords(deck, t0 + 2000), [], 'not due any more');
+  deck = updateMissDeck(deck, ['rhythm'], [{ perfect: false }], ['rhythm'], t0 + 5000);
+  assert.ok(deck[0].due < t0 + 5000 + 3600000, 'missed again → back within the hour');
+  assert.equal(updateMissDeck(Array.from({ length: 400 }, (_, i) => ({ word: `w${i}`, addedAt: i })), [], [], ['new'], t0).length, 300, 'capped');
+}
+
 console.log('typingUpgrades: all checks passed');

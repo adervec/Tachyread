@@ -14,7 +14,7 @@ import { allTypingRuns } from '../state/storage.js';
 import { applyTheme, THEME_NAMES } from '../state/themes.js';
 import { passesMarks } from '../engine/typingPlans.js';
 import { encodeChallenge } from '../features/typingChallenge.js';
-import { weakSpots, windowWpm, windowSeries, consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress, penaltyRewind } from '../features/typingUpgrades.js';
+import { weakSpots, updateMissDeck, dueMissWords, windowWpm, windowSeries, consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress, penaltyRewind } from '../features/typingUpgrades.js';
 import { currentSession, sessionStats, bookForecast } from '../features/typingSession.js';
 import { splitRun, splitsFor } from '../features/typingSplits.js';
 import { typingEyeColor } from '../features/avatarMood.js';
@@ -167,6 +167,10 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const layout = LAYOUTS[cfg.layout] ? cfg.layout : 'qwerty';
   const courseLevel = Math.max(COURSE_START, Math.min(COURSE_ORDER.length, Number(cfg.courseLevel) || COURSE_START));
   const courseTarget = Number(cfg.courseTarget) || 35;
+  const missDeckRef = useRef(cfg.missDeck); // endRun is memoised — read the deck as it is NOW
+  missDeckRef.current = cfg.missDeck;
+  // Weak spots serve the missed words that are DUE first, then history's most-missed.
+  const withDue = (w) => ({ ...w, words: [...new Set([...dueMissWords(cfg.missDeck, Date.now()), ...w.words])].slice(0, 40) }); // eslint-disable-line react-hooks/purity
   const blind = !!cfg.blind;             // hide per-char verdicts while running; the numbers tell the tale at the end
   const penaltyWords = Math.max(0, Math.min(9, Number(cfg.penaltyWords) || 0)); // setback mode: words erased per mistyped word
   // Display-only variants of the transforms (the REQUIRED typing is identical either way):
@@ -239,7 +243,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const passageMax = passageWordsFor(mode, limit);
 
   const { prepared, passage } = useMemo(() => {
-    const raw = buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: passageMax, seed, reviewWords: reviewRef.current, courseLevel, weak: gameMode === 'weakspot' ? weakSpots(pastRunsRef.current || []) : null });
+    const raw = buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: passageMax, seed, reviewWords: reviewRef.current, courseLevel, weak: gameMode === 'weakspot' ? withDue(weakSpots(pastRunsRef.current || [])) : null });
     const base = isDocMode ? startIndex.current : 0;
     const prep = [];
     let pre = null; // fully-skipped decorative tokens ahead of the next kept word (ghost display)
@@ -464,6 +468,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     // Problem words (missed or unusually slow) → the 🎯 review drill; PBs judged against history.
     run.problemWords = problemWords(passage, resultsRef.current);
     run.pb = pbFlags(pastRunsRef.current || [], run);
+    // Missed-word deck (spaced repetition) — updated after every run.
+    patchCfg({ missDeck: updateMissDeck(missDeckRef.current, passage, resultsRef.current, run.problemWords, Date.now()) });
     if (gameMode === 'course') {
       run.course = { level: courseLevel, ...courseStep(courseLevel, s.keys, run.accuracy, { target: courseTarget }) };
       if (run.course.unlock) patchCfg({ courseLevel: courseLevel + 1 });

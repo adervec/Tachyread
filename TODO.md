@@ -3,9 +3,6 @@
 Backlog from the 2026-11 GitHub sweep (sharing/lending items excluded by choice). Built in chunks;
 delete an item when it ships.
 
-## Chunk 6 — Typing training
-- Missed-word spaced repetition (weak spots currently weight recent misses; no per-word schedule).
-
 ## Chunk 7 — Getting books in
 - Goodreads / StoryGraph CSV import.
 - ISBN barcode scan (BarcodeDetector / zxing).

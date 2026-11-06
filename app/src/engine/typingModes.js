@@ -79,6 +79,7 @@ export function weakspotPassage(weak, count, seed = 0, docWords = []) {
     ...BIGRAMS.filter(onKeys).flatMap((g) => [g, g, g]),
   ];
   if (!pool.length) return shuffled(COMMON_WORDS, seed).concat(shuffled(COMMON_WORDS, seed + 1)).slice(0, count);
+  if (new Set(pool).size < 20) pool.push(...shuffled(COMMON_WORDS, seed).slice(0, 30)); // a thin history: pad so it isn't one word on repeat
   const out = [];
   for (let round = 0; out.length < count; round++) out.push(...shuffled(pool, seed + round));
   return out.slice(0, count);

@@ -3,6 +3,7 @@
 // typing streaks, problem-word mining + review drills (Amphetype/TIPP10-style), per-key/per-finger
 // error profiles (Keybr/TIPP10), and the pace-caret math (Monkeytype's pace caret / TypeRacer's
 // ghost). All pure — see typingUpgrades.test.mjs.
+import { newCard, schedule } from '../engine/srs.js';
 
 // ── consistency ─────────────────────────────────────────────────────────────
 // Keystroke-timing consistency as a percentage: 100 × (1 − coefficient of variation) of the
@@ -213,6 +214,22 @@ export function weakSpots(runs, { keys = 6, words = 30, minN = 12 } = {}) {
   const weakWords = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, words).map(([w]) => w);
   return { keys: weakKeys, words: weakWords };
 }
+
+// Missed-word spaced repetition: every run's problem words go on a card (a repeat miss resets it,
+// due again in minutes); a due word you then type perfectly moves out to a longer interval. The
+// weak-spot drill serves due words first. Capped so the deck stays small in the settings.
+export function updateMissDeck(deck, passage, results, problems, now, cap = 300) {
+  const byWord = new Map((deck || []).map((c) => [c.word, c]));
+  const missed = new Set((problems || []).map((w) => String(w).toLowerCase()));
+  for (const w of missed) byWord.set(w, byWord.has(w) ? schedule(byWord.get(w), 0, now) : newCard(w, '', now));
+  (results || []).forEach((r, i) => {
+    const w = String(passage?.[i] || '').toLowerCase();
+    const c = byWord.get(w);
+    if (c && !missed.has(w) && r?.perfect && (c.due || 0) <= now) byWord.set(w, schedule(c, 2, now));
+  });
+  return [...byWord.values()].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)).slice(0, cap);
+}
+export const dueMissWords = (deck, now) => (deck || []).filter((c) => (c.due || 0) <= now).sort((a, b) => (a.due || 0) - (b.due || 0)).map((c) => c.word);
 
 // ── pace caret ──────────────────────────────────────────────────────────────
 // Standard WPM ⇒ 5 chars per word; a word in the passage costs its length + 1 (the space).
