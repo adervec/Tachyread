@@ -14,11 +14,12 @@ import {
   allAudiobookManifests, setAudiobookMeta, loadDocPayload, allFiles, getAbFolders, setAbFolders,
   getBinding, getLibraryBooks,
 } from '../state/storage.js';
-import { planTracks, trackFileName, buildM3u, sanitizeFilename } from '../features/audiobookExport.js';
+import { planTracks, trackFileName, buildM3u, sanitizeFilename, encodeWav } from '../features/audiobookExport.js';
+import { hasNarrationTags, synthTagged } from '../features/narrationTags.js';
 import {
   diffSync, addFolder, removeFolder, patchFolder, assignBook, unassignBook, setFolderBook, foldersForBook, shelfFor,
 } from '../features/audiobookSync.js';
-import { defaultVoiceForLang, piperSupported, installedVoices, voiceLabel, createPiperEngine } from '../features/piperTts.js';
+import { defaultVoiceForLang, piperSupported, installedVoices, voiceLabel, createPiperEngine, ENGLISH_VOICES } from '../features/piperTts.js';
 import { elevenVoices, elevenSynth, elevenConfigured } from '../features/elevenLabs.js';
 import { audiobookChunks, readerDocFromText } from '../document/readerDocument.js';
 import { averageVoice, voiceLine, VOICE_ATTRS } from '../features/voice/voiceScore.js';
@@ -606,7 +607,13 @@ export default function AudiobookDialog({ onClose }) {
     // every batch (and before any retry) frees the heap; OPFS keeps the voice cached.
     const PIPER_BATCH = 16;
     const engine = isEl ? null : createPiperEngine();
-    const synth = (c) => (isEl ? elevenSynth(c.text.trim(), vid.slice(3), key, { modelId }) : engine.synth(c.text.trim(), vid));
+    // Any voice, either engine: [voice:…] tags can switch engines mid-chunk.
+    let piperForTags = null;
+    const synthOne = (text, v) => (String(v).startsWith('el:') ? elevenSynth(text, v.slice(3), key, { modelId }) : (engine || (piperForTags ||= createPiperEngine())).synth(text, v));
+    const candidates = [...ENGLISH_VOICES.map((v) => ({ id: v.id, label: v.label })), ...elVoices.map((v) => ({ id: `el:${v.id}`, label: v.name }))];
+    const synth = (c) => (hasNarrationTags(c.text)
+      ? synthTagged(c.text, { synth: synthOne, voiceId: vid, candidates, encodeWav }) // pauses + voice changes stitched into one clip
+      : (isEl ? elevenSynth(c.text.trim(), vid.slice(3), key, { modelId }) : engine.synth(c.text.trim(), vid)));
     try {
       for (let i = 0; i < targets.length; i++) {
         if (abort.current || stopAllRef.current) break;
@@ -642,7 +649,7 @@ export default function AudiobookDialog({ onClose }) {
         if ((i & 7) === 0 && job.checksum === checksum) await refresh();
         if (consecutive >= CONSEC_ABORT) break;
       }
-    } finally { engine?.dispose(); }
+    } finally { engine?.dispose(); piperForTags?.dispose(); }
 
     const stopped = abort.current || stopAllRef.current;
     const bailed = consecutive >= CONSEC_ABORT;
