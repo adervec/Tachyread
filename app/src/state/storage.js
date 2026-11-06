@@ -619,6 +619,12 @@ export async function saveNote(checksum, note) {
   const idx = rec.notes.findIndex((n) => n.id === id);
   const merged = {
     id, wordIndex: note.wordIndex ?? null, text: note.text || '', color: note.color || null,
+    // Highlights: a word range plus the quoted text (kind 'highlight'); plain notes have neither.
+    ...((note.kind || rec.notes[idx]?.kind) === 'highlight' ? {
+      kind: 'highlight',
+      endWordIndex: note.endWordIndex ?? rec.notes[idx]?.endWordIndex ?? note.wordIndex ?? null,
+      quote: note.quote ?? rec.notes[idx]?.quote ?? '',
+    } : {}),
     // Optional ToC-section attachment { title, start }. Kept verbatim: if the section is later
     // renamed/removed the note shows as orphaned, never deleted.
     section: note.section || (idx >= 0 ? rec.notes[idx].section : null) || null,
@@ -626,6 +632,7 @@ export async function saveNote(checksum, note) {
   };
   if (idx >= 0) rec.notes[idx] = merged; else rec.notes.push(merged);
   await db.put('notes', rec, checksum);
+  notesChanged(checksum);
   return merged;
 }
 
@@ -633,7 +640,11 @@ export async function deleteNote(checksum, id) {
   const db = await getDB();
   const rec = (await db.get('notes', checksum)) || { notes: [] };
   const i = rec.notes.findIndex((n) => n.id === id);
-  if (i >= 0) { rec.notes[i] = { ...rec.notes[i], deleted: true, updatedAt: Date.now() }; await db.put('notes', rec, checksum); }
+  if (i >= 0) { rec.notes[i] = { ...rec.notes[i], deleted: true, updatedAt: Date.now() }; await db.put('notes', rec, checksum); notesChanged(checksum); }
+}
+// The Lines pane draws highlights — tell it when a document's notes change.
+function notesChanged(checksum) {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('tr-notes', { detail: checksum }));
 }
 
 // ── Literary Journey library (the reading tracker) ───────────────────────────────────────────────

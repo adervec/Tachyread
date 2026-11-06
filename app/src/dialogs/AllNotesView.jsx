@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { allNotes, saveNote, deleteNote, deleteCrossNote, saveCrossNote } from '../state/storage.js';
+import { notesMarkdown, sendToReadwise } from '../features/notesExport.js';
+import { saveTextToFile } from '../features/fileSystem.js';
 import { AI_NOTE_TYPES } from '../features/journeyAi.js';
 import { readStatus } from '../features/journeyLibrary.js';
 import { fmtDateTime } from '../features/dateFmt.js';
@@ -17,7 +19,23 @@ const KIND_LABEL = {
 };
 
 export default function AllNotesView({ books, crossNotes, fileStats, onSaveBook, onReloadCross }) {
-  const { openRecent, closeDialog } = useApp();
+  const { openRecent, closeDialog, state } = useApp();
+  const [exportMsg, setExportMsg] = useState('');
+  // Document notes + highlights and per-book notes, flattened for Markdown / Readwise.
+  const exportItems = () => [
+    ...(docNotes || []).map((n) => ({ book: nameOf(n.checksum).replace(/\.[a-z0-9]+$/i, ''), quote: n.quote || '', text: n.text || '', wordIndex: n.wordIndex, section: n.section, createdAt: n.createdAt })),
+    ...books.filter((b) => b.notes && String(b.notes).trim()).map((b) => ({ book: b.title, author: b.author, text: b.notes })),
+  ];
+  async function exportMd() {
+    try { await saveTextToFile(notesMarkdown(exportItems()), `tachyread-notes-${new Date().toISOString().slice(0, 10)}.md`, 'text/markdown'); } catch { /* cancelled */ }
+  }
+  async function exportReadwise() {
+    const token = (state.global.readwiseKey || '').trim();
+    if (!token) { setExportMsg('Add your Readwise access token in Application Settings → Readwise first.'); return; }
+    setExportMsg('Sending to Readwise…');
+    try { setExportMsg(`Sent ${await sendToReadwise(token, exportItems())} highlight(s) to Readwise (it skips ones it already has).`); }
+    catch (e) { setExportMsg(String(e?.message || e)); }
+  }
   const [docNotes, setDocNotes] = useState(null);
   const [kind, setKind] = useState('all');
   const [q, setQ] = useState('');
@@ -37,7 +55,7 @@ export default function AllNotesView({ books, crossNotes, fileStats, onSaveBook,
       out.push({
         key: `doc:${n.checksum}:${n.id}`, kind: 'doc', when: n.updatedAt || n.createdAt || 0,
         where: nameOf(n.checksum), sub: n.section ? `§ ${n.section.title}` : (n.wordIndex != null ? `@ word ${n.wordIndex + 1}` : ''),
-        text: n.text, raw: n,
+        text: n.quote ? `❝ ${n.quote} ❞${n.text ? `\n${n.text}` : ''}` : n.text, raw: n,
       });
     }
     for (const b of books) {
@@ -95,6 +113,9 @@ export default function AllNotesView({ books, crossNotes, fileStats, onSaveBook,
     <div className="an-view">
       <div className="lj-toolbar">
         <input className="lj-search" placeholder="Search all notes…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <button onClick={exportMd} title="Every document note, highlight and book note as one Markdown file, grouped by book">⬇ Markdown</button>
+        <button onClick={exportReadwise} title="Send highlights and notes to your Readwise account (your own access token, from Application Settings)">→ Readwise</button>
+        {exportMsg && <span className="settings-note" role="status" style={{ margin: 0 }}>{exportMsg}</span>}
         {['all', 'doc', 'book', 'ai', 'shared'].map((k) => (
           <button key={k} className={`lj-qcat${kind === k ? ' on' : ''}`} onClick={() => setKind(k)}>
             {k === 'all' ? 'All' : KIND_LABEL[k]} ({counts[k]})

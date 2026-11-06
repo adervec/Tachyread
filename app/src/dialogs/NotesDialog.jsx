@@ -70,7 +70,7 @@ export default function NotesDialog({ tab, onJumpWord, onClose }) {
     const full = tab.doc.fullText || tab.doc.words.join(' ');
     return full.length > MAX_CONTEXT ? full.slice(0, MAX_CONTEXT) + '\n…[truncated]' : full;
   };
-  const notesBlock = () => (notes.length ? notes.map((n) => `- ${n.wordIndex != null ? `[@word ${n.wordIndex + 1}] ` : ''}${n.text}`).join('\n') : '(no notes yet)');
+  const notesBlock = () => (notes.length ? notes.map((n) => `- ${n.wordIndex != null ? `[@word ${n.wordIndex + 1}] ` : ''}${n.quote ? `“${n.quote}” ` : ''}${n.text}`).join('\n') : '(no notes yet)');
 
   async function runAI(kind) {
     setAiBusy(true); setAiErr(''); setOutput('');
@@ -135,7 +135,8 @@ export default function NotesDialog({ tab, onJumpWord, onClose }) {
                   </>
                 ) : (
                   <>
-                    <div className="note-text">{n.text}</div>
+                    {n.quote && <blockquote className="note-quote">{n.quote}</blockquote>}
+                    {n.text && <div className="note-text">{n.text}</div>}
                     {n.section && (() => {
                       const live = resolveSection(n.section);
                       return live

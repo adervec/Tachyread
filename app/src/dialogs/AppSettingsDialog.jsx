@@ -407,6 +407,11 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         notes) goes to Anthropic and spends your own API credits.
       </p>
 
+      <div className="field-section">Readwise (optional)</div>
+      <Field label="Access token">
+        <input type="password" value={g.readwiseKey || ''} onChange={(e) => patch({ readwiseKey: e.target.value.trim() })} placeholder="From readwise.io/access_token" style={{ width: '100%' }}
+          title="Lets Notes → “→ Readwise” send your highlights to your Readwise account. Stays on this device — never synced or saved in profiles." />
+      </Field>
       <div className="field-section">Translation (optional)</div>
       <Field label="Service">
         <select value={g.translateProvider || 'mymemory'} onChange={(e) => patch({ translateProvider: e.target.value })}>

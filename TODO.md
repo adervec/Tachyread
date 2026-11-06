@@ -4,7 +4,6 @@ Backlog from the 2026-11 GitHub sweep (sharing/lending items excluded by choice)
 delete an item when it ships.
 
 ## Chunk 5 — Notes, highlights, dictionary
-- Text-range highlights + quotes; export notes/highlights to Markdown / Readwise (user token).
 - Tap-a-word dictionary / Wikipedia popup → add to Vocabulary deck; offline StarDict import.
 - Library-wide full-text search.
 
