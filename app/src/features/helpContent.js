@@ -130,6 +130,7 @@ export const HELP_SECTIONS = [
       'Audio menu: the Audiobook Manager records/plays per-line narration; the Text-to-Speech Reader is a standalone TTS popup; Ambient Sound plays a low soundscape under your reading.',
       'Audio Settings holds the TTS voice & rate (the default voice follows your document language), the speak-along follow mode, and the auto-stop timer.',
       'Narration tags: in your own text files, [pause] (¾ s), [pause:2] (seconds) and [break] (1.5 s) add silence to the generated audiobook, and [voice:Amy] … [/voice] reads a passage in another voice (matched by voice name — Piper or ElevenLabs). The tags stay visible in the reader.',
+      'Audiobook export → “One .m4b audiobook with chapters” saves the whole book as a single M4B (AAC, encoded on this device) with a chapter at every track and the book’s Trackyread cover when it has one — the format audiobook apps and Apple Books expect.',
       'Audiobook export can also write a SUBTITLE file (.srt or .vtt) beside each track — one cue per narrated chunk, timed to the audio — for video captions, read-along players or other tools.',
       'Listen with the screen off: read-aloud keeps playing when you lock the phone or switch apps, and your lock-screen / notification media controls (play·pause·next·previous) drive it — next/previous jump paragraphs.',
     ],

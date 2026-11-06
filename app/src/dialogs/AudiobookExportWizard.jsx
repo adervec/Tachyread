@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
-import { getAudioClip, getSectionExtraBlob, entryClips } from '../state/storage.js';
+import { getAudioClip, getSectionExtraBlob, entryClips, getBinding, getLibraryBook } from '../state/storage.js';
+import { buildM4b, encodeAac } from '../features/m4b.js';
+import { bookCoverUrl } from '../features/openLibrary.js';
 import { saveBlobToFile } from '../features/fileSystem.js';
 import {
   planTracks, trackFileName, buildM3u, encodeWav, buildId3v2, estimateBytes, fmtDuration, sanitizeFilename, orderSectionItems, buildSubtitles,
@@ -61,6 +63,56 @@ export function buildExportItems(sections, manifest) {
   return out;
 }
 
+// The whole book as ONE .m4b: every clip decoded at 44.1 kHz, mixed to mono, AAC-encoded clip by
+// clip (memory stays small), with a chapter at each track start and the book's cover when Trackyread
+// has one. Returns { blob, chapters }.
+const canM4b = typeof window !== 'undefined' && typeof window.AudioEncoder === 'function';
+async function bookCover(checksum) {
+  try {
+    const id = (await getBinding())?.map?.[checksum];
+    const book = id ? await getLibraryBook(id) : null;
+    const url = book ? bookCoverUrl(book, 'L') : null;
+    if (!url) return null;
+    const r = await fetch(url);
+    const type = r.headers.get('content-type') || '';
+    if (!r.ok || !/jpe?g|png/.test(type)) return null;
+    return { bytes: new Uint8Array(await r.arrayBuffer()), type: /png/.test(type) ? 'png' : 'jpeg' };
+  } catch { return null; } // cover hosts without CORS just mean no cover
+}
+export async function assembleM4b(checksum, tracks, tags, { onProgress, isAborted } = {}) {
+  const SR = 44100;
+  const actx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SR });
+  const chapters = [];
+  let samples = 0, done = 0;
+  const total = tracks.reduce((a, t) => a + t.items.length, 0);
+  async function* pcm() {
+    for (const t of tracks) {
+      chapters.push({ title: t.title, startMs: (samples / SR) * 1000 });
+      for (const it of t.items) {
+        if (isAborted?.()) return;
+        const blob = it.kind === 'sec'
+          ? await getSectionExtraBlob(checksum, it.firstLine, it.role, it.clipId)
+          : (await getAudioClip(checksum, it.startLine))?.blob || null;
+        onProgress?.(++done, total, t.title);
+        if (!blob) continue;
+        let buf;
+        try { buf = await actx.decodeAudioData(await blob.arrayBuffer()); } catch { continue; }
+        const mono = new Float32Array(buf.length);
+        for (let c = 0; c < buf.numberOfChannels; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) mono[i] += d[i] / buf.numberOfChannels; }
+        samples += mono.length;
+        yield mono;
+      }
+    }
+  }
+  try {
+    const { frames, asc } = await encodeAac(pcm(), { sampleRate: SR });
+    if (!frames.length) return null;
+    const cover = await bookCover(checksum);
+    const bytes = buildM4b({ frames, asc, sampleRate: SR, chapters, tags: { ...tags, cover } });
+    return { blob: new Blob([bytes], { type: 'audio/mp4' }), chapters: chapters.length, cover: !!cover };
+  } finally { actx.close(); }
+}
+
 // mp3 fast-path only when every item is an ElevenLabs mp3 clip; any imported music / section extra
 // forces the decode-and-re-render WAV path (robust for mixed formats).
 export const allItemsMp3 = (items) =>
@@ -71,6 +123,7 @@ export default function AudiobookExportWizard({ checksum, fileName, sections, ma
   const [targetMin, setTargetMin] = useState(12);
   const [forceWav, setForceWav] = useState(false);
   const [subs, setSubs] = useState(''); // '' | 'srt' | 'vtt' — a timed subtitle file beside each track
+  const [asM4b, setAsM4b] = useState(false); // one .m4b with chapters instead of separate tracks
   const [prog, setProg] = useState(null); // { done, total, label }
   const [msg, setMsg] = useState('');
   const abort = useRef(false);
@@ -87,6 +140,19 @@ export default function AudiobookExportWizard({ checksum, fileName, sections, ma
   async function run() {
     if (!tracks.length) { setMsg('No generated audio to export.'); return; }
     abort.current = false;
+    if (asM4b) {
+      setProg({ done: 0, total: items.length, label: 'Encoding…' });
+      try {
+        const r = await assembleM4b(checksum, tracks, { title: album, album, artist: 'Tachyread' }, {
+          onProgress: (done, total, label) => setProg({ done, total, label }), isAborted: () => abort.current,
+        });
+        if (!r || abort.current) { setProg(null); setMsg(abort.current ? 'Export stopped.' : 'Nothing could be encoded.'); return; }
+        await saveBlobToFile(r.blob, `${album}.m4b`, [{ description: 'Audiobook', accept: { 'audio/mp4': ['.m4b'] } }]);
+        setProg(null);
+        setMsg(`Exported “${album}.m4b” — ${r.chapters} chapter(s)${r.cover ? ', with cover' : ''}.`);
+      } catch (e) { setProg(null); setMsg('Export failed: ' + (e?.message || e)); }
+      return;
+    }
     setProg({ done: 0, total: tracks.length, label: 'Preparing…' });
     const names = tracks.map((t) => trackFileName(t, tracks.length, ext));
     let dir = null;
@@ -128,7 +194,7 @@ export default function AudiobookExportWizard({ checksum, fileName, sections, ma
     <Dialog title="Export as audiobook" onClose={onClose} width={640}
       buttons={prog
         ? <button onClick={() => { abort.current = true; }}>Stop</button>
-        : <><button className="toggle-on" disabled={!tracks.length} onClick={run}>Export {tracks.length} track{tracks.length === 1 ? '' : 's'}…</button><button onClick={onClose}>Close</button></>}>
+        : <><button className="toggle-on" disabled={!tracks.length} onClick={run}>{asM4b ? `Export .m4b (${tracks.length} chapter${tracks.length === 1 ? '' : 's'})…` : `Export ${tracks.length} track${tracks.length === 1 ? '' : 's'}…`}</button><button onClick={onClose}>Close</button></>}>
       {items.length === 0 ? (
         <p className="settings-note">Nothing generated yet — create the narration first, then come back to export it as standalone tracks.</p>
       ) : (
@@ -156,6 +222,13 @@ export default function AudiobookExportWizard({ checksum, fileName, sections, ma
             </span>
             {allMp3 && <label><input type="checkbox" checked={forceWav} onChange={(e) => setForceWav(e.target.checked)} /> Force WAV</label>}
           </div>
+          {canM4b && (
+            <div className="lj-inline">
+              <label title="One audiobook file (AAC, 96 kbps) with a chapter at every track — what audiobook apps and Apple Books expect. Encoded on this device.">
+                <input type="checkbox" checked={asM4b} onChange={(e) => setAsM4b(e.target.checked)} /> One .m4b audiobook with chapters (instead of separate tracks)
+              </label>
+            </div>
+          )}
           <div className="lj-inline">
             <label title="A subtitle file beside each track, one cue per narrated chunk timed to the audio — for video captions, read-along players or other tools">
               Subtitles <select value={subs} onChange={(e) => setSubs(e.target.value)}>
