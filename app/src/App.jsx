@@ -117,6 +117,8 @@ import { playLineClick } from './features/clickSound.js';
 import { createMetronome } from './features/metronome.js';
 import { saveTextToFile, saveBlobToFile } from './features/fileSystem.js';
 import { challengeFromHash } from './features/typingChallenge.js';
+import { sharedPayload, shareFileName } from './features/shareTarget.js';
+const SHARE_INBOX = 'tachyread-share-inbox';
 import { buildTabPdf } from './features/exportPdf.js';
 import { ambient } from './features/ambient.js';
 import { createAttentionMonitor } from './features/webcamAttention.js';
@@ -1705,6 +1707,34 @@ function AppInner() {
     window.addEventListener('pagehide', onHide);
     return () => window.removeEventListener('pagehide', onHide);
   }, []);
+
+  // Shared to the app (Web Share Target, installed PWA): text opens as a document; a link opens Grab
+  // from Web URL pre-filled. The query is cleared so a reload doesn't re-open it.
+  // Three ways a share arrives: this page's own URL (nothing was open), the installed app's
+  // launchQueue (Chrome focuses the open window — launch_handler focus-existing — instead of loading
+  // the URL), or a second browser tab that hit the single-instance guard and posted it via storage.
+  const openShared = (sh) => {
+    if (!sh) return;
+    if (sh.kind === 'text') openFiles([new File([sh.title && sh.title !== 'Shared text' ? `${sh.title}
+
+${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
+    else openDialog({ kind: 'web-grab', url: sh.url });
+  };
+  const openSharedRef = useRef(openShared);
+  openSharedRef.current = openShared;
+  const [shared] = useState(() => sharedPayload(window.location.search));
+  useEffect(() => {
+    if (!state.globalHydrated) return; // after settings load, or the restore would sweep it away
+    if (shared) { window.history.replaceState(null, '', window.location.pathname + window.location.hash); openShared(shared); }
+    window.launchQueue?.setConsumer?.((params) => { try { openSharedRef.current(sharedPayload(new URL(params.targetURL).search)); } catch { /* not a share */ } });
+    const onStorage = (e) => {
+      if (e.key !== SHARE_INBOX || !e.newValue) return;
+      try { openSharedRef.current(JSON.parse(e.newValue)); localStorage.removeItem(SHARE_INBOX); } catch { /* bad payload */ }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.globalHydrated]);
 
   // A challenge link opens straight into its drill — on the active tab (drills don't use its text),
   // or on a small placeholder document when nothing is open. The fragment is cleared so a reload
@@ -3550,7 +3580,7 @@ function AppInner() {
         <AttentionDialog tab={dlgTab} recentScores={probeScoresRef.current} onClose={closeDialog} />
       )}
       {dialog?.kind === 'grab' && <GrabWizard onClose={closeDialog} />}
-      {dialog?.kind === 'web-grab' && <WebGrabWizard onClose={closeDialog} />}
+      {dialog?.kind === 'web-grab' && <WebGrabWizard onClose={closeDialog} initialUrl={dialog.url || ''} />}
       {dialog?.kind === 'html-structure' && <HtmlStructureWizard html={dialog.html} fileName={dialog.fileName} sourceUrl={dialog.sourceUrl} onClose={closeDialog} />}
       {dialog?.kind === 'html-tools' && <HtmlToolsDialog onClose={closeDialog} />}
       {dialog?.kind === 'api-usage' && <ApiUsageDialog onClose={closeDialog} />}
@@ -3808,10 +3838,18 @@ export default function App() {
   // Single-instance guard: if the app is already open in another browser tab, bow out and
   // touch nothing (no IndexedDB, no session writes) so the live tab isn't clobbered.
   const [instance] = useState(() => acquireInstance());
+  // A share that landed in this second tab is handed to the open one (it listens for SHARE_INBOX).
+  const [forwarded] = useState(() => {
+    if (instance.primary) return false;
+    const sh = sharedPayload(window.location.search);
+    if (!sh) return false;
+    try { localStorage.setItem(SHARE_INBOX, JSON.stringify({ ...sh, at: Date.now() })); return true; } catch { return false; }
+  });
   if (!instance.primary) {
     return (
       <div className="closing-overlay">
         <h1>Tachyread</h1>
+        {forwarded && <p><b>Sent to your open Tachyread tab</b> — switch to it to read what you shared.</p>}
         <p>Already open in another browser tab.</p>
         <p className="hint">This app runs in a single tab so your files and progress stay in sync. Switch to that tab, or close it and reload here.</p>
         <button onClick={() => window.location.reload()}>Reload</button>

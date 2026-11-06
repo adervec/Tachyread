@@ -8,9 +8,9 @@ import { normalizeUrl, proxyUrl, isHtmlContentType } from '../features/webGrab.j
 // directly (same-origin policy), so this offers three paths, cleanest-first: a direct fetch (works
 // for CORS-friendly sites), an opt-in reader service that relays the page (discloses the URL to a
 // third party), and a fully-local manual paste (open the page yourself, copy it, paste it here).
-export default function WebGrabWizard({ onClose }) {
+export default function WebGrabWizard({ onClose, initialUrl = '' }) {
   const { openDoc, setStatus, openDialog } = useApp();
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState(initialUrl); // a link shared to the app arrives pre-filled
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [blocked, setBlocked] = useState(false); // direct fetch failed → reveal fallbacks

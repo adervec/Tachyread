@@ -11,6 +11,7 @@ export const HELP_SECTIONS = [
       'Open a book with File → Open Document (.pdf, .epub, .docx, .txt, .md), paste text from the clipboard (Ctrl+B), or capture it from anything on screen with Grab Text (OCR). You can also drop files onto the window.',
       'The Fast Reader pane flashes one word at a time at your WPM (Space plays/pauses); the Lines pane shows the text in context. Toggle panes from the bar at the top (ToC, Avatars/Stats, Index, Fast Reader, Lines) — on desktop, whatever pane/chips/stats layout you leave is restored on the next launch.',
       'Everything you read is tracked per book: position, coverage, pace. Close the app and your session restores.',
+      'Share to Tachyread: with the app installed on your phone, use any app’s Share menu → Tachyread. Shared text opens as a document; a shared link opens Grab from Web URL with it filled in. If Tachyread is already open, the share goes to that window.',
       'Bulk-adding a whole shelf? File → Bulk Add from Folder scans a folder, filters by format, and opens every file you haven’t added yet.',
     ],
   },
