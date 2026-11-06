@@ -3,7 +3,8 @@
 // by set (see App's plan runner); the editor lives in dialogs/TypingPlanDialog.jsx.
 //
 //   plan = { id, name, steps: [step] }
-//   step = { id, mode, runMode, runLimit, sets, description }
+//   step = { id, mode, runMode, runLimit, sets, description, passWpm, passAcc }
+//   passWpm / passAcc: optional pass marks (0 = none) — a set below them must be redone.
 //
 // Pure: model factories + operations only.
 
@@ -17,6 +18,8 @@ export function makeStep(partial = {}) {
     runLimit: 60,
     sets: 1,
     description: '',
+    passWpm: 0,
+    passAcc: 0,
     ...partial,
   };
 }
@@ -46,6 +49,12 @@ export function applySetOp(plan, op) {
   const fn = SET_OPS[op];
   if (!fn || !plan) return plan;
   return { ...plan, steps: (plan.steps || []).map((s) => ({ ...s, sets: Math.max(1, fn(s.sets || 1)) })) };
+}
+
+// Did this run clear the step's pass marks? (No marks = always passes.)
+export function passesMarks(step, run) {
+  if (!run) return false;
+  return (run.netWpm || 0) >= (Number(step?.passWpm) || 0) && (run.accuracy || 0) >= (Number(step?.passAcc) || 0);
 }
 
 // Total sets across the plan — for progress display.

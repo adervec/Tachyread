@@ -1,7 +1,7 @@
 // ponytail: typing-plan model factories + set-count ops (double/halve/inc/dec, never below 1).
 // Run: node src/engine/typingPlans.test.mjs
 import assert from 'node:assert';
-import { makeStep, makePlan, duplicatePlan, applySetOp, totalSets } from './typingPlans.js';
+import { makeStep, makePlan, duplicatePlan, applySetOp, totalSets, passesMarks } from './typingPlans.js';
 
 // makeStep: sane defaults + overrides, and a unique id
 const s = makeStep();
@@ -44,3 +44,10 @@ assert.equal(totalSets(null), 0, 'null → 0');
 assert.equal(totalSets({}), 0, 'no steps → 0');
 
 console.log('typingPlans: all cases pass');
+
+// pass marks
+assert.equal(passesMarks({}, { netWpm: 10, accuracy: 50 }), true, 'no marks = passes');
+assert.equal(passesMarks({ passWpm: 60, passAcc: 95 }, { netWpm: 61, accuracy: 96 }), true);
+assert.equal(passesMarks({ passWpm: 60, passAcc: 95 }, { netWpm: 59, accuracy: 99 }), false, 'too slow');
+assert.equal(passesMarks({ passWpm: 60, passAcc: 95 }, { netWpm: 80, accuracy: 94.9 }), false, 'too sloppy');
+assert.equal(passesMarks({ passWpm: 60 }, null), false);

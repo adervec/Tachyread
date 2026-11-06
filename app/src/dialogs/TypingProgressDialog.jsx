@@ -6,6 +6,8 @@ import { TYPING_MODE_BY_ID } from '../engine/typingModes.js';
 import { fmtDateTime } from '../features/dateFmt.js';
 import { typingWeekly, typingOverall } from '../features/typingStats.js';
 import { typingStreak, aggregateKeys, fingerStats, keyFinger } from '../features/typingUpgrades.js';
+import { runsCsv } from '../features/typingChallenge.js';
+import { saveTextToFile } from '../features/fileSystem.js';
 import { keyboardRows } from '../features/keyboards.js';
 import { normalizeRuns, difficultyRows, runDifficulty, difficultyLabel } from '../features/typingDifficulty.js';
 import { textMatcher, inRange, inDates, anySet } from '../features/tableFilter.js';
@@ -121,6 +123,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
       width={740}
       buttons={
         <>
+          <button onClick={() => saveTextToFile(runsCsv(rawRuns || []), `typing-runs-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv').catch(() => {})} disabled={!rawRuns?.length} title="Every run as a spreadsheet (CSV) — raw numbers, not the adjusted view">⬇ Export CSV</button>
           <button onClick={clearAll} disabled={!runs?.length}>Clear history</button>
           <button onClick={onClose}>Close</button>
         </>

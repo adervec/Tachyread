@@ -3,12 +3,6 @@
 Backlog from the 2026-11 GitHub sweep (sharing/lending items excluded by choice). Built in chunks;
 delete an item when it ships.
 
-## Chunk 3 — Typing quick wins
-- Pass marks (min WPM/accuracy) on Typing Plan steps.
-- Trigram + common-word drills.
-- CSV export of every run.
-- Challenge links (seeded test from a URL).
-
 ## Chunk 4 — Trackyread quick wins
 - Saved filter views ("smart shelves") pinned to the dashboard.
 - Rereads kept as separate readings.

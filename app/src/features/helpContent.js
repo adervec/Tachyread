@@ -91,7 +91,8 @@ export const HELP_SECTIONS = [
       'The results screen shows an examinable chart of raw, effective and burst WPM plus accuracy AND a consistency % (keystroke-rhythm steadiness), 🏆 personal-best banners (all-time and per mode), and your 🔥 daily typing streak.',
       '🎯 Drill the misses: one click on the results screen builds a review drill from that run\'s mistyped and unusually slow words — practice your book\'s own hard words, not a generic list.',
       'Typing Progress adds a keyboard-shaped per-key error heatmap and per-finger error rates mined from your runs, alongside streaks, weekly summaries and per-run consistency.',
-      'Drills (Mavis-style rows, bigrams, numbers…) live in the mode dropdown; Typing Plans chains sets into workouts; Flow Writer and Dictation are separate output games.',
+      'Drills (Mavis-style rows, bigram and trigram patterns, common words, numbers, gibberish…) live in the mode dropdown; Typing Plans chains sets into workouts, and a step can carry PASS MARKS (minimum WPM / accuracy) — a set below them has to be redone. Flow Writer and Dictation are separate output games.',
+      '🔗 Challenge links: after a drill run, copy a link to that exact drill — whoever opens it types the same words with a 👻 ghost at your speed. Book passages never travel in a link. Typing Progress → ⬇ Export CSV saves every run as a spreadsheet.',
     ],
   },
   {

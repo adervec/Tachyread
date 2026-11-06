@@ -107,6 +107,14 @@ export default function TypingPlanDialog({ onStart, onClose }) {
                     <input type="number" min={1} max={9999} value={s.runLimit} title="Limit" style={{ width: 64 }}
                       onChange={(e) => patchStep(i, { runLimit: Math.max(1, Number(e.target.value) || 1) })} />
                   )}
+                  <input type="number" min={0} max={300} value={s.passWpm || 0} style={{ width: 56 }} aria-label="Pass mark: minimum net WPM"
+                    title="Pass mark: minimum net WPM to move on (0 = none) — a set below it has to be redone"
+                    onChange={(e) => patchStep(i, { passWpm: Math.max(0, Number(e.target.value) || 0) })} />
+                  <span className="lj-qdim" style={{ fontSize: 11 }}>wpm</span>
+                  <input type="number" min={0} max={100} value={s.passAcc || 0} style={{ width: 50 }} aria-label="Pass mark: minimum accuracy %"
+                    title="Pass mark: minimum accuracy % to move on (0 = none)"
+                    onChange={(e) => patchStep(i, { passAcc: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} />
+                  <span className="lj-qdim" style={{ fontSize: 11 }}>%</span>
                   <label className="tp-sets" title="How many times to repeat this step">
                     ×<input type="number" min={1} max={99} value={s.sets}
                       onChange={(e) => patchStep(i, { sets: Math.max(1, Number(e.target.value) || 1) })} /> sets

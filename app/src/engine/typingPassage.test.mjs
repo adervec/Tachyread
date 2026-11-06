@@ -1,7 +1,7 @@
 // A run ends when its passage runs out, so the passage must outlast the run limit. A fixed 600-word
 // lookahead used to end a "1000 words" run at ~500 once punctuation-only tokens were filtered out.
 import assert from 'node:assert/strict';
-import { buildPassage, passageWordsFor } from './typingModes.js';
+import { buildPassage, passageWordsFor, ngramDrill } from './typingModes.js';
 
 // The whole point: asking for N words must pull ahead more than N, with room for dropped tokens.
 for (const limit of [10, 60, 100, 500, 1000, 5000, 9999]) {
@@ -45,4 +45,17 @@ console.log('typingPassage: all cases pass');
   const n = buildPassage('numbers', { max: 200, seed: 1 });
   assert.ok(n.every((w) => /\d/.test(w)), 'numbers token without a digit');
   assert.ok(/[!@#$%^&*()]/.test(n.join('')), 'numbers drill should include shifted symbols');
+}
+
+// n-gram drills: each pattern three times in a row, every pattern before any repeats, seed varies order
+{
+  const d = ngramDrill(['th', 'he', 'in'], 9, 0);
+  assert.equal(d.length, 9);
+  for (let i = 0; i < 9; i += 3) assert.ok(d[i] === d[i + 1] && d[i] === d[i + 2], 'triplets');
+  assert.deepEqual([...new Set(d)].sort(), ['he', 'in', 'th']);
+  assert.equal(ngramDrill(['ab'], 4, 0).join(' '), 'ab ab ab ab', 'wraps into another round');
+  const tri = buildPassage('trigrams', { max: 30, seed: 2 });
+  assert.equal(tri.length, 30);
+  assert.ok(tri.every((t) => t.length === 3));
+  assert.ok(buildPassage('bigrams', { max: 12 }).every((t) => t.length === 2));
 }
