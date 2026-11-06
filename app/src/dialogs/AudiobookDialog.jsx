@@ -16,10 +16,11 @@ import {
 } from '../state/storage.js';
 import { planTracks, trackFileName, buildM3u, sanitizeFilename, encodeWav } from '../features/audiobookExport.js';
 import { hasNarrationTags, synthTagged } from '../features/narrationTags.js';
+import { createLocalEngine, KOKORO_VOICES, isKokoro, kokoroLabel } from '../features/localTts.js';
 import {
   diffSync, addFolder, removeFolder, patchFolder, assignBook, unassignBook, setFolderBook, foldersForBook, shelfFor,
 } from '../features/audiobookSync.js';
-import { defaultVoiceForLang, piperSupported, installedVoices, voiceLabel, createPiperEngine, ENGLISH_VOICES } from '../features/piperTts.js';
+import { defaultVoiceForLang, piperSupported, installedVoices, voiceLabel, ENGLISH_VOICES } from '../features/piperTts.js';
 import { elevenVoices, elevenSynth, elevenConfigured } from '../features/elevenLabs.js';
 import { audiobookChunks, readerDocFromText } from '../document/readerDocument.js';
 import { averageVoice, voiceLine, VOICE_ATTRS } from '../features/voice/voiceScore.js';
@@ -38,9 +39,17 @@ import { sessionConsistency, narrationMix } from '../features/narrationQuality.j
 import { bookTracker, chunkRange, creditNarration, textReadShare } from '../features/narrationRead.js';
 
 // Rough clip duration from the blob: mp3 (~128 kbps, ElevenLabs) vs 16-bit 22.05 kHz WAV (Piper).
-const estMs = (blob) => (/mpe?g|mp3/i.test(blob.type)
-  ? Math.max(200, Math.round((blob.size / 16000) * 1000))
-  : Math.max(200, Math.round(((blob.size - 44) / (22050 * 2)) * 1000)));
+// Clip length: a WAV's own header says its byte rate (Piper 22 kHz/16-bit, Kokoro 24 kHz/float…);
+// ElevenLabs mp3 ≈ 128 kbps.
+const estMs = async (blob) => {
+  if (/mpe?g|mp3/i.test(blob.type)) return Math.max(200, Math.round((blob.size / 16000) * 1000));
+  try {
+    const head = new DataView(await blob.slice(0, 44).arrayBuffer());
+    const byteRate = head.getUint32(28, true);
+    if (head.getUint32(0) === 0x52494646 && byteRate > 0) return Math.max(200, Math.round(((blob.size - 44) / byteRate) * 1000));
+  } catch { /* not a WAV header */ }
+  return Math.max(200, Math.round(((blob.size - 44) / (22050 * 2)) * 1000));
+};
 const fmtBytes = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 const fmtDur = (ms) => `${(Math.round((ms || 0) / 100) / 10).toFixed(1)}s`;
 const fmtWhen = (ts) => (ts ? fmtDateTime(ts) : '—');
@@ -143,7 +152,7 @@ export default function AudiobookDialog({ onClose }) {
   const [elVoices, setElVoices] = useState([]); // ElevenLabs voices [{ id, name }]
   const elMap = useMemo(() => new Map(elVoices.map((v) => [v.id, v.name])), [elVoices]);
   // A voice id is either a Piper id or `el:<elevenVoiceId>`; label both.
-  const labelVoice = (vid) => (vid && vid.startsWith('el:') ? `☁ ${elMap.get(vid.slice(3)) || vid.slice(3)}` : voiceLabel(vid));
+  const labelVoice = (vid) => (vid && vid.startsWith('el:') ? `☁ ${elMap.get(vid.slice(3)) || vid.slice(3)}` : isKokoro(vid) ? kokoroLabel(vid) : voiceLabel(vid));
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [confirmJob, setConfirmJob] = useState(null); // { kind, targets, sections, words }
   const [clipMgr, setClipMgr] = useState(null); // chunk whose clip manager is open
@@ -386,7 +395,7 @@ export default function AudiobookDialog({ onClose }) {
   async function loadVoices() {
     const list = await installedVoices();
     setVoices(list);
-    if (list.length && !voiceId.startsWith('el:') && !list.includes(voiceId)) setVoiceId(list[0]);
+    if (list.length && !voiceId.startsWith('el:') && !isKokoro(voiceId) && !list.includes(voiceId)) setVoiceId(list[0]);
     if (elevenConfigured(state.global.elevenLabsKey)) {
       try { setElVoices(await elevenVoices(state.global.elevenLabsKey)); } catch { setElVoices([]); }
     }
@@ -551,8 +560,8 @@ export default function AudiobookDialog({ onClose }) {
       const isEl = voiceId.startsWith('el:');
       let blob;
       if (isEl) blob = await elevenSynth(title, voiceId.slice(3), state.global.elevenLabsKey, { modelId: state.global.elevenModel || 'eleven_multilingual_v2' });
-      else { const engine = createPiperEngine(); try { blob = await engine.synth(title, voiceId); } finally { engine.dispose(); } }
-      await setSectionExtra(checksum, firstLine, 'title', blob, { source: 'tts', voiceId, durationMs: estMs(blob), titleText: title });
+      else { const engine = createLocalEngine(); try { blob = await engine.synth(title, voiceId); } finally { engine.dispose(); } }
+      await setSectionExtra(checksum, firstLine, 'title', blob, { source: 'tts', voiceId, durationMs: await estMs(blob), titleText: title });
       setMsg(`🔊 Narrated the title “${title.slice(0, 40)}”.`); refresh();
     } catch (e) { setMsg('Title narration failed: ' + (e?.message || e)); appendAppLog('audiobook', `section title @ ${firstLine + 1}: ${e?.message || e}`); }
     setSecBusy('');
@@ -606,11 +615,11 @@ export default function AudiobookDialog({ onClose }) {
     // chunk ~50 with "Can't create a session / failed to allocate a buffer". Recycling the worker
     // every batch (and before any retry) frees the heap; OPFS keeps the voice cached.
     const PIPER_BATCH = 16;
-    const engine = isEl ? null : createPiperEngine();
+    const engine = isEl ? null : createLocalEngine({ onKokoroProgress: (p) => setMsg(p < 100 ? `Downloading the Kokoro voice model (once, ~90 MB)… ${p}%` : '') });
     // Any voice, either engine: [voice:…] tags can switch engines mid-chunk.
     let piperForTags = null;
-    const synthOne = (text, v) => (String(v).startsWith('el:') ? elevenSynth(text, v.slice(3), key, { modelId }) : (engine || (piperForTags ||= createPiperEngine())).synth(text, v));
-    const candidates = [...ENGLISH_VOICES.map((v) => ({ id: v.id, label: v.label })), ...elVoices.map((v) => ({ id: `el:${v.id}`, label: v.name }))];
+    const synthOne = (text, v) => (String(v).startsWith('el:') ? elevenSynth(text, v.slice(3), key, { modelId }) : (engine || (piperForTags ||= createLocalEngine())).synth(text, v));
+    const candidates = [...ENGLISH_VOICES.map((v) => ({ id: v.id, label: v.label })), ...KOKORO_VOICES, ...elVoices.map((v) => ({ id: `el:${v.id}`, label: v.name }))];
     const synth = (c) => (hasNarrationTags(c.text)
       ? synthTagged(c.text, { synth: synthOne, voiceId: vid, candidates, encodeWav }) // pauses + voice changes stitched into one clip
       : (isEl ? elevenSynth(c.text.trim(), vid.slice(3), key, { modelId }) : engine.synth(c.text.trim(), vid)));
@@ -632,7 +641,7 @@ export default function AudiobookDialog({ onClose }) {
             blob = await synth(c);
           }
           setPhase('saving');
-          await addAudioClip(job.checksum, c.startLine, blob, { source: 'tts', voiceId: vid, durationMs: estMs(blob), spanEndLine: c.endLine });
+          await addAudioClip(job.checksum, c.startLine, blob, { source: 'tts', voiceId: vid, durationMs: await estMs(blob), spanEndLine: c.endLine });
           ok++; consecutive = 0;
           if (engine && ok % PIPER_BATCH === 0) engine.recycle(); // fresh heap for the next batch
         } catch (e) {
@@ -880,7 +889,10 @@ export default function AudiobookDialog({ onClose }) {
       <label>Voice
         <select value={voiceId} onChange={(e) => setVoiceId(e.target.value)} title="Voice used for the next job you queue (offline Piper, or ElevenLabs cloud if a key is set in Audio Settings). Jobs already queued keep the voice they were queued with.">
           <optgroup label="Offline (Piper)">
-            {(voices.length ? voices : (voiceId.startsWith('el:') ? [] : [voiceId])).map((v) => <option key={v} value={v}>{voiceLabel(v)}</option>)}
+            {(voices.length ? voices : (voiceId.startsWith('el:') || isKokoro(voiceId) ? [] : [voiceId])).map((v) => <option key={v} value={v}>{voiceLabel(v)}</option>)}
+          </optgroup>
+          <optgroup label="Offline (Kokoro · higher quality · ~90 MB once)">
+            {KOKORO_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
           </optgroup>
           {elVoices.length > 0 && (
             <optgroup label="ElevenLabs (cloud · your quota)">

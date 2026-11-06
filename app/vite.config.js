@@ -22,5 +22,8 @@ export default defineConfig({
     },
     server: {
         port: 52593,
-    }
+    },
+    // Workers are spawned as module workers ({ type: 'module' }); build them as ES modules too so
+    // libraries that use import.meta (kokoro-js / Transformers.js) keep it.
+    worker: { format: 'es' },
 })
