@@ -99,7 +99,7 @@ import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, speechRecognitionSupported } from './features/speechRecognition.js';
 import { alignOrResync, speakParams, moveQuality, strictnessOf } from './features/speakAlign.js';
-import { speechSession, keepSession } from './features/speechLog.js';
+import { speechSession, keepSession, countFillers } from './features/speechLog.js';
 import { playWordFx } from './features/wordFx.js';
 import VoiceFeedback from './components/VoiceFeedback.jsx';
 import { recordClip } from './features/audioRecorder.js';
@@ -2051,9 +2051,13 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           sess.move(qs, hit.to);
           move = `+${hit.to - wi} word${hit.to - wi === 1 ? '' : 's'}${hit.resync ? ' (found your place)' : ''}`;
         } else if (isFinal) { move = 'no match near your place'; sess.miss(); }
+        // Filler words (um, uh, you know…) that aren't in the text around your place.
+        const nf = isFinal ? countFillers(transcript, tab.doc.words.slice(Math.max(0, wi - 12), wi + 60).join(' ')) : 0;
+        if (nf) sess.fillers(nf);
         lastResultAt = Date.now();
         setSpeakInfo((si) => ({
           ...si, status: 'listening', error: null, heard: transcript, final: isFinal, move: move || si.move,
+          fillers: (si.fillers || 0) + nf, since: si.since || Date.now(),
           // What the card lines up: heard words vs the text from where you were.
           trace: hit ? { from: wi, to: hit.to, pairs: hit.pairs } : (isFinal ? { from: wi, to: wi, pairs: null } : si.trace),
         }));
