@@ -4,11 +4,8 @@ Backlog from the 2026-11 GitHub sweep (sharing/lending items excluded by choice)
 delete an item when it ships.
 
 ## Chunk 3 — Typing quick wins
-- Read-ahead mode (only next N words visible) and memory mode (hide the current word).
-- Tape mode (single scrolling line).
 - Pass marks (min WPM/accuracy) on Typing Plan steps.
 - Trigram + common-word drills.
-- Lazy accents (type a for á), Caps Lock warning.
 - CSV export of every run.
 - Challenge links (seeded test from a URL).
 

@@ -3411,6 +3411,9 @@
 .tr-runs th, .tr-runs td { padding: 2px 10px 2px 0; text-align: right; border-bottom: 1px solid var(--divider); }
 .tr-runs td:last-child, .tr-runs th:last-child { text-align: left; }
 .tr-runs-net { font-weight: 700; }
+.trw.ra-hidden { visibility: hidden; }
+.trw.active.mem .trc.pending { color: transparent; }
+.tr-caps { background: var(--orp-fg); color: #fff; }
 .trc.wrong { color: #fff; background: var(--orp-fg); border-radius: 2px; }
 /* A letter that was wrong at some point, then fixed: a faint residue of the mistake. */
 .trc.stain { background: color-mix(in srgb, var(--orp-fg) 16%, transparent); border-radius: 2px; }
