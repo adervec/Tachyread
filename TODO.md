@@ -5,8 +5,6 @@ delete an item when it ships.
 
 ## Chunk 6 — Typing training
 - Missed-word spaced repetition (weak spots currently weight recent misses; no per-word schedule).
-- On-screen keyboard; Colemak/Dvorak emulation.
-- keybr-style key-unlock course.
 
 ## Chunk 7 — Getting books in
 - Goodreads / StoryGraph CSV import.

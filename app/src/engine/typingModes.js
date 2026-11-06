@@ -6,6 +6,7 @@
 // scoring, trend, and history all keep working unchanged.
 
 import { reviewPassage } from '../features/typingUpgrades.js';
+import { coursePassage, COURSE_START } from './keyboardLayouts.js';
 
 // kind: 'doc'  → generated from the open document (needs the reading position; supports "count as read")
 //       'drill'→ self-contained practice text (no reading position)
@@ -14,6 +15,7 @@ export const TYPING_MODES = [
   { id: 'commonWords', label: 'Common words', kind: 'drill', desc: 'The most frequent English words — build raw speed.' },
   { id: 'bigrams', label: 'Bigrams', kind: 'drill', desc: 'The most common English letter pairs (th, he, in…), each typed three times.' },
   { id: 'trigrams', label: 'Trigrams', kind: 'drill', desc: 'The most common English letter triples (the, and, ing…), each typed three times.' },
+  { id: 'course', label: '🎓 Course', kind: 'drill', desc: 'keybr-style: start with 6 letters, unlock the next when every one is at your target speed.' },
   { id: 'weakspot', label: '🩹 Weak spots', kind: 'drill', desc: 'Built from your whole history: the words you most often miss or slow on, plus words and letter pairs on your weakest keys.' },
   { id: 'homeRow', label: 'Home row', kind: 'drill', desc: 'a s d f j k l ; drill.' },
   { id: 'topRow', label: 'Top row', kind: 'drill', desc: 'q w e r t y u i o p drill.' },
@@ -128,7 +130,7 @@ export function passageWordsFor(mode, limit) {
 
 // Build the passage (word array) for a mode. `seed` lets callers vary drills between attempts;
 // `reviewWords` feeds the 'review' drill (the last run's problem words).
-export function buildPassage(mode, { docWords = [], startIndex = 0, max = 600, seed = 0, reviewWords = null, weak = null } = {}) {
+export function buildPassage(mode, { docWords = [], startIndex = 0, max = 600, seed = 0, reviewWords = null, weak = null, courseLevel = COURSE_START } = {}) {
   switch (mode) {
     case 'review':
       if (reviewWords?.length) return reviewPassage(reviewWords, { max: Math.min(max, 60), seed });
@@ -139,6 +141,7 @@ export function buildPassage(mode, { docWords = [], startIndex = 0, max = 600, s
       while (out.length < max) out.push(...shuffled(COMMON_WORDS, seed + i++));
       return out.slice(0, max);
     }
+    case 'course': return coursePassage(courseLevel, max, seed, docWords);
     case 'weakspot': return weakspotPassage(weak, max, seed, docWords);
     case 'bigrams': return ngramDrill(BIGRAMS, max, seed);
     case 'trigrams': return ngramDrill(TRIGRAMS, max, seed);
