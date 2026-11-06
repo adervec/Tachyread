@@ -95,7 +95,7 @@ const agg = aggregateKeys([
   { keys: { a: { n: 6, err: 1 }, q: { n: 4, err: 3 } } },
   { /* legacy run without keys */ },
 ]);
-assert.deepEqual(agg.a, { n: 16, err: 3 }, 'per-key merge across runs');
+assert.deepEqual(agg.a, { n: 16, err: 3, ms: 0, t: 0 }, 'per-key merge across runs (timing fields zero on untimed runs)');
 const fs = fingerStats(agg);
 assert.equal(fs[0].finger, 'L pinky', 'worst finger first (a+q are both L pinky)');
 assert.ok(Math.abs(fs[0].rate - 6 / 20) < 1e-9, 'rate = errors/attempts');
@@ -157,6 +157,24 @@ assert.equal(penaltyRewind([], 0, 3).pos, 0, 'empty run is safe');
   assert.equal(s[0], 0, 'no history yet');
   s.forEach((v, i) => assert.equal(v, windowWpm(tr.slice(0, i + 1).map((p) => ({ ts: p.t * 1000, ok: p.ok })), tr[i].t * 1000, 2)));
   assert.equal(s[6], 300, '25 ok chars/s = 300 wpm');
+}
+
+
+// per-key speed, hand speed, weak spots
+{
+  const { keyWpm, handSpeed, weakSpots } = await import('./typingUpgrades.js');
+  assert.equal(keyWpm({ t: 10, ms: 2000 }), 60, '200 ms a key = 60 wpm');
+  assert.equal(keyWpm({ t: 3, ms: 600 }), null, 'too few timed keystrokes');
+  const hs = handSpeed({ f: { t: 30, ms: 6000 }, j: { t: 30, ms: 3000 } });
+  assert.equal(Math.round(hs.L), 60); assert.equal(Math.round(hs.R), 120);
+  const runs = [
+    { ts: 2, keys: { e: { n: 100, err: 1, ms: 15000, t: 100 }, q: { n: 40, err: 8, ms: 12000, t: 40 }, k: { n: 40, err: 0, ms: 14000, t: 40 }, z: { n: 5, err: 5 } }, problemWords: ['Rhythm', 'queue'] },
+    { ts: 1, problemWords: ['rhythm'] },
+  ];
+  const w = weakSpots(runs);
+  assert.deepEqual(w.keys, ['q', 'k'], 'q: error-prone + slow; k: slow; e fine; z too few attempts');
+  assert.deepEqual(w.words, ['rhythm', 'queue'], 'most-missed first, case-folded');
+  assert.deepEqual(weakSpots([]), { keys: [], words: [] });
 }
 
 console.log('typingUpgrades: all checks passed');

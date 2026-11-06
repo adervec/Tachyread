@@ -14,6 +14,7 @@ export const TYPING_MODES = [
   { id: 'commonWords', label: 'Common words', kind: 'drill', desc: 'The most frequent English words — build raw speed.' },
   { id: 'bigrams', label: 'Bigrams', kind: 'drill', desc: 'The most common English letter pairs (th, he, in…), each typed three times.' },
   { id: 'trigrams', label: 'Trigrams', kind: 'drill', desc: 'The most common English letter triples (the, and, ing…), each typed three times.' },
+  { id: 'weakspot', label: '🩹 Weak spots', kind: 'drill', desc: 'Built from your whole history: the words you most often miss or slow on, plus words and letter pairs on your weakest keys.' },
   { id: 'homeRow', label: 'Home row', kind: 'drill', desc: 'a s d f j k l ; drill.' },
   { id: 'topRow', label: 'Top row', kind: 'drill', desc: 'q w e r t y u i o p drill.' },
   { id: 'bottomRow', label: 'Bottom row', kind: 'drill', desc: 'z x c v b n m drill.' },
@@ -62,6 +63,25 @@ const LOWER = 'abcdefghijklmnopqrstuvwxyz';
 const BIGRAMS = 'th he in er an re on at en nd ti es or te of ed is it al ar st to nt ng se ha as ou io le ve co me de hi ri ro ic ne ea ra ce li ch ll be ma si om ur'.split(' ');
 const TRIGRAMS = 'the and ing ion ent her for tha ter tio ere ate ati hat est all ver his ith ers res are ons rea ear was sta thi tin ted con men pro com per ess ive int ound ight'.split(' ').filter((t) => t.length === 3);
 
+// Weak-spot drill: missed words twice each, words on your weak keys (from the open book first, then
+// common words), and those keys' bigrams three times — shuffled. Without history: common words.
+export function weakspotPassage(weak, count, seed = 0, docWords = []) {
+  const keys = weak?.keys || [];
+  const words = weak?.words || [];
+  const onKeys = (w) => keys.some((k) => w.includes(k));
+  const bookWords = [...new Set(docWords.slice(0, 50000).map((w) => String(w).toLowerCase().replace(/[^\p{L}'-]/gu, '')).filter((w) => w.length > 2 && w.length < 13 && onKeys(w)))].slice(0, 120);
+  const pool = [
+    ...words.flatMap((w) => [w, w]),
+    ...bookWords,
+    ...COMMON_WORDS.filter((w) => w.length > 2 && onKeys(w)),
+    ...BIGRAMS.filter(onKeys).flatMap((g) => [g, g, g]),
+  ];
+  if (!pool.length) return shuffled(COMMON_WORDS, seed).concat(shuffled(COMMON_WORDS, seed + 1)).slice(0, count);
+  const out = [];
+  for (let round = 0; out.length < count; round++) out.push(...shuffled(pool, seed + round));
+  return out.slice(0, count);
+}
+
 // ngram-type-style pattern drill: each n-gram typed `reps` times in a row, patterns shuffled.
 export function ngramDrill(list, count, seed = 0, reps = 3) {
   const out = [];
@@ -108,7 +128,7 @@ export function passageWordsFor(mode, limit) {
 
 // Build the passage (word array) for a mode. `seed` lets callers vary drills between attempts;
 // `reviewWords` feeds the 'review' drill (the last run's problem words).
-export function buildPassage(mode, { docWords = [], startIndex = 0, max = 600, seed = 0, reviewWords = null } = {}) {
+export function buildPassage(mode, { docWords = [], startIndex = 0, max = 600, seed = 0, reviewWords = null, weak = null } = {}) {
   switch (mode) {
     case 'review':
       if (reviewWords?.length) return reviewPassage(reviewWords, { max: Math.min(max, 60), seed });
@@ -119,6 +139,7 @@ export function buildPassage(mode, { docWords = [], startIndex = 0, max = 600, s
       while (out.length < max) out.push(...shuffled(COMMON_WORDS, seed + i++));
       return out.slice(0, max);
     }
+    case 'weakspot': return weakspotPassage(weak, max, seed, docWords);
     case 'bigrams': return ngramDrill(BIGRAMS, max, seed);
     case 'trigrams': return ngramDrill(TRIGRAMS, max, seed);
     case 'homeRow': return drillWords('asdfghjkl;', max, seed);

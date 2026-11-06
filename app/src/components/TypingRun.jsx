@@ -13,7 +13,7 @@ import { allTypingRuns } from '../state/storage.js';
 import { applyTheme, THEME_NAMES } from '../state/themes.js';
 import { passesMarks } from '../engine/typingPlans.js';
 import { encodeChallenge } from '../features/typingChallenge.js';
-import { windowWpm, windowSeries, consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress, penaltyRewind } from '../features/typingUpgrades.js';
+import { weakSpots, windowWpm, windowSeries, consistencyPct, pbFlags, bestNet, typingStreak, problemWords, buildCum, paceChars, paceWordIndex, runProgress, penaltyRewind } from '../features/typingUpgrades.js';
 import { currentSession, sessionStats, bookForecast } from '../features/typingSession.js';
 import { splitRun, splitsFor } from '../features/typingSplits.js';
 import { typingEyeColor } from '../features/avatarMood.js';
@@ -207,7 +207,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // Persisted run history, loaded once: personal-best detection, the 👻 pace ghost's
   // last-run/PB speeds, and the daily-streak line on the results screen.
   const pastRunsRef = useRef(null);
-  useEffect(() => { allTypingRuns().then((r) => { pastRunsRef.current = r || []; }).catch(() => { pastRunsRef.current = []; }); }, []);
+  const [pastLoaded, setPastLoaded] = useState(0); // bumps once history loads, so the weak-spot drill rebuilds from it
+  useEffect(() => { allTypingRuns().then((r) => { pastRunsRef.current = r || []; setPastLoaded((n) => n + 1); }).catch(() => { pastRunsRef.current = []; }); }, []);
   const isDocMode = (TYPING_MODE_BY_ID[gameMode]?.kind || 'doc') === 'doc';
   // Show the book's own line/paragraph breaks instead of a flowing wall — visual only.
   const showBreaks = !!cfg.showBreaks && isDocMode && !oneWord && !cfg.ticker;
@@ -231,7 +232,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const passageMax = passageWordsFor(mode, limit);
 
   const { prepared, passage } = useMemo(() => {
-    const raw = buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: passageMax, seed, reviewWords: reviewRef.current });
+    const raw = buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: passageMax, seed, reviewWords: reviewRef.current, weak: gameMode === 'weakspot' ? weakSpots(pastRunsRef.current || []) : null });
     const base = isDocMode ? startIndex.current : 0;
     const prep = [];
     let pre = null; // fully-skipped decorative tokens ahead of the next kept word (ghost display)
@@ -243,7 +244,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       pre = null;
     }
     return { prepared: prep, passage: prep.map((p) => p.text) };
-  }, [doc, gameMode, seed, bypassSym, lowercase, noSpecial, isDocMode, passageMax]);
+  }, [doc, gameMode, seed, bypassSym, lowercase, noSpecial, isDocMode, passageMax, gameMode === 'weakspot' && pastLoaded]);
   // A typed char matches its target when it's equal (case rule) or the target is exotic (auto-accepted).
   const charOk = (typedCh, targetCh) => (bypassSym && isExotic(targetCh)) || sameChar(typedCh, targetCh, caseSensitive);
   // Exact-match test for fix-errors mode: same length, every char passing the run's own char rule.
@@ -764,9 +765,10 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   function scoreChars(fromLen, str) {
     const s = stats.current;
     const target = passage[pos] || '';
+    let keyDt = 0; // time to reach the first new key of this event (per-key speed)
     if (str.length > fromLen) {
       const now = Date.now();
-      if (lastKeyTsRef.current) intervalsRef.current.push(now - lastKeyTsRef.current);
+      if (lastKeyTsRef.current) { keyDt = now - lastKeyTsRef.current; intervalsRef.current.push(keyDt); }
       lastKeyTsRef.current = now;
       if (fromLen === 0 && !wordStartRef.current) wordStartRef.current = now;
     }
@@ -774,8 +776,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       const ch = target[p];
       s.chars += 1;
       const key = ch ? (caseSensitive ? ch : ch.toLowerCase()) : null;
-      const kk = key ? (s.keys[key] ||= { n: 0, err: 0 }) : null;
+      const kk = key ? (s.keys[key] ||= { n: 0, err: 0, ms: 0, t: 0 }) : null;
       if (kk) kk.n += 1;
+      // Timed only when it's a single fresh keystroke after a short gap — pastes, multi-char mobile
+      // events and pauses over 2 s would smear the key's speed.
+      if (kk && p === fromLen && str.length - fromLen === 1 && keyDt > 0 && keyDt < 2000) { kk.ms += keyDt; kk.t += 1; }
       if (ch !== undefined && charOk(str[p], ch)) {
         s.correct += 1;
         ping(sounds.charCorrect);

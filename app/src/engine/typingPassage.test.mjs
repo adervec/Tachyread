@@ -59,3 +59,16 @@ console.log('typingPassage: all cases pass');
   assert.ok(tri.every((t) => t.length === 3));
   assert.ok(buildPassage('bigrams', { max: 12 }).every((t) => t.length === 2));
 }
+
+// weak-spot passage
+{
+  const { weakspotPassage } = await import('./typingModes.js');
+  const p = weakspotPassage({ keys: ['q'], words: ['rhythm'] }, 40, 1);
+  assert.equal(p.length, 40);
+  assert.ok(p.includes('rhythm'));
+  assert.ok(p.filter((w) => w !== 'rhythm').every((w) => w.includes('q')), 'everything else drills the weak key');
+  assert.equal(weakspotPassage(null, 20).length, 20, 'no history → common words');
+  const fromBook = weakspotPassage({ keys: ['q'], words: [] }, 30, 0, ['The', 'Queen’s', 'quiet', 'garden.', 'quiet']);
+  assert.ok(fromBook.includes('quiet') && fromBook.every((w) => w.includes('q')), 'book words on the weak key, cleaned + deduped');
+  assert.equal(buildPassage('weakspot', { max: 10, weak: { keys: [], words: ['abc'] } }).filter((w) => w === 'abc').length > 0, true);
+}
