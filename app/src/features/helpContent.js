@@ -102,7 +102,7 @@ export const HELP_SECTIONS = [
     body: [
       'Eye Warmup: an 8-drill guided routine (pursuit, saccades, peripheral, focus, rest) — a ~3 minute warmup before reading, with optional eye-tracking.',
       'Span Drill: flashes a run of words for one glance and widens it as you keep up — trains words-per-fixation.',
-      'Vocabulary: collects words you look up into a spaced-repetition deck.',
+      'Vocabulary: collects words you look up into a spaced-repetition deck. Right-click any word in the Lines pane → 📖 Define for its definitions (English, from the free Dictionary API) and a Wikipedia summary in the document language, then ＋ Add to Vocabulary keeps the word, its sentence and a short definition on a card. Only the looked-up word is sent.',
       'Take a Break Now and the comfort monitor (20-20-20 microbreaks) protect your eyes on long sessions.',
     ],
   },

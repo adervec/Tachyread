@@ -4,7 +4,7 @@ Backlog from the 2026-11 GitHub sweep (sharing/lending items excluded by choice)
 delete an item when it ships.
 
 ## Chunk 5 — Notes, highlights, dictionary
-- Tap-a-word dictionary / Wikipedia popup → add to Vocabulary deck; offline StarDict import.
+- Offline StarDict dictionary import (the 📖 Define popup currently uses dictionaryapi.dev + Wikipedia).
 - Library-wide full-text search.
 
 ## Chunk 6 — Typing training

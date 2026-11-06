@@ -14,6 +14,8 @@ import { getCachedTranslation, putCachedTranslation, appendAppLog, getNotes, sav
 import { swapLookup, applySwap } from '../features/wordSwaps.js';
 import CrosshairOverlay from './CrosshairOverlay.jsx';
 import { beelineMix } from '../features/beeline.js';
+import DefinePopup from './DefinePopup.jsx';
+import { contextAt } from '../engine/vocab.js';
 
 // Reading-pointer feature archived for now (not useful). Flip to true to restore it, and uncomment
 // its Settings section in dialogs/SettingsDialog.jsx.
@@ -448,7 +450,7 @@ function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, li
   );
 }
 
-function WordMenu({ menu, onClose, onJumpWord, onAddNote, onHighlight }) {
+function WordMenu({ menu, onClose, onJumpWord, onAddNote, onHighlight, onDefine }) {
   if (!menu) return null;
   const w = menu.word;
   const enc = encodeURIComponent(w);
@@ -459,6 +461,7 @@ function WordMenu({ menu, onClose, onJumpWord, onAddNote, onHighlight }) {
   const sel = menu.sel;
   const items = [
     ...(sel ? [{ label: `🖍 Highlight “${sel.text.length > 28 ? `${sel.text.slice(0, 28)}…` : sel.text}”`, fn: () => { onHighlight?.(sel); onClose(); } }] : []),
+    { label: `📖 Define “${w}”`, fn: () => { onDefine?.(menu); onClose(); } },
     { label: '📝 Add note here', fn: () => { onAddNote?.(menu.start >= 0 ? menu.start : 0); onClose(); } },
     { label: `Copy “${w}”`, fn: () => { navigator.clipboard?.writeText(w).catch(() => {}); onClose(); } },
     { label: 'Translate (Google)', fn: () => open(`https://translate.google.com/?sl=auto&tl=en&text=${enc}&op=translate`) },
@@ -593,7 +596,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       const a = wiOf(ws.anchorNode), b = wiOf(ws.focusNode);
       if (Number.isFinite(a) && Number.isFinite(b)) sel = { start: Math.min(a, b), end: Math.max(a, b), text: ws.toString().replace(/\s+/g, ' ').trim() };
     }
-    setMenu({ x: Math.min(e.clientX, window.innerWidth - 240), y: Math.min(e.clientY, window.innerHeight - 180), word, start, sel });
+    setMenu({ x: Math.min(e.clientX, window.innerWidth - 240), y: Math.min(e.clientY, window.innerHeight - 180), word, start, sel, wi: Number(wordEl.dataset.wi) });
   }
   const currentLine = getLineIndex(doc, idx);
   // No paragraph highlight in wall mode — merged blocks have no blank-line boundaries to bound it.
@@ -654,6 +657,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   // Highlights (kind 'highlight' notes) drawn under their words; reloads whenever this doc's notes change.
   const notesCs = doc.contentChecksum || settings.contentChecksum;
   const [userHl, setUserHl] = useState([]);
+  const [define, setDefine] = useState(null); // 📖 Define popup: { word, x, y, context }
   useEffect(() => {
     if (!notesCs) return undefined;
     let dead = false;
@@ -1325,7 +1329,9 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
         settings={settings}
         onChange={(pl) => patchSettings(tab.id, { linesCrosshairs: pl })}
       />
-      <WordMenu menu={menu} onClose={() => setMenu(null)} onJumpWord={onJumpWord} onAddNote={onAddNote} onHighlight={addHighlight} />
+      <WordMenu menu={menu} onClose={() => setMenu(null)} onJumpWord={onJumpWord} onAddNote={onAddNote} onHighlight={addHighlight}
+        onDefine={(m) => setDefine({ word: m.word, x: m.x, y: m.y, context: Number.isFinite(m.wi) ? contextAt(doc, m.wi) : '' })} />
+      {define && <DefinePopup at={define} onClose={() => setDefine(null)} />}
     </div>
   );
 }
