@@ -128,6 +128,7 @@ export const HELP_SECTIONS = [
     say: 'Tachyread can record and play per-line narration, run a standalone text-to-speech reader, and play ambient sound under your reading. Read-aloud keeps playing with the screen off, driven by your lock-screen media controls.',
     body: [
       'Audio menu: the Audiobook Manager records/plays per-line narration; the Text-to-Speech Reader is a standalone TTS popup; Ambient Sound plays a low soundscape under your reading.',
+      'Kokoro voices (Audiobook Command Centre → Voice → “Offline (Kokoro)”): a higher-quality on-device voice for narration. The model (~90 MB) downloads once from Hugging Face and the browser keeps it; everything is generated on this device.',
       'Audio Settings holds the TTS voice & rate (the default voice follows your document language), the speak-along follow mode, and the auto-stop timer.',
       'Narration tags: in your own text files, [pause] (¾ s), [pause:2] (seconds) and [break] (1.5 s) add silence to the generated audiobook, and [voice:Amy] … [/voice] reads a passage in another voice (matched by voice name — Piper or ElevenLabs). The tags stay visible in the reader.',
       'Audiobook export → “One .m4b audiobook with chapters” saves the whole book as a single M4B (AAC, encoded on this device) with a chapter at every track and the book’s Trackyread cover when it has one — the format audiobook apps and Apple Books expect.',

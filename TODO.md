@@ -7,6 +7,7 @@ delete an item when it ships.
 - Barcode scanning on Windows/Linux desktop Chrome (no BarcodeDetector there; would need a zxing-wasm dependency). Typed ISBN works everywhere.
 
 ## Chunk 8 — Audio & speaking
-- Kokoro in-browser TTS with word-exact highlighting.
+- Word-exact highlighting for Kokoro narration (kokoro-js doesn't expose per-word timings yet).
+- Kokoro for live read-aloud (it's in audiobook generation now).
 - Audiobook-to-text sync (forced alignment of a user's own audiobook).
 - Phoneme-level pronunciation scoring (large on-device model).
