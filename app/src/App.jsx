@@ -3149,7 +3149,7 @@ function AppInner() {
                 sessionRuns={typingRuns}
                 endFanfare={state.global.typingEndFanfare !== false}
                 globalCfg={state.global.typingCfg}
-                onPatchCfg={(p) => updateGlobal({ typingCfg: { ...(state.global.typingCfg || {}), ...p } })}
+                onPatchCfg={(p) => updateGlobal({ typingCfg: { ...(stateGlobalRef.current.typingCfg || {}), ...p } })} // latest cfg: run-end callbacks hold an older render's state
                 plan={planState ? {
                   name: planState.plan.name,
                   step: planState.step + 1,

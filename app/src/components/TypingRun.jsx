@@ -4,6 +4,7 @@ import { getLineIndex, getParagraphRange } from '../document/readerDocument.js';
 import { deviceKind } from '../state/device.js';
 import { activeKeyboard } from '../features/keyboards.js';
 import { buildPassage, passageWordsFor, TYPING_MODES, TYPING_MODE_BY_ID } from '../engine/typingModes.js';
+import { LAYOUTS, emulateKey, keyFor, courseStep, COURSE_ORDER, COURSE_START } from '../engine/keyboardLayouts.js';
 import { transformToken, displayCells, isExotic, ghostCharsAt } from '../engine/typingText.js';
 import { letterGrade, playGradeSound, GRADE_STATEMENTS } from '../features/gradeChime.js';
 import { createReadAloud } from '../features/readAloud.js';
@@ -160,6 +161,12 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   // current word's letters once you start typing it.
   const readAhead = cfg.readAhead == null ? null : Math.max(0, Math.min(3, Number(cfg.readAhead)));
   const memoryMode = !!cfg.memoryMode;
+  // Keyboard aids: on-screen keyboard showing the next key, and layout emulation (Colemak/Dvorak
+  // typed on a QWERTY board). Course: how many letters are unlocked and the speed to unlock more.
+  const showKeyboard = !!cfg.showKeyboard;
+  const layout = LAYOUTS[cfg.layout] ? cfg.layout : 'qwerty';
+  const courseLevel = Math.max(COURSE_START, Math.min(COURSE_ORDER.length, Number(cfg.courseLevel) || COURSE_START));
+  const courseTarget = Number(cfg.courseTarget) || 35;
   const blind = !!cfg.blind;             // hide per-char verdicts while running; the numbers tell the tale at the end
   const penaltyWords = Math.max(0, Math.min(9, Number(cfg.penaltyWords) || 0)); // setback mode: words erased per mistyped word
   // Display-only variants of the transforms (the REQUIRED typing is identical either way):
@@ -232,7 +239,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const passageMax = passageWordsFor(mode, limit);
 
   const { prepared, passage } = useMemo(() => {
-    const raw = buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: passageMax, seed, reviewWords: reviewRef.current, weak: gameMode === 'weakspot' ? weakSpots(pastRunsRef.current || []) : null });
+    const raw = buildPassage(gameMode, { docWords: doc.words, startIndex: startIndex.current, max: passageMax, seed, reviewWords: reviewRef.current, courseLevel, weak: gameMode === 'weakspot' ? weakSpots(pastRunsRef.current || []) : null });
     const base = isDocMode ? startIndex.current : 0;
     const prep = [];
     let pre = null; // fully-skipped decorative tokens ahead of the next kept word (ghost display)
@@ -244,7 +251,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       pre = null;
     }
     return { prepared: prep, passage: prep.map((p) => p.text) };
-  }, [doc, gameMode, seed, bypassSym, lowercase, noSpecial, isDocMode, passageMax, gameMode === 'weakspot' && pastLoaded]);
+  }, [doc, gameMode, seed, bypassSym, lowercase, noSpecial, isDocMode, passageMax, gameMode === 'weakspot' && pastLoaded, gameMode === 'course' && courseLevel]);
   // A typed char matches its target when it's equal (case rule) or the target is exotic (auto-accepted).
   const charOk = (typedCh, targetCh) => (bypassSym && isExotic(targetCh)) || sameChar(typedCh, targetCh, caseSensitive);
   // Exact-match test for fix-errors mode: same length, every char passing the run's own char rule.
@@ -457,13 +464,17 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     // Problem words (missed or unusually slow) → the 🎯 review drill; PBs judged against history.
     run.problemWords = problemWords(passage, resultsRef.current);
     run.pb = pbFlags(pastRunsRef.current || [], run);
+    if (gameMode === 'course') {
+      run.course = { level: courseLevel, ...courseStep(courseLevel, s.keys, run.accuracy, { target: courseTarget }) };
+      if (run.course.unlock) patchCfg({ courseLevel: courseLevel + 1 });
+    }
     pastRunsRef.current = [...(pastRunsRef.current || []), run];
     setSummary(run);
     setPhase('done');
     onSaveRun?.(run);
     if (endFanfare) playGradeSound(run.grade);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [metrics, doc, onSaveRun, gameMode, endFanfare, passage]);
+  }, [metrics, doc, onSaveRun, gameMode, endFanfare, passage, courseLevel, courseTarget]);
 
   const armIdle = useCallback(() => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -933,6 +944,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   function onKeyDown(e) {
     const caps = !!e.getModifierState?.('CapsLock');
     if (caps !== capsOn) setCapsOn(caps);
+    // Layout emulation: the physical key types the chosen layout's letter, through the same input path.
+    if (layout !== 'qwerty' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const ch = emulateKey(e.code, e.shiftKey !== caps, layout);
+      if (ch) { e.preventDefault(); onChange({ target: { value: buf + ch } }); return; }
+    }
     if (wordBackOnly && e.key === 'Backspace' && phase === 'running') {
       e.preventDefault();
       if (e.ctrlKey || e.altKey || e.metaKey) clearWord();
@@ -1184,6 +1200,17 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                 onClick={() => patchCfg({ showBreaks: !cfg.showBreaks })} disabled={locked || oneWord || !!cfg.ticker}
                 title="Show the book's own line and paragraph breaks — visual only, the words you type are identical" />
             )}
+            <Tile icon="⌨" label="Keyboard" state={showKeyboard ? 'shown' : 'hidden'} on={showKeyboard}
+              onClick={() => patchCfg({ showKeyboard: !showKeyboard })} disabled={locked}
+              title="Show an on-screen keyboard that lights up the next key" />
+            <Tile icon="🔀" label="Layout" state={LAYOUTS[layout].label} on={layout !== 'qwerty'}
+              onClick={() => patchCfg({ layout: { qwerty: 'colemak', colemak: 'dvorak', dvorak: 'qwerty' }[layout] })} disabled={locked}
+              title="Practise another layout on your QWERTY keyboard — each physical key types that layout's letter (QWERTY → Colemak → Dvorak)" />
+            {gameMode === 'course' && (
+              <Tile icon="🎓" label="Course target" state={`${courseTarget} wpm · ${courseLevel} letters`} on
+                onClick={() => patchCfg({ courseTarget: { 25: 35, 35: 45, 45: 60, 60: 25 }[courseTarget] || 35 })} disabled={locked}
+                title="Speed every unlocked letter must reach before the next unlocks (25 → 35 → 45 → 60 wpm)" />
+            )}
             <Tile icon="📟" label="Ticker" state={cfg.ticker ? 'single line' : 'off'} on={!!cfg.ticker}
               onClick={() => patchCfg({ ticker: !cfg.ticker })} disabled={locked || oneWord}
               title="Show the passage as one horizontal ticker line — the active word holds a fixed point while committed words stream off to the left" />
@@ -1337,7 +1364,14 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             return <Fragment key={i}>{preEl}{wordEl}{brkEl}</Fragment>;
           })}
         </div>
+        {showKeyboard && phase !== 'done' && !blind && <OnScreenKeyboard layout={layout} next={(passage[pos] || '')[buf.length] ?? ' '} />}
       </div>
+      {gameMode === 'course' && phase !== 'done' && (
+        <div className="tr-course" aria-label="Course letters">
+          {[...COURSE_ORDER].map((ch, i) => <span key={ch} className={i < courseLevel ? (i === courseLevel - 1 ? 'focus' : 'on') : 'off'}>{ch}</span>)}
+          <span className="lj-qdim"> · unlock at {courseTarget} wpm & 95% on every letter</span>
+        </div>
+      )}
 
       {phase === 'idle' && <div className="tr-hint">Just start typing — the run begins on your first letter (or press ▶ Start for a Ready·Set·Go). It ends at your limit, on “End run”, or after 5s idle. Esc discards.</div>}
 
@@ -1387,6 +1421,13 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           {summary.raced && (
             <div className={`tr-race-result${summary.caught ? ' caught' : ''}`}>
               {summary.caught ? '🔊 The voice caught you!' : '🏁 You outran the voice!'}
+            </div>
+          )}
+          {summary.course && (
+            <div className={`tr-pb${summary.course.unlock ? '' : ' tr-course-wait'}`} role="status">
+              {summary.course.unlock ? `🔓 New letter unlocked: “${summary.course.next}”`
+                : !summary.course.accuracyOk ? `🎓 Keep going — accuracy needs 95% to unlock the next letter`
+                  : `🎓 Keep going — under ${courseTarget} wpm on: ${summary.course.slow.join(' ')}`}
             </div>
           )}
           {(summary.pb?.allTime || summary.pb?.mode) && (
@@ -1477,6 +1518,24 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// On-screen keyboard: the layout's three letter rows plus space, with the next key lit (and Shift
+// when the next character needs it).
+function OnScreenKeyboard({ layout, next }) {
+  const k = keyFor(next, layout);
+  const rows = LAYOUTS[layout].rows;
+  return (
+    <div className="tr-osk" aria-hidden="true">
+      {rows.map((row, r) => (
+        <div key={r} className="tr-osk-row" style={{ paddingLeft: r * 14 }}>
+          {r === 2 && <span className={`tr-osk-key wide${k?.shift ? ' next' : ''}`}>⇧</span>}
+          {[...row].map((ch, c) => <span key={c} className={`tr-osk-key${k && k.row === r && k.col === c ? ' next' : ''}${r === 1 && (c === 3 || c === 6) ? ' home' : ''}`}>{ch}</span>)}
+        </div>
+      ))}
+      <div className="tr-osk-row"><span className={`tr-osk-key space${k?.space ? ' next' : ''}`}>space</span></div>
     </div>
   );
 }
