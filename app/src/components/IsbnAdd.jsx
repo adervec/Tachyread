@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { lookupIsbn, validIsbn } from '../features/openLibrary.js';
 
-// Library → "＋ Add by ISBN": type an ISBN or (where the browser has BarcodeDetector — Android,
-// ChromeOS, macOS) scan the barcode on the back of the book. Open Library fills in the details and
+// Library → "＋ Add by ISBN": type an ISBN or scan the barcode on the back of the book — the
+// browser's own BarcodeDetector where it has one (Android, ChromeOS, macOS), else the zxing-wasm
+// stand-in (barcode-detector/ponyfill), loaded only when you press Scan. Open Library fills in the details and
 // the new-book editor opens pre-filled, so nothing is saved until you press Save.
-const canScan = typeof window !== 'undefined' && 'BarcodeDetector' in window;
+const canScan = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+const detectorClass = async () => window.BarcodeDetector || (await import('barcode-detector/ponyfill')).BarcodeDetector;
 
 function Scanner({ onIsbn, onClose }) {
   const videoRef = useRef(null);
@@ -18,7 +20,9 @@ function Scanner({ onIsbn, onClose }) {
         const v = videoRef.current;
         v.srcObject = stream;
         await v.play().catch(() => {});
-        const det = new window.BarcodeDetector({ formats: ['ean_13', 'isbn_10', 'isbn_13'].filter(Boolean) });
+        const Det = await detectorClass();
+        if (dead) return;
+        const det = new Det({ formats: ['ean_13'] });
         timer = setInterval(async () => {
           try {
             for (const c of await det.detect(v)) {
