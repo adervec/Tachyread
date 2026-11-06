@@ -3,6 +3,7 @@ import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { newCard, schedule, dueCards, learnedCount } from '../engine/srs.js';
 import { harvestRare, contextAt } from '../engine/vocab.js';
+import { importStardict, listDicts, deleteDict } from '../state/storage.js';
 
 const GRADES = [{ g: 0, label: 'Again' }, { g: 1, label: 'Hard' }, { g: 2, label: 'Good' }, { g: 3, label: 'Easy' }];
 const dictUrl = (w) => `https://www.merriam-webster.com/dictionary/${encodeURIComponent(w)}`;
@@ -14,6 +15,8 @@ export default function VocabDialog({ doc, onClose }) {
   const deck = state.global.vocabDeck || [];
   const [view, setView] = useState('review'); // review | deck
   const [revealed, setRevealed] = useState(false);
+  const [dicts, setDicts] = useState(null); // imported offline dictionaries (loaded when the section opens)
+  const refreshDicts = () => listDicts().then(setDicts).catch(() => setDicts([]));
   const [addWord, setAddWord] = useState('');
   const [msg, setMsg] = useState('');
 
@@ -56,6 +59,24 @@ export default function VocabDialog({ doc, onClose }) {
     >
       <div className="vocab">
         {msg && <p className="settings-note" style={{ marginTop: 0 }}>{msg}</p>}
+        <details className="lj-fold vocab-dicts" onToggle={(e) => { if (e.currentTarget.open) refreshDicts(); }}>
+          <summary>📚 Offline dictionaries{dicts?.length ? ` (${dicts.length})` : ''}</summary>
+          <p className="settings-note">Import a StarDict dictionary (pick its .ifo, .idx and .dict or .dict.dz files together) and 📖 Define answers from it first — any language, no network.</p>
+          <input type="file" multiple accept=".ifo,.idx,.dict,.dz" aria-label="StarDict files"
+            onChange={async (e) => {
+              const files = [...(e.target.files || [])]; e.target.value = ''; // copy first — clearing the input empties its live FileList
+              if (!files?.length) return;
+              setMsg('Importing dictionary…');
+              try { const d = await importStardict(files); setMsg(`Imported “${d.name}” — ${d.wordcount.toLocaleString()} words.`); refreshDicts(); }
+              catch (err) { setMsg(`Couldn’t import: ${err?.message || err}`); }
+            }} />
+          {(dicts || []).map((d) => (
+            <div key={d.id} className="lj-inline">
+              <b>{d.name}</b> <span className="lj-qdim">{d.wordcount.toLocaleString()} words · {(d.bytes / 1048576).toFixed(1)} MB</span>
+              <button className="grab-trash" onClick={async () => { await deleteDict(d.id); refreshDicts(); }} aria-label={`Remove ${d.name}`}>🗑</button>
+            </div>
+          ))}
+        </details>
         {view === 'review' && (
           <div className="vocab-review">
             {!card && <div className="vocab-empty">✓ All caught up — {deck.length} word(s), {learned} learned. Add more from the Deck tab.</div>}

@@ -1632,6 +1632,7 @@
 .define-head { display: flex; align-items: baseline; gap: 6px; font-size: 16px; margin-bottom: 4px; }
 .define-head .link-btn { margin-left: auto; }
 .define-sense ol { margin: 2px 0 6px 18px; padding: 0; }
+.define-offline { white-space: pre-wrap; margin: 2px 0 8px; }
 .define-wiki p { margin: 2px 0 8px; }
 .vc-def { font-size: 12px; opacity: .85; margin-top: 4px; }
 .note-quote { margin: 2px 0 4px; padding-left: 8px; border-left: 3px solid #f5c518; font-style: italic; }
