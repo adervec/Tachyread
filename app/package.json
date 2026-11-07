@@ -42,7 +42,7 @@
     "jspdf": "^4.2.1",
     "kokoro-js": "^1.2.1",
     "mammoth": "^1.12.0",
-    "pdfjs-dist": "^5.7.284",
+    "pdfjs-dist": "^6.5.438",
     "phonemizer": "^1.2.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
@@ -61,5 +61,10 @@
     "globals": "^17.6.0",
     "playwright-core": "^1.62.0",
     "vite": "^8.0.12"
+  },
+  "overrides": {
+    "epubjs": {
+      "@xmldom/xmldom": "^0.8.15"
+    }
   }
 }

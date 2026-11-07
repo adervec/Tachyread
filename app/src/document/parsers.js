@@ -86,8 +86,12 @@ async function parseEpub(file, onProgress) {
   for (const item of spine) {
     onProgress?.({ phase: 'Extracting sections', done: ++si, total: spine.length });
     try {
+      // epub.js resolves load() with the section's <html> ELEMENT (not a Document), so look for its
+      // <body> inside it — reading .body / .documentElement off it gave '' and every EPUB opened empty.
       const sdoc = await item.load(book.load.bind(book));
-      const html = sdoc?.body?.innerHTML || sdoc?.documentElement?.innerHTML || '';
+      const root = sdoc?.body || sdoc?.documentElement || sdoc;
+      const bodyEl = root?.nodeName?.toLowerCase() === 'body' ? root : (root?.getElementsByTagName?.('body')?.[0] || root);
+      const html = bodyEl?.innerHTML || '';
       const tmp = document.createElement('div');
       tmp.innerHTML = html;
       const text = tmp.innerText || tmp.textContent || '';
