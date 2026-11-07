@@ -111,6 +111,7 @@ export const HELP_SECTIONS = [
       'Eye Warmup: an 8-drill guided routine (pursuit, saccades, peripheral, focus, rest) — a ~3 minute warmup before reading, with optional eye-tracking.',
       'Span Drill: flashes a run of words for one glance and widens it as you keep up — trains words-per-fixation.',
       'Vocabulary: collects words you look up into a spaced-repetition deck. Right-click any word in the Lines pane → 📖 Define for its definitions (English, from the free Dictionary API) and a Wikipedia summary in the document language, then ＋ Add to Vocabulary keeps the word, its sentence and a short definition on a card. Only the looked-up word is sent. Vocabulary → 📚 Offline dictionaries imports StarDict dictionaries (.ifo + .idx + .dict / .dict.dz) — Define then answers from them first, in any language, with no network.',
+      'Pronunciation Check (Train menu): read the sentence at your place aloud and each word is scored by how closely your SOUNDS matched how it should sound — hover a word for the expected vs heard sounds (IPA). A phoneme recogniser runs on this device; the model (~320 MB) downloads once.',
       'Take a Break Now and the comfort monitor (20-20-20 microbreaks) protect your eyes on long sessions.',
     ],
   },

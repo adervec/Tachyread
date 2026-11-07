@@ -26,6 +26,7 @@ import TypingRun from './components/TypingRun.jsx';
 import FindDialog from './dialogs/FindDialog.jsx';
 import GoToLineDialog from './dialogs/GoToLineDialog.jsx';
 import OpdsDialog from './dialogs/OpdsDialog.jsx';
+import PronounceDialog from './dialogs/PronounceDialog.jsx';
 import AudioSyncDialog from './dialogs/AudioSyncDialog.jsx';
 import CompanionPane from './components/CompanionPane.jsx';
 import SettingsDialog from './dialogs/SettingsDialog.jsx';
@@ -2476,6 +2477,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     }
     if (action === 'web-grab') return openDialog({ kind: 'web-grab' });
     if (action === 'opds') return openDialog({ kind: 'opds' });
+    if (action === 'pronounce') return activeTab?.doc ? openDialog({ kind: 'pronounce' }) : setStatus('Open a document first — the check uses the sentence at your place.');
     if (action === 'audio-sync') return activeTab?.doc ? openDialog({ kind: 'audio-sync' }) : setStatus('Open the book first, then sync its audiobook.');
     if (action === 'html-tools') return openDialog({ kind: 'html-tools' });
     if (action === 'api-usage') return openDialog({ kind: 'api-usage' });
@@ -3614,6 +3616,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       )}
       {dialog?.kind === 'grab' && <GrabWizard onClose={closeDialog} />}
       {dialog?.kind === 'opds' && <OpdsDialog onClose={closeDialog} />}
+      {dialog?.kind === 'pronounce' && activeTab?.doc && <PronounceDialog tab={activeTab} onClose={closeDialog} />}
       {dialog?.kind === 'audio-sync' && activeTab?.doc && <AudioSyncDialog tab={activeTab} onClose={closeDialog} />}
       {dialog?.kind === 'web-grab' && <WebGrabWizard onClose={closeDialog} initialUrl={dialog.url || ''} />}
       {dialog?.kind === 'html-structure' && <HtmlStructureWizard html={dialog.html} fileName={dialog.fileName} sourceUrl={dialog.sourceUrl} onClose={closeDialog} />}

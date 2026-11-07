@@ -63,6 +63,7 @@ const MENUS = {
     { label: 'Span Drill...', action: 'span-drill', icon: '↔️'},
     { label: 'Dictation (speak to write)...', action: 'dictation', icon: '🎙️'},
     { label: 'Vocabulary...', action: 'vocab', icon: '🧠'},
+    { label: 'Pronunciation Check...', action: 'pronounce', icon: '👄'},
     { kind: 'separator' },
     { label: 'Take a Break Now', action: 'take-break', icon: '☕'},
   ],
