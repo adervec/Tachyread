@@ -1635,6 +1635,11 @@
 .companion-text { flex: 1; overflow: auto; padding: 6px 12px; line-height: 1.5; }
 .companion-text p { margin: 0 0 2px; }
 .companion-text p.here { background: var(--current-line-bg); border-radius: 3px; }
+.pron-sentence { font-size: 22px; line-height: 1.6; margin: 10px 0; }
+.pron-w { border-radius: 3px; padding: 0 1px; cursor: help; }
+.pron-w.good { background: color-mix(in srgb, #2e9d4f 22%, transparent); }
+.pron-w.ok { background: color-mix(in srgb, #e0a21e 30%, transparent); }
+.pron-w.bad { background: color-mix(in srgb, #d9534f 32%, transparent); }
 .ft-results { max-height: 60vh; overflow: auto; }
 .ft-doc { padding: 6px 0; border-bottom: 1px solid var(--divider); }
 .ft-doc-h { display: flex; gap: 8px; align-items: baseline; }
