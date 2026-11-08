@@ -35,11 +35,13 @@ function createKokoroEngine(onProgress) {
       const p = pending.get(e.data?.id);
       if (!p) return;
       pending.delete(e.data.id);
+      if (e.data.device) api.device = e.data.device; // 'webgpu' | 'wasm' — what the worker ended up on
       if (e.data.ok) p.resolve(e.data.blob); else p.reject(new Error(e.data.error));
     };
     worker.onerror = (ev) => { for (const p of pending.values()) p.reject(new Error(`Kokoro failed to start: ${ev.message || 'worker error'}`)); pending.clear(); worker = null; };
   };
-  return {
+  const api = {
+    device: null,
     synth(text, voiceId) {
       if (!worker) spawn();
       return new Promise((resolve, reject) => { const id = ++seq; pending.set(id, { resolve, reject }); worker.postMessage({ id, text, voice: String(voiceId).slice(7) }); });
@@ -48,6 +50,7 @@ function createKokoroEngine(onProgress) {
     recycle() {},
     dispose() { if (worker) { try { worker.terminate(); } catch { /* gone */ } worker = null; } pending.clear(); },
   };
+  return api;
 }
 
 export function createLocalEngine({ onKokoroProgress } = {}) {
@@ -56,6 +59,7 @@ export function createLocalEngine({ onKokoroProgress } = {}) {
     synth: (text, voiceId) => (isKokoro(voiceId)
       ? (kokoro ||= createKokoroEngine(onKokoroProgress)).synth(text, voiceId)
       : (piper ||= createPiperEngine()).synth(text, voiceId)),
+    kokoroDevice: () => kokoro?.device || null,
     recycle: () => piper?.recycle(),
     dispose: () => { piper?.dispose(); kokoro?.dispose(); },
   };

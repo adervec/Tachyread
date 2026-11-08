@@ -5,7 +5,7 @@ import { useVoices } from '../features/tts.js';
 import { ENGLISH_VOICES, defaultVoiceForLang, downloadVoice, isVoiceDownloaded, piperSupported } from '../features/piperTts.js';
 import { KOKORO_VOICES } from '../features/localTts.js';
 import { elevenVoices, ELEVEN_MODELS } from '../features/elevenLabs.js';
-import { listenStatus, onListenStatus, runListenNow, stopListenRun } from '../features/listenAgent.js';
+import { listenStatus, onListenStatus, runListenNow, stopListenRun, runSpeedTest } from '../features/listenAgent.js';
 
 // Audio settings, reachable from the Audio menu: the read-aloud voice + rate (per tab), the
 // speak-along follow mode, and the global auto-stop timer. Ambient sound keeps its own dialog.
@@ -129,7 +129,7 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
         Data → Cloud sync set up. Only rendered clips are ever deleted — never your own recordings.
       </p>
       <Field label="Render ahead here">
-        <label className="inline-check"><input type="checkbox" checked={!!global.listenRender} onChange={(e) => onPatchGlobal({ listenRender: e.target.checked })} /> this device renders and uploads (it must be the sync machine — Trackyread → AI / Cowork)</label>
+        <label className="inline-check"><input type="checkbox" checked={!!global.listenRender} onChange={(e) => onPatchGlobal({ listenRender: e.target.checked })} /> render the window on this device — the sync machine (Trackyread → AI / Cowork) also uploads it; any other device renders for itself only, while charging</label>
       </Field>
       <Field label="Pull audio here">
         <label className="inline-check"><input type="checkbox" checked={!!global.listenPull} onChange={(e) => onPatchGlobal({ listenPull: e.target.checked })} /> fetch the rendered window to this device (Wi-Fi only)</label>
@@ -144,6 +144,7 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
       <Field label="Status">
         <span role="status">{ls.text}</span>
         <button style={{ marginLeft: 8 }} disabled={ls.busy} onClick={() => runListenNow()}>▶ Run now</button>
+        <button style={{ marginLeft: 4 }} disabled={ls.busy} onClick={() => runSpeedTest()} title="How fast Kokoro renders on this device (× real-time) and on which backend — tells you whether this device can render ahead itself">⏱ Speed test</button>
         {ls.busy && <button style={{ marginLeft: 4 }} onClick={stopListenRun}>■ Stop</button>}
       </Field>
 

@@ -755,20 +755,38 @@ function AppInner() {
   // keeps the first render's onEnd, so it calls through a ref to the current closure.
   const pendingListenRef = useRef(false);
   const listenNextRef = useRef(null);
-  listenNextRef.current = async function listenNext() {
+  // finish: record the completion (the book ended) — false for a lock-screen skip to the next /
+  // previous (dir) book, which only changes books.
+  listenNextRef.current = async function listenNext({ finish = true, dir = 1 } = {}) {
     const tab = activeTabRef.current;
     const cs = tab?.doc?.contentChecksum;
     if (!cs) return false;
-    patchSettings(tab.id, { completions: [...(tab.settings.completions || []), completionEntry(tab.tracker)] });
-    await finishBoundBook(cs).catch(() => {});
-    const n = await nextListenBook(stateGlobalRef.current.listenQueue, cs).catch(() => null);
-    if (!n) { setStatus('🎧 Queue finished — nothing more to listen to on this device.'); return false; }
+    if (finish) {
+      patchSettings(tab.id, { completions: [...(tab.settings.completions || []), completionEntry(tab.tracker)] });
+      await finishBoundBook(cs).catch(() => {});
+    }
+    const n = await nextListenBook(stateGlobalRef.current.listenQueue, cs, [], { dir }).catch(() => null);
+    if (!n) { setStatus(finish ? '🎧 Queue finished — nothing more to listen to on this device.' : '🎧 No other book of this queue is on this device.'); return false; }
     pendingListenRef.current = true;
     const r = await openBookFile({ cs: n.cs, name: n.book.title, dirs: n.dirs, openRecent, openFiles }).catch((e) => ({ ok: false, msg: e?.message || String(e) }));
     if (!r.ok) { pendingListenRef.current = false; setStatus(r.msg); return false; }
     closeTab(tab.id);
-    setStatus(`🎧 Up next: ${n.book.title}`);
+    setStatus(`🎧 ${finish ? 'Up next' : dir > 0 ? 'Skipped ahead to' : 'Back to'}: ${n.book.title}`);
     return true;
+  };
+  // Lock-screen skips while listening through a queue: next/previous CHUNK (the narration unit);
+  // past the last chunk counts as the book's end.
+  const skipChunkRef = useRef(null);
+  skipChunkRef.current = (dir) => {
+    const tab = activeTabRef.current;
+    if (!tab?.doc) return;
+    const chunks = audiobookChunks(tab.doc);
+    const idx = tab.settings.wordIndex || 0;
+    const i = chunks.findIndex((c) => c.endWordIndex >= idx);
+    const target = chunks[(i < 0 ? chunks.length : i) + dir];
+    if (target) jumpWord(target.startWordIndex);
+    else if (dir > 0) onReadAloudEnd();
+    else jumpWord(0);
   };
   const onReadAloudEnd = () => {
     if (!stateGlobalRef.current.listenQueue) { setPlaying(false); return; }
@@ -818,10 +836,11 @@ function AppInner() {
       startMediaSession(mediaMeta(), {
         onPlay: () => { if (!playingRef.current) playPauseRef.current?.(); },
         onPause: () => { if (playingRef.current) playPauseRef.current?.(); },
-        onNext: () => navRef.current?.('nextPara'),
-        onPrev: () => navRef.current?.('prevPara'),
-        onSeekForward: () => navRef.current?.('nextLine'),
-        onSeekBackward: () => navRef.current?.('prevLine'),
+        // Listening through a queue: track buttons = chunk, seek buttons = book (a skip, no finish).
+        onNext: () => (stateGlobalRef.current.listenQueue ? skipChunkRef.current?.(1) : navRef.current?.('nextPara')),
+        onPrev: () => (stateGlobalRef.current.listenQueue ? skipChunkRef.current?.(-1) : navRef.current?.('prevPara')),
+        onSeekForward: () => (stateGlobalRef.current.listenQueue ? listenNextRef.current?.({ finish: false, dir: 1 }) : navRef.current?.('nextLine')),
+        onSeekBackward: () => (stateGlobalRef.current.listenQueue ? listenNextRef.current?.({ finish: false, dir: -1 }) : navRef.current?.('prevLine')),
       }, { keepAlive: !offline && stateGlobalRef.current.bgKeepAlive !== false });
     } else {
       readAloudRef.current.stop();

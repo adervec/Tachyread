@@ -28,15 +28,24 @@ export async function finishBoundBook(checksum, today = new Date().toISOString()
   return book;
 }
 
-// The next unfinished book of queue `qid` after the one bound to `checksum` whose text this device
-// has (open tab, saved copy, or a file in the search folders). null = nothing left to listen to.
-export async function nextListenBook(qid, checksum, openChecksums = []) {
+// The queue order rotated to start after `currentId` (dir 1) or, reversed, to start just before it
+// (dir -1): "next" continues down the queue and wraps round, "previous" walks back up it.
+export function queueFrom(order, currentId, dir = 1) {
+  const i = order.findIndex((b) => b.id === currentId);
+  const rest = i < 0 ? [...order] : [...order.slice(i + 1), ...order.slice(0, i)];
+  return dir < 0 ? rest.reverse() : rest;
+}
+
+// The next (dir 1) or previous (dir -1) unfinished book of queue `qid` from the one bound to
+// `checksum` whose text this device has (open tab, saved copy, or a file in the search folders).
+// null = nothing left to listen to.
+export async function nextListenBook(qid, checksum, openChecksums = [], { dir = 1 } = {}) {
   const [queues, books, map, dirs] = await Promise.all([getLibraryRef('queues'), getLibraryBooks(), getBinding(), getSearchDirs().catch(() => [])]);
   const q = (queues || []).find((x) => x.id === qid && !x.deleted);
   if (!q) return null;
   const csOf = {};
   for (const [cs, id] of Object.entries(map || {})) if (!csOf[id]) csOf[id] = cs;
-  const order = queueBooks(q, books).filter((b) => csOf[b.id] !== checksum);
+  const order = queueFrom(queueBooks(q, books), map?.[checksum] || null, dir).filter((b) => csOf[b.id] !== checksum);
   const available = async (b) => ['open', 'local', 'folder'].includes((await fileWhere(csOf[b.id], b.title, { openChecksums, dirs, search: true })).where);
   const { book } = await nextInQueue(order, map?.[checksum] || null, available);
   return book ? { book, cs: csOf[book.id], dirs } : null;
