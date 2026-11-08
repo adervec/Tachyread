@@ -2,16 +2,19 @@
 // copy, or the designated search folders (the text never syncs between devices). Shared by the
 // queue's ▶ and the book-finished popup's "open next".
 import { loadDocPayload } from '../state/storage.js';
-import { findFile, rememberPath } from './fileLocator.js';
+import { findFile, foundPaths, handleAt, rememberPath } from './fileLocator.js';
 
 // Where a linked file can be opened from: 'open' | 'local' | 'folder' | 'missing' | 'unlinked'.
-// The folder search is the only slow step, so it runs only when `search` is true.
+// The folder crawl is the only slow step, so it runs only when `search` is true — and only when the
+// folder index (Find folders / Search folders) hasn't already recorded where the file is.
 export async function fileWhere(cs, name, { openChecksums = [], dirs = [], search = false } = {}) {
   if (!cs) return { where: 'unlinked' };
   if (openChecksums.includes(cs)) return { where: 'open' };
   if ((await loadDocPayload(cs).catch(() => null))?.fullText) return { where: 'local' };
-  if (!search || !dirs.length) return { where: dirs.length ? 'unsearched' : 'missing' };
-  const hit = await findFile(dirs, name).catch(() => null);
+  const known = dirs.length ? foundPaths()[cs] : null;
+  if (!search || !dirs.length) return { where: dirs.length ? (known ? 'folder' : 'unsearched') : 'missing' };
+  const at = known && await handleAt(dirs, known);
+  const hit = at ? { handle: at, path: known } : await findFile(dirs, name).catch(() => null);
   if (hit) rememberPath(cs, hit.path);
   return hit ? { where: 'folder', hit } : { where: 'missing' };
 }

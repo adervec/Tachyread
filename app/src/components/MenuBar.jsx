@@ -25,6 +25,7 @@ const MENUS = {
     { label: 'Open Untracked Only (skip what is in Trackyread)...', action: 'open-untracked', icon: '🆕'},
     { label: 'Open Unfinished Only (skip what is finished)...', action: 'open-unfinished', icon: '📖'},
     { label: 'Bulk Add from Folder...', action: 'bulk-add', icon: '📂'},
+    { label: 'Add Untracked Files to Trackyread (from folder, nothing stays open)...', action: 'bulk-track', icon: '🏷️'},
     { label: 'Open from Clipboard', shortcut: 'Ctrl+B', action: 'open-clip', icon: '📋'},
     { label: 'Export as Bionic EPUB (e-ink)...', action: 'export-bionic', icon: '📗'},
     { label: 'Grab Text (OCR)...', shortcut: 'Ctrl+Shift+G', action: 'grab', icon: '📸'},

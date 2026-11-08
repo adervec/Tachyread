@@ -62,8 +62,10 @@ export function nameScore(want, got) {
 
 // Breadth-first so a copy sitting at the top of the folder beats one buried in an archive, and an
 // exact name beats a re-format found at the same depth. Returns { handle, dir, score, scanned, path }
-// (path relative to `dir`, e.g. 'SF/dune.epub').
-export async function findFileIn(dir, fileName, { maxDepth = 4, budget = 4000 } = {}) {
+// (path relative to `dir`, e.g. 'SF/dune.epub'). The budget has to cover a real library — a few
+// thousand entries never got past the top folders of one — but it is still the slow path: a path
+// the folder index remembered (handleAt) is tried first.
+export async function findFileIn(dir, fileName, { maxDepth = 8, budget = 20000 } = {}) {
   let queue = [{ dir, depth: 0, path: '' }];
   let scanned = 0;
   let best = null;
@@ -100,6 +102,19 @@ export async function findFile(dirs, fileName, opts) {
     if (best?.score === 2) break;
   }
   return best;
+}
+
+// A path the index recorded ('Root/sub/file.epub') back to its file handle in O(depth) — no crawl.
+// null when that root isn't a search folder any more or the file moved (the caller then crawls).
+export async function handleAt(dirs, path) {
+  const [rootName, ...segs] = String(path || '').split('/');
+  const root = (dirs || []).find((d) => d.name === rootName);
+  if (!root || !segs.length || !await ensureRead(root)) return null;
+  try {
+    let dir = root;
+    for (const s of segs.slice(0, -1)) dir = await dir.getDirectoryHandle(s);
+    return await dir.getFileHandle(segs[segs.length - 1]);
+  } catch { return null; }
 }
 
 // One walk over every search folder that records where each wanted file lives — the browser never

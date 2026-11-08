@@ -2685,6 +2685,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     if (action === 'cursor-manager') return openDialog({ kind: 'cursor-manager' });
     if (action === 'crosshairs') return openDialog({ kind: 'crosshairs' });
     if (action === 'bulk-add') return openDialog({ kind: 'bulk-add' });
+    if (action === 'bulk-track') return openDialog({ kind: 'bulk-add', track: true });
     if (action === 'open-untracked') return triggerOpen(DOC_EXTS, 'untracked');
     if (action === 'open-unfinished') return triggerOpen(DOC_EXTS, 'unfinished');
     if (action === 'install-pwa') {
@@ -3647,7 +3648,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           onClose={closeDialog}
         />
       )}
-      {dialog?.kind === 'bulk-add' && <BulkAddWizard onClose={closeDialog} />}
+      {dialog?.kind === 'bulk-add' && <BulkAddWizard onClose={closeDialog} track={!!dialog.track} />}
       {dialog?.kind === 'disclaimer' && (
         <DisclaimerDialog
           onClose={() => {
