@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { getAudioClip, getSectionExtraBlob, entryClips, getBinding, getLibraryBook } from '../state/storage.js';
 import { buildM4b, encodeAac } from '../features/m4b.js';
@@ -66,7 +66,12 @@ export function buildExportItems(sections, manifest) {
 // The whole book as ONE .m4b: every clip decoded at 44.1 kHz, mixed to mono, AAC-encoded clip by
 // clip (memory stays small), with a chapter at each track start and the book's cover when Trackyread
 // has one. Returns { blob, chapters }.
-const canM4b = typeof window !== 'undefined' && typeof window.AudioEncoder === 'function';
+// Having AudioEncoder isn't enough: Chrome on Windows/Linux has no AAC encoder (Android, macOS and
+// Edge do), so ask for the exact config. null = still checking.
+async function aacSupported() {
+  try { return typeof AudioEncoder === 'function' && (await AudioEncoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate: 44100, numberOfChannels: 1, bitrate: 96000 })).supported === true; }
+  catch { return false; }
+}
 async function bookCover(checksum) {
   try {
     const id = (await getBinding())?.map?.[checksum];
@@ -124,6 +129,8 @@ export default function AudiobookExportWizard({ checksum, fileName, sections, ma
   const [forceWav, setForceWav] = useState(false);
   const [subs, setSubs] = useState(''); // '' | 'srt' | 'vtt' — a timed subtitle file beside each track
   const [asM4b, setAsM4b] = useState(false); // one .m4b with chapters instead of separate tracks
+  const [canM4b, setCanM4b] = useState(null);
+  useEffect(() => { aacSupported().then(setCanM4b); }, []);
   const [prog, setProg] = useState(null); // { done, total, label }
   const [msg, setMsg] = useState('');
   const abort = useRef(false);
@@ -229,6 +236,7 @@ export default function AudiobookExportWizard({ checksum, fileName, sections, ma
               </label>
             </div>
           )}
+          {canM4b === false && <p className="settings-note" style={{ margin: 0 }}>One-file .m4b isn’t offered here: this browser can’t encode AAC (Chrome on Windows/Linux). Chrome on Android/macOS or Edge can; separate tracks work everywhere.</p>}
           <div className="lj-inline">
             <label title="A subtitle file beside each track, one cue per narrated chunk timed to the audio — for video captions, read-along players or other tools">
               Subtitles <select value={subs} onChange={(e) => setSubs(e.target.value)}>

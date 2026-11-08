@@ -8,6 +8,7 @@ import { defaultGlobalSettings, defaultFileSettings, syncableGlobalSettings } fr
 import { mergePresence, presenceList } from '../features/presence.js';
 import { writeBackup, readBackup, BACKUP_VERSION } from '../features/backupStream.js';
 import { SPEECH_LOG_CAP } from '../features/speechLog.js';
+import { compressClip } from '../features/clipCodec.js'; // (cycle: clipCodec reads clips back through this module — call-time only)
 
 const DB_NAME = 'Tachyread';
 const DB_VERSION = 13;
@@ -497,6 +498,7 @@ export function entryClips(entry) {
 
 // Add a clip for a chunk (does NOT replace existing ones). Returns the new clip id.
 export async function addAudioClip(checksum, line, blob, meta = {}) {
+  blob = await compressClip(blob); // WAV → Ogg Opus where the browser can (clipCodec.js); durationMs was measured on the original
   const db = await getDB();
   const source = meta.source || 'tts';
   const id = `${source}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -532,6 +534,20 @@ export async function getAudioClip(checksum, line) {
 export async function getAudioClipById(checksum, line, id) {
   const db = await getDB();
   return await db.get('audiobook', clipBlobKey(checksum, line, id));
+}
+
+// Swap a clip's bytes (after compression); the manifest's sizeBytes follows.
+export async function replaceAudioClipBlob(checksum, line, id, blob) {
+  const db = await getDB();
+  const key = clipBlobKey(checksum, line, id);
+  const rec = await db.get('audiobook', key);
+  if (!rec) return;
+  await db.put('audiobook', { ...rec, blob, sizeBytes: blob.size }, key);
+  const manifest = await db.get('audiobookManifest', checksum);
+  const entry = manifest?.lines?.[line];
+  if (!entry) return;
+  manifest.lines[line] = { ...entry, clips: entryClips(entry).map((c) => (c.id === id ? { ...c, sizeBytes: blob.size } : c)) };
+  await db.put('audiobookManifest', manifest, checksum);
 }
 
 // Delete one clip. Removes the chunk from the manifest if it was the last.
