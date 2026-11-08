@@ -29,7 +29,7 @@ self.onmessage = async (e) => {
       dev = 'wasm'; ttsP = make('wasm'); tts = await ttsP; // the GPU path failed at first use → WASM for good
       audio = await tts.generate(text, { voice });
     }
-    self.postMessage({ id, ok: true, blob: audio.toBlob() });
+    self.postMessage({ id, ok: true, blob: audio.toBlob(), device: dev });
   } catch (err) {
     self.postMessage({ id, ok: false, error: String(err?.message || err) });
   }
