@@ -5,6 +5,7 @@ import { useVoices } from '../features/tts.js';
 import { ENGLISH_VOICES, defaultVoiceForLang, downloadVoice, isVoiceDownloaded, piperSupported } from '../features/piperTts.js';
 import { KOKORO_VOICES } from '../features/localTts.js';
 import { elevenVoices, ELEVEN_MODELS } from '../features/elevenLabs.js';
+import { listenStatus, onListenStatus, runListenNow, stopListenRun } from '../features/listenAgent.js';
 
 // Audio settings, reachable from the Audio menu: the read-aloud voice + rate (per tab), the
 // speak-along follow mode, and the global auto-stop timer. Ambient sound keeps its own dialog.
@@ -20,6 +21,8 @@ function Field({ label, children }) {
 export default function AudioSettingsDialog({ settings, onPatch, global, onPatchGlobal, onClose }) {
   const [s, setS] = useState(settings);
   const voices = useVoices();
+  const [ls, setLs] = useState(listenStatus()); // pocket-listening agent status
+  useEffect(() => onListenStatus(setLs), []);
   function patch(p) {
     setS({ ...s, ...p });
     onPatch(p);
@@ -117,6 +120,32 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
           )}
         </>
       )}
+
+      <div className="field-section">Pocket listening (queue audio across devices)</div>
+      <p className="settings-note">
+        The sync machine renders the next hours of your listen queue with the Kokoro voice above and mirrors
+        them to the sync target (Google Drive’s private app folder, or the Tachyread folder’s <code>sync/listen/</code>);
+        your other devices pull them over Wi-Fi and drop what you’ve heard. Needs a queue (TTS → QUEUE) and
+        Data → Cloud sync set up. Only rendered clips are ever deleted — never your own recordings.
+      </p>
+      <Field label="Render ahead here">
+        <label className="inline-check"><input type="checkbox" checked={!!global.listenRender} onChange={(e) => onPatchGlobal({ listenRender: e.target.checked })} /> this device renders and uploads (it must be the sync machine — Trackyread → AI / Cowork)</label>
+      </Field>
+      <Field label="Pull audio here">
+        <label className="inline-check"><input type="checkbox" checked={!!global.listenPull} onChange={(e) => onPatchGlobal({ listenPull: e.target.checked })} /> fetch the rendered window to this device (Wi-Fi only)</label>
+      </Field>
+      <Field label="Hours ahead">
+        <input type="number" min={1} max={48} value={global.listenHours ?? 20} onChange={(e) => onPatchGlobal({ listenHours: Math.max(1, Math.min(48, Number(e.target.value) || 20)) })} style={{ width: 70 }} />
+        <span className="settings-note" style={{ margin: '0 0 0 8px' }}>≈ {Math.round((global.listenHours ?? 20) * 11)} MB at 24 kbps</span>
+      </Field>
+      <Field label="Cloud cap">
+        <input type="number" min={0.25} max={10} step={0.25} value={global.listenCapGb ?? 1} onChange={(e) => onPatchGlobal({ listenCapGb: Math.max(0.25, Math.min(10, Number(e.target.value) || 1)) })} style={{ width: 70 }} /> GB
+      </Field>
+      <Field label="Status">
+        <span role="status">{ls.text}</span>
+        <button style={{ marginLeft: 8 }} disabled={ls.busy} onClick={() => runListenNow()}>▶ Run now</button>
+        {ls.busy && <button style={{ marginLeft: 4 }} onClick={stopListenRun}>■ Stop</button>}
+      </Field>
 
       <div className="field-section">ElevenLabs (cloud voice — optional)</div>
       <Field label="API key">

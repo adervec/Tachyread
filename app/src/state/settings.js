@@ -229,6 +229,8 @@ export const GLOBAL_DATA_KEYS = new Set([
   // profile must not carry someone else's work list, and resetting preferences must not bin a
   // half-finished queue of twelve books.
   'abQueue', 'abRuns',
+  // Which device renders / pulls pocket-listening audio is a property of the device, not a preference.
+  'listenRender', 'listenPull',
 ]);
 
 // Reset global preferences to defaults while keeping the user's data (GLOBAL_DATA_KEYS).
@@ -359,6 +361,13 @@ export function defaultGlobalSettings() {
     // Listen mode: '' = off, else a reading-queue id — when read-aloud reaches a book's end, its
     // finish is recorded and the queue's next book (that this device has) opens and keeps playing.
     listenQueue: '',
+    // Pocket listening across devices (listenAgent.js): the sync machine renders `listenHours` of the
+    // listen queue ahead with Kokoro and mirrors it to the sync target under `listenCapGb`; devices
+    // with listenPull fetch it over Wi-Fi. render/pull are per device (GLOBAL_DATA_KEYS).
+    listenRender: false,
+    listenPull: false,
+    listenHours: 20,
+    listenCapGb: 1,
     // ElevenLabs cloud TTS (optional audiobook-generation backend). Key stays on this device (a
     // secret — kept out of cloud sync); model + last-used voice remembered for the manager.
     elevenLabsKey: '',

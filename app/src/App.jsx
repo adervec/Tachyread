@@ -73,6 +73,7 @@ import RegressionDialog from './dialogs/RegressionDialog.jsx';
 import ProgressDetailDialog from './dialogs/ProgressDetailDialog.jsx';
 import { fmtTime, fmtDateTime } from './features/dateFmt.js';
 import { startCoworkScheduler } from './features/coworkScheduler.js';
+import { startListenAgent } from './features/listenAgent.js';
 import { promptInstall, installState, installHelp, runningStandalone } from './features/pwaInstall.js';
 import { revealFile, rememberFile, revealSupported } from './features/revealFile.js';
 import { openFilterContext, skipOpen } from './features/openFilter.js';
@@ -2446,6 +2447,8 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     onRan: (ids) => setStatus(`🗓 Cowork schedule ran: ${ids.join(', ')}`),
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
+  // Pocket listening: render-ahead on the sync machine, pull on the others (Audio → Audio Settings).
+  useEffect(() => startListenAgent({ getGlobal: () => globalSnapRef.current }), []);
 
   // Save a copy of the active tab's text to an external file (native Save dialog where supported).
   function doSaveTab() {
