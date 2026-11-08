@@ -356,6 +356,9 @@ export function defaultGlobalSettings() {
     // screen locked, unlike native TTS which Android suspends). offlineVoiceId '' = auto by language.
     offlineVoice: false,
     offlineVoiceId: '',
+    // Listen mode: '' = off, else a reading-queue id — when read-aloud reaches a book's end, its
+    // finish is recorded and the queue's next book (that this device has) opens and keeps playing.
+    listenQueue: '',
     // ElevenLabs cloud TTS (optional audiobook-generation backend). Key stays on this device (a
     // secret — kept out of cloud sync); model + last-used voice remembered for the manager.
     elevenLabsKey: '',
