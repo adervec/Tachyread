@@ -495,6 +495,7 @@ export function defaultGlobalSettings() {
     // Webcam attention (opt-in, experimental): pause non-TTS reading when the camera can't see you
     // facing the screen with eyes open. Processed entirely on-device; nothing leaves the machine.
     webcamAttention: false,
+    speakFace: false, // face camera scores presenting (eye contact, steadiness, expressiveness, articulation) while reading aloud
     // Webcam doze detection (opt-in): stop read-aloud if your eyes stay shut / you're gone a while.
     webcamDoze: false,
     // Away alarm (opt-in): sound an alert if you look away from the screen for this many seconds.

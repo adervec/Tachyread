@@ -190,7 +190,9 @@ or keys are included.
 Each session: \`at\`/\`end\` (epoch ms), \`name\` (document), \`words\` advanced by reading aloud, \`exact\`/\`near\`/\`skip\`
 (words read exactly / approximately / skipped), \`q\` (mean match quality 0–100), \`misses\` (heard phrases
 matching nothing), \`strict\` (1 forgiving – 5 strict), \`voice\` {overall, scores: pace, clarity, resonantDepth,
-expressiveness, nonNasal, noUptalk, projection, breath — 0–100}, \`m\` per-minute [minute, words, quality, voice].
+expressiveness, nonNasal, noUptalk, projection, breath — 0–100}, \`m\` per-minute [minute, words, quality, voice, fillers],
+\`f\` filler words heard, \`face\` presenting scores from the face camera when it was on {presence, eyeContact,
+headSteadiness, expressiveness, articulation, overall — 0–100}.
 
 ## Reading the numbers
 - Speeds: silent reading wpm excludes read-aloud time; typing wpm is net (errors cost) unless marked gross.

@@ -105,6 +105,8 @@ import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
 import { createRecognizer, speechRecognitionSupported } from './features/speechRecognition.js';
 import { alignOrResync, speakParams, moveQuality, strictnessOf } from './features/speakAlign.js';
 import { speechSession, keepSession, countFillers } from './features/speechLog.js';
+import { presentingScorer } from './features/voice/presenting.js';
+import { writeSpeakingLog } from './features/speakingBridge.js';
 import { playWordFx } from './features/wordFx.js';
 import VoiceFeedback from './components/VoiceFeedback.jsx';
 import { recordClip } from './features/audioRecorder.js';
@@ -538,6 +540,7 @@ function AppInner() {
   const recognizerRef = useRef(null);
   const speakRef = useRef(null);      // latest tab + stepWord for the long-lived recogniser callbacks
   const speechSessRef = useRef(null);  // the reading-aloud session being logged (VoiceFeedback feeds it voice scores)
+  const presentingRef = useRef(null);  // …and its face-camera presenting scorer (the attention monitor feeds it frames)
   const spokenWordsRef = useRef(0);   // words advanced by reading aloud this session → live pace
   // What the reading-aloud card shows: recogniser status/error, the phrase heard, the last move.
   const [speakInfo, setSpeakInfo] = useState({});
@@ -1244,7 +1247,8 @@ function AppInner() {
   // Front-camera attention/gesture features are disabled on mobile (battery/CPU, and small screens
   // rarely face the user squarely) — only OCR/Grab (which uses the rear/document camera) runs there.
   const camGuardsOn = state.global.webcamAttention || state.global.webcamDoze || state.global.webcamAwayAlarm
-    || state.global.webcamDistanceNudge || state.global.webcamFocusStats;
+    || state.global.webcamDistanceNudge || state.global.webcamFocusStats
+    || (!!state.global.speakFace && !!activeTab?.settings.speaking?.enabled); // presenting score while reading aloud
   // Eye GESTURES are the exception to the no-front-camera-on-mobile rule: they're a deliberate
   // hands-free control the user switched on, and on a phone propped up while reading they're the
   // most useful input there is. Everything else camera-driven stays desktop-only.
@@ -1287,6 +1291,7 @@ function AppInner() {
         // Eye-rotoscope overlay: track the detected iris centres while the fx is on.
         if (camEyeFxRef.current?.on) setCamEyes(s.eyes || null);
       },
+      onFrame: (f) => presentingRef.current?.frame(f),
       onStream: (s) => setWebcamStream(s),
       onState: (s) => setWebcamState(s),
       onAttention: (attentive) => {
@@ -2086,6 +2091,10 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       strict: strictnessOf(speakParams(activeTab.settings.speaking || {})), from: activeTab.settings.wordIndex,
     });
     speechSessRef.current = sess;
+    // Face camera → presenting scores for this session (Biometric → Presenting score). The camera
+    // itself is brought up by the attention-monitor effect, which hands every frame to this scorer.
+    const face = stateGlobalRef.current.speakFace ? presentingScorer() : null;
+    presentingRef.current = face;
     setSpeakInfo({ status: 'starting', lang });
     let stopped = false;
     let restartTimer = 0, silentTimer = 0, lastResultAt = 0;
@@ -2157,8 +2166,16 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       try { r.stop(); } catch { /* ignore */ }
       recognizerRef.current = null;
       speechSessRef.current = null;
+      presentingRef.current = null;
       const rec = sess.finish();
-      if (keepSession(rec)) appendSpeechLog(rec);
+      const fs = face?.summary();
+      if (fs) {
+        rec.face = fs;
+        setStatus(`🎥 Presenting (0–100): eye contact ${fs.eyeContact}, head steadiness ${fs.headSteadiness}${fs.expressiveness != null ? `, expressiveness ${fs.expressiveness}` : ''}${fs.articulation != null ? `, articulation ${fs.articulation}` : ''}.`);
+      }
+      // Kept on this device (Data → Speech log) and, when the Tachyread folder is set up, written to
+      // its speech/ subfolder for SpeechImprover.
+      if (keepSession(rec)) { appendSpeechLog(rec); writeSpeakingLog(rec).catch(() => {}); }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab?.id, speakingOn, docLang.bcp]);
