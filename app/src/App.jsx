@@ -96,6 +96,8 @@ import TypingPlanDialog from './dialogs/TypingPlanDialog.jsx';
 import SaveTabDialog from './dialogs/SaveTabDialog.jsx';
 import { createReadAloud } from './features/readAloud.js';
 import { createOfflineReadAloud } from './features/offlineReadAloud.js';
+import { completionEntry, finishBoundBook, nextListenBook } from './features/listenQueue.js';
+import { openBookFile } from './features/openBook.js';
 import { playButtonView } from './features/playButtonMode.js';
 import { defaultVoiceForLang, voiceLabel } from './features/piperTts.js';
 import { enterFocus, exitFocus, repaintCovers } from './features/focusMode.js';
@@ -746,6 +748,40 @@ function AppInner() {
     patchSettings(tab.id, { wordIndex: wi });
   }
 
+  // Listen mode (global.listenQueue): at the end of a book, record the finish the Book Finished popup
+  // would have recorded and carry on with the next book of that queue this device can open — pocket
+  // listening without touching the screen. Off, or nothing left → read-aloud just stops. The driver
+  // keeps the first render's onEnd, so it calls through a ref to the current closure.
+  const pendingListenRef = useRef(false);
+  const listenNextRef = useRef(null);
+  listenNextRef.current = async function listenNext() {
+    const tab = activeTabRef.current;
+    const cs = tab?.doc?.contentChecksum;
+    if (!cs) return false;
+    patchSettings(tab.id, { completions: [...(tab.settings.completions || []), completionEntry(tab.tracker)] });
+    await finishBoundBook(cs).catch(() => {});
+    const n = await nextListenBook(stateGlobalRef.current.listenQueue, cs).catch(() => null);
+    if (!n) { setStatus('🎧 Queue finished — nothing more to listen to on this device.'); return false; }
+    pendingListenRef.current = true;
+    const r = await openBookFile({ cs: n.cs, name: n.book.title, dirs: n.dirs, openRecent, openFiles }).catch((e) => ({ ok: false, msg: e?.message || String(e) }));
+    if (!r.ok) { pendingListenRef.current = false; setStatus(r.msg); return false; }
+    closeTab(tab.id);
+    setStatus(`🎧 Up next: ${n.book.title}`);
+    return true;
+  };
+  const onReadAloudEnd = () => {
+    if (!stateGlobalRef.current.listenQueue) { setPlaying(false); return; }
+    listenNextRef.current().then((ok) => { if (!ok) setPlaying(false); });
+  };
+  // The next book's tab is active (and hydrated): turn its read-aloud on so the running playback
+  // carries straight into it.
+  useEffect(() => {
+    if (!pendingListenRef.current || !activeTab || activeTab.lazy) return;
+    pendingListenRef.current = false;
+    if (!activeTab.settings.readAloud) patchSettings(activeTab.id, { readAloud: true });
+    // eslint-disable-next-line
+  }, [activeTab?.id, activeTab?.lazy]);
+
   useEffect(() => {
     // Pick the read-aloud backend: offline Piper (real audio → survives screen lock) or the native
     // Web Speech engine. Rebuild the driver when the mode flips.
@@ -760,7 +796,7 @@ function AppInner() {
             setIndex: ttsSetIndex,
             getVoiceName: () => activeTabRef.current?.settings.annunciateVoice, // native fallback voice
             getRate: () => ttsSpeedRef.current,
-            onEnd: () => setPlaying(false),
+            onEnd: onReadAloudEnd,
             onStatus: (s) => setTtsStatus(s),
             getLiveVoice: () => stateGlobalRef.current.kokoroLive || null, // fill gaps with Kokoro
           })
@@ -770,7 +806,7 @@ function AppInner() {
             setIndex: ttsSetIndex,
             getVoiceName: () => activeTabRef.current?.settings.annunciateVoice,
             getRate: () => ttsSpeedRef.current,
-            onEnd: () => setPlaying(false),
+            onEnd: onReadAloudEnd,
           });
     }
     const on = playing && !!activeTab?.settings?.readAloud;

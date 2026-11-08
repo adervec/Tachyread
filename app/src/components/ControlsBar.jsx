@@ -7,6 +7,8 @@ import { goalFraction, computeGoalStatus } from '../engine/goals.js';
 import { MODES } from '../engine/readingMode.js';
 import { lastCountableWord } from '../document/toc.js';
 import { playButtonView } from '../features/playButtonMode.js';
+import { getLibraryRef } from '../state/storage.js';
+import { liveQueues } from '../features/readingQueues.js';
 
 // Compact gap for the ghost verdict — "1m 30s" reads at a glance where "00:01:30" doesn't.
 function fmtGap(secs) {
@@ -49,6 +51,12 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
   // On phones the full playback row (10 nav buttons + speed unit + mode toggles + goal) would wrap
   // into a tall stack that eats the reader — hence the Steps/Modes/Goal pager above.
   const { doc, settings } = tab;
+  // Listen mode's queue picker (shown while read-aloud is on) — the live reading queues by name.
+  const [queues, setQueues] = useState([]);
+  useEffect(() => {
+    if (!settings.readAloud) return;
+    getLibraryRef('queues').then((q) => setQueues(liveQueues(q || []))).catch(() => {});
+  }, [settings.readAloud]);
   const idx = settings.wordIndex;
   const totalWords = doc.words.length;
   const skipRanges = settings.skipRanges || [];
@@ -267,6 +275,19 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
                   .map((v) => (
                     <option key={v} value={v}>{v}×</option>
                   ))}
+              </select>
+            </div>
+          )}
+          {readAloud && (
+            <div className="mode-pair">
+              <span title="Listen through a queue: when this book ends, its finish is recorded and the queue's next book that this device has opens and keeps playing">QUEUE</span>
+              <select
+                value={state.global.listenQueue || ''}
+                onChange={(e) => updateGlobal({ listenQueue: e.target.value })}
+                title="Continue with the next book of this queue when the current one ends (Off: just stop)"
+              >
+                <option value="">Off</option>
+                {queues.map((q) => <option key={q.id} value={q.id}>🎧 {q.name}</option>)}
               </select>
             </div>
           )}
