@@ -177,6 +177,12 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
           Pause fast reading when the camera can’t see you facing the screen with eyes open
         </label>
       </Field>
+      <Field label="Presenting score">
+        <label className="inline-check">
+          <input type="checkbox" checked={!!g.speakFace} onChange={(e) => patch({ speakFace: e.target.checked })} />
+          While advancing by reading aloud, watch your face too and score the presenting — eye contact, head steadiness, expressiveness, articulation (0–100, saved with the session; nothing is recorded). Goes to SpeechImprover with the session.
+        </label>
+      </Field>
       <Field label="Doze detection">
         <label className="inline-check">
           <input type="checkbox" checked={!!g.webcamDoze} onChange={(e) => patch({ webcamDoze: e.target.checked })} />

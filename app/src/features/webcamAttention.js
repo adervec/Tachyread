@@ -16,6 +16,11 @@
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { gazeFeatures } from './eyeTracking.js';
 import { FACE_SHAPE_KEYS } from './eyeGestures.js';
+import { PRESENTING_SHAPES } from './voice/presenting.js';
+
+// The blendshapes shipped per frame: the ones eye/face gestures read plus the few the presenting
+// scorer needs (brows, smile, jaw) — the model emits 52 and shipping them all is garbage churn.
+const SHAPE_KEYS = [...new Set([...FACE_SHAPE_KEYS, ...PRESENTING_SHAPES])];
 
 const MP_VERSION = '0.10.35';
 const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`;
@@ -61,28 +66,33 @@ async function createLandmarkBackend() {
         blinkL = score('eyeBlinkLeft');
         blinkR = score('eyeBlinkRight');
         blinkScore = (blinkL + blinkR) / 2;
-        // Just the expression scores the face gestures read — the model emits 52 of these per
-        // frame and shipping them all through the sample callback is pure garbage churn.
         shapes = {};
-        for (const k of FACE_SHAPE_KEYS) shapes[k] = score(k);
+        for (const k of SHAPE_KEYS) shapes[k] = score(k);
       }
       // Iris position inside the eye opening, for the eye-roll gesture (same features the gaze
       // tracker uses — one face mesh, two consumers).
       const gf = gazeFeatures(lm);
-      // rough yaw: nose tip relative to the two outer eye corners (0.5 = centred / facing forward)
-      let facing = true;
+      // rough yaw: nose tip relative to the two outer eye corners (0.5 = centred / facing forward);
+      // rough pitch: nose tip between forehead and chin. Both as offsets from centre, for the
+      // presenting scorer's eye-contact and head-steadiness.
+      let facing = true, yaw = null, pitch = null;
       if (lm[1] && lm[33] && lm[263]) {
         const span = lm[263].x - lm[33].x;
         if (Math.abs(span) > 1e-3) {
           const r = (lm[1].x - lm[33].x) / span;
           facing = r > 0.27 && r < 0.73;
+          yaw = r - 0.5;
         }
+      }
+      if (lm[1] && lm[10] && lm[152]) {
+        const h = lm[152].y - lm[10].y;
+        if (Math.abs(h) > 1e-3) pitch = (lm[1].y - lm[10].y) / h - 0.5;
       }
       // face width as a fraction of the frame (left/right face-contour landmarks) — a distance proxy.
       const faceSpan = lm[234] && lm[454] ? Math.abs(lm[454].x - lm[234].x) : null;
       // Iris CENTRES in normalized video coords — the eye-rotoscope overlay aims its graphics here.
       const eyes = lm[468] && lm[473] ? { l: { x: lm[473].x, y: lm[473].y }, r: { x: lm[468].x, y: lm[468].y } } : null;
-      return { present: true, facing, blinkScore, blinkL, blinkR, shapes, irisX: gf ? gf[0] : null, irisY: gf ? gf[1] : null, faceSpan, eyes };
+      return { present: true, facing, yaw, pitch, blinkScore, blinkL, blinkR, shapes, irisX: gf ? gf[0] : null, irisY: gf ? gf[1] : null, faceSpan, eyes };
     },
     close() { try { landmarker.close(); } catch { /* ignore */ } },
   };
@@ -119,8 +129,9 @@ function createFaceDetectorBackend() {
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // onState: starting | watching | away | drowsy | unsupported | denied | error | off
+// onFrame: every tick, face or not — { t, present, facing, yaw, pitch, eyesOpen, shapes } (presenting scorer)
 export function createAttentionMonitor({
-  onState, onAttention, onDoze, onAway, onProximity, onStream, onSample, blinkThreshold = BLINK_CLOSED,
+  onState, onAttention, onDoze, onAway, onProximity, onStream, onSample, onFrame, blinkThreshold = BLINK_CLOSED,
   intervalMs = 250, attentionGraceMs = 1300, dozeMs = 7000, absentMs = 20000,
   proximityThreshold = 0.52, proximityHoldMs = 2500,
 } = {}) {
@@ -186,6 +197,7 @@ export function createAttentionMonitor({
     const score = typeof r.blinkScore === 'number' ? r.blinkScore : null;
     lastBlinkScore = score;
     const eyesOpen = score != null ? score < threshold : null; // null = no eye data (presence-only)
+    onFrame?.({ t: now, present: !!r.present, facing: !!r.facing, yaw: r.yaw ?? null, pitch: r.pitch ?? null, eyesOpen, shapes: r.shapes || null });
     if (r.present) lastPresent = now;
     if (eyesOpen === true) lastEyesOpen = now;
     if (r.facing && eyesOpen !== false) lastAttentive = now;

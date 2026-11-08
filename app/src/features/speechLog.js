@@ -17,6 +17,7 @@ export const SPEECH_LOG_FIELDS = {
   voice: 'session-average voice scores 0–100 {overall, scores:{pace, clarity, resonantDepth, expressiveness, nonNasal, noUptalk, projection, breath}}; null when live voice feedback was off',
   m: 'per-minute trend: [minute since start, words advanced, mean quality 0–100, voice overall or null, filler words]',
   f: 'filler words heard that were not in the text (um, uh, er, like, you know…)',
+  face: 'presenting scores from the face camera, 0–100 {presence, eyeContact, headSteadiness, expressiveness, articulation, overall, frames}; absent when the camera was off (features/voice/presenting.js)',
 };
 
 export const SPEECH_LOG_CAP = 2000; // ~1–2 KB each → a few MB at most
