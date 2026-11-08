@@ -1,7 +1,7 @@
 // Self-check for the missing-file search: name matching, and the budgeted breadth-first walk.
 // Run: node src/features/fileLocator.test.mjs
 import assert from 'node:assert/strict';
-import { nameScore, stem, findFileIn, indexFolders } from './fileLocator.js';
+import { nameScore, stem, findFileIn, indexFolders, handleAt } from './fileLocator.js';
 
 // ── name matching ──
 assert.equal(nameScore('Great Expectations.epub', 'Great Expectations.epub'), 2, 'same name');
@@ -65,4 +65,20 @@ console.log('fileLocator: all cases pass');
   assert.equal(idx.found, 3);
   const denied = { ...dirOf(tree, 'Locked'), queryPermission: async () => 'prompt' };
   assert.equal((await indexFolders([denied], [{ cs: 'ge', name: 'Great Expectations.epub' }])).skipped, 1, 'no silent permission → skipped, not prompted');
+}
+
+// ── a remembered path straight back to its handle, no crawl ──
+{
+  const fs = (t, name) => ({
+    kind: 'directory', name,
+    async getDirectoryHandle(n) { if (t[n] && typeof t[n] === 'object') return fs(t[n], n); throw new Error('NotFoundError'); },
+    async getFileHandle(n) { if (t[n] === null) return { kind: 'file', name: n }; throw new Error('NotFoundError'); },
+  });
+  const dirs = [fs(tree, 'Lib')];
+  assert.equal((await handleAt(dirs, 'Lib/Books/Great Expectations.epub')).name, 'Great Expectations.epub');
+  assert.equal((await handleAt(dirs, 'Lib/Archive/Deep/Deeper/Deepest/Great Expectations.epub')).name, 'Great Expectations.epub', 'any depth');
+  assert.equal(await handleAt(dirs, 'Lib/Books/Gone.epub'), null, 'moved file → null (caller falls back to the crawl)');
+  assert.equal(await handleAt(dirs, 'Other/notes.txt'), null, 'a root that is not a search folder');
+  assert.equal(await handleAt(dirs, 'Lib'), null, 'no file part');
+  assert.equal(await handleAt(dirs, ''), null);
 }

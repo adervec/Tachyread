@@ -2361,14 +2361,15 @@ function NamedQueue({ queue, others = [], paths = {}, stacked = true, onLayout, 
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idsKey, openChecksums, dirs]);
+  // One walk over the folders for every missing file (indexFolders, deep), not a crawl per book — a
+  // long queue of files on another device used to burn a whole budget each without ever reaching
+  // the subfolders. The paths it finds are remembered, so ▶ opens them without searching again.
   async function searchFolders() {
     setSearching(true);
-    const m = { ...where };
-    for (const b of qBooks) {
-      if (m[b.id] !== 'unsearched') continue;
-      m[b.id] = (await fileWhere(csOf[b.id], fileStats[csOf[b.id]]?.fileName || b.title, { openChecksums, dirs, search: true })).where;
-      setWhere({ ...m });
-    }
+    const todo = qBooks.filter((b) => where[b.id] === 'unsearched');
+    const r = await indexFolders(dirs, todo.map((b) => ({ cs: csOf[b.id], name: fileStats[csOf[b.id]]?.fileName || b.title })), { ask: true }).catch(() => null);
+    if (r) rememberPaths(r.paths);
+    setWhere((m) => ({ ...m, ...Object.fromEntries(todo.map((b) => [b.id, r?.paths[csOf[b.id]] ? 'folder' : 'missing'])) }));
     setSearching(false);
   }
   const counts = Object.values(where).reduce((a, w) => ({ ...a, [w]: (a[w] || 0) + 1 }), {});
