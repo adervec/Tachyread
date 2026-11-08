@@ -13,6 +13,7 @@ import { SYNC_PROVIDERS, getSyncProvider, driveOriginAllowed, getDriveProfile } 
 import { backupToProvider, restoreFromProvider, syncWithProvider } from '../features/sync/syncManager.js';
 import { getRoot, pickRoot, forgetRoot, subDirLabel, folderSupported } from '../features/tachyFolder.js';
 import { getSyncStamps } from '../state/storage.js';
+import { compressAllClips } from '../features/clipCodec.js';
 
 // Where each kind of data goes and when it last moved — the honest answer to "is it syncing?".
 // Book files and audio have no cloud copy at all today; saying so beats letting people assume.
@@ -120,6 +121,16 @@ export default function DataDialog({ onClose }) {
     catch (e) { if (e?.name !== 'AbortError') setMsg('Folder not chosen: ' + (e?.message || e)); }
   }
   async function forgetFolder() { await forgetRoot(); await refreshFolder(); }
+
+  // Re-encode stored WAV clips to AAC (clipCodec.js) — the one-off catch-up; new clips get it on save.
+  async function compressClips() {
+    setBusy(true); setMsg('Compressing clips…');
+    try {
+      const r = await compressAllClips((p) => setMsg(`Compressing clip ${p.done}/${p.total}… ${fmtMB(p.before)} → ${fmtMB(p.after)} so far`));
+      setMsg(r.changed ? `Compressed ${r.changed} of ${r.total} clip(s): ${fmtMB(r.before)} → ${fmtMB(r.after)}.` : `Nothing to compress — ${r.total} clip(s) are already compact${typeof AudioEncoder === 'undefined' ? ' (this browser has no audio encoder)' : ''}.`);
+    } catch (e) { setMsg('Compression failed: ' + (e?.message || e)); }
+    setBusy(false);
+  }
 
   // ── cloud ──
   // Two-way sync (pull-merge-push), then reload so merged settings/progress apply to open tabs.
@@ -429,6 +440,12 @@ export default function DataDialog({ onClose }) {
           <div className="data-row">
             <button onClick={() => openDialog({ kind: 'book-groups' })}>📚 Book groups…</button>
             <span className="settings-note" style={{ margin: 0 }}>Group editions of the same book so progress syncs across them.</span>
+          </div>
+
+          <div className="field-section">Audiobook clips</div>
+          <div className="data-row">
+            <button onClick={compressClips} disabled={busy || !(counts && counts.audiobook)}>🗜 Compress audiobook clips</button>
+            <span className="settings-note" style={{ margin: 0 }}>Re-encodes WAV clips (Piper, Kokoro, mic takes) to Opus — 15–30× smaller, same playback. New clips are compressed as they are made.</span>
           </div>
 
           <div className="field-section">Clear specific data</div>
