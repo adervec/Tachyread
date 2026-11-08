@@ -6,12 +6,13 @@
 // readwrite grant — otherwise the run is logged as skipped so the user knows to re-grant.
 
 import {
-  getJourneyAi, saveJourneyAi, getLibraryBooks, allFiles, getFsHandle, getDeviceId, getBinding, getLibraryRef, loadGlobal,
+  getJourneyAi, saveJourneyAi, getLibraryBooks, allFiles, getDeviceId, getBinding, getLibraryRef, loadGlobal,
 } from '../state/storage.js';
 import {
-  buildDataset, buildProgress, buildDigest, buildCoworkRequest, buildCoworkManifest,
+  buildDataset, buildProgress, buildDigest, buildCoworkRequest,
   buildApiMessages, parseAiOutput, contentHash,
 } from './journeyAi.js';
+import { subDir, subDirLabel } from './tachyFolder.js';
 import { opsInstruction, sanitizeOutput, planRows, isReportOnly, queuesForDataset, logRequest } from './coworkOps.js';
 import { writeSnapshot, commitRows } from './coworkApply.js';
 import { liveQueues } from './readingQueues.js';
@@ -68,12 +69,10 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
   if (coworkIds.length) {
     let note; let ok = true; let target = ai?.coworkDirPath || '';
     try {
-      const dir = await getFsHandle('journeyCoworkDir');
-      const perm = dir && (await (dir.queryPermission?.({ mode: 'readwrite' }) ?? 'granted'));
-      if (!dir) { ok = false; note = 'skipped — no cowork folder chosen'; }
-      else if (perm !== 'granted') { ok = false; note = 'skipped — folder permission needs re-granting (open the Cowork page once)'; }
+      const dir = await subDir('cowork'); // silent: null when not chosen or permission lapsed
+      if (!dir) { ok = false; note = 'skipped — Tachyread folder not connected (open the Cowork page once to re-grant)'; }
       else {
-        target = target || dir.name;
+        target = target || (await subDirLabel('cowork'));
         // One request file: if the last request hasn't been answered yet, fold its operations in
         // rather than overwriting it (the agent would never see the earlier, often bigger, request).
         const pending = ai?.requestLog?.[0] && ai.requestLog[0].at > (ai?.lastReplyAt || 0) ? ai.requestLog[0].ops : [];
@@ -85,7 +84,6 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
         const req = buildCoworkRequest(dataset, instr);
         await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(req, null, 2));
         await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, instr));
-        await writeToDir(dir, 'cowork.json', JSON.stringify(buildCoworkManifest(), null, 2));
         ai = logRequest({ ...ai, instruction: { ...instr, updatedAt: now } }, { hash: req.requestHash, ops: instr.ops, at: now, auto: true }); // replies are matched back by hash
         note = `auto-wrote cowork request (${instr.mode})`;
       }
@@ -97,10 +95,8 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
   if (due.includes('cw-snapshot')) {
     let ok = true; let note;
     try {
-      const dir = await getFsHandle('journeyCoworkDir');
-      const perm = dir && (await (dir.queryPermission?.({ mode: 'readwrite' }) ?? 'granted'));
-      if (!dir) { ok = false; note = 'skipped — no cowork folder chosen'; }
-      else if (perm !== 'granted') { ok = false; note = 'skipped — folder permission needs re-granting (open the Cowork page once)'; }
+      const dir = await subDir('cowork');
+      if (!dir) { ok = false; note = 'skipped — Tachyread folder not connected (open the Cowork page once to re-grant)'; }
       else note = `auto snapshot (${await writeSnapshot(dir, now)} files)`;
     } catch (e) { ok = false; note = `snapshot failed: ${e?.message || e}`; }
     ai = recordRun(ai, ['cw-snapshot'], { at: now, kind: 'cowork', target: ai?.coworkDirPath || 'cowork folder', ok, note, auto: true });

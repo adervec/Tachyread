@@ -13,7 +13,7 @@ import { fmtDateTime } from '../features/dateFmt.js';
 import {
   getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef, saveLibraryRef,
   getJourneyAi, saveJourneyAi, exportLibraryData, importLibraryData, librarySize, clearLibrary,
-  getBinding, setBinding, getSectionBindings, setSectionBinding, allDocMeta, allFiles, getFsHandle, setFsHandle,
+  getBinding, setBinding, getSectionBindings, setSectionBinding, allDocMeta, allFiles,
   loadFile, loadReadState, loadDocPayload,
   getCrossNotes, saveCrossNote, deleteCrossNote,
 } from '../state/storage.js';
@@ -23,7 +23,7 @@ import { sectionSpan } from '../document/toc.js';
 import { askClaude, anthropicConfigured } from '../features/anthropic.js';
 import {
   buildDataset, buildDigest, buildProgress, AI_NOTE_TYPES,
-  buildCoworkRequest, buildCoworkManifest, buildApiMessages, parseAiOutput, contentHash,
+  buildCoworkRequest, buildApiMessages, parseAiOutput, contentHash,
 } from '../features/journeyAi.js';
 import {
   normalizeSeed, filterBooks, libraryStats, exportJourneyMarkdown,
@@ -60,6 +60,7 @@ import {
 import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset, logRequest, opsForReply } from '../features/coworkOps.js';
 import { writeSnapshot, commitRows, undoLastApply, listInbox, readInbox, moveInbox } from '../features/coworkApply.js';
 import { getDeviceId } from '../state/storage.js';
+import { subDir, subDirLabel, pickRoot } from '../features/tachyFolder.js';
 import { deviceKind } from '../state/device.js';
 import { AXES, READER_ARCHETYPES, readerProfile, matchArchetype, currentArchetype, archetypeTrend, archetypeAxes } from '../features/readerArchetype.js';
 
@@ -3281,19 +3282,7 @@ function AnalyticsView({ books, dayAgg = [], ai = null, splitTypes = false, onSp
 }
 
 // ── AI / Cowork view ─────────────────────────────────────────────────────────────────────────────
-// The shared AI-cowork-sync panel (https://adervec.github.io/cowork.js) — the same chrome every app and
-// CoworkSyncHub show. Loaded from the maker portal; until it loads (or offline) the cowork group renders
-// exactly as before, so nothing depends on it.
-function usePanelReady() {
-  const [ready, setReady] = useState(() => !!(window.customElements && customElements.get('cowork-panel')));
-  useEffect(() => {
-    if (ready || !window.customElements) return undefined;
-    let on = true;
-    customElements.whenDefined('cowork-panel').then(() => { if (on) setReady(true); });
-    return () => { on = false; };
-  }, [ready]);
-  return ready;
-}
+// The cowork files live in the Tachyread folder's cowork/ subfolder (tachyFolder.js).
 async function writeToDir(dir, name, text) {
   const fh = await dir.getFileHandle(name, { create: true });
   const w = await fh.createWritable(); await w.write(text); await w.close();
@@ -3323,11 +3312,8 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
   const [openExplain, setOpenExplain] = useState(null);
   const [question, setQuestion] = useState(ai?.question || ''); // for the "Ask a question" operation
   const [dir, setDir] = useState(null);
+  const [dirName, setDirName] = useState(''); // "Tachyread/cowork" — dir.name alone would just say "cowork"
   const [dirPath, setDirPath] = useState(ai?.coworkDirPath || '');
-  const panelReady = usePanelReady();
-  const panelRef = useRef(null);
-  // when the folder reply was last read in, so the shared panel can say "answered" (device-local)
-  const [lastRead, setLastRead] = useState(() => { try { return +localStorage.getItem('tr-cowork-lastread') || 0; } catch { return 0; } });
   const [pasted, setPasted] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -3354,9 +3340,10 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
   ], [ai]);
   const [opQ, setOpQ] = useState('');
   const [opGroup, setOpGroup] = useState('all');
-  const coworkTarget = (dirPath || '').trim() || dir?.name || '';
+  const coworkTarget = (dirPath || '').trim() || dirName;
 
-  useEffect(() => { getFsHandle('journeyCoworkDir').then(setDir).catch(() => {}); }, []);
+  const loadDir = () => { subDir('cowork').then(setDir).catch(() => {}); subDirLabel('cowork').then(setDirName).catch(() => {}); };
+  useEffect(loadDir, []);
 
   // Related-activity feed entries (kept for compatibility — the merged history displays them).
   const actEntry = (kind, text) => ({ at: Date.now(), kind, text });
@@ -3448,7 +3435,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
   }
 
   async function chooseFolder() {
-    try { const h = await window.showDirectoryPicker({ id: 'tachyread-journey-cowork', mode: 'readwrite' }); await setFsHandle('journeyCoworkDir', h); setDir(h); }
+    try { await pickRoot(); setDir(await subDir('cowork', { ask: true })); setDirName(await subDirLabel('cowork')); }
     catch { /* cancelled */ }
   }
 
@@ -3493,7 +3480,6 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
           const req = buildCoworkRequest(dataset, ci);
           await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(req, null, 2));
           await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, ci));
-          await writeToDir(dir, 'cowork.json', JSON.stringify(buildCoworkManifest(), null, 2)); // discovery manifest for hubs
           cur = logRequest({ ...cur, instruction: { ...ci, updatedAt: now } }, { hash: req.requestHash, ops: ci.ops, at: now }); // replies are matched back to this
           note = `wrote request (${ci.mode})`; parts.push(`cowork request written (${ci.mode})`);
         } catch (e) { ok = false; note = String(e?.message || e); parts.push('cowork write failed'); }
@@ -3534,9 +3520,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
           : m.how === 'recent' ? `no request id in the reply — checked against your ${m.count} request(s) from the last 3 days`
             : 'checked against your last request';
         await stageReply(t, m.ops, `cowork folder · ${how}`);
-        const n = Date.now(); setLastRead(n);
-        await saveJourneyAi({ ...((await getJourneyAi().catch(() => null)) || ai || {}), lastReplyAt: n }); onReload(); // scheduler: request answered
-        try { localStorage.setItem('tr-cowork-lastread', String(n)); } catch { /* quota */ }
+        await saveJourneyAi({ ...((await getJourneyAi().catch(() => null)) || ai || {}), lastReplyAt: Date.now() }); onReload(); // scheduler: request answered
       }
     } catch (e) { setMsg('Read failed: ' + (e?.message || e)); }
     setBusy(false);
@@ -3559,37 +3543,6 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
     catch (e) { setMsg('Could not parse that reply: ' + (e?.message || e)); }
     setBusy(false);
   }
-
-  // the shared panel: our cowork state in, its header buttons back as `cowork-action` events
-  useEffect(() => {
-    const p = panelRef.current;
-    if (!p || !panelReady) return;
-    p.setAttribute('mode', 'data'); // attribute, not a JSX prop: React 19 would assign a property
-    const req = Math.max(0, ...Object.entries(actionRuns)
-      .filter(([id, r]) => id.startsWith('cw-') && r && r.ok).map(([, r]) => r.at || 0)) / 1000;
-    const rep = lastRead / 1000;
-    p.data = {
-      app: 'tachyread', folder: coworkTarget || 'no folder connected',
-      channels: [{ channel: 'journey', request_mtime: req, reply_mtime: rep, pending: !!req && rep < req, answered: !!req && rep >= req }],
-      actions: viewer ? [] : [
-        { id: 'connect', label: dir ? 'Change folder' : 'Connect folder', primary: !dir },
-        ...(dir ? [{ id: 'push', label: 'Send requests', primary: true }, { id: 'poll', label: 'Check for replies' }] : []),
-      ],
-      channelActions: [],
-    };
-  }, [panelReady, dir, coworkTarget, actionRuns, lastRead, viewer]);
-  useEffect(() => {
-    const p = panelRef.current;
-    if (!p) return undefined;
-    const h = (ev) => {
-      const a = ev.detail?.action;
-      if (a === 'connect') chooseFolder();
-      else if (a === 'push') runSelected(true);
-      else if (a === 'poll') readResponse();
-    };
-    p.addEventListener('cowork-action', h);
-    return () => p.removeEventListener('cowork-action', h);
-  });
 
   const targetOf = (g) => (g.kind === 'cowork' ? (coworkTarget || 'no folder chosen')
     : g.kind === 'api' ? model
@@ -3692,7 +3645,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
             })}
             {g.id === 'cowork' && (
               <div className="lj-inline cwt-foot">
-                {!panelReady && <button onClick={chooseFolder} disabled={viewer}>{dir ? `📁 ${dir.name}` : '📁 Choose cowork folder…'}</button>}
+                <button onClick={chooseFolder} disabled={viewer} title="Requests, replies and snapshots go to the Tachyread folder's cowork/ subfolder">{dir ? `📁 ${dirName || dir.name}` : '📁 Choose the Tachyread folder…'}</button>
                 <input
                   className="cwt-path" type="text" disabled={viewer}
                   placeholder="Full folder path (annotation — shown in history; browsers can't read real paths)"
@@ -3702,9 +3655,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
             )}
           </div>
         );
-        return g.id === 'cowork'
-          ? <cowork-panel key={g.id} ref={panelRef} class="cwt-panel">{groupEl}</cowork-panel>
-          : <Fragment key={g.id}>{groupEl}</Fragment>;
+        return <Fragment key={g.id}>{groupEl}</Fragment>;
       })}
       {!viewer && (
         <div className="lj-inline">

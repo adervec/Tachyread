@@ -1,6 +1,6 @@
 // Self-check for journeyAi.js — run: node app/src/features/journeyAi.demo.mjs
 import assert from 'node:assert';
-import { buildDataset, buildDigest, buildProgress, buildApiMessages, buildCoworkRequest, buildCoworkManifest, parseAiOutput, applyAiOutput, contentHash, getInstruction, LIGHT_INSTRUCTION } from './journeyAi.js';
+import { buildDataset, buildDigest, buildProgress, buildApiMessages, buildCoworkRequest, parseAiOutput, applyAiOutput, contentHash, getInstruction, LIGHT_INSTRUCTION } from './journeyAi.js';
 
 const books = [
   { id: 'a', title: 'A', author: 'X', genre: 'SciFi', fnf: 'F', difficultyLevel: 3, recScore: 6, completion: true, finishTime: '2024-01-01', rating: 4 },
@@ -58,11 +58,6 @@ assert.notEqual(contentHash('hello'), contentHash('world'));
   const ins = getInstruction(null);
   assert.equal(req.requestHash, contentHash(JSON.stringify(ds) + JSON.stringify(ins?.ops || ins?.text || '')), 'declared hash covers dataset + requested ops');
   assert.notEqual(buildCoworkRequest(ds, { ops: ['cw-classify'] }).requestHash, buildCoworkRequest(ds, { ops: ['cw-classify', 'cw-notes'] }).requestHash, 'different ops, different hash');
-  const man = buildCoworkManifest();
-  assert.equal(man.protocol, 'cowork-manifest');
-  assert.equal(man.channels.length, 1);
-  assert.equal(man.channels[0].replyPath, 'journey-cowork-response.json');
-  assert.ok(!man.channels[0].replyDir, 'exactly one reply target');
   assert.ok(buildDigest(ds, getInstruction(null)).includes('requestHash'), 'digest asks for the echo');
 }
 

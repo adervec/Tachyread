@@ -3,7 +3,7 @@
 // travel are progress-only (reading history keyed by file checksum + grab markers + book groups);
 // file bodies and grab images never leave the device. See storage.exportProgressData.
 
-import { exportProgressData, importProgressData, exportLibraryData, importLibraryData, getLibraryChangedAt, getLibrarySyncState, setLibrarySyncState } from '../../state/storage.js';
+import { exportProgressData, importProgressData, exportLibraryData, importLibraryData, getLibraryChangedAt, getLibrarySyncState, setLibrarySyncState, stampSync } from '../../state/storage.js';
 import { getSyncProvider, PROGRESS_FILE_NAME, LIBRARY_FILE_NAME } from './syncProviders.js';
 
 // Read + parse a downloaded sync blob, turning a truncated/corrupt cloud file into a clear message
@@ -22,8 +22,11 @@ export async function backupToProvider(providerId, cfg, opts = {}) {
   const bundle = await exportProgressData();
   const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
   await p.upload(conn, PROGRESS_FILE_NAME, blob);
+  await stampSync('progress', { pushedAt: Date.now() });
   return { at: Date.now(), bytes: blob.size };
 }
+// Whose copy did we just pull? (bundle.device = the device name that wrote it)
+const pulledStamp = (bundle) => ({ pulledAt: Date.now(), pulledFrom: bundle?.device || '', remoteAt: bundle?.exportedAt || bundle?.generatedAt || 0 });
 
 export async function restoreFromProvider(providerId, cfg, opts = {}) {
   const p = getSyncProvider(providerId);
@@ -34,6 +37,7 @@ export async function restoreFromProvider(providerId, cfg, opts = {}) {
   if (!blob) throw new Error('No Tachyread progress sync found in that location yet — back up first.');
   const bundle = await parseSyncBlob(blob, 'progress');
   const r = await importProgressData(bundle);
+  await stampSync('progress', pulledStamp(bundle));
   return { at: Date.now(), merged: r.merged };
 }
 
@@ -54,6 +58,7 @@ export async function backupLibraryToProvider(providerId, cfg, opts = {}) {
   const bundle = await exportLibraryData();
   const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
   await p.upload(conn, LIBRARY_FILE_NAME, blob);
+  await stampSync('library', { pushedAt: Date.now() });
   return { at: Date.now(), bytes: blob.size, books: bundle.books.length };
 }
 
@@ -65,6 +70,7 @@ export async function restoreLibraryFromProvider(providerId, cfg, opts = {}) {
   const blob = await p.download(conn, LIBRARY_FILE_NAME);
   if (!blob) throw new Error('No Tachyread library sync found in that location yet — back up first.');
   const bundle = await parseSyncBlob(blob, 'library');
+  await stampSync('library', pulledStamp(bundle));
   return importLibraryData(bundle, { mode: 'merge' });
 }
 
@@ -89,7 +95,12 @@ export async function syncLibraryWithProvider(providerId, cfg, opts = {}) {
   let pulled = false;
   if (remoteNew && remoteStamp !== null) {
     const blob = await p.download(conn, LIBRARY_FILE_NAME);
-    if (blob) { await importLibraryData(await parseSyncBlob(blob, 'library'), { mode: 'merge', fromSync: true }); pulled = true; }
+    if (blob) {
+      const bundle = await parseSyncBlob(blob, 'library');
+      await importLibraryData(bundle, { mode: 'merge', fromSync: true });
+      await stampSync('library', pulledStamp(bundle));
+      pulled = true;
+    }
   }
 
   // Push only when we have local changes (or the remote file doesn't exist yet).
@@ -99,6 +110,7 @@ export async function syncLibraryWithProvider(providerId, cfg, opts = {}) {
     const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
     await p.upload(conn, LIBRARY_FILE_NAME, blob);
     bytes = blob.size; books = bundle.books.length;
+    await stampSync('library', { pushedAt: Date.now() });
     newStamp = p.stat ? await p.stat(conn, LIBRARY_FILE_NAME) : null;
   }
   await setLibrarySyncState({ remoteStamp: newStamp, localChange: changedAt, syncedAt: Date.now() });

@@ -1,8 +1,10 @@
 // Boot smoke test: build output actually RUNS. Serves dist via `vite preview`, drives the app in a
 // real browser (the machine's installed Chrome/Edge via playwright-core — no browser downloads, so
 // this works on GitHub runners too), and fails on ANY console error or uncaught page error.
-// Flow: boot → open a dropped .txt → line rows render → play a moment → Help opens. `npm run smoke`.
+// Flow: boot → open a dropped .txt → line rows render → play a moment → Help opens → a dropped
+// .epub renders its text. `npm run smoke`.
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
@@ -64,12 +66,24 @@ try {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(500);
 
+  // EPUB opens with its text (regression: 73a238b — every EPUB opened with 0 words).
+  const epub = readFileSync(path.join(appDir, 'scripts/fixtures/smoke.epub')).toString('base64');
+  await page.evaluate((b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], 'smoke.epub', { type: 'application/epub+zip' }));
+    document.querySelector('.app').dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true }));
+  }, epub);
+  await page.waitForFunction(() => document.querySelector('.line-pane-list')?.textContent.includes('Epubsmoke'), null, { timeout: 20000 })
+    .catch(() => fail('EPUB opened but none of its text rendered (0-word EPUB regression)'));
+  await page.keyboard.press('Escape');
+
   await browser.close();
   killServer();
   // Benign noise allowlist (none so far — keep strict; add patterns here only with a comment why).
   const real = errors.filter(() => true);
   if (real.length) fail(`${real.length} console/page error(s):\n  ${real.join('\n  ')}`);
-  console.log('smoke: app boots, opens a document, plays, Help renders — 0 console errors');
+  console.log('smoke: app boots, opens a document, plays, Help renders, EPUB has text — 0 console errors');
 } catch (e) {
   fail(e?.message || String(e));
 }

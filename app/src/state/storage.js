@@ -968,6 +968,18 @@ export async function setLibrarySyncState(state) {
   const db = await getDB();
   await db.put('library', state, 'syncState');
 }
+// When each sync file last moved, and whose device wrote the copy we pulled — the sync status card.
+// { progress | library: { pushedAt, pulledAt, pulledFrom, remoteAt } }. A direct put: must NOT bump
+// the library change stamp, or every sync would make the library dirty again.
+export async function getSyncStamps() {
+  const db = await getDB();
+  return (await db.get('library', 'syncStamps')) || {};
+}
+export async function stampSync(kind, patch) {
+  const db = await getDB();
+  const cur = (await db.get('library', 'syncStamps')) || {};
+  await db.put('library', { ...cur, [kind]: { ...(cur[kind] || {}), ...patch } }, 'syncStamps');
+}
 
 // A versioned bundle of the whole tracker. Defaults (full: tombstones + refs + ai + binding) feed the
 // cloud Drive file; a filtered user export passes its own `books` and can drop deleted/ai/binding.
@@ -983,6 +995,7 @@ export async function exportLibraryData(opts = {}) {
   }
   return {
     protocol: 'tachyread-journey', protocolVersion: 1, kind: 'library', generatedAt: Date.now(),
+    device: ((await db.get('global', 'settings')) || {}).deviceName || '', // who wrote this copy (sync status card)
     meta: (await db.get('library', 'meta'))?.data || null,
     books: bookList,
     authors: (await db.get('library', 'refs:authors'))?.data || null,
