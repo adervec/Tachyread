@@ -13,7 +13,8 @@
 //     Drive REST API. Needs your own OAuth client ID (see the setup note in the dialog). The Drive
 //     bytes still never touch any server of ours; it's your browser talking to your Drive.
 
-import { getFsHandle, setFsHandle } from '../../state/storage.js';
+import { setFsHandle } from '../../state/storage.js';
+import { subDir, subDirLabel, pickRoot, forgetRoot, folderSupported } from '../tachyFolder.js';
 
 export const BACKUP_FILE_NAME = 'tachyread-backup.json';
 // Cloud sync carries reading PROGRESS only (see storage.exportProgressData) — a separate, smaller
@@ -24,35 +25,23 @@ export const PROGRESS_FILE_NAME = 'tachyread-progress.json';
 // interval instead of every few seconds while reading.
 export const LIBRARY_FILE_NAME = 'tachyread-library.json';
 
-async function ensureDirPermission(handle, mode = 'readwrite') {
-  if (!handle) return false;
-  const opts = { mode };
-  if ((await handle.queryPermission(opts)) === 'granted') return true;
-  return (await handle.requestPermission(opts)) === 'granted';
-}
-
+// The sync/ subfolder of the one Tachyread folder (tachyFolder.js); a legacy sync-only folder
+// keeps working until the one folder is chosen.
 export const localFolderProvider = {
   id: 'localFolder',
-  label: 'Local folder (or a Drive / Dropbox sync folder)',
-  supported: () => typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function',
+  label: 'Tachyread folder (in a Drive / Dropbox / OneDrive sync folder)',
+  supported: folderSupported,
   available: () => true,
-  async connect() {
-    let handle = await getFsHandle('syncDir');
-    if (handle && (await ensureDirPermission(handle))) return handle;
-    handle = await window.showDirectoryPicker({ id: 'tachyread-sync', mode: 'readwrite' });
-    if (!(await ensureDirPermission(handle))) throw new Error('Folder permission was denied.');
-    await setFsHandle('syncDir', handle);
-    return handle;
+  async connect(cfg, { silent = false } = {}) {
+    const dir = await subDir('sync', { ask: !silent });
+    if (dir) return dir;
+    if (silent) throw new Error('The Tachyread folder isn’t connected on this device.');
+    await pickRoot();
+    return subDir('sync', { ask: true });
   },
-  async isConnected() {
-    const h = await getFsHandle('syncDir');
-    return !!h && (await h.queryPermission({ mode: 'readwrite' })) === 'granted';
-  },
-  async folderName() {
-    const h = await getFsHandle('syncDir');
-    return h?.name || null;
-  },
-  async disconnect() { await setFsHandle('syncDir', null); },
+  async isConnected() { return !!(await subDir('sync')); },
+  async folderName() { return (await subDirLabel('sync')) || null; },
+  async disconnect() { await forgetRoot(); await setFsHandle('syncDir', null); },
   async upload(dir, name, blob) {
     const fh = await dir.getFileHandle(name, { create: true });
     const w = await fh.createWritable();

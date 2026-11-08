@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { getStream } from '../features/audioRecorder.js';
 import { encodeWav } from '../features/audiobookExport.js';
-import { addAudioClip, getFsHandle, setFsHandle } from '../state/storage.js';
+import { addAudioClip } from '../state/storage.js';
+import { subDir, subDirLabel, pickRoot } from '../features/tachyFolder.js';
 import {
   rmsOf, adaptiveThreshold, cleanTake, expectedMs, shouldAdvance, sessionQueue,
 } from '../features/readThrough.js';
@@ -69,8 +70,10 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
   const liveRef = useRef({});           // advanceMode/onBreak/queue/qi mirrored for the audio callback
   liveRef.current = { advanceMode, onBreak, queue, qi };
 
-  // A previously linked training-log folder is offered again automatically.
-  useEffect(() => { getFsHandle('speechTrainingDir').then((h) => h && setLogDir(h)).catch(() => {}); }, []);
+  // The Tachyread folder's speech/ subfolder (or a previously linked log folder) is used automatically.
+  const [logName, setLogName] = useState('');
+  const loadLogDir = () => { subDir('speech').then((h) => h && setLogDir(h)).catch(() => {}); subDirLabel('speech').then(setLogName).catch(() => {}); };
+  useEffect(loadLogDir, []);
 
   const uncoveredCount = useMemo(() => sessionQueue(chunks, isCovered, true).length, [chunks, isCovered]);
   const chunk = queue.length && qi < queue.length ? chunks[queue[qi]] : null;
@@ -152,9 +155,9 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
 
   async function pickLogDir() {
     try {
-      const h = await window.showDirectoryPicker({ id: 'tachyread-narration-log', mode: 'readwrite' });
-      await setFsHandle('speechTrainingDir', h).catch(() => {});
-      setLogDir(h);
+      await pickRoot();
+      setLogDir(await subDir('speech', { ask: true }));
+      setLogName(await subDirLabel('speech'));
       setLogNote('');
     } catch { /* cancelled */ }
   }
@@ -352,9 +355,9 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
           <div className="field-row">
             <label>Speech training log</label>
             {logDir
-              ? <span>📁 Logging quality to <b>{logDir.name}</b> — SpeechImprover can watch this folder. <button onClick={() => { setFsHandle('speechTrainingDir', null).catch(() => {}); setLogDir(null); }}>Forget</button></span>
+              ? <span>📁 Logging quality to <b>{logName || logDir.name}</b> — SpeechImprover can watch this folder (change it under Data → Cloud sync).</span>
               : typeof window.showDirectoryPicker === 'function'
-                ? <button onClick={pickLogDir} title="Each session writes a small JSON quality log there; point SpeechImprover at the same folder and narrations count as speech training">📁 Log quality to a folder…</button>
+                ? <button onClick={pickLogDir} title="Each session writes a small JSON quality log to the Tachyread folder's speech/ subfolder; point SpeechImprover at it and narrations count as speech training">📁 Choose the Tachyread folder…</button>
                 : <span className="settings-note" style={{ margin: 0 }}>Folder logging needs a Chromium browser.</span>}
           </div>
           {err && <p className="settings-note" style={{ color: 'var(--ox-bright, #b0413e)' }}>{err}</p>}

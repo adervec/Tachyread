@@ -11,6 +11,40 @@ import { blobLines, readBackup, isStreamableHeader } from '../features/backupStr
 import { SPEECH_LOG_FIELDS } from '../features/speechLog.js';
 import { SYNC_PROVIDERS, getSyncProvider, driveOriginAllowed, getDriveProfile } from '../features/sync/syncProviders.js';
 import { backupToProvider, restoreFromProvider, syncWithProvider } from '../features/sync/syncManager.js';
+import { getRoot, pickRoot, forgetRoot, subDirLabel, folderSupported } from '../features/tachyFolder.js';
+import { getSyncStamps } from '../state/storage.js';
+
+// Where each kind of data goes and when it last moved — the honest answer to "is it syncing?".
+// Book files and audio have no cloud copy at all today; saying so beats letting people assume.
+function SyncStatus({ sync, folderName }) {
+  const [stamps, setStamps] = useState({});
+  const [folder, setFolder] = useState('');
+  useEffect(() => {
+    getSyncStamps().then(setStamps).catch(() => {});
+    subDirLabel('sync').then(setFolder).catch(() => {});
+  }, [sync.provider, sync.lastSync, sync.lastLibrarySync, folderName]);
+  const where = sync.provider === 'googleDrive' ? 'Google Drive › private app folder' : folder ? `📁 ${folder}` : 'Tachyread folder — none chosen yet';
+  const cell = (s, k) => (s ? (s[k] ? fmtDateTime(s[k]) : 'never') : '—'); // null = this data never syncs
+  const rows = [
+    ['Reading progress & tab settings', where, stamps.progress || {}],
+    ['Trackyread library', where, stamps.library || {}],
+    ['Book files', 'This device only — open each book on every device (or keep the files in a synced folder)', null],
+    ['Audiobook audio (clips, synced audiobooks)', 'This device only — no cloud copy yet', null],
+  ];
+  return (
+    <table className="history-table">
+      <thead><tr><th>Data</th><th>Where it goes</th><th>Last pushed</th><th>Last pulled</th></tr></thead>
+      <tbody>
+        {rows.map(([what, to, s]) => (
+          <tr key={what}>
+            <td>{what}</td><td>{to}</td><td>{cell(s, 'pushedAt')}</td>
+            <td>{cell(s, 'pulledAt')}{s?.pulledAt && s.pulledFrom ? <> — written by <b>{s.pulledFrom}</b></> : null}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 
 // Friendly names + display order for the object stores shown in the Overview.
 const STORE_LABELS = {
@@ -76,6 +110,16 @@ export default function DataDialog({ onClose }) {
 
   // The signed-in Google account (live token's profile, or the last one we persisted for display).
   const account = (sync.provider === 'googleDrive' && (getDriveProfile() || sync.profile)) || null;
+
+  // The one Tachyread folder (sync/, cowork/, speech/ inside it).
+  const [folderName, setFolderName] = useState('');
+  const refreshFolder = () => getRoot().then((h) => setFolderName(h?.name || '')).catch(() => {});
+  useEffect(() => { refreshFolder(); }, []);
+  async function chooseFolder() {
+    try { await pickRoot(); await refreshFolder(); setMsg('Tachyread folder chosen — sync files go to its sync/ subfolder; Sync now to push.'); }
+    catch (e) { if (e?.name !== 'AbortError') setMsg('Folder not chosen: ' + (e?.message || e)); }
+  }
+  async function forgetFolder() { await forgetRoot(); await refreshFolder(); }
 
   // ── cloud ──
   // Two-way sync (pull-merge-push), then reload so merged settings/progress apply to open tabs.
@@ -290,14 +334,16 @@ export default function DataDialog({ onClose }) {
           <div className="field-section">Cloud sync (beta)</div>
           <p className="settings-note">
             Syncs your <strong>reading progress and tab settings</strong> across your devices — reading
-            position per file (keyed by content), your Default Tab Settings, and per-file display. Your
-            <strong> application &amp; biometric settings are device-specific</strong> and stay put (they’re
-            tuned to each device’s screen, camera and habits). Tabs also show a small 🖥 badge when the
-            same file is open on another synced device (as of the last sync). Your files, document text,
-            and grabbed pages <strong>never leave this device</strong>,
-            and nothing goes through our servers: it's your browser talking to your own Google Drive (a private
-            app-data folder) or a local folder your Drive / Dropbox / OneDrive desktop app already syncs.
+            position per file (keyed by content), your Default Tab Settings, and per-file display — plus
+            the Trackyread library. Your <strong>application &amp; biometric settings are device-specific</strong>
+            and stay put (they’re tuned to each device’s screen, camera and habits). Tabs also show a small 🖥
+            badge when the same file is open on another synced device (as of the last sync).
+            <strong> Book files, document text, grabbed pages and audiobook audio never leave this device</strong>
+            — there is no cloud copy of them. Nothing goes through our servers: it's your browser talking to
+            your own Google Drive (a private app-data folder) or to the Tachyread folder, which you put inside
+            a folder your Drive / Dropbox / OneDrive desktop app already syncs.
           </p>
+          <SyncStatus sync={sync} folderName={folderName} />
           <div className="field-row">
             <label>This device's name</label>
             <div>
@@ -315,6 +361,16 @@ export default function DataDialog({ onClose }) {
               </select>
             </div>
           </div>
+          {sync.provider === 'localFolder' && folderSupported() && (
+            <div className="field-row">
+              <label>Tachyread folder</label>
+              <div className="data-row" style={{ margin: 0 }}>
+                <button onClick={chooseFolder} disabled={busy}>{folderName ? `📁 ${folderName}` : '📁 Choose folder…'}</button>
+                {folderName && <button onClick={forgetFolder} disabled={busy} title="Forget the folder on this device (nothing on disk is deleted)">Forget</button>}
+                <span className="settings-note" style={{ margin: 0 }}>One folder for everything Tachyread writes to disk: <code>sync/</code>, <code>cowork/</code> and <code>speech/</code> inside it.</span>
+              </div>
+            </div>
+          )}
           {sync.provider === 'googleDrive' && account && (
             <div className="gsync-account">
               {account.picture
