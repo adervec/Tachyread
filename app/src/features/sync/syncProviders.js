@@ -65,6 +65,19 @@ export const localFolderProvider = {
       return null;
     }
   },
+  // Pocket-listening audio: one file per chunk under sync/listen/; the id is the file name.
+  async putFile(dir, name, blob) {
+    const d = await dir.getDirectoryHandle('listen', { create: true });
+    const w = await (await d.getFileHandle(name, { create: true })).createWritable();
+    await w.write(blob); await w.close();
+    return name;
+  },
+  async getFile(dir, id) {
+    try { return await (await (await dir.getDirectoryHandle('listen')).getFileHandle(id)).getFile(); } catch { return null; }
+  },
+  async removeFile(dir, id) {
+    try { await (await dir.getDirectoryHandle('listen')).removeEntry(id); } catch { /* already gone */ }
+  },
 };
 
 // ---- Google Drive (private appDataFolder) -------------------------------------------------------
@@ -203,7 +216,7 @@ export const googleDriveProvider = {
       if (!session) throw new Error('Drive upload init returned no session URL.');
       const put = await fetch(session, { method: 'PUT', body: blob });
       if (!put.ok) throw new Error(`Drive upload failed (${put.status}).`);
-      return;
+      return (await put.json().catch(() => null))?.id || existing;
     }
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
@@ -213,6 +226,16 @@ export const googleDriveProvider = {
       : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
     const r = await fetch(url, { method: existing ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${conn.token}` }, body: form });
     if (!r.ok) throw new Error(`Drive upload failed (${r.status}).`);
+    return (await r.json().catch(() => null))?.id || existing; // the file id (pocket-listening clips are fetched by id)
+  },
+  // Pocket-listening audio: one Drive file per chunk, addressed by id.
+  putFile(conn, name, blob) { return googleDriveProvider.upload(conn, name, blob); },
+  async getFile(conn, id) {
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, { headers: { Authorization: `Bearer ${conn.token}` } });
+    return r.ok ? await r.blob() : null;
+  },
+  async removeFile(conn, id) {
+    await fetch(`https://www.googleapis.com/drive/v3/files/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${conn.token}` } }).catch(() => {});
   },
   async download(conn, name) {
     const id = await driveFindId(conn.token, name);
