@@ -57,7 +57,7 @@ import {
   SYNC_ACTION_GROUPS, actionById, combineCoworkInstruction, SCHEDULE_OPTS,
   syncRole, recordRun, mergedHistory, calendarCells, fmtAgo, dayKey,
 } from '../features/coworkActions.js';
-import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset, logRequest, opsForReply } from '../features/coworkOps.js';
+import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset, logRequest, opsForReply, opForRow, opForReport } from '../features/coworkOps.js';
 import { writeSnapshot, commitRows, undoLastApply, listInbox, readInbox, moveInbox } from '../features/coworkApply.js';
 import { getDeviceId } from '../state/storage.js';
 import { subDir, subDirLabel, pickRoot } from '../features/tachyFolder.js';
@@ -1211,7 +1211,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
           {tab === 'genres' && <RefList kind="genre" items={refs.genres} subitems={refs.subgenres} books={books} onOpen={(name) => { setColF({ ...colF, genre: name, author: '' }); setLimit(100); setTab('library'); }} />}
           {tab === 'archetype' && <ArchetypeView books={books} />}
           {tab === 'constellation' && <TreeViews books={books} ai={ai} onOpenInLibrary={(id) => { setTab('library'); setSelected(id); }} />}
-          {tab === 'ai' && <AiView books={books} ai={ai} global={global} onPatchGlobal={onPatch} bindMap={bindMap || {}} onReload={reload} />}
+          {tab === 'ai' && <AiView books={books} ai={ai} global={global} onPatchGlobal={onPatch} bindMap={bindMap || {}} onReload={reload} onReloadAi={async () => setAi(await getJourneyAi())} />}
 
           {tab === 'data' && (
             <div className="lj-data">
@@ -3292,7 +3292,7 @@ async function readFromDir(dir, name) {
   try { const fh = await dir.getFileHandle(name); return await (await fh.getFile()).text(); } catch { return null; }
 }
 
-function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
+function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onReloadAi = onReload }) {
   // Reading-progress bundle (daily/weekly totals, streak, in-flight books) attached to every export,
   // so cowork daily/weekly summary tasks have the data. Built fresh at call time from the file records.
   // The algorithmic weekly summaries ride along so a cowork task can return dressed-up `weeklies`.
@@ -3333,12 +3333,24 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
   const history = useMemo(() => mergedHistory(ai), [ai]);
   // Everything the AI has written for you, in one sortable table.
   const outputs = useMemo(() => [
-    ...Object.entries(ai?.briefs || {}).map(([date, b]) => ({ key: `b:${date}`, at: b.at || Date.parse(date), date, kind: 'brief', title: `Morning brief ${date}`, text: b.text })),
-    ...(ai?.reports || []).map((r, i) => ({ key: `r:${r.at}:${i}`, at: r.at, kind: `report · ${r.kind}`, title: r.title || r.kind, text: r.text })),
-    ...(ai?.answers || []).map((a, i) => ({ key: `a:${a.at}:${i}`, at: a.at, kind: 'answer', title: a.question || 'Answer', text: a.text })),
-    ...(ai?.analysis ? [{ key: 'an:current', at: ai.updatedAt || 0, kind: 'analysis (current)', title: 'Dashboard analysis', text: ai.analysis }] : []),
-    ...(ai?.analysisHistory || []).map((h, i) => ({ key: `ah:${h.at}:${i}`, at: h.at, kind: 'analysis (archived)', title: 'Earlier analysis', text: h.text, analysisIndex: i })),
+    ...Object.entries(ai?.briefs || {}).map(([date, b]) => ({ key: `b:${date}`, at: b.at || Date.parse(date), date, kind: 'brief', op: 'cw-brief', title: `Morning brief ${date}`, text: b.text })),
+    ...(ai?.reports || []).map((r, i) => ({ key: `r:${r.at}:${i}`, at: r.at, kind: `report · ${r.kind}`, op: opForReport(r.kind), title: r.title || r.kind, text: r.text })),
+    ...(ai?.answers || []).map((a, i) => ({ key: `a:${a.at}:${i}`, at: a.at, kind: 'answer', op: 'cw-ask', title: a.question || 'Answer', text: a.text })),
+    ...(ai?.analysis ? [{ key: 'an:current', at: ai.updatedAt || 0, kind: 'analysis (current)', op: 'cw-light', title: 'Dashboard analysis', text: ai.analysis }] : []),
+    ...(ai?.analysisHistory || []).map((h, i) => ({ key: `ah:${h.at}:${i}`, at: h.at, kind: 'analysis (archived)', op: 'cw-light', title: 'Earlier analysis', text: h.text, analysisIndex: i })),
   ], [ai]);
+  // Subtasks in play — ticked, scheduled, or answered by the reply under review — each a chip that
+  // narrows the page to that one operation: its row, its share of the reply, its outputs, its runs.
+  const [task, setTask] = useState('all');
+  const tasks = useMemo(() => {
+    const live = new Set([...sel, ...Object.keys(schedules).filter((id) => schedules[id] && schedules[id] !== 'off'), ...(review?.ops || [])]);
+    return SYNC_ACTION_GROUPS[0].actions.map((a) => a.id).filter((id) => COWORK_OPS[id] && live.has(id));
+  }, [sel, schedules, review]);
+  const focus = tasks.includes(task) ? task : 'all';
+  const focusOp = focus === 'all' ? null : COWORK_OPS[focus];
+  const inFocus = (ids) => focus === 'all' || (ids || []).includes(focus);
+  const revRows = useMemo(() => (review ? review.rows.filter((r) => focus === 'all' || opForRow(r, review.ops) === focus) : []), [review, focus]);
+  const outs = outputs.filter((o) => focus === 'all' || o.op === focus);
   const [opQ, setOpQ] = useState('');
   const [opGroup, setOpGroup] = useState('all');
   const coworkTarget = (dirPath || '').trim() || dirName;
@@ -3350,10 +3362,13 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
   const actEntry = (kind, text) => ({ at: Date.now(), kind, text });
   async function logActivity(kind, text) {
     await saveJourneyAi({ ...(ai || {}), activity: [...(ai?.activity || []), actEntry(kind, text)].slice(-40) });
-    onReload();
+    onReloadAi();
   }
 
-  const persistAi = async (patch) => { await saveJourneyAi({ ...(ai || {}), ...patch }); onReload(); };
+  // AI-record-only changes re-read just that record (onReloadAi). The schedule dropdowns, question
+  // and folder path used to trigger the whole dialog's reload — every book and file record — and a
+  // dropdown sat on its old value until that finished.
+  const persistAi = async (patch) => { await saveJourneyAi({ ...(ai || {}), ...patch }); onReloadAi(); };
   const toggleSel = (id) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const setSched = (id, v) => persistAi({ schedules: { ...schedules, [id]: v } });
   const designate = () => persistAi({ syncMachine: { deviceId, name: (global?.deviceName || '').trim() || deviceKind(), at: Date.now() } });
@@ -3429,7 +3444,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
     try {
       const n = await writeSnapshot(dir);
       const cur = recordRun((await getJourneyAi().catch(() => null)) || ai || {}, ['cw-snapshot'], { at: Date.now(), kind: 'cowork', target: coworkTarget, ok: true, note: `wrote snapshot (${n} files)` });
-      await saveJourneyAi(cur); onReload();
+      await saveJourneyAi(cur); onReloadAi();
       setMsg(`Snapshot written: ${n} files in ${coworkTarget || dir.name}/snapshot/ (read-only for agents — see its README.md).`);
     } catch (e) { setMsg('Snapshot failed: ' + (e?.message || e)); }
     setBusy(false);
@@ -3442,8 +3457,8 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
 
   // Run everything checked in the tree, in transport order: API first (its apply saves the ai
   // record), then re-read the record and fold in the cowork write + cloud syncs + run stamps.
-  async function runSelected(onlyCowork) {
-    const ids = [...sel].filter((id) => actionById(id)).filter((id) => onlyCowork !== true || id.startsWith('cw-'));
+  async function runSelected(only = null) { // only: an explicit id list (a focused subtask) instead of the ticked set
+    const ids = (only || [...sel]).filter((id) => actionById(id));
     if (!ids.length) { setMsg('Nothing checked — tick at least one action in the tree.'); return; }
     setBusy(true); setMsg('Running selected actions…');
     const now = Date.now();
@@ -3502,7 +3517,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
     }
     if (apiTried) cur = recordRun(cur, ['api-light'], { at: now, kind: 'api', target: model, ok: apiOk, note: apiNote });
     await saveJourneyAi(cur);
-    onReload();
+    if (ids.some((d) => d.startsWith('cloud-'))) onReload(); else onReloadAi(); // only a cloud sync can change books
     setMsg(parts.length ? parts.join(' · ') : 'Done.');
     setBusy(false);
   }
@@ -3521,7 +3536,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
           : m.how === 'recent' ? `no request id in the reply — checked against your ${m.count} request(s) from the last 3 days`
             : 'checked against your last request';
         await stageReply(t, m.ops, `cowork folder · ${how}`);
-        await saveJourneyAi({ ...((await getJourneyAi().catch(() => null)) || ai || {}), lastReplyAt: Date.now() }); onReload(); // scheduler: request answered
+        await saveJourneyAi({ ...((await getJourneyAi().catch(() => null)) || ai || {}), lastReplyAt: Date.now() }); onReloadAi(); // scheduler: request answered
       }
     } catch (e) { setMsg('Read failed: ' + (e?.message || e)); }
     setBusy(false);
@@ -3548,7 +3563,8 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
   const targetOf = (g) => (g.kind === 'cowork' ? (coworkTarget || 'no folder chosen')
     : g.kind === 'api' ? model
       : (getSyncProvider(global?.sync?.provider)?.label || global?.sync?.provider || 'no provider'));
-  const filteredHistory = dayFilter ? history.filter((h) => dayKey(h.at) === dayFilter) : history;
+  const focusHistory = focus === 'all' ? history : history.filter((h) => inFocus(h.ids));
+  const filteredHistory = dayFilter ? focusHistory.filter((h) => dayKey(h.at) === dayFilter) : focusHistory;
 
   return (
     <div className="lj-ai">
@@ -3569,16 +3585,41 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
         )}
       </div>
 
-      <div className="rh-section-h">{viewer ? 'Sync status (view-only)' : 'Request builder'}</div>
-      <div className="lj-inline cw-opfilter">
-        <TextF value={opQ} onChange={setOpQ} label="operations (name or description)" />
-        <select value={opGroup} onChange={(e) => setOpGroup(e.target.value)} aria-label="Operation group">
-          <option value="all">All kinds</option><option value="snapshot">Snapshot</option>{OP_GROUPS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
-        </select>
-        {(opQ || opGroup !== 'all') && <button onClick={() => { setOpQ(''); setOpGroup('all'); }}>Show all</button>}
-      </div>
+      {tasks.length > 0 && (
+        <div className="lj-queue-pick cw-tasks" role="tablist" aria-label="Subtasks">
+          <button role="tab" aria-selected={focus === 'all'} className={`lj-qcat${focus === 'all' ? ' on' : ''}`} onClick={() => { setTask('all'); setOpenExplain(null); }} title="Every operation, the whole reply and the full history">All</button>
+          {tasks.map((id) => {
+            const op = COWORK_OPS[id];
+            const n = review ? review.rows.filter((r) => opForRow(r, review.ops) === id).length : 0;
+            const run = actionRuns[id];
+            return (
+              <button key={id} role="tab" aria-selected={focus === id} className={`lj-qcat${focus === id ? ' on' : ''}`} onClick={() => { setTask(id); setOpenExplain(id); }}
+                title={`${op.label}: its request, its share of the reply, its outputs and runs${run ? ` · last run ${fmtAgo(run.at)}` : ''}`}>
+                {op.icon} {op.label}{n ? ` · ${n} to review` : ''}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="rh-section-h">{viewer ? 'Sync status (view-only)' : focusOp ? `Request — ${focusOp.label}` : 'Request builder'}</div>
+      {!focusOp && (
+        <div className="lj-inline cw-opfilter">
+          <TextF value={opQ} onChange={setOpQ} label="operations (name or description)" />
+          <select value={opGroup} onChange={(e) => setOpGroup(e.target.value)} aria-label="Operation group">
+            <option value="all">All kinds</option><option value="snapshot">Snapshot</option>{OP_GROUPS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+          </select>
+          {(opQ || opGroup !== 'all') && <button onClick={() => { setOpQ(''); setOpGroup('all'); }}>Show all</button>}
+        </div>
+      )}
       {SYNC_ACTION_GROUPS.map((g) => {
         if (g.needsKey && !keyOk) return null; // no key → the whole group vanishes, no nagging note
+        const opT = textMatcher(opQ).test;
+        const shown = g.actions.filter((a) => {
+          if (focusOp) return a.id === focus;
+          const op = COWORK_OPS[a.id];
+          return !((opT && !opT(`${a.label} ${a.desc || ''}`)) || (opGroup !== 'all' && g.id === 'cowork' && (op ? op.group : 'snapshot') !== opGroup));
+        });
+        if (!shown.length) return null;
         const onCount = g.actions.filter((a) => sel.has(a.id)).length;
         const allOn = onCount === g.actions.length;
         const groupEl = (
@@ -3592,12 +3633,10 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
               <span className="cwt-gico">{g.icon}</span><b>{g.label}</b>
               <span className="cwt-target" title="Where this group's actions land">→ {targetOf(g)}</span>
             </label>
-            {g.actions.map((a, ai2) => {
+            {shown.map((a, ai2) => {
               const run = actionRuns[a.id];
               const op = COWORK_OPS[a.id];
-              const opT = textMatcher(opQ).test;
-              if ((opT && !opT(`${a.label} ${a.desc || ''}`)) || (opGroup !== 'all' && g.id === 'cowork' && (op ? op.group : 'snapshot') !== opGroup)) return null;
-              const prevOp = COWORK_OPS[g.actions[ai2 - 1]?.id];
+              const prevOp = COWORK_OPS[shown[ai2 - 1]?.id];
               const sub = op && op.group !== prevOp?.group ? OP_GROUPS.find((x) => x.id === op.group) : null;
               const ex = op ? op.explain : a.id === 'cw-snapshot' ? {
                 sends: 'Nothing goes to an AI. Writes read-only files into the folder\'s snapshot/ subfolder: reading days, books, queues, goals, typing, reading aloud, narration quality, focus, an activity log and a README explaining every field.',
@@ -3660,7 +3699,9 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
       })}
       {!viewer && (
         <div className="lj-inline">
-          <button className="toggle-on" disabled={busy || sel.size === 0} onClick={() => runSelected()}>▶ Run selected ({[...sel].filter((id) => actionById(id)).length})</button>
+          {focusOp
+            ? <button className="toggle-on" disabled={busy} onClick={() => runSelected([focus])} title="Write a request for this one operation (the activity snapshot goes with it)">▶ Run {focusOp.label}</button>
+            : <button className="toggle-on" disabled={busy || sel.size === 0} onClick={() => runSelected()}>▶ Run selected ({[...sel].filter((id) => actionById(id)).length})</button>}
           {dir && <button disabled={busy} onClick={readResponse} title="Read the agent's reply — it is filtered and shown for review, never applied straight away">📥 Read response</button>}
           {dir && <button disabled={busy} onClick={snapshotNow} title="Write the read-only activity snapshot now">📸 Snapshot now</button>}
           <span className="settings-note">Scheduled actions run automatically — on the sync machine only.</span>
@@ -3678,17 +3719,18 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
       )}
       {review && (
         <div className="cw-review">
-          <div className="rh-section-h">Review the reply — {review.source} · {review.ops.map((id) => COWORK_OPS[id]?.label || id).join(', ')}</div>
+          <div className="rh-section-h">Review the reply — {review.source} · {(focusOp ? [focus] : review.ops).map((id) => COWORK_OPS[id]?.label || id).join(', ')}</div>
           <p className="settings-note">Nothing has been written yet. Untick anything you don&rsquo;t want, then apply. Applied changes can be undone in one step.</p>
-          {review.rows.length > 0 && (
-            <DataTable stateKey="cw-review" rows={review.rows} rowKey={(r) => r.key} maxRows={1000} className="cw-review-dt"
+          {focusOp && !revRows.length && review.rows.length > 0 && <p className="settings-note">Nothing in this reply for {focusOp.label} — the other {review.rows.length} change(s) are under their own subtasks (or All).</p>}
+          {revRows.length > 0 && (
+            <DataTable stateKey="cw-review" rows={revRows} rowKey={(r) => r.key} maxRows={1000} className="cw-review-dt"
               lead={{ header: '', cell: (r) => <input type="checkbox" checked={picked.has(r.key)} aria-label={`Apply: ${r.label}`} onChange={() => setPicked((s0) => { const s1 = new Set(s0); if (s1.has(r.key)) s1.delete(r.key); else s1.add(r.key); return s1; })} /> }}
               toolbar={(vis) => (<>
                 <button onClick={() => setPicked((s0) => new Set([...s0, ...vis.map((r) => r.key)]))} title="Tick every row the filters show">Tick shown ({vis.length})</button>
                 <button onClick={() => setPicked((s0) => { const s1 = new Set(s0); vis.forEach((r) => s1.delete(r.key)); return s1; })}>Untick shown</button>
               </>)}
               columns={[
-                { key: 'kind', label: 'Type', type: 'select', get: (r) => r.kind, render: (r) => ROW_KIND[r.kind] || r.kind, options: [...new Set(review.rows.map((r) => r.kind))].map((k) => [k, ROW_KIND[k] || k]) },
+                { key: 'kind', label: 'Type', type: 'select', get: (r) => r.kind, render: (r) => ROW_KIND[r.kind] || r.kind, options: [...new Set(revRows.map((r) => r.kind))].map((k) => [k, ROW_KIND[k] || k]) },
                 { key: 'label', label: 'Change', type: 'text', get: (r) => r.label },
                 { key: 'from', label: 'Now', type: 'text', get: (r) => (r.from == null || r.from === '' ? '—' : String(r.from)) },
                 { key: 'to', label: 'Proposed', type: 'text', get: (r) => String(r.to ?? '') },
@@ -3705,10 +3747,10 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
             </details>
           )}
           <div className="lj-inline">
-            <button className="toggle-on" disabled={busy || !picked.size || picked.size > APPLY_CAP} onClick={applyReview} title={picked.size > APPLY_CAP ? `At most ${APPLY_CAP} per apply` : undefined}>Apply {picked.size} ticked</button>
+            <button className="toggle-on" disabled={busy || !picked.size || picked.size > APPLY_CAP} onClick={applyReview} title={picked.size > APPLY_CAP ? `At most ${APPLY_CAP} per apply` : undefined}>Apply {picked.size} ticked{focusOp ? ` (${revRows.filter((r) => picked.has(r.key)).length} here)` : ''}</button>
             {review.rows.length > APPLY_CAP && <span className="settings-note" style={{ margin: 0 }}>{review.rows.length} changes — applied in pages of up to {APPLY_CAP}</span>}
-            <button onClick={() => setPicked(new Set(review.rows.map((r) => r.key)))}>Tick all</button>
-            <button onClick={() => setPicked(new Set())}>Untick all</button>
+            <button onClick={() => setPicked((s0) => new Set([...s0, ...revRows.map((r) => r.key)]))}>Tick all{focusOp ? ' here' : ''}</button>
+            <button onClick={() => setPicked((s0) => { const s1 = new Set(s0); revRows.forEach((r) => s1.delete(r.key)); return s1; })}>Untick all{focusOp ? ' here' : ''}</button>
             <button onClick={async () => { if (review.inboxFile) { await moveInbox(dir, review.inboxFile).catch(() => {}); refreshInbox(); } setReview(null); setMsg('Reply discarded — nothing was changed.'); }}>Discard reply</button>
           </div>
         </div>
@@ -3723,8 +3765,8 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
             </div>
           )}
           <details className="lj-fold">
-            <summary>Apply log ({(ai?.applyLog || []).length})</summary>
-            <DataTable stateKey="cw-applylog" rows={(ai?.applyLog || []).map((e, i) => ({ ...e, i }))} rowKey={(e) => `${e.at}-${e.i}`}
+            <summary>Apply log ({(ai?.applyLog || []).filter((e) => inFocus(e.ops)).length}{focusOp ? ` — ${focusOp.label}` : ''})</summary>
+            <DataTable stateKey="cw-applylog" rows={(ai?.applyLog || []).map((e, i) => ({ ...e, i })).filter((e) => inFocus(e.ops))} rowKey={(e) => `${e.at}-${e.i}`}
               columns={[
                 { key: 'at', label: 'When', type: 'date', get: (e) => e.at, render: (e) => fmtDateTime(e.at) },
                 { key: 'summary', label: 'What was applied', type: 'text', get: (e) => e.summary },
@@ -3736,19 +3778,19 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
           </details>
         </>
       )}
-      {outputs.length > 0 && (
+      {outs.length > 0 && (
         <>
-          <div className="rh-section-h">AI outputs — briefs, reports, answers, analyses</div>
-          <DataTable stateKey="cw-outputs" rows={outputs} rowKey={(o) => o.key}
+          <div className="rh-section-h">{focusOp ? `Outputs — ${focusOp.label}` : 'AI outputs — briefs, reports, answers, analyses'}</div>
+          <DataTable stateKey="cw-outputs" rows={outs} rowKey={(o) => o.key}
             columns={[
               { key: 'at', label: 'When', type: 'date', get: (o) => o.at, render: (o) => (o.date || fmtDateTime(o.at)) },
-              { key: 'kind', label: 'Type', type: 'select', get: (o) => o.kind, options: [...new Set(outputs.map((o) => o.kind))].map((k) => [k, k]) },
+              { key: 'kind', label: 'Type', type: 'select', get: (o) => o.kind, options: [...new Set(outs.map((o) => o.kind))].map((k) => [k, k]) },
               { key: 'text', label: 'Text (click to expand)', type: 'text', get: (o) => `${o.title} ${o.text}`,
                 render: (o) => (
                   <details className="cw-out">
                     <summary><b>{o.title}</b> <span className="lj-qdim">{String(o.text).slice(0, 110)}{String(o.text).length > 110 ? '…' : ''}</span></summary>
                     <p className="lj-analysis cw-brief">{o.text}</p>
-                    {o.analysisIndex != null && !viewer && <button className="grab-trash" title="Delete this archived analysis" onClick={async () => { await saveJourneyAi({ ...ai, analysisHistory: ai.analysisHistory.filter((_, j) => j !== o.analysisIndex) }); onReload(); }}>🗑 Delete</button>}
+                    {o.analysisIndex != null && !viewer && <button className="grab-trash" title="Delete this archived analysis" onClick={async () => { await saveJourneyAi({ ...ai, analysisHistory: ai.analysisHistory.filter((_, j) => j !== o.analysisIndex) }); onReloadAi(); }}>🗑 Delete</button>}
                   </details>
                 ) },
             ]} />
@@ -3756,7 +3798,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
       )}
 
       <div className="rh-section-h cw-hist-h">
-        <span>Sync history ({history.length})</span>
+        <span>Sync history ({focusHistory.length}{focusOp ? ` — ${focusOp.label}` : ''})</span>
         <span className="cw-hist-toggle">
           <button className={histView === 'list' ? 'toggle-on' : ''} onClick={() => { setHistView('list'); setDayFilter(null); }}>☰ List</button>
           <button className={histView === 'cal' ? 'toggle-on' : ''} onClick={() => setHistView('cal')}>📅 Calendar</button>
@@ -3771,7 +3813,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload }) {
           </div>
           <div className="cwcal-grid">
             {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d) => <span key={d} className="cwcal-dow">{d}</span>)}
-            {calendarCells(calCursor.y, calCursor.m, history).map((c) => (
+            {calendarCells(calCursor.y, calCursor.m, focusHistory).map((c) => (
               <button
                 key={c.key}
                 className={`cwcal-cell${c.inMonth ? '' : ' out'}${c.count ? ' has' : ''}${c.errs ? ' err' : ''}${dayFilter === c.key ? ' sel' : ''}`}

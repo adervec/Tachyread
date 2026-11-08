@@ -613,7 +613,7 @@ export function planRows(output, { booksById = {}, files = {}, goals = {}, year 
   for (const r of output.renames || []) {
     for (const b of Object.values(booksById)) {
       if (b.deleted || b.locked || String(b[r.field] || '').trim() !== r.from) continue;
-      rows.push({ key: `f:${b.id}:${r.field}`, kind: 'field', label: `${b.title} — ${r.field} (rename)`, from: r.from, to: r.to, bookId: b.id, field: r.field, value: r.to });
+      rows.push({ key: `f:${b.id}:${r.field}`, kind: 'field', rename: true, label: `${b.title} — ${r.field} (rename)`, from: r.from, to: r.to, bookId: b.id, field: r.field, value: r.to });
     }
   }
   if (output.goalAdvice) {
@@ -690,6 +690,18 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now(), so
   for (const id of working.keys()) undo.books.push(booksById[id]);
   return { bookUpdates: [...working.values(), ...created], crossNoteAdds, bindingAdds, queueOrders, vocabAdds, planAdds, goalSets, aiNext, undo };
 }
+
+// Which of the requested operations a review row belongs to — the first whose permission covers it
+// (the Cowork page's per-subtask view). A rename row goes to the renaming op, not a blank-filler
+// that happens to allow the same field. null = none of them (not possible for sanitized output).
+const ROW_ALLOW = { note: 'aiNotes', cross: 'crossNotes', link: 'bindings', newBook: 'newBooks', tags: 'addTags', vocab: 'vocab', typingPlan: 'typingPlan', goal: 'goalAdvice', queueOrder: 'queueOrder', dupe: 'duplicates', weekly: 'weeklies', brief: 'brief', analysis: 'analysis', recommendations: 'recommendations', treeMeta: 'treeMeta', answer: 'answer' };
+export function opForRow(row, ids) {
+  const covers = (a) => (row.kind === 'field' ? (row.rename ? (a.renames || []).includes(row.field) : !!a.fields?.[row.field])
+    : row.kind === 'report' ? a.reports === row.value?.kind
+      : !!a[ROW_ALLOW[row.kind]]);
+  return (ids || []).find((id) => COWORK_OPS[id] && covers(COWORK_OPS[id].allow)) || null;
+}
+export const opForReport = (kind) => Object.keys(COWORK_OPS).find((id) => COWORK_OPS[id].allow.reports === kind) || null;
 
 // Short "what was applied" line for the log.
 export function applySummary(rows) {
