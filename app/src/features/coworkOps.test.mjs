@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { logRequest, opsForReply, COWORK_OPS, combinedAllow, opsInstruction, sanitizeOutput, planRows, buildApply, isReportOnly, schemaFor, queuesForDataset } from './coworkOps.js';
+import { logRequest, opsForReply, COWORK_OPS, combinedAllow, opsInstruction, sanitizeOutput, planRows, buildApply, isReportOnly, schemaFor, queuesForDataset, opForRow, opForReport } from './coworkOps.js';
 
 const books = {
   a: { id: 'a', title: 'Alpha', author: 'X', genre: '', recScore: 5 },                    // to-read, no genre
@@ -143,4 +143,14 @@ assert.deepEqual(opsForReply({ requestHash: 'full' }, al, { now: 3000 }).ops, ['
 const noHash = opsForReply({}, al, { now: 3000 });
 assert.deepEqual([noHash.how, noHash.ops.sort()], ['recent', ['cw-brief', 'cw-classify', 'cw-fill-genre']]);
 assert.equal(opsForReply({}, al, { now: 1000 + 5 * 86400000 }).how, 'last');
+
+// Per-subtask view: a review row belongs to the first requested operation whose permission covers it.
+assert.equal(opForRow({ kind: 'field', field: 'genre' }, ['cw-tags', 'cw-fill-genre']), 'cw-fill-genre');
+assert.equal(opForRow({ kind: 'field', field: 'genre', rename: true }, ['cw-fill-genre', 'cw-genre-merge']), 'cw-genre-merge', 'a rename row goes to the merge op, not the blank-filler');
+assert.ok(planRows(rn.output, { booksById: rnBooks }).every((r) => r.rename === true), 'rename rows are marked');
+assert.equal(opForRow({ kind: 'report', value: { kind: 'typing' } }, ['cw-retro', 'cw-typing-coach']), 'cw-typing-coach');
+assert.equal(opForRow({ kind: 'tags' }, ['cw-fill-genre']), null, 'nothing requested covers it');
+assert.equal(opForRow({ kind: 'treeMeta' }, ['cw-graph', 'cw-tree']), 'cw-graph', 'first requested wins a shared permission');
+assert.equal(opForReport('health'), 'cw-health');
+assert.equal(opForReport('nope'), null);
 console.log('coworkOps: all cases pass');
