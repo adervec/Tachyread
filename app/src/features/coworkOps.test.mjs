@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { logRequest, opsForReply, COWORK_OPS, combinedAllow, opsInstruction, sanitizeOutput, planRows, buildApply, isReportOnly, schemaFor, queuesForDataset, opForRow, opForReport } from './coworkOps.js';
+import { logRequest, opsForReply, COWORK_OPS, combinedAllow, opsInstruction, sanitizeOutput, planRows, buildApply, isReportOnly, schemaFor, queuesForDataset, opForRow, opForReport, rememberRequeues } from './coworkOps.js';
 
 const books = {
   a: { id: 'a', title: 'Alpha', author: 'X', genre: '', recScore: 5 },                    // to-read, no genre
@@ -153,4 +153,38 @@ assert.equal(opForRow({ kind: 'tags' }, ['cw-fill-genre']), null, 'nothing reque
 assert.equal(opForRow({ kind: 'treeMeta' }, ['cw-graph', 'cw-tree']), 'cw-graph', 'first requested wins a shared permission');
 assert.equal(opForReport('health'), 'cw-health');
 assert.equal(opForReport('nope'), null);
+
+// Dynamic queues: only unqueued to-read books, only into queues with a description, once each.
+const qs = [{ id: 'q1', name: 'Lit', dynamic: 'American literature', prep: ['reception'], ids: ['c'] }, { id: 'q2', name: 'Phil', ids: [] }, { id: 'q3', name: 'Gone', deleted: true, ids: [] }];
+const qctx = { ...ctx, queues: qs };
+const qadd = sanitizeOutput({ queueAdds: [{ queueId: 'q1', ids: ['a', 'c', 'b', 'a', 'zzz'], why: 'fits' }, { queueId: 'q2', ids: ['a'] }, { queueId: 'q3', ids: ['a'] }] }, ['cw-queue-fill'], qctx);
+assert.deepEqual(qadd.output.queueAdds, [{ queueId: 'q1', bookId: 'a', why: 'fits' }]);
+const qaw = Object.fromEntries(qadd.dropped.map((d) => [d.what, d.why]));
+assert.match(qaw['additions to “Phil”'], /not dynamic/);
+assert.match(qaw['add Gamma to “Lit”'], /already in a queue/);
+assert.match(qaw['add Beta to “Lit”'], /not a to-read/);
+const qar = planRows(qadd.output, { booksById: books, queues: qs });
+assert.deepEqual([qar[0].kind, qar[0].from, qar[0].to], ['queueAdd', '(no queue)', 'Lit']);
+assert.deepEqual(buildApply(qar, { booksById: books }).queueAdds, [{ queueId: 'q1', bookId: 'a' }]);
+assert.equal(opForRow(qar[0], ['cw-queue-advice', 'cw-queue-fill']), 'cw-queue-fill');
+// Re-queue: a queued to-read book to another live queue — and never a pair reviewed before.
+const qm = sanitizeOutput({ queueMoves: [{ bookId: 'c', toQueueId: 'q2', why: 'philosophy' }, { bookId: 'c', toQueueId: 'q1' }, { bookId: 'a', toQueueId: 'q2' }, { bookId: 'c', toQueueId: 'q3' }] }, ['cw-requeue'], qctx);
+assert.deepEqual(qm.output.queueMoves, [{ bookId: 'c', toQueueId: 'q2', why: 'philosophy' }]);
+const qmr = planRows(qm.output, { booksById: books, queues: qs });
+assert.deepEqual([qmr[0].kind, qmr[0].from, qmr[0].to], ['queueMove', 'Lit', 'Phil']);
+assert.deepEqual(buildApply(qmr, { booksById: books }).queueAdds, [{ queueId: 'q2', bookId: 'c' }], 'a move is an add elsewhere (addToQueue moves)');
+const remembered = rememberRequeues({}, qmr, 5);
+assert.deepEqual(remembered.requeueSkip, [{ bookId: 'c', toQueueId: 'q2', at: 5 }]);
+assert.equal(sanitizeOutput({ queueMoves: [{ bookId: 'c', toQueueId: 'q2' }] }, ['cw-requeue'], { ...qctx, requeueSkip: remembered.requeueSkip }).output.queueMoves.length, 0, 'reviewed once → never suggested again');
+assert.equal(rememberRequeues({ x: 1 }, qar).x, 1, 'nothing to remember → record untouched');
+// Prep notes: only the types a queue asks for, on its unread books, once; the unrestricted notes op wins.
+const noted = { ...books, c: { ...books.c, aiNotes: [{ type: 'guide', text: 'g' }] } };
+const pn = sanitizeOutput({ aiNotes: [{ bookId: 'c', type: 'reception', text: 'r' }, { bookId: 'c', type: 'guide', text: 'g2' }, { bookId: 'c', type: 'summary', text: 's' }, { bookId: 'a', type: 'reception', text: 'x' }] }, ['cw-queue-prep'], { ...qctx, booksById: noted });
+assert.deepEqual(pn.output.aiNotes.map((n) => n.type), ['reception']);
+assert.equal(buildApply(planRows(pn.output, { booksById: noted }), { booksById: noted }).bookUpdates[0].aiNotes.at(-1).type, 'reception', 'a known note type, not "other"');
+assert.equal(combinedAllow(['cw-queue-prep']).aiNotes, 'prep');
+assert.equal(combinedAllow(['cw-queue-prep', 'cw-notes']).aiNotes, true);
+assert.equal(sanitizeOutput({ aiNotes: [{ bookId: 'c', type: 'summary', text: 's' }] }, ['cw-queue-prep', 'cw-notes'], { ...qctx, booksById: noted }).output.aiNotes.length, 1);
+const qds = queuesForDataset(qs, Object.values(noted));
+assert.deepEqual([qds[0].dynamic, qds[0].prep, qds[0].books[0].notes, qds[1].dynamic], ['American literature', ['reception'], ['guide'], null]);
 console.log('coworkOps: all cases pass');
