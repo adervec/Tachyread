@@ -6,8 +6,8 @@ import {
   allAudiobookManifests, getLibraryBook, saveLibraryBook, saveLibraryRef, deleteLibraryBook, addCrossNotes, getCrossNotes, deleteCrossNote, setBinding, saveJourneyAi,
 } from '../state/storage.js';
 import { buildSnapshot, diffSnapshots, changesMarkdown } from './coworkSnapshot.js';
-import { buildApply, applySummary } from './coworkOps.js';
-import { setQueueIds } from './readingQueues.js';
+import { buildApply, applySummary, rememberRequeues } from './coworkOps.js';
+import { setQueueIds, addToQueue } from './readingQueues.js';
 import { newCard } from '../engine/srs.js';
 import { makePlan, makeStep } from '../engine/typingPlans.js';
 
@@ -55,8 +55,9 @@ operation's reply schema). Anything the declared operations may not change is di
 Operation ids: cw-brief, cw-weeklies, cw-light, cw-retro, cw-typing-coach, cw-speak-coach,
 cw-narration-qa, cw-health, cw-ask, cw-fill-genre, cw-fill-desc, cw-fill-type, cw-fill-diff,
 cw-add-recs, cw-series-gaps, cw-tags, cw-vocab, cw-typing-plan, cw-rescore, cw-links, cw-notes,
-cw-classify, cw-genre-merge, cw-author-tidy, cw-goal-advice, cw-queue-advice, cw-dupes, cw-tree,
-cw-graph. (Vocabulary and typing plans can only be applied from the Cowork page.)
+cw-classify, cw-genre-merge, cw-author-tidy, cw-goal-advice, cw-queue-advice, cw-queue-fill,
+cw-requeue, cw-queue-prep, cw-dupes, cw-tree, cw-graph. (Vocabulary and typing plans can only be
+applied from the Cowork page.)
 Reviewed files move to inbox/processed/ (or inbox/rejected/ if unreadable).
 `;
 export async function listInbox(dir) {
@@ -83,9 +84,11 @@ export async function moveInbox(dir, name, to = 'processed') {
 // The undo snapshot (books as they were, new links, added shared notes, AI fields as they were) is
 // kept as ai.lastApply; every commit is logged in ai.applyLog.
 // `global` + `patchGlobal` are needed only for vocabulary cards / typing plans (app settings).
-export async function commitRows(rows, { books, ai, ops = [], source = '', auto = false, now = Date.now(), global = null, patchGlobal = null }) {
+// `reviewed` = every row that was up for review (ticked or not) — re-queue suggestions among them
+// are remembered so they aren't made again.
+export async function commitRows(rows, { books, ai, ops = [], source = '', auto = false, now = Date.now(), global = null, patchGlobal = null, reviewed = rows }) {
   const booksById = Object.fromEntries((books || []).map((b) => [b.id, b]));
-  const { bookUpdates, crossNoteAdds, bindingAdds, queueOrders, vocabAdds, planAdds, goalSets, aiNext, undo } = buildApply(rows, { booksById, ai, now, source: ops.join(',') || source });
+  const { bookUpdates, crossNoteAdds, bindingAdds, queueOrders, queueAdds, vocabAdds, planAdds, goalSets, aiNext, undo } = buildApply(rows, { booksById, ai, now, source: ops.join(',') || source });
   if ((vocabAdds.length || planAdds.length) && !patchGlobal) throw new Error('vocabulary / typing plans can only be applied from the Cowork page');
   if (vocabAdds.length) {
     await patchGlobal({ vocabDeck: [...(global?.vocabDeck || []), ...vocabAdds.map((c) => newCard(c.word, c.context, now))] });
@@ -101,10 +104,11 @@ export async function commitRows(rows, { books, ai, ops = [], source = '', auto 
     undo.goals = before;
     await saveLibraryRef('goals', goalSets.reduce((g, x) => ({ ...g, [x.key]: x.n }), before));
   }
-  if (queueOrders.length) {
+  if (queueOrders.length || queueAdds.length) {
     const before = (await getLibraryRef('queues').catch(() => null)) || [];
     undo.queues = before; // the whole array as it was — undo puts it back
-    await saveLibraryRef('queues', queueOrders.reduce((qs, qo) => setQueueIds(qs, qo.queueId, qo.ids), before));
+    const ordered = queueOrders.reduce((qs, qo) => setQueueIds(qs, qo.queueId, qo.ids), before);
+    await saveLibraryRef('queues', queueAdds.reduce((qs, qa) => addToQueue(qs, qa.queueId, qa.bookId), ordered)); // addToQueue also moves
   }
   // Remember each book's save stamp: undo only restores a book that is still EXACTLY as this apply
   // left it (any later edit — yours or a later apply — wins).
@@ -115,7 +119,7 @@ export async function commitRows(rows, { books, ai, ops = [], source = '', auto 
   const summary = applySummary(rows);
   const entry = { ...undo, ops, source, summary };
   const next = {
-    ...aiNext,
+    ...rememberRequeues(aiNext, reviewed, now),
     lastApply: entry,
     // The last 10 applies stay undoable (newest first) — not only the most recent one.
     undoStack: [entry, ...(ai?.undoStack || []).filter((u) => u.at !== entry.at)].slice(0, 10),

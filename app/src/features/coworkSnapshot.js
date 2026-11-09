@@ -70,7 +70,8 @@ export function buildSnapshot({ files = [], books = [], bindMap = {}, queues = [
     const qb = queueBooks(q, live);
     const st = queueStats(qb, { wpm: pace.wpm || 250, fileOf, wordsPerDay: pace.wordsPerDay, now });
     return {
-      name: q.name, books: qb.length, finished: st.done, percentWordsRead: st.pctWords, wordsLeft: st.wordsLeft, hoursLeft: st.hoursLeft,
+      name: q.name, dynamic: String(q.dynamic || '').trim() || null, prep: Array.isArray(q.prep) && q.prep.length ? q.prep : null,
+      books: qb.length, finished: st.done, percentWordsRead: st.pctWords, wordsLeft: st.wordsLeft, hoursLeft: st.hoursLeft,
       etaAllDone: st.eta, next: st.next?.title || null,
       order: qb.map((b) => ({ id: b.id, title: b.title, status: readStatus(b), percentRead: Math.round((st.pctById[b.id] || 0) * 100), eta: st.etaById[b.id] || null })),
     };
@@ -177,7 +178,7 @@ or keys are included.
 | \`reading-days.json\` | Per day: \`wordsRead\`, \`activeSecs\`, \`aloudWords\`/\`aloudSecs\` (part read aloud), \`wpm\` (silent reading speed; aloud excluded), \`hours\` {localHour 0–23: words} (when), \`methods\` {method: words} (how: auto = auto-play, word / line / para / page = stepping, scroll, listen = TTS, speak = aloud, other), \`regressions\` (backtracks over just-read text — a rough difficulty signal), \`files\` [{file, bookId, words, secs}]. Up to 400 days; hours/methods only on days recorded since that tracking began. |
 | \`sessions.json\` | Individual reading sessions (a pause over 5 min starts a new one): \`start\`/\`end\` (ISO), \`file\`, \`bookId\`, \`words\`, \`minutes\`, \`wpm\`, \`methods\` {method: words}. Up to 1,000, oldest first. |
 | \`books.json\` | Every tracker book: \`status\` (reading / queue / toread / finished / abandoned), \`started\`, \`finished\`, \`rating\`, \`recScore\` (0–10), \`words\`, \`queue\` {queue, position}, \`file\` {percentRead, wordsRead, pacedWords (words actually read in-app — excludes sections ticked as read elsewhere), activeHours, lastRead, completions}. |
-| \`queues.json\` | Reading queues in order: books, finished, % of words read, words/hours left, \`etaAllDone\` and per-book \`eta\` at the recent pace, \`next\`. |
+| \`queues.json\` | Reading queues in order: books, finished, % of words read, words/hours left, \`etaAllDone\` and per-book \`eta\` at the recent pace, \`next\`; \`dynamic\` (a description the cowork fills the queue from) and \`prep\` (note types wanted for its unread books) when set. |
 | \`goals.json\` | \`last30Days\` (words by local hour and by method), yearly books/words goals (on-track flag, projection, need per day/month), reading \`streak\`, \`recentPace\` (words/day and wpm over ~6 weeks, recent days weighted), and \`today\`. |
 | \`typing.json\` | Typing-practice \`runs\` (net/gross wpm, accuracy %, consistency %, words, seconds, mode, device), \`weekly\` aggregates, \`topErrorKeys\` [[key, count]]. |
 | \`speaking.json\` | Reading-aloud sessions — field meanings in its \`fields\` description below. |

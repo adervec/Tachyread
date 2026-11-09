@@ -36,6 +36,10 @@ export const AI_NOTE_TYPES = {
   critique: 'Critique',
   parallel: 'Parallels to other works',
   comparison: 'Comparison across books',
+  reception: 'Critical reception',
+  guide: 'Reader’s guide',
+  context: 'Background & context',
+  author: 'About the author',
   other: 'Note',
 };
 

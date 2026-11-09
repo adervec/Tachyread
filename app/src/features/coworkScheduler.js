@@ -36,6 +36,7 @@ async function datasetWithProgress(light, books) {
   const ds = buildDataset(books, { light, progress });
   ds.queues = queuesForDataset(await getLibraryRef('queues').catch(() => []), books);
   ds.vocabWords = ((await loadGlobal().catch(() => null))?.vocabDeck || []).map((c) => c.word);
+  ds.requeueSkip = ((await getJourneyAi().catch(() => null))?.requeueSkip || []).map(({ bookId, toQueueId }) => ({ bookId, toQueueId }));
   return ds;
 }
 

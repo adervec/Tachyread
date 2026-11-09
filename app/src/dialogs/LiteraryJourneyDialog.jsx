@@ -57,7 +57,7 @@ import {
   SYNC_ACTION_GROUPS, actionById, combineCoworkInstruction, SCHEDULE_OPTS,
   syncRole, recordRun, mergedHistory, calendarCells, fmtAgo, dayKey,
 } from '../features/coworkActions.js';
-import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset, logRequest, opsForReply, opForRow, opForReport } from '../features/coworkOps.js';
+import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset, logRequest, opsForReply, opForRow, opForReport, PREP_NOTE_TYPES } from '../features/coworkOps.js';
 import { writeSnapshot, commitRows, undoLastApply, listInbox, readInbox, moveInbox } from '../features/coworkApply.js';
 import { getDeviceId } from '../state/storage.js';
 import { subDir, subDirLabel, pickRoot } from '../features/tachyFolder.js';
@@ -2241,7 +2241,7 @@ function QueueView({ initialSel = null, books, onOpen, fileStats = {}, bindMap =
   );
 }
 
-const ROW_KIND = { field: 'Book field', note: 'Book note', cross: 'Shared note', link: 'File link', analysis: 'Analysis', recommendations: 'Read-next list', weekly: 'Weekly summary', brief: 'Morning brief', treeMeta: 'Tree links', answer: 'Answer', queueOrder: 'Queue order', dupe: 'Duplicate pair', report: 'Report', newBook: 'New book', tags: 'Tags', vocab: 'Vocab card', typingPlan: 'Typing plan', goal: 'Goal' };
+const ROW_KIND = { field: 'Book field', note: 'Book note', cross: 'Shared note', link: 'File link', analysis: 'Analysis', recommendations: 'Read-next list', weekly: 'Weekly summary', brief: 'Morning brief', treeMeta: 'Tree links', answer: 'Answer', queueOrder: 'Queue order', queueAdd: 'Queue add', queueMove: 'Queue move', dupe: 'Duplicate pair', report: 'Report', newBook: 'New book', tags: 'Tags', vocab: 'Vocab card', typingPlan: 'Typing plan', goal: 'Goal' };
 const APPLY_CAP = 200; // most changes one apply may write (bigger replies are reviewed in pages)
 
 // Dashboard: every queue's progress and what's left, plus totals across all of them.
@@ -2344,6 +2344,11 @@ function NamedQueue({ queue, others = [], paths = {}, stacked = true, onLayout, 
   }), [qBooks, wpm, fileStats, csOf, pace]);
   const [renaming, setRenaming] = useState(null);
   const [confirmDel, setConfirmDel] = useState(false);
+  // Cowork settings on the queue itself (they sync with it): a description the "Fill dynamic queues"
+  // operation adds matching unread books from, and the prep-note types wanted for its unread books.
+  const [cw, setCw] = useState(false);
+  const [dyn, setDyn] = useState(queue.dynamic || '');
+  const togglePrep = (t) => onChange({ ...queue, prep: (queue.prep || []).includes(t) ? queue.prep.filter((x) => x !== t) : [...(queue.prep || []), t] });
   // File presence: the cheap checks (open tab / local copy) run on their own; the folder search only
   // on request, since it walks directories.
   const [where, setWhere] = useState({});
@@ -2409,10 +2414,23 @@ function NamedQueue({ queue, others = [], paths = {}, stacked = true, onLayout, 
           )}
         <span className="lj-spacer" />
         {renaming == null && <button onClick={() => setRenaming(queue.name)}>Rename</button>}
+        <button aria-expanded={cw} onClick={() => setCw(!cw)} title="What the cowork may do with this queue: fill it from a description, prepare notes for its unread books">🤖 Cowork{String(queue.dynamic || '').trim() ? ' · 🧲' : ''}{queue.prep?.length ? ' · 📖' : ''}</button>
         {confirmDel
           ? <><button className="danger" onClick={onDelete}>Delete “{queue.name}”</button><button onClick={() => setConfirmDel(false)}>Keep</button></>
           : <button onClick={() => setConfirmDel(true)} title="Delete this queue (the books stay in your library)">Delete</button>}
       </div>
+      {cw && (
+        <div className="lj-qcw">
+          <label>🧲 Dynamic — the cowork adds unread books that fit:
+            <input type="text" value={dyn} placeholder="e.g. American literature (empty = not dynamic)" aria-label="Dynamic queue description"
+              onChange={(e) => setDyn(e.target.value)} onBlur={() => { if (dyn.trim() !== String(queue.dynamic || '')) onChange({ ...queue, dynamic: dyn.trim() }); }} />
+          </label>
+          <span>📖 Prep notes for its unread books:
+            {PREP_NOTE_TYPES.map((t) => <label key={t}><input type="checkbox" checked={(queue.prep || []).includes(t)} onChange={() => togglePrep(t)} /> {AI_NOTE_TYPES[t]}</label>)}
+          </span>
+          <p className="settings-note">Cowork page → “Fill dynamic queues”, “Prep notes for queued books”, “Suggest re-queuing mis-queued books”. Every change is reviewed there before it lands.</p>
+        </div>
+      )}
       {st.count > 0 && (
         <>
           {/* The whole queue at a glance: one segment per book, sized by length, filled by progress. */}
@@ -3302,6 +3320,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     const ds = buildDataset(books, { light, progress });
     ds.queues = queuesForDataset(await getLibraryRef('queues').catch(() => []), books); // for queue advice
     ds.vocabWords = (global?.vocabDeck || []).map((c) => c.word); // so vocabulary suggestions skip known words
+    ds.requeueSkip = (ai?.requeueSkip || []).map(({ bookId, toQueueId }) => ({ bookId, toQueueId })); // re-queue pairs already declined
     return ds;
   };
   // Request builder: a checkbox TREE of every sync action (cowork folder / direct API / cloud),
@@ -3381,10 +3400,10 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     if ((ai?.ledger || []).includes(hash)) { setMsg('That reply was already applied.'); return; }
     const queues = (await getLibraryRef('queues').catch(() => null)) || [];
     const queuedIds = new Set(liveQueues(queues).flatMap((q) => q.ids || []));
-    const { output, dropped } = sanitizeOutput(parseAiOutput(text), ops, { booksById, bindMap, queuedIds, queues, vocabWords: (global?.vocabDeck || []).map((c) => c.word) });
+    const { output, dropped } = sanitizeOutput(parseAiOutput(text), ops, { booksById, bindMap, queuedIds, queues, vocabWords: (global?.vocabDeck || []).map((c) => c.word), requeueSkip: ai?.requeueSkip || [] });
     const files = Object.fromEntries((await allFiles().catch(() => [])).map((f) => [f.checksum, f]));
     const goals = (await getLibraryRef('goals').catch(() => null)) || {};
-    const rows = planRows(output, { booksById, files, goals });
+    const rows = planRows(output, { booksById, files, goals, queues });
     setReview({ rows, dropped, ops, source, hash, ...extra });
     setPicked(new Set(rows.slice(0, APPLY_CAP).map((r) => r.key))); // a huge reply goes in pages, never one click
     setMsg(rows.length
@@ -3399,7 +3418,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     setBusy(true);
     try {
       const base = { ...(ai || {}), ledger: [...(ai?.ledger || []), review.hash].slice(-50) };
-      const r = await commitRows(rows, { books, ai: base, ops: review.ops, source: review.source, global, patchGlobal: onPatchGlobal });
+      const r = await commitRows(rows, { books, ai: base, ops: review.ops, source: review.source, global, patchGlobal: onPatchGlobal, reviewed: review.rows });
       const left = review.rows.filter((x) => !picked.has(x.key));
       // Rows not applied this time stay up for the next page (only for big replies split by the cap).
       if (left.length && review.rows.length > APPLY_CAP) {
@@ -3701,6 +3720,10 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
         <div className="lj-inline">
           {focusOp
             ? <button className="toggle-on" disabled={busy} onClick={() => runSelected([focus])} title="Write a request for this one operation (the activity snapshot goes with it)">▶ Run {focusOp.label}</button>
+            : null}
+          {focus === 'cw-requeue' && ai?.requeueSkip?.length > 0 && <button disabled={busy} onClick={() => persistAi({ requeueSkip: [] })} title="Reviewed re-queue suggestions are never made again — this clears that memory">Forget {ai.requeueSkip.length} reviewed suggestion{ai.requeueSkip.length === 1 ? '' : 's'}</button>}
+          {focusOp
+            ? null
             : <button className="toggle-on" disabled={busy || sel.size === 0} onClick={() => runSelected()}>▶ Run selected ({[...sel].filter((id) => actionById(id)).length})</button>}
           {dir && <button disabled={busy} onClick={readResponse} title="Read the agent's reply — it is filtered and shown for review, never applied straight away">📥 Read response</button>}
           {dir && <button disabled={busy} onClick={snapshotNow} title="Write the read-only activity snapshot now">📸 Snapshot now</button>}
