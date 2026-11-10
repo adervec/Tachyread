@@ -2,7 +2,7 @@
 // copy, or the designated search folders (the text never syncs between devices). Shared by the
 // queue's ▶ and the book-finished popup's "open next".
 import { loadDocPayload } from '../state/storage.js';
-import { findFile, foundPaths, handleAt, rememberPath } from './fileLocator.js';
+import { findFile, forgetPath, foundPaths, handleAt, rememberPath } from './fileLocator.js';
 
 // Where a linked file can be opened from: 'open' | 'local' | 'folder' | 'missing' | 'unlinked'.
 // The folder crawl is the only slow step, so it runs only when `search` is true — and only when the
@@ -15,7 +15,7 @@ export async function fileWhere(cs, name, { openChecksums = [], dirs = [], searc
   if (!search || !dirs.length) return { where: dirs.length ? (known ? 'folder' : 'unsearched') : 'missing' };
   const at = known && await handleAt(dirs, known);
   const hit = at ? { handle: at, path: known } : await findFile(dirs, name).catch(() => null);
-  if (hit) rememberPath(cs, hit.path);
+  if (hit) rememberPath(cs, hit.path); else if (known) forgetPath(cs); // moved out of the search folders: stop showing the old spot
   return hit ? { where: 'folder', hit } : { where: 'missing' };
 }
 

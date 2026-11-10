@@ -2365,7 +2365,7 @@ function NamedQueue({ queue, others = [], paths = {}, stacked = true, onLayout, 
     })();
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsKey, openChecksums, dirs]);
+  }, [idsKey, openChecksums, dirs, paths]); // paths: Find folders may have dropped a stale one
   // One walk over the folders for every missing file (indexFolders, deep), not a crawl per book — a
   // long queue of files on another device used to burn a whole budget each without ever reaching
   // the subfolders. The paths it finds are remembered, so ▶ opens them without searching again.
@@ -2576,7 +2576,8 @@ function QueueCandidates({ queue, queues, books, dirs = [], paths, setPaths, wpm
     setIndexing('⟳ Looking through your folders…');
     const r = await indexFolders(dirs, wanted, { ask }).catch(() => null);
     if (!r) { setIndexing('Could not read the search folders.'); return; }
-    rememberPaths(r.paths);
+    // A walk that read every folder to the end and still missed a file: its remembered path is stale.
+    rememberPaths(r.paths, r.complete ? wanted.map((w) => w.cs).filter((cs) => !r.paths[cs]) : []);
     setPaths(foundPaths());
     setIndexing(ask || r.found ? `Found ${r.found} of ${wanted.length} linked files (${r.scanned.toLocaleString()} entries looked at)${r.skipped ? ` · ${r.skipped} folder${r.skipped === 1 ? '' : 's'} need permission — use Find folders` : ''}.` : '');
   }

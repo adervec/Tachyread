@@ -1,7 +1,7 @@
 // Self-check for the missing-file search: name matching, and the budgeted breadth-first walk.
 // Run: node src/features/fileLocator.test.mjs
 import assert from 'node:assert/strict';
-import { nameScore, stem, findFileIn, indexFolders, handleAt } from './fileLocator.js';
+import { nameScore, stem, findFileIn, indexFolders, handleAt, rememberPaths, foundPaths, forgetPath } from './fileLocator.js';
 
 // ── name matching ──
 assert.equal(nameScore('Great Expectations.epub', 'Great Expectations.epub'), 2, 'same name');
@@ -81,4 +81,19 @@ console.log('fileLocator: all cases pass');
   assert.equal(await handleAt(dirs, 'Other/notes.txt'), null, 'a root that is not a search folder');
   assert.equal(await handleAt(dirs, 'Lib'), null, 'no file part');
   assert.equal(await handleAt(dirs, ''), null);
+}
+
+// ── remembered paths: a complete walk that misses a file drops its stale path; a partial one can't tell ──
+{
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  rememberPaths({ a: 'Lib/a.txt', b: 'Lib/b.txt' });
+  rememberPaths({ a: 'Lib/new/a.txt' }, ['b']);
+  assert.deepEqual(foundPaths(), { a: 'Lib/new/a.txt' }, 'moved file re-recorded, vanished file forgotten');
+  forgetPath('a');
+  assert.deepEqual(foundPaths(), {});
+  const want = [{ cs: 'x', name: 'Gone.epub' }];
+  assert.equal((await indexFolders([dirOf(tree, 'Lib')], want)).complete, true, 'every folder read to the end → conclusive');
+  assert.equal((await indexFolders([dirOf(tree, 'Lib')], want, { budget: 3 })).complete, false, 'budget ran out → not conclusive');
+  assert.equal((await indexFolders([{ ...dirOf(tree, 'Locked'), queryPermission: async () => 'prompt' }], want)).complete, false, 'an unreadable folder → not conclusive');
 }
