@@ -40,6 +40,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # House standard: nothing reaches the live site unless the checks passed.
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
       # Project site is served from https://adervec.github.io/Tachyread/,
       # so assets must resolve under the /Tachyread/ base path.
       - name: Build
