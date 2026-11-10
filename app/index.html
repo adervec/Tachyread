@@ -10,6 +10,18 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Tachyread</title>
+    <!-- House standards (CoworkSyncHub/HOUSE-STANDARDS.md): the shared font.js gives the app font,
+         pinch-zoom option, crash notice, storage persistence, About panel, what's new and offline pill.
+         Tachyread keeps its own update notice (version.json, features/appHealth.js), since its
+         service worker file does not change between deploys. -->
+    <meta name="app-name" content="Tachyread" />
+    <meta name="app-version" content="%APP_BUILD%" />
+    <meta name="app-whatsnew" content="%BASE_URL%whatsnew.json" />
+    <meta name="app-license" content="MIT" />
+    <meta name="app-source" content="https://github.com/adervec/Tachyread" />
+    <meta name="app-data-note" content="Your library, progress and settings stay in this browser. Backup and sync go only to your own Google Drive app folder or a folder you pick." />
+    <script>window.appUpdateNotice = false;</script>
+    <script src="https://adervec.github.io/font.js"></script>
   </head>
   <body>
     <div id="root"></div>

@@ -1357,6 +1357,16 @@ const THEME_HEADING_PACK = {
 };
 
 // The heading-style pack a theme uses by default.
+// House standard: a tab whose reader never chose a theme follows the device's light/dark setting;
+// a saved choice (themeName, or the legacy darkMode toggle) always wins. See themes.test.mjs.
+export const systemPrefersDark = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+export function tabThemeName(s, sysDark = systemPrefersDark()) {
+  if (s?.themeName) return s.themeName;
+  if (s?.darkMode === true) return 'Dark';
+  if (s?.darkMode === false) return 'Light';
+  return sysDark ? 'Dark' : 'Light';
+}
+
 export function resolveHeadingPack(themeName) {
   return THEME_HEADING_PACK[themeName] || DEFAULT_HEADING_PACK;
 }

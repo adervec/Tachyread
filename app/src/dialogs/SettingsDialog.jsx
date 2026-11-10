@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { HEADING_DETAIL_ITEMS } from '../features/headingMeta.js';
 import Dialog from './Dialog.jsx';
-import { THEME_CATEGORIES, HEADING_PACKS } from '../state/themes.js';
+import { THEME_CATEGORIES, HEADING_PACKS, tabThemeName } from '../state/themes.js';
 import { offDefaultKeys, defaultFileSettings, tabDefaultsFrom } from '../state/settings.js';
 import ProfilesBar from '../components/ProfilesBar.jsx';
 import { createMetronome } from '../features/metronome.js';
@@ -438,7 +438,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = 'Ta
       <Section>Reading theme</Section>
       <Field label="Theme">
         <select
-          value={s.themeName || (s.darkMode ? 'Dark' : 'Light')}
+          value={tabThemeName(s)}
           onChange={(e) => patch({ themeName: e.target.value })}
         >
           {THEME_CATEGORIES.map((g) => (

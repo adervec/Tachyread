@@ -7,7 +7,7 @@ import { initAppHealth } from './features/appHealth.js';
 // Capture the install prompt BEFORE React mounts — Chrome fires beforeinstallprompt once, early,
 // and a missed event means no in-app install offer for the whole page load.
 initPwaInstall();
-initAppHealth(); // persistent storage, crash notice, new-version notice
+initAppHealth(); // new-version notice (font.js in index.html does the other house standards)
 
 createRoot(document.getElementById('root')).render(<App />);
 

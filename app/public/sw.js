@@ -49,11 +49,11 @@ self.addEventListener('fetch', (e) => {
       }
     }
 
-    // version.json is how the app notices a new deploy, so it is never served stale either.
+    // version.json and whatsnew.json describe the deploy itself, so they are never served stale either.
     // The MANIFEST and icons decide installability, so they are never served stale: a bad or
     // outdated copy stuck in the cache silently breaks "Install app" until the cache is cleared.
     // Network-first (cache only as an offline fallback) keeps Chrome reading the real thing.
-    if (/manifest\.webmanifest$|icon-\d+\.png$|icon-maskable-\d+\.png$|version\.json$/.test(new URL(req.url).pathname)) {
+    if (/manifest\.webmanifest$|icon-\d+\.png$|icon-maskable-\d+\.png$|version\.json$|whatsnew\.json$/.test(new URL(req.url).pathname)) {
       try {
         const net = await fetch(req, { cache: 'no-cache' });
         if (net && net.status === 200) cache.put(req, net.clone());

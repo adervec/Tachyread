@@ -5,7 +5,7 @@ export function defaultFileSettings() {
     wordIndex: 0,
     wpm: 250,
     speedUnit: 'Words',
-    darkMode: false,
+    darkMode: null, // null = never chosen: follow the device light/dark setting (themes.js tabThemeName)
     themeName: '',
     serif: false,
     guideColor: 'Red',
@@ -394,7 +394,6 @@ export function defaultGlobalSettings() {
     // Touch gesture navigation (off by default — it can interfere with text selection/scroll):
     // horizontal swipes over the reading area step lines (long swipes step paragraphs).
     gestureControls: false,
-    allowZoom: false, // page zoom (viewport); off by default so taps/swipes on the text stay precise
     // Webcam hand-gesture controls: open-palm joystick scrolls the Lines pane at variable speed,
     // a wave toggles play/pause. handCalib = { centerY, topY, bottomY } from the calibration.
     // handGestureSet = per-gesture on/off (null → feature defaults; discrete gestures start off).

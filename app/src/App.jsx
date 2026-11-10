@@ -155,7 +155,7 @@ const HAND_LABEL = {
 };
 import { getSyncProvider, getDriveProfile } from './features/sync/syncProviders.js';
 import { backupToProvider, syncWithProvider } from './features/sync/syncManager.js';
-import { applyTheme } from './state/themes.js';
+import { applyTheme, tabThemeName, systemPrefersDark } from './state/themes.js';
 import { ensureFamilyLoaded } from './state/fonts.js';
 import './App.css';
 
@@ -225,12 +225,6 @@ function AppInner() {
   // Teleprompter: full-screen Lines restyled (huge centred text, black stage, optional mirror for
   // prompter glass). Pair it with Advance by reading aloud so the text follows your voice.
   const [prompter, setPrompter] = useState(null); // null | 'plain' | 'mirror'
-  // Reader option: allow page zoom. The viewport meta blocks it by default (precise taps on the text).
-  useEffect(() => {
-    document.querySelector('meta[name="viewport"]')?.setAttribute('content', state.global.allowZoom
-      ? 'width=device-width, initial-scale=1.0'
-      : 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
-  }, [state.global.allowZoom]);
   useEffect(() => { if (!immersive) setPrompter(null); }, [immersive]); // reading area fills the whole screen (tiny ⛶ overlay / Esc to exit)
   const immersiveRef = useRef(false);
   immersiveRef.current = immersive;
@@ -589,11 +583,18 @@ function AppInner() {
   }, [activeTab?.id, activeTab?.settings.enableProperNames, activeTab?.settings.properNameSeed]);
 
   // Apply the active tab's theme (one of ~30 named palettes) via CSS custom properties.
-  // Falls back to the legacy darkMode flag when no themeName is set.
+  // Falls back to the legacy darkMode flag, then to the device's light/dark setting (tabThemeName).
+  const [sysDark, setSysDark] = useState(() => systemPrefersDark());
   useEffect(() => {
-    const name = activeTab?.settings?.themeName || (activeTab?.settings?.darkMode ? 'Dark' : 'Light');
-    applyTheme(name, state.global.defaultSerifFamily, state.global.defaultSansFamily);
+    const q = window.matchMedia?.('(prefers-color-scheme: dark)');
+    const on = () => setSysDark(!!q?.matches);
+    q?.addEventListener?.('change', on);
+    return () => q?.removeEventListener?.('change', on);
+  }, []);
+  useEffect(() => {
+    applyTheme(tabThemeName(activeTab?.settings, sysDark), state.global.defaultSerifFamily, state.global.defaultSansFamily);
   }, [
+    sysDark,
     activeTab?.settings?.themeName,
     activeTab?.settings?.darkMode,
     state.global.defaultSerifFamily,
@@ -2743,7 +2744,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     if (action === 'toggle-incognito') { dispatch({ type: 'TOGGLE_INCOGNITO' }); return; }
     if (action === 'toggle-bluelight') { toggleBlueLight(); return; }
     if (action === 'toggle-dark' && activeTab) {
-      patchSettings(activeTab.id, { darkMode: !activeTab.settings.darkMode });
+      patchSettings(activeTab.id, { darkMode: tabThemeName(activeTab.settings) !== 'Dark' }); // from what is showing, device default included
     }
   }
 

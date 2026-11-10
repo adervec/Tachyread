@@ -94,7 +94,7 @@ html, body, #root {
   height: 100%;
   overflow: hidden;
   /* House font: Atkinson Hyperlegible, bundled (state/bundledFonts.js). A tab's own font choice overrides it. */
-  font-family: 'Atkinson Hyperlegible', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--app-font, 'Atkinson Hyperlegible', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif); /* font.js picker */
   font-size: 13px;
   background: var(--pane-bg);
   color: var(--menu-fg);

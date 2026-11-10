@@ -48,7 +48,7 @@ const vendor = {
 // https://vitejs.dev/config/
 export default defineConfig({
     // version.json beside the app: the running page compares it with its own build to offer a reload.
-    plugins: [plugin(), vendor, { name: 'version-json', generateBundle() { this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD_NUMBER, sha: BUILD_SHA, date: BUILD_DATE }) }); } }],
+    plugins: [plugin(), vendor, { name: 'version-json', transformIndexHtml: (html) => html.replace('%APP_BUILD%', `${BUILD_NUMBER} (${BUILD_SHA})`), generateBundle() { this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD_NUMBER, sha: BUILD_SHA, date: BUILD_DATE }) }); } }],
     define: {
         __BUILD_NUMBER__: JSON.stringify(BUILD_NUMBER),
         __BUILD_SHA__: JSON.stringify(BUILD_SHA),

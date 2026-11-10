@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { driveClientId } from '../features/sync/syncProviders.js';
 import { fmtDateTime } from '../features/dateFmt.js';
-import { THEME_CATEGORIES } from '../state/themes.js';
+import { THEME_CATEGORIES, tabThemeName } from '../state/themes.js';
 import { countOffDefaultSettings, defaultFileSettings } from '../state/settings.js';
 import { useIsCompact } from '../state/device.js';
 import { allFiles } from '../state/storage.js';
@@ -245,8 +245,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
   const [hiddenRecent, setHiddenRecent] = useState(null);
   const recent = (state.global.recentFiles || []).filter((r) => !hiddenRecent?.has(r.checksum));
   const isCompact = useIsCompact();
-  const themeName =
-    activeTab?.settings?.themeName || (activeTab?.settings?.darkMode ? 'Dark' : 'Light');
+  const themeName = tabThemeName(activeTab?.settings);
 
   // Google Drive sign-in / sync, on the bar itself — signing in used to mean a trip through
   // File → Backup & Data. Shown wherever Drive can work (this origin is authorized, or a fork

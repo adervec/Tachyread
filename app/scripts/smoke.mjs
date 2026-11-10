@@ -44,9 +44,9 @@ try {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   // House standard: no third-party requests. The core flow (boot, open, play, Help, EPUB) must only
-  // ever talk to this site; opt-in features (Google Fonts, camera models, OCR data) are not exercised.
+  // ever talk to this site (and adervec.github.io, which serves the shared font.js); opt-in features (Google Fonts, camera models, OCR data) are not exercised.
   const foreign = new Set();
-  page.on('request', (r) => { const u = new URL(r.url()); if (/^https?:$/.test(u.protocol) && u.hostname !== 'localhost') foreign.add(u.host); });
+  page.on('request', (r) => { const u = new URL(r.url()); if (/^https?:$/.test(u.protocol) && !['localhost', 'adervec.github.io'].includes(u.hostname)) foreign.add(u.host); });
 
   await page.goto(URL_, { waitUntil: 'load', timeout: 20000 });
   await page.waitForSelector('.menu-bar', { timeout: 15000 });

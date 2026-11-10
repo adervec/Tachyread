@@ -1,4 +1,3 @@
-/* global __BUILD_NUMBER__, __BUILD_SHA__, __BUILD_DATE__ */
 import { useRef, useState } from 'react';
 import { SECTION_BAR_MODES } from '../features/sectionBars.js';
 import { DOCK_MINI_ITEMS, dockMiniShow } from '../features/dockMini.js';
@@ -178,15 +177,9 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
           A small frame-rate / “working hard” readout in the status bar
         </label>
       </Field>
-      <Field label="Pinch zoom">
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={!!g.allowZoom}
-            onChange={(e) => patch({ allowZoom: e.target.checked })}
-          />
-          Let the browser zoom the page (pinch / Ctrl +). Off keeps taps and swipes on the text precise.
-        </label>
+      <Field label="App font & zoom">
+        {/* Shared house picker (font.js): app font, "Allow pinch-zoom", the running build and About. */}
+        <app-font-picker label="App font (menus, dialogs, tabs without their own font)"></app-font-picker>
       </Field>
       <Field label="Swipe gestures">
         <label className="inline-check">
@@ -480,9 +473,6 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         ))}
       </div>
       </div>
-      <p className="settings-note" style={{ marginTop: 12 }}>
-        Tachyread build <strong>{__BUILD_NUMBER__}</strong> · {__BUILD_SHA__} · {__BUILD_DATE__}. A bar at the bottom says when a newer version is ready.
-      </p>
     </Dialog>
   );
 }

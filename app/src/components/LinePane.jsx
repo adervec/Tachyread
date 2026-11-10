@@ -5,7 +5,7 @@ import { hlWordClass, endsSentence } from '../features/highlightAlgos.js';
 import { getTocEntries } from '../document/toc.js';
 import { buildHeadingMeta, headingDetailChips } from '../features/headingMeta.js';
 import { buildWallDoc, WALL_SEP } from '../document/wallText.js';
-import { resolveHeadingPack } from '../state/themes.js';
+import { resolveHeadingPack, tabThemeName } from '../state/themes.js';
 import Pointer from './Pointer.jsx';
 import { useReportVisibility } from '../state/useReportVisibility.js';
 import { useApp } from '../state/AppContext.jsx';
@@ -614,7 +614,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   // on doc + the TOC entries + the chosen style, so they keep a stable identity across word steps
   // (the precondition that lets memo(LineRow) skip unchanged lines during playback).
   const headingStyle = settings.tocHeadingStyle ?? 'auto';
-  const themeName = settings.themeName || (settings.darkMode ? 'Dark' : 'Light');
+  const themeName = tabThemeName(settings);
   const headingPack = useMemo(() => {
     if (headingStyle === 'off') return '';
     return headingStyle && headingStyle !== 'auto' ? headingStyle : resolveHeadingPack(themeName);

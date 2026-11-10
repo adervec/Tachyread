@@ -1,0 +1,30 @@
+[
+  {
+    "date": "2026-11-10",
+    "items": [
+      "Tachyread now starts in light or dark to match your device, until you pick a theme yourself.",
+      "Menus and dialogs use Atkinson Hyperlegible by default. Change it under Settings → Application → App font; your own reading fonts still win.",
+      "Streaks, finish dates and daily totals follow your own calendar: reading late in the evening counts for that day.",
+      "A bar tells you when a new version is ready, and another shows up if something goes wrong, with a Reload button.",
+      "About Tachyread (in Application settings) shows the version, where your data lives, storage used and diagnostics.",
+      "The camera and OCR engines now load from Tachyread's own site.",
+      "Delete everything says clearly that other apps and your Drive copy are left alone."
+    ]
+  },
+  {
+    "date": "2026-11-09",
+    "items": [
+      "Queues can fill themselves from a description, suggest moving a book to a better queue (without asking twice), and prepare spoiler-free notes before you start.",
+      "Files you moved out of your search folders no longer show their old location."
+    ]
+  },
+  {
+    "date": "2026-11-08",
+    "items": [
+      "Add a whole folder of books to Trackyread without opening them.",
+      "Listen mode plays straight through a reading queue, with chapter and book skips on the lock screen.",
+      "Narration clips are stored 15 to 30 times smaller.",
+      "Reading aloud gives a presenting score from your camera."
+    ]
+  }
+]
