@@ -152,11 +152,16 @@ export async function indexFolders(dirs, wanted, { maxDepth = 8, budget = 60000,
       queue = next;
     }
   }
-  return { paths, found: Object.keys(paths).length, scanned, skipped };
+  // complete: every folder was read to the end, so a wanted file that was NOT found really is gone from them.
+  return { paths, found: Object.keys(paths).length, scanned, skipped, complete: skipped === 0 && scanned < budget };
 }
-export function rememberPaths(map) {
-  try { localStorage.setItem(PATHS_KEY, JSON.stringify({ ...foundPaths(), ...map })); } catch { /* private mode */ }
+// `forget`: checksums whose remembered path is stale (a complete walk didn't find the file any more).
+export function rememberPaths(map, forget = []) {
+  const cur = foundPaths();
+  for (const cs of forget) delete cur[cs];
+  try { localStorage.setItem(PATHS_KEY, JSON.stringify({ ...cur, ...map })); } catch { /* private mode */ }
 }
+export const forgetPath = (cs) => rememberPaths({}, [cs]);
 
 // Where each linked file was last found (checksum → 'Folder/sub/file.epub'), so the queue's file
 // column and path filter can show real locations. Device-local (paths differ per device).
