@@ -9,6 +9,7 @@
 // Pure; see journeyForgetting.test.mjs.
 
 import { finishMs, readStatus, bookRating } from './journeyLibrary.js';
+import { parseDay } from './localDay.js';
 
 const DAY = 86400000;
 // Memory "stability" (the decay constant, in days) for a book read once. Retention = e^(-t/S), so
@@ -27,7 +28,7 @@ function finishCount(b) {
 
 // The most recent finish, epoch ms — the last time the memory was refreshed.
 function lastFinishMs(b) {
-  const hist = (Array.isArray(b?.finishHistory) ? b.finishHistory : []).map((d) => (typeof d === 'number' ? d : Date.parse(d))).filter((n) => Number.isFinite(n));
+  const hist = (Array.isArray(b?.finishHistory) ? b.finishHistory : []).map((d) => parseDay(d)).filter((n) => Number.isFinite(n));
   const latest = finishMs(b);
   return Math.max(latest ?? -Infinity, ...(hist.length ? hist : [-Infinity]));
 }
@@ -103,7 +104,7 @@ export function forgettingSummary(scan) {
 export const DRIFT_MIN_DAYS = 10;   // untouched this long → you're starting to drift
 export const DRIFT_COLD_DAYS = 45;  // this long → you've likely lost the thread
 export function driftingScan(books, lastReadOf = {}, now = Date.now()) {
-  const parse = (v) => (typeof v === 'number' ? v : (v ? Date.parse(v) : NaN));
+  const parse = parseDay;
   const out = [];
   for (const b of books || []) {
     if (readStatus(b) !== 'reading') continue;

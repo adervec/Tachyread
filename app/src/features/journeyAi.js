@@ -7,6 +7,7 @@
 
 import { libraryStats, readStatus, finishMs, sortBooks } from './journeyLibrary.js';
 import { MAX_REAL_WPM } from '../engine/readingTracker.js';
+import { localDay, parseDay, mondayOf } from './localDay.js';
 
 export const LIGHT_INSTRUCTION =
   'LIGHT update. Refresh recScore only for books you can confidently judge; produce a short "read next" ' +
@@ -74,14 +75,14 @@ export function buildProgress(files, { books = [], bindMap = {}, days = 35, now 
     const dated = (f.dailyHistory || []).filter((e) => e.date && ((e.wordsRead || 0) > 0 || (e.activeTimeSecs || 0) > 0));
     for (const e of dated) {
       allDates.add(e.date);
-      if (Date.parse(e.date) < cutoff) continue;
+      if (parseDay(e.date) < cutoff) continue;
       const cur = byDay.get(e.date) || { date: e.date, wordsRead: 0, activeSecs: 0 };
       cur.wordsRead += e.wordsRead || 0;
       cur.activeSecs += e.activeTimeSecs || 0;
       byDay.set(e.date, cur);
     }
     const last = dated.map((e) => e.date).sort().pop() || null;
-    if (last && Date.parse(last) >= cutoff) {
+    if (last && parseDay(last) >= cutoff) {
       const linked = bindMap[cs];
       active.push({
         title: (linked && bookById[linked]?.title) || f.fileName || 'Untitled',
@@ -100,9 +101,7 @@ export function buildProgress(files, { books = [], bindMap = {}, days = 35, now 
     .map((d) => ({ ...d, wpm: wpmOf(d.wordsRead, d.activeSecs) }));
   // Weekly rollups (weeks start Monday).
   const weekOf = (dateStr) => {
-    const d = new Date(dateStr + 'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
-    return d.toISOString().slice(0, 10);
+    return localDay(mondayOf(parseDay(dateStr)));
   };
   const byWeek = new Map();
   for (const d of daysArr) {
@@ -114,7 +113,7 @@ export function buildProgress(files, { books = [], bindMap = {}, days = 35, now 
   const weeks = [...byWeek.values()].sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1))
     .map((w) => ({ ...w, wpm: wpmOf(w.wordsRead, w.activeSecs) }));
   // Current streak: walk back from today (today itself may still be unread without breaking it).
-  const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
+  const dayKey = localDay;
   let cursor = now;
   if (!allDates.has(dayKey(cursor))) cursor -= 86400000;
   let streak = 0;

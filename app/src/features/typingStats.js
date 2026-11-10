@@ -1,13 +1,7 @@
 // Pure aggregates for the Typing Progress page: per-week summaries and an overall first-vs-recent
 // progress comparison (absolute + relative). Runs are { ts, netWpm, accuracy, words, durationMs }.
+import { localDay, shiftDay, mondayOf } from './localDay.js';
 
-const WEEK = 7 * 86400000;
-const mondayOf = (t) => {
-  const d = new Date(t);
-  d.setUTCHours(0, 0, 0, 0);
-  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
-  return d.getTime();
-};
 
 // Weekly rollups, newest first. Only weeks with runs appear; each row carries the delta of its
 // average net WPM vs the PREVIOUS active week (null for the oldest).
@@ -20,8 +14,8 @@ export function typingWeekly(runs, { weeks = 12 } = {}) {
     byWeek.get(w).push(r);
   }
   const rows = [...byWeek.entries()].sort((a, b) => a[0] - b[0]).map(([w, rs]) => ({
-    week: new Date(w).toISOString().slice(0, 10),
-    end: new Date(w + WEEK - 86400000).toISOString().slice(0, 10),
+    week: localDay(w),
+    end: shiftDay(localDay(w), 6),
     runs: rs.length,
     avgNet: Math.round(rs.reduce((a, r) => a + (r.netWpm || 0), 0) / rs.length),
     best: Math.max(...rs.map((r) => r.netWpm || 0)),

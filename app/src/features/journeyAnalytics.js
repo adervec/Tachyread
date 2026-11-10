@@ -3,9 +3,10 @@
 // tick and the logic stays testable — see journeyAnalytics.demo.mjs.
 
 import { readStatus, finishMs, recommender, bookRating } from './journeyLibrary.js';
+import { localDay, parseDay, mondayOf } from './localDay.js';
 
-const yearOf = (b) => { const ms = finishMs(b); return ms == null ? null : new Date(ms).getUTCFullYear(); };
-const monthOf = (b) => { const ms = finishMs(b); return ms == null ? null : new Date(ms).getUTCMonth() + 1; };
+const yearOf = (b) => { const ms = finishMs(b); return ms == null ? null : new Date(ms).getFullYear(); };
+const monthOf = (b) => { const ms = finishMs(b); return ms == null ? null : new Date(ms).getMonth() + 1; };
 
 // Chronological finishes with running totals — the spine of the replay animation and the growth curve.
 // Only dated finished books; ascending by finish time.
@@ -18,7 +19,7 @@ export function cumulativeFinishes(books) {
   return rows.map(({ b, t }) => {
     n += 1; pages += Number(b.pages) || 0; words += Number(b.words) || 0;
     return {
-      t, date: new Date(t).toISOString().slice(0, 10), id: b.id, title: b.title, author: b.author,
+      t, date: localDay(t), id: b.id, title: b.title, author: b.author,
       genre: b.genre || 'Uncategorized', difficulty: Number(b.difficultyLevel) || null, rating: bookRating(b),
       n, pages, words,
     };
@@ -101,8 +102,8 @@ export function recommenderBreakdown(books) {
 // count so far, where the year-fraction says you "should" be, and a projection at the current rate.
 export function yearGoal(books, target, now = Date.now()) {
   const d = new Date(now);
-  const year = d.getUTCFullYear();
-  const y0 = Date.UTC(year, 0, 1), y1 = Date.UTC(year + 1, 0, 1);
+  const year = d.getFullYear();
+  const y0 = new Date(year, 0, 1).getTime(), y1 = new Date(year + 1, 0, 1).getTime();
   const yearFrac = Math.min(1, Math.max(0, (now - y0) / (y1 - y0)));
   const finished = books.filter((b) => { const t = finishMs(b); return readStatus(b) === 'finished' && t != null && t >= y0 && t < now + 1; }).length;
   const expected = target > 0 ? target * yearFrac : 0;
@@ -183,17 +184,11 @@ export function yearInBooks(books, year) {
 // `text` is the default summary; a cowork agent can replace it with a dressed-up version (stored in
 // the ai record's `weeklies`, keyed by the week's Monday date).
 export function weeklySummaries(days, books, { weeks = 8, now = Date.now() } = {}) {
-  const mondayOf = (t) => {
-    const d = new Date(t);
-    d.setUTCHours(0, 0, 0, 0);
-    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
-    return d.getTime();
-  };
-  const iso = (t) => new Date(t).toISOString().slice(0, 10);
+  const iso = localDay;
   const curMonday = mondayOf(now);
   const byWeek = new Map(); // weekStartMs → { words, secs, days:Set }
   for (const d of days || []) {
-    const t = Date.parse((d.date || '') + 'T00:00:00Z');
+    const t = parseDay(d.date || '');
     if (!Number.isFinite(t) || t >= curMonday) continue; // only completed weeks
     const w = mondayOf(t);
     const cur = byWeek.get(w) || { words: 0, secs: 0, days: new Set() };
@@ -259,7 +254,7 @@ export function recentWordsPerDay(books, windowDays = 90, now = Date.now()) {
   let words = 0, earliest = now;
   for (const b of books || []) {
     if (readStatus(b) !== 'finished') continue;
-    const t = Date.parse(b.finishTime || '');
+    const t = parseDay(b.finishTime || '');
     if (!t || t < cutoff || t > now) continue;
     const w = bookWords(b);
     if (!w) continue;
@@ -288,7 +283,7 @@ export function queueWithEstimates(books, wpm = 250, opts = {}) {
     .map((b) => {
       const words = bookWords(b);
       cumWords += words;
-      const etc = wordsPerDay && cumWords ? new Date(now + (cumWords / wordsPerDay) * 86400000).toISOString().slice(0, 10) : null;
+      const etc = wordsPerDay && cumWords ? localDay(now + (cumWords / wordsPerDay) * 86400000) : null;
       return { book: b, words, hours: estHours(b, wpm), etc };
     });
   const totalHours = round1(items.reduce((s, i) => s + (i.hours || 0), 0));
@@ -306,10 +301,10 @@ export function queueWithEstimates(books, wpm = 250, opts = {}) {
 // double-counting linked books. `linkedIds`: Set of book ids that have a linked document.
 export function yearWordsGoal(dayAgg, books, linkedIds, target, now = Date.now()) {
   const d = new Date(now);
-  const year = d.getUTCFullYear();
-  const y0 = Date.UTC(year, 0, 1), y1 = Date.UTC(year + 1, 0, 1);
+  const year = d.getFullYear();
+  const y0 = new Date(year, 0, 1).getTime(), y1 = new Date(year + 1, 0, 1).getTime();
   const yearFrac = Math.min(1, Math.max(0, (now - y0) / (y1 - y0)));
-  const from = `${year}-01-01`, to = d.toISOString().slice(0, 10);
+  const from = `${year}-01-01`, to = localDay(d);
   const appWords = (dayAgg || []).reduce((a, x) => a + (x.date >= from && x.date <= to ? x.wordsRead || 0 : 0), 0);
   const offApp = (books || []).reduce((a, b) => {
     const t = finishMs(b);

@@ -8,6 +8,7 @@ import { yearGoal, yearWordsGoal } from './journeyAnalytics.js';
 import { queueBooks, queueStats, liveQueues, recentPace } from './readingQueues.js';
 import { readingStreak, todaySummary, localDate } from './todaySummary.js';
 import { typingWeekly } from './typingStats.js';
+import { localDay } from './localDay.js';
 
 export const SNAPSHOT_VERSION = 1;
 const words = (b) => Number(b?.words) || (Number(b?.pages) ? Number(b.pages) * 275 : 0);
@@ -53,7 +54,7 @@ export function buildSnapshot({ files = [], books = [], bindMap = {}, queues = [
     return {
       id: b.id, title: b.title, author: b.author || null, genre: b.genre || null, subgenre: b.subgenre || null,
       type: contentType(b), status: readStatus(b), started: b.startTime || null,
-      finished: finishMs(b) != null ? new Date(finishMs(b)).toISOString().slice(0, 10) : null,
+      finished: finishMs(b) != null ? localDay(finishMs(b)) : null,
       rating: Number(b.rating) || null, recScore: b.recScore ?? null, words: words(b) || null, queue: qOf[b.id] || null,
       file: f ? {
         name: f.fileName, totalWords: f.totalWords || 0, percentRead: Math.round(fileStats[cs].coverage * 1000) / 10,

@@ -1,4 +1,5 @@
 // Self-check for journeyAnalytics.js — run: node app/src/features/journeyAnalytics.demo.mjs
+import { localDay } from './localDay.js';
 import assert from 'node:assert';
 import { cumulativeFinishes, finishHeatmap, paceByYear, genreTrend, recommenderBreakdown, estHours, queueWithEstimates, recentWordsPerDay, yearGoal, yearWordsGoal, seriesProgress, yearInBooks, weeklySummaries } from './journeyAnalytics.js';
 
@@ -73,7 +74,7 @@ assert.equal(q.items[0].book.id, 'e'); // highest recScore first
 assert.ok(q.totalHours > 0);
 
 // recentWordsPerDay: only finishes within the window count; paper entries (words/pages) included.
-const NOW = Date.parse('2024-06-01');
+const NOW = Date.parse('2024-06-01T00:00:00');
 const paceBooks = [
   { completion: true, finishTime: '2024-05-01', words: 100000 }, // 31 days before NOW, in window
   { completion: true, finishTime: '2024-05-20', pages: 200 },     // paper entry (200*275=55000 words)
@@ -90,11 +91,11 @@ assert.equal(qEtc.wordsPerDay, 5000);
 assert.ok(qEtc.items[0].etc && qEtc.items[1].etc);
 assert.ok(qEtc.items[1].etc >= qEtc.items[0].etc); // second book finishes no earlier than the first
 // book 'e' = 100000 words / 5000 per day = 20 days after NOW
-assert.equal(qEtc.items[0].etc, new Date(NOW + 20 * 86400000).toISOString().slice(0, 10));
+assert.equal(qEtc.items[0].etc, localDay(NOW + 20 * 86400000));
 
 // no recent finishes → no pace → null ETCs but hours still computed. `books` has a 2024-05 finish,
 // so push NOW far into the future to leave nothing in the trailing 90-day window.
-const FUTURE = Date.parse('2030-01-01');
+const FUTURE = Date.parse('2030-01-01T00:00:00');
 const qNone = queueWithEstimates(books, 250, { now: FUTURE });
 assert.equal(qNone.wordsPerDay, null);
 assert.equal(qNone.items[0].etc, null);

@@ -7,6 +7,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { queueBooks, nextInQueue } from '../features/readingQueues.js';
 import { getSearchDirs } from '../features/fileLocator.js';
 import { fileWhere, openBookFile } from '../features/openBook.js';
+import { localDay } from '../features/localDay.js';
 
 function fmtTime(secs) {
   if (!secs) return '0s';
@@ -15,7 +16,7 @@ function fmtTime(secs) {
   const s = Math.floor(secs % 60);
   return `${h ? h + 'h ' : ''}${m ? m + 'm ' : ''}${s}s`;
 }
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const todayISO = () => localDay();
 
 function Stars({ value, onChange }) {
   return (

@@ -9,8 +9,7 @@
 
 import { GestureRecognizer, FilesetResolver } from '@mediapipe/tasks-vision';
 
-const MP_VERSION = '0.10.35';
-const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`;
+const WASM_URL = `${import.meta.env?.BASE_URL ?? "/"}vendor/mediapipe`; // served from our own site (vite.config.js)
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task';
 
 const PALM = 9; // middle-finger MCP landmark — a stable palm-centre proxy

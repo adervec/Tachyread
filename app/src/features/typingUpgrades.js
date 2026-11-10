@@ -4,6 +4,7 @@
 // error profiles (Keybr/TIPP10), and the pace-caret math (Monkeytype's pace caret / TypeRacer's
 // ghost). All pure — see typingUpgrades.test.mjs.
 import { newCard, schedule } from '../engine/srs.js';
+import { localDay } from './localDay.js';
 
 // ── consistency ─────────────────────────────────────────────────────────────
 // Keystroke-timing consistency as a percentage: 100 × (1 − coefficient of variation) of the
@@ -60,10 +61,6 @@ export function bestNet(runs, mode = null) {
 }
 
 // ── daily streak ────────────────────────────────────────────────────────────
-const localDay = (ts) => {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 
 // Consecutive LOCAL days with at least one run, ending today (or yesterday — a streak isn't broken
 // until a full day passes without typing). Also totals today's typed words and time.

@@ -225,6 +225,12 @@ function AppInner() {
   // Teleprompter: full-screen Lines restyled (huge centred text, black stage, optional mirror for
   // prompter glass). Pair it with Advance by reading aloud so the text follows your voice.
   const [prompter, setPrompter] = useState(null); // null | 'plain' | 'mirror'
+  // Reader option: allow page zoom. The viewport meta blocks it by default (precise taps on the text).
+  useEffect(() => {
+    document.querySelector('meta[name="viewport"]')?.setAttribute('content', state.global.allowZoom
+      ? 'width=device-width, initial-scale=1.0'
+      : 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+  }, [state.global.allowZoom]);
   useEffect(() => { if (!immersive) setPrompter(null); }, [immersive]); // reading area fills the whole screen (tiny ⛶ overlay / Esc to exit)
   const immersiveRef = useRef(false);
   immersiveRef.current = immersive;

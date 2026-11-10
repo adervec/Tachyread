@@ -1,5 +1,6 @@
 // Reading-time math for a tracked book: how long it took, and — when the rest was finished as an
 // audiobook — an estimated total based on 1× narration. Pure; see readingTime.demo.mjs.
+import { parseDay } from './localDay.js';
 
 export const AUDIOBOOK_WPM = 150; // typical audiobook narration at 1× speed
 
@@ -29,7 +30,7 @@ export function fmtDur(secs) {
 
 // Whole days between two ISO dates (start → finish); null if either is missing/invalid.
 export function daysBetween(startISO, finishISO) {
-  const a = Date.parse(startISO || ''), b = Date.parse(finishISO || '');
+  const a = parseDay(startISO || ''), b = parseDay(finishISO || '');
   if (Number.isNaN(a) || Number.isNaN(b)) return null;
   return Math.max(0, Math.round((b - a) / 86400000));
 }

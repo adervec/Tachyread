@@ -9,6 +9,7 @@ import { mergePresence, presenceList } from '../features/presence.js';
 import { writeBackup, readBackup, BACKUP_VERSION } from '../features/backupStream.js';
 import { SPEECH_LOG_CAP } from '../features/speechLog.js';
 import { compressClip } from '../features/clipCodec.js'; // (cycle: clipCodec reads clips back through this module — call-time only)
+import { ownLocalKeys, withoutOurPortalEntry } from './ownKeys.js';
 
 const DB_NAME = 'Tachyread';
 const DB_VERSION = 13;
@@ -1189,13 +1190,11 @@ export async function clearStore(name) {
 export async function wipeAllData() {
   const db = await getDB();
   for (const name of db.objectStoreNames) { try { await db.clear(name); } catch { /* skip */ } }
+  // Only our own keys: every app shares this origin, so never localStorage.clear() (ownKeys.js).
   try {
-    const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith('tachyread-') && k !== 'tachyread-instance-lock') keys.push(k);
-    }
-    keys.forEach((k) => localStorage.removeItem(k));
+    ownLocalKeys(Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i))).forEach((k) => localStorage.removeItem(k));
+    const portal = withoutOurPortalEntry(localStorage.getItem('portal-installed'));
+    if (portal) localStorage.setItem('portal-installed', portal);
   } catch { /* storage unavailable */ }
 }
 

@@ -460,7 +460,9 @@ export default function DataDialog({ onClose }) {
           <div className="field-section" style={{ color: '#c0392b' }}>Danger zone</div>
           <p className="settings-note" style={{ color: 'var(--danger, #c0392b)' }}>
             Deletes <strong>all</strong> Tachyread data on this device — library, progress, history, grabs,
-            settings — then reloads. Export a backup first if you might want it back.
+            settings — then reloads. Export a backup first if you might want it back. Only Tachyread’s own
+            data goes: the other apps on this site keep theirs. Your synced copy (Google Drive app folder
+            or the Tachyread folder) is <strong>not</strong> touched — remove it there if you want it gone.
           </p>
           <div className="data-row">
             {!wipeArm ? (

@@ -3,7 +3,8 @@
 //   fileStats { checksum: { fileName, coverage, today: {words, secs} | undefined } }
 //   bookOf    checksum → tracker book (or null)
 // LOCAL calendar dates — the reading tracker records days in local time.
-export const localDate = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+import { localDay } from './localDay.js';
+export const localDate = localDay;
 const dayBefore = (s) => { const [y, m, d] = s.split('-').map(Number); return localDate(new Date(y, m - 1, d - 1)); };
 
 // Consecutive reading days ending today — or ending yesterday, when today hasn't started yet (the

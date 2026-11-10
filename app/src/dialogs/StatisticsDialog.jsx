@@ -3,6 +3,7 @@ import Dialog from './Dialog.jsx';
 import { allFiles } from '../state/storage.js';
 import { MAX_REAL_WPM } from '../engine/readingTracker.js';
 import { fmtDate } from '../features/dateFmt.js';
+import { parseDay } from '../features/localDay.js';
 
 function fmtTime(secs) {
   if (!secs) return '0s';
@@ -154,6 +155,6 @@ export default function StatisticsDialog({ tabs = [], activeTabId, onClose }) {
 
 function withinDays(dateStr, n) {
   if (!dateStr) return false;
-  const then = new Date(dateStr).getTime();
+  const then = parseDay(dateStr);
   return Date.now() - then <= n * 24 * 3600 * 1000;
 }

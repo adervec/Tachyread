@@ -1,6 +1,7 @@
 // Rough cost estimates + aggregation for the API-spend dashboard. Prices are APPROXIMATE public
 // list rates and change over time / by plan — the dashboard labels the figures "estimated". Pure;
 // see apiPricing.demo.mjs.
+import { localDay } from './localDay.js';
 
 // USD per MILLION tokens (input / output).
 export const ANTHROPIC_PRICES = {
@@ -20,7 +21,7 @@ export function anthropicCost(model, inTok = 0, outTok = 0) {
 export const ELEVEN_USD_PER_CHAR = 0.00018; // ≈ $0.18 per 1,000 characters
 export function elevenCost(chars = 0) { return chars * ELEVEN_USD_PER_CHAR; }
 
-const dayOf = (ts) => new Date(ts).toISOString().slice(0, 10);
+const dayOf = localDay;
 
 // Aggregate a list of usage records into dashboard-ready totals.
 export function summarizeUsage(entries) {

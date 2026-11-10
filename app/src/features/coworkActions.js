@@ -9,6 +9,7 @@
 //   ai.coworkDirPath  string                                         — user-annotated full folder path
 
 import { COWORK_OPS, OP_GROUPS, opsInstruction } from './coworkOps.js';
+import { localDay } from './localDay.js';
 
 // ── The action tree ─────────────────────────────────────────────────────────
 // Three groups = the three transports. `needsKey` gates the whole group on an Anthropic key —
@@ -111,11 +112,7 @@ export function mergedHistory(ai) {
   return [...rich, ...legacy].sort((a, b) => b.at - a.at);
 }
 
-const pad2 = (n) => String(n).padStart(2, '0');
-export function dayKey(ts) {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
+export const dayKey = localDay;
 
 // Calendar month grid (Monday-first). Cells: { key, day, inMonth, count, errs }.
 export function calendarCells(year, month /* 0-based */, history = []) {

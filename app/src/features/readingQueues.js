@@ -5,6 +5,7 @@
 // the only queues — the old status-based "On deck" list is folded into one once (deckMigration).
 // All functions here are pure.
 import { readStatus, contentType, CONTENT_TYPES, STATUS_LABEL } from './journeyLibrary.js';
+import { localDay, shiftDay, daysBetween } from './localDay.js';
 
 const bookWords = (b) => Number(b?.words) || (Number(b?.pages) ? Number(b.pages) * 275 : 0);
 
@@ -137,13 +138,12 @@ export function recentPace(days, { now = Date.now(), halfLife = 10, windowDays =
   const dates = [...byDate.keys()].sort();
   if (!dates.length) return { wordsPerDay: null, wpm: null };
   // Anchor on the LOCAL date (tracker days are local), then step in whole days.
-  const ld = new Date(now);
-  const today = Date.UTC(ld.getFullYear(), ld.getMonth(), ld.getDate());
-  const span = Math.max(1, Math.min(windowDays, Math.round((today - Date.parse(dates[0])) / 86400000) + 1));
+  const today = localDay(now);
+  const span = Math.max(1, Math.min(windowDays, daysBetween(dates[0], today) + 1));
   const rows = [];
   let w = 0, wWords = 0, wMins = 0;
   for (let age = 0; age < span; age++) {
-    const d = byDate.get(new Date(today - age * 86400000).toISOString().slice(0, 10));
+    const d = byDate.get(shiftDay(today, -age));
     const k = 0.5 ** (age / halfLife);
     const aloudW = Math.min(d?.wordsRead || 0, d?.aloudWords || 0), aloudS = Math.min(d?.activeSecs || 0, d?.aloudSecs || 0);
     const readW = (d?.wordsRead || 0) - aloudW, readS = (d?.activeSecs || 0) - aloudS;
@@ -231,7 +231,7 @@ export function queueStats(qBooks, { wpm = 250, fileOf = () => null, wordsPerDay
   let cum = 0;
   const etas = left.map(({ book, wordsLeft }) => {
     cum += wordsLeft;
-    return { id: book.id, eta: wordsPerDay && cum ? new Date(now + (cum / wordsPerDay) * 86400000).toISOString().slice(0, 10) : null };
+    return { id: book.id, eta: wordsPerDay && cum ? localDay(now + (cum / wordsPerDay) * 86400000) : null };
   });
   const wordsLeft = Math.max(0, wordsTotal - wordsRead);
   return {
@@ -277,7 +277,7 @@ export function queuesOverview(queues, books, opts = {}) {
       queues: rows.length, count: sum('count'), done: sum('done'), wordsTotal: sum('wordsTotal'), wordsLeft,
       hoursLeft: Math.round((wordsLeft / (opts.wpm || 250) / 60) * 10) / 10,
       hoursSpent: Math.round(sum('hoursSpent') * 10) / 10,
-      eta: wpd && wordsLeft ? new Date(now + (wordsLeft / wpd) * 86400000).toISOString().slice(0, 10) : null,
+      eta: wpd && wordsLeft ? localDay(now + (wordsLeft / wpd) * 86400000) : null,
     },
   };
 }

@@ -5,6 +5,7 @@
 // on each historical slice. See readerArchetype.demo.mjs.
 
 import { finishMs, pubYear, readStatus } from './journeyLibrary.js';
+import { localDay } from './localDay.js';
 
 export const AXES = ['fiction', 'nonfiction', 'literary', 'genreFiction', 'ideas', 'contemporary', 'challenge', 'volume', 'speculative', 'factual', 'poetic', 'series'];
 export const MIN_BOOKS = 3; // below this we don't claim an archetype
@@ -115,7 +116,7 @@ export function archetypeTrend(books, windowDays = 365, now = Date.now()) {
     const tt = Math.min(t, now);
     const win = finished.filter((x) => x.t <= tt && x.t > tt - winMs).map((x) => x.b);
     const m = matchArchetype(readerProfile(win));
-    out.push({ t: tt, date: new Date(tt).toISOString().slice(0, 10), archetypeId: m.archetype?.id || null, archetypeName: m.archetype?.name || null, sim: m.sim || 0, count: m.count });
+    out.push({ t: tt, date: localDay(tt), archetypeId: m.archetype?.id || null, archetypeName: m.archetype?.name || null, sim: m.sim || 0, count: m.count });
     if (tt >= now) break;
   }
   return out;

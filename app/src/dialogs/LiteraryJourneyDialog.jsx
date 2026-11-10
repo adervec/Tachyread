@@ -63,6 +63,7 @@ import { getDeviceId } from '../state/storage.js';
 import { subDir, subDirLabel, pickRoot } from '../features/tachyFolder.js';
 import { deviceKind } from '../state/device.js';
 import { AXES, READER_ARCHETYPES, readerProfile, matchArchetype, currentArchetype, archetypeTrend, archetypeAxes } from '../features/readerArchetype.js';
+import { localDay, parseDay } from '../features/localDay.js';
 
 // Trigger a client-side file download (same anchor trick DataDialog uses; showSaveFilePicker hangs
 // headless so a plain anchor is the reliable path).
@@ -74,7 +75,7 @@ function download(name, text, mime = 'application/json') {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const todayISO = () => localDay();
 const clean = (v) => String(v || '').trim();
 
 // Map the Library editor's status pill back onto the book's completion/inProgress/shelf fields.
@@ -128,7 +129,7 @@ function Stat({ v, l, sub }) {
 // inline target editor. The goal map is a synced tracker ref, so it follows the library across devices.
 function GoalCard({ books, goals, onSetGoal }) {
   const now = useMemo(() => Date.now(), []); // eslint-disable-line react-hooks/purity
-  const year = new Date(now).getUTCFullYear();
+  const year = new Date(now).getFullYear();
   const target = Number(goals?.[year]) || 0;
   const g = useMemo(() => yearGoal(withRereads(books), target, now), [books, target, now]); // a re-read counts in each year it was finished
   const [editing, setEditing] = useState(false);
@@ -184,7 +185,7 @@ function TodayCard({ books, goals, dayAgg, fileStats, bindMap, linkedIds, openCh
   const byId = useMemo(() => new Map(books.map((b) => [b.id, b])), [books]);
   const t = useMemo(() => todaySummary({ dayAgg, fileStats, bookOf: (cs) => byId.get(bindMap[cs]) || null, books, now }), [dayAgg, fileStats, bindMap, byId, books, now]);
   const pace = useMemo(() => recentPace(dayAgg.filter((d) => d.date !== t.today), { now: now - 86400000 }), [dayAgg, t.today, now]);
-  const wordsTarget = Number(goals?.[`${new Date(now).getUTCFullYear()}-words`]) || 0;
+  const wordsTarget = Number(goals?.[`${new Date(now).getFullYear()}-words`]) || 0;
   const wg = useMemo(() => (wordsTarget ? yearWordsGoal(dayAgg, books, linkedIds, wordsTarget, now) : null), [wordsTarget, dayAgg, books, linkedIds, now]);
   // What's next in each queue (first few queues).
   const [nexts, setNexts] = useState([]);
@@ -262,7 +263,7 @@ function TodayCard({ books, goals, dayAgg, fileStats, bindMap, linkedIds, openCh
 const fmtWords = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
 function WordsGoalCard({ books, goals, dayAgg, linkedIds, onSetGoal }) {
   const now = useMemo(() => Date.now(), []); // eslint-disable-line react-hooks/purity
-  const year = new Date(now).getUTCFullYear();
+  const year = new Date(now).getFullYear();
   const key = `${year}-words`;
   const target = Number(goals?.[key]) || 0;
   const g = useMemo(() => yearWordsGoal(dayAgg, books, linkedIds, target, now), [dayAgg, books, linkedIds, target, now]);
@@ -988,7 +989,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               {stats.recentFinishes.length === 0 && <p className="settings-note">No dated finishes yet.</p>}
               <ul className="lj-recent">
                 {stats.recentFinishes.map((b) => (
-                  <li key={b.id}><b>{b.title}</b> — {b.author} <em>{finishMs(b) ? new Date(finishMs(b)).toISOString().slice(0, 10) : ''}</em></li>
+                  <li key={b.id}><b>{b.title}</b> — {b.author} <em>{finishMs(b) ? localDay(finishMs(b)) : ''}</em></li>
                 ))}
               </ul>
             </div>
@@ -1158,7 +1159,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                           <td>{b.recScore || ''}</td>
                           <td>{b.pages || ''}</td>
                           <td>{pubYear(b) || ''}</td>
-                          <td>{finishMs(b) ? new Date(finishMs(b)).toISOString().slice(0, 10) : ''}</td>
+                          <td>{finishMs(b) ? localDay(finishMs(b)) : ''}</td>
                           <td className="lj-row-acts" onClick={(e) => e.stopPropagation()}>
                             <button title="On deck (queue)" className={st === 'queue' ? 'on' : ''} onClick={() => shelve(b, st === 'queue' ? 'toread' : 'queue')}>📋</button>
                             <button title="Reading" className={st === 'reading' ? 'on' : ''} onClick={() => shelve(b, 'reading')}>📖</button>
@@ -1763,7 +1764,7 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
   const suggested = !isNew && !currentLink ? suggestDoc(b, docMeta) : null;
   // Reading facts from the linked document, for the "auto" fills below.
   const docStats = currentLink ? fileStats[currentLink] : null;
-  const finishISO = finishMs(b) ? new Date(finishMs(b)).toISOString().slice(0, 10) : null;
+  const finishISO = finishMs(b) ? localDay(finishMs(b)) : null;
   const eyeFrac = (Number(b.audiobookEyePct) || 0) / 100;
   const abSecs = b.audiobookFinish ? audiobookSecs(bookWordCount(b), eyeFrac) : 0;
   const totalSecs = estimateTotalSecs({ readSecs: b.readSecs, words: bookWordCount(b), audiobookFinish: b.audiobookFinish, eyeFrac });
@@ -1786,7 +1787,7 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
         <label className={dcls('fnf')}>Fiction?<select value={b.fnf || ''} onChange={(e) => set({ fnf: e.target.value })}><option value="F">Fiction</option><option value="NF">Non-fiction</option></select></label>
         <label className={dcls('type')}>Content type<select value={contentType(b)} onChange={(e) => set({ type: e.target.value })}>{Object.entries(CONTENT_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
         <label className={dcls('completion', 'inProgress', 'shelf')}>Status<select value={status} onChange={(e) => setB(applyStatus(b, e.target.value))}><option value="toread">To read</option><option value="queue">On deck</option><option value="reading">Reading</option><option value="finished">Finished</option><option value="abandoned">Abandoned</option></select></label>
-        <label className={dcls('finishTime')}>Finished<input type="date" value={(finishMs(b) ? new Date(finishMs(b)).toISOString().slice(0, 10) : '')} onChange={(e) => set({ finishTime: e.target.value })} /></label>
+        <label className={dcls('finishTime')}>Finished<input type="date" value={(finishMs(b) ? localDay(finishMs(b)) : '')} onChange={(e) => set({ finishTime: e.target.value })} /></label>
         <label className={dcls('recBy')}>Rec. by<input value={b.recBy || ''} placeholder="Claude" onChange={(e) => set({ recBy: e.target.value })} /></label>
         <label className={dcls('rating')}>Rating<input type="number" min="0" max="5" value={bookRating(b) || ''} onChange={(e) => set({ rating: Number(e.target.value) })} /></label>
         <label className={dcls('locked')} title="A locked book is never changed by any cowork operation (fills, rescoring, notes, duplicates) — those changes are discarded before review">
@@ -3353,7 +3354,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   const history = useMemo(() => mergedHistory(ai), [ai]);
   // Everything the AI has written for you, in one sortable table.
   const outputs = useMemo(() => [
-    ...Object.entries(ai?.briefs || {}).map(([date, b]) => ({ key: `b:${date}`, at: b.at || Date.parse(date), date, kind: 'brief', op: 'cw-brief', title: `Morning brief ${date}`, text: b.text })),
+    ...Object.entries(ai?.briefs || {}).map(([date, b]) => ({ key: `b:${date}`, at: b.at || parseDay(date), date, kind: 'brief', op: 'cw-brief', title: `Morning brief ${date}`, text: b.text })),
     ...(ai?.reports || []).map((r, i) => ({ key: `r:${r.at}:${i}`, at: r.at, kind: `report · ${r.kind}`, op: opForReport(r.kind), title: r.title || r.kind, text: r.text })),
     ...(ai?.answers || []).map((a, i) => ({ key: `a:${a.at}:${i}`, at: a.at, kind: 'answer', op: 'cw-ask', title: a.question || 'Answer', text: a.text })),
     ...(ai?.analysis ? [{ key: 'an:current', at: ai.updatedAt || 0, kind: 'analysis (current)', op: 'cw-light', title: 'Dashboard analysis', text: ai.analysis }] : []),

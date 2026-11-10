@@ -7,6 +7,7 @@ import { setReadStatus } from './journeyLibrary.js';
 import { queueBooks, nextInQueue } from './readingQueues.js';
 import { getSearchDirs } from './fileLocator.js';
 import { fileWhere } from './openBook.js';
+import { localDay } from './localDay.js';
 
 // The completion entry the Book Finished popup writes (tab.tracker's lifetime figures; no rating).
 export function completionEntry(tr, now = new Date()) {
@@ -20,7 +21,7 @@ export function completionEntry(tr, now = new Date()) {
 }
 
 // Mark the document's bound Trackyread book finished. Returns the book, or null when unbound.
-export async function finishBoundBook(checksum, today = new Date().toISOString().slice(0, 10)) {
+export async function finishBoundBook(checksum, today = localDay()) {
   const id = (await getBinding())?.[checksum];
   const book = id && (await getLibraryBooks()).find((b) => b.id === id);
   if (!book) return null;

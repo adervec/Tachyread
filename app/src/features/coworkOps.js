@@ -34,6 +34,7 @@ import { TYPING_MODES } from '../engine/typingModes.js';
 const TYPING_MODE_IDS = TYPING_MODES.filter((m) => m.kind !== 'doc').map((m) => m.id);
 import { liveQueues, queueBooks, queueOf } from './readingQueues.js';
 import { AI_NOTE_TYPES } from './journeyAi.js';
+import { localDay } from './localDay.js';
 
 const NEVER = 'Titles, authors, ids, reading/finished status and dates, ratings, your own notes, queues, reading progress and history, file links that already exist — and anything about a book you have locked (🔒).';
 
@@ -763,7 +764,7 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now(), so
       aiNext.dupeSuggestions = [...list, { ...r.value, at: now }].slice(-200);
     } else if (r.kind === 'brief') {
       keepAi('briefs');
-      const date = /^\d{4}-\d{2}-\d{2}$/.test(String(r.value.date || '')) ? r.value.date : new Date(now).toISOString().slice(0, 10);
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(String(r.value.date || '')) ? r.value.date : localDay(now);
       const briefs = { ...(aiNext.briefs || {}), [date]: { text: String(r.value.text || ''), at: now } };
       aiNext.briefs = Object.fromEntries(Object.entries(briefs).sort((x, y) => (x[0] < y[0] ? 1 : -1)).slice(0, 60));
     }

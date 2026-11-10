@@ -43,7 +43,7 @@ assert.ok(['autodidact', 'scholar', 'deep-diver'].includes(currentArchetype(nf).
 assert.equal(matchArchetype(readerProfile(classicist.slice(0, MIN_BOOKS - 1))).archetype, null);
 
 // Backward trend: monthly points, reacts to the window. Deterministic `now`.
-const now = Date.parse('2024-07-01');
+const now = Date.parse('2024-07-01T00:00:00');
 const trend = archetypeTrend([...classicist, ...genre], 365, now);
 assert.ok(trend.length > 3, 'trend has monthly points');
 assert.equal(trend[trend.length - 1].date, '2024-07-01', 'last point is now');

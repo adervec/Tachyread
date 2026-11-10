@@ -15,8 +15,7 @@
 
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
-const MP_VERSION = '0.10.35';
-const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`;
+const WASM_URL = `${import.meta.env?.BASE_URL ?? "/"}vendor/mediapipe`; // served from our own site (vite.config.js)
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
 // Face-mesh indices. Iris centres come from the refined (478-point) mesh; the rest are the eye

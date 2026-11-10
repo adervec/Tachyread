@@ -27,7 +27,9 @@ async function getWorker(lang = 'eng') {
     _workerPromise = (async () => {
       const { createWorker } = await import('tesseract.js');
       // logger fires {status, progress 0..1} for engine load, traineddata download, and recognition.
-      return createWorker(lang, undefined, { logger: (m) => { if (_ocrLogger) _ocrLogger(m); } }); // downloads core+lang on first use
+      // Engine from our own site (vite.config.js vendor/); only the language data is downloaded.
+      const own = `${import.meta.env.BASE_URL}vendor/tesseract`;
+      return createWorker(lang, undefined, { workerPath: `${own}/worker.min.js`, corePath: own, logger: (m) => { if (_ocrLogger) _ocrLogger(m); } });
     })();
   }
   return _workerPromise;

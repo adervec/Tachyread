@@ -43,6 +43,10 @@ try {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  // House standard: no third-party requests. The core flow (boot, open, play, Help, EPUB) must only
+  // ever talk to this site; opt-in features (Google Fonts, camera models, OCR data) are not exercised.
+  const foreign = new Set();
+  page.on('request', (r) => { const u = new URL(r.url()); if (/^https?:$/.test(u.protocol) && u.hostname !== 'localhost') foreign.add(u.host); });
 
   await page.goto(URL_, { waitUntil: 'load', timeout: 20000 });
   await page.waitForSelector('.menu-bar', { timeout: 15000 });
@@ -93,6 +97,7 @@ try {
   // Benign noise allowlist (none so far — keep strict; add patterns here only with a comment why).
   const real = errors.filter(() => true);
   if (real.length) fail(`${real.length} console/page error(s):\n  ${real.join('\n  ')}`);
+  if (foreign.size) fail(`third-party requests during the core flow: ${[...foreign].join(', ')}`);
   console.log('smoke: app boots, opens a document, plays, Help renders, EPUB has text — 0 console errors');
 } catch (e) {
   fail(e?.message || String(e));

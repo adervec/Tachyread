@@ -2,10 +2,12 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.jsx';
 import { initPwaInstall } from './features/pwaInstall.js';
+import { initAppHealth } from './features/appHealth.js';
 
 // Capture the install prompt BEFORE React mounts — Chrome fires beforeinstallprompt once, early,
 // and a missed event means no in-app install offer for the whole page load.
 initPwaInstall();
+initAppHealth(); // persistent storage, crash notice, new-version notice
 
 createRoot(document.getElementById('root')).render(<App />);
 

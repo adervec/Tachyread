@@ -22,8 +22,7 @@ import { PRESENTING_SHAPES } from './voice/presenting.js';
 // scorer needs (brows, smile, jaw) — the model emits 52 and shipping them all is garbage churn.
 const SHAPE_KEYS = [...new Set([...FACE_SHAPE_KEYS, ...PRESENTING_SHAPES])];
 
-const MP_VERSION = '0.10.35';
-const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`;
+const WASM_URL = `${import.meta.env?.BASE_URL ?? "/"}vendor/mediapipe`; // served from our own site (vite.config.js)
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 const BLINK_CLOSED = 0.5; // mean eyeBlink blendshape score above this = eyes shut
 

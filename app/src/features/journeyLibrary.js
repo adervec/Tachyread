@@ -2,6 +2,7 @@
 // per-book envelope the store merges, and the filter / sort / stats / export logic behind the Library
 // and Dashboard views (ported from the standalone index.html tracker). No storage/React imports here
 // so it stays trivially testable — see journeyLibrary.demo.mjs.
+import { localDay, parseDay } from './localDay.js';
 
 export function slug(s) {
   return String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -37,7 +38,7 @@ export function finishMs(b) {
   const v = b?.finishTime;
   if (v == null || v === '') return null;
   if (typeof v === 'number') return v;
-  const t = Date.parse(v);
+  const t = parseDay(v); // a bare 'YYYY-MM-DD' is that LOCAL day
   return Number.isNaN(t) ? null : t;
 }
 
@@ -209,7 +210,7 @@ export function exportJourneyMarkdown(books, { title = 'Reading Journey' } = {})
   const groups = { finished: [], reading: [], queue: [], toread: [], abandoned: [] };
   for (const b of books) groups[readStatus(b)].push(b);
   const out = [`# ${title} — ${books.length} books`, ''];
-  const date = (b) => { const ms = finishMs(b); return ms ? new Date(ms).toISOString().slice(0, 10) : ''; };
+  const date = (b) => { const ms = finishMs(b); return ms ? localDay(ms) : ''; };
   const stars = (b) => { const r = bookRating(b); return r > 0 ? ' — ' + '★'.repeat(Math.round(r)) : ''; };
   const label = { finished: 'Finished', reading: 'Reading', queue: 'On deck', toread: 'To read', abandoned: 'Abandoned' };
   for (const g of ['finished', 'reading', 'queue', 'toread', 'abandoned']) {
