@@ -77,3 +77,12 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+
+  # House standards: check the live site after every deploy, then tag the release.
+  after-deploy:
+    needs: deploy
+    uses: adervec/CoworkSyncHub/.github/workflows/after-deploy.yml@main
+    with:
+      url: https://adervec.github.io/Tachyread/
+    permissions:
+      contents: write
