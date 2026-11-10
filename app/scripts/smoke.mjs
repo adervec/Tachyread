@@ -57,6 +57,16 @@ try {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
 
+  // House font: Atkinson Hyperlegible is the default for the UI and for a tab with no font chosen,
+  // and its bundled @font-face must actually load (not just be named in the stack).
+  const fonts = await page.evaluate(async () => ({
+    body: getComputedStyle(document.body).fontFamily,
+    lines: getComputedStyle(document.querySelector('.line-pane-list')).fontFamily,
+    loaded: (await document.fonts.load("13px 'Atkinson Hyperlegible'")).length,
+  }));
+  const atk = (f) => /^['"]?Atkinson Hyperlegible/.test(f);
+  if (!atk(fonts.body) || !atk(fonts.lines) || !fonts.loaded) fail(`default font is not Atkinson Hyperlegible: ${JSON.stringify(fonts)}`);
+
   // Play briefly, then Help.
   await page.keyboard.press(' ');
   await page.waitForTimeout(1200);
