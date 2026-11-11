@@ -13,7 +13,7 @@ import {
   buildApiMessages, parseAiOutput, contentHash,
 } from './journeyAi.js';
 import { subDir, subDirLabel } from './tachyFolder.js';
-import { opsInstruction, sanitizeOutput, planRows, isReportOnly, queuesForDataset, logRequest } from './coworkOps.js';
+import { opsInstruction, sanitizeOutput, planRows, isReportOnly, queuesForDataset, logRequest, reviewFirst, parkReply } from './coworkOps.js';
 import { writeSnapshot, commitRows } from './coworkApply.js';
 import { liveQueues } from './readingQueues.js';
 import { weeklySummaries } from './journeyAnalytics.js';
@@ -41,11 +41,13 @@ async function datasetWithProgress(light, books) {
 }
 
 // Scheduled runs NEVER apply book changes on their own: an API reply goes through the same
-// permission filter as everything else, and only REPORT rows (analysis, read-next, briefs,
-// weeklies) are committed automatically — logged and undoable like a manual apply.
-async function applyReportOnly(ai, reply, ops, books) {
+// permission filter as everything else. By default (review first) it waits in the Cowork page's
+// review list; only when review is switched off for every operation are its REPORT rows
+// (analysis, read-next, briefs, weeklies) committed automatically — logged and undoable.
+async function applyReportOnly(ai, reply, ops, books, source = 'scheduled API') {
   const hash = contentHash(reply);
   if ((ai?.ledger || []).includes(hash)) return { ai, note: 'reply already applied' };
+  if (reviewFirst(ai, ops)) return { ai: parkReply(ai, { text: reply, ops, source, hash }), note: 'reply waiting for your review on the Cowork page' };
   const [bindMap, queues] = await Promise.all([getBinding().catch(() => ({})), getLibraryRef('queues').catch(() => [])]);
   const booksById = Object.fromEntries(books.map((b) => [b.id, b]));
   const queuedIds = new Set(liveQueues(queues || []).flatMap((q) => q.ids || []));

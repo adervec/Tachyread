@@ -2,6 +2,7 @@
   {
     "date": "2026-11-10",
     "items": [
+      "Scheduled Cowork replies now wait for your review before anything changes. Switch that off per report under AI / Cowork if you'd rather they apply themselves.",
       "Tachyread now starts in light or dark to match your device, until you pick a theme yourself.",
       "Menus and dialogs use Atkinson Hyperlegible by default. Change it under Settings → Application → App font; your own reading fonts still win.",
       "Streaks, finish dates and daily totals follow your own calendar: reading late in the evening counts for that day.",

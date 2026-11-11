@@ -57,7 +57,7 @@ import {
   SYNC_ACTION_GROUPS, actionById, combineCoworkInstruction, SCHEDULE_OPTS,
   syncRole, recordRun, mergedHistory, calendarCells, fmtAgo, dayKey,
 } from '../features/coworkActions.js';
-import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset, logRequest, opsForReply, opForRow, opForReport, PREP_NOTE_TYPES } from '../features/coworkOps.js';
+import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset, logRequest, opsForReply, opForRow, opForReport, PREP_NOTE_TYPES, reviewFirst, unparkReply } from '../features/coworkOps.js';
 import { writeSnapshot, commitRows, undoLastApply, listInbox, readInbox, moveInbox } from '../features/coworkApply.js';
 import { getDeviceId } from '../state/storage.js';
 import { subDir, subDirLabel, pickRoot } from '../features/tachyFolder.js';
@@ -3723,6 +3723,12 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
           {focusOp
             ? <button className="toggle-on" disabled={busy} onClick={() => runSelected([focus])} title="Write a request for this one operation (the activity snapshot goes with it)">▶ Run {focusOp.label}</button>
             : null}
+          {focus && COWORK_OPS[focus]?.group === 'report' && (
+            <label className="inline-check" title="On: a scheduled reply for this operation waits in the review list below. Off: its report (analysis, read-next, briefs) is applied on its own, still logged and undoable.">
+              <input type="checkbox" checked={reviewFirst(ai, [focus])} onChange={(e) => persistAi({ autoApply: { ...(ai?.autoApply || {}), [focus]: !e.target.checked } })} />
+              Review scheduled replies first
+            </label>
+          )}
           {focus === 'cw-requeue' && ai?.requeueSkip?.length > 0 && <button disabled={busy} onClick={() => persistAi({ requeueSkip: [] })} title="Reviewed re-queue suggestions are never made again — this clears that memory">Forget {ai.requeueSkip.length} reviewed suggestion{ai.requeueSkip.length === 1 ? '' : 's'}</button>}
           {focusOp
             ? null
@@ -3740,6 +3746,16 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
           </span>
           {inbox.slice(0, 5).map((n) => <button key={n} disabled={busy || !!review} onClick={() => reviewInbox(n)} title={`Review ${n}`}>Review {n}</button>)}
           <button onClick={refreshInbox} title="Look in inbox/ again">⟳</button>
+        </div>
+      )}
+      {!review && ai?.pendingReplies?.length > 0 && (
+        <div className="settings-note" role="status">
+          ⏳ {ai.pendingReplies.length} scheduled repl{ai.pendingReplies.length === 1 ? 'y is' : 'ies are'} waiting for your review:
+          {ai.pendingReplies.map((p) => (
+            <button key={p.hash} disabled={busy} style={{ marginLeft: 6 }} onClick={async () => { await stageReply(p.text, p.ops, `${p.source} · ${new Date(p.at).toLocaleString()}`); persistAi(unparkReply(ai, p.hash)); }}>
+              Review {p.ops.map((id) => COWORK_OPS[id]?.label || id).join(' + ')} ({new Date(p.at).toLocaleDateString()})
+            </button>
+          ))}
         </div>
       )}
       {review && (

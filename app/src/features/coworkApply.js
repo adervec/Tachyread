@@ -10,6 +10,7 @@ import { buildApply, applySummary, rememberRequeues } from './coworkOps.js';
 import { setQueueIds, addToQueue } from './readingQueues.js';
 import { newCard } from '../engine/srs.js';
 import { makePlan, makeStep } from '../engine/typingPlans.js';
+import { COWORK_MANIFEST } from './coworkOps.js';
 
 async function writeFile(dir, name, text) {
   const fh = await dir.getFileHandle(name, { create: true });
@@ -36,6 +37,7 @@ export async function writeSnapshot(dir, now = Date.now()) {
   out['changes.md'] = changesMarkdown(changes, prev?.at || null, nowIso);
   for (const [name, text] of Object.entries(out)) await writeFile(sub, name, text);
   await writeFile(await dir.getDirectoryHandle('inbox', { create: true }), 'README.md', INBOX_README);
+  await writeFile(dir, 'cowork.json', JSON.stringify(COWORK_MANIFEST, null, 2)); // discovery manifest
   return Object.keys(out).length;
 }
 

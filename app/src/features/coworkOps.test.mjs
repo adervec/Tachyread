@@ -188,3 +188,20 @@ assert.equal(sanitizeOutput({ aiNotes: [{ bookId: 'c', type: 'summary', text: 's
 const qds = queuesForDataset(qs, Object.values(noted));
 assert.deepEqual([qds[0].dynamic, qds[0].prep, qds[0].books[0].notes, qds[1].dynamic], ['American literature', ['reception'], ['guide'], null]);
 console.log('coworkOps: all cases pass');
+
+// ── review first (house standard): on by default, off only per REPORT operation ──
+{
+  const { reviewFirst, parkReply, unparkReply, COWORK_MANIFEST } = await import('./coworkOps.js');
+  assert.equal(reviewFirst({}, ['cw-light']), true, 'review is on by default');
+  assert.equal(reviewFirst({ autoApply: { 'cw-light': true } }, ['cw-light']), false, 'switched off for this report op');
+  assert.equal(reviewFirst({ autoApply: { 'cw-light': false } }, ['cw-light']), true);
+  assert.equal(reviewFirst({ autoApply: { 'cw-queue-fill': true } }, ['cw-queue-fill']), true, 'book-changing ops always review');
+  assert.equal(reviewFirst({ autoApply: { 'cw-light': true } }, ['cw-light', 'cw-queue-fill']), true, 'a mixed request reviews');
+  const parked = parkReply({ ledger: ['old'] }, { text: '{}', ops: ['cw-light'], source: 's', hash: 'h1' }, 5);
+  assert.equal(parked.pendingReplies.length, 1);
+  assert.equal(parkReply(parked, { text: '{}', ops: ['cw-light'], source: 's', hash: 'h1' }).pendingReplies.length, 1, 'never parked twice');
+  assert.equal(parkReply(parked, { hash: 'old' }).pendingReplies.length, 1, 'an applied reply is not parked again');
+  assert.deepEqual(unparkReply(parked, 'h1').pendingReplies, []);
+  assert.equal(COWORK_MANIFEST.protocol, 'cowork-manifest');
+  for (const c of COWORK_MANIFEST.channels) assert.ok(c.name && c.request.length && (!!c.replyPath !== !!c.replyDir), `manifest channel ${c.name} is valid`);
+}

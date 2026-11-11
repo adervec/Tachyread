@@ -389,6 +389,27 @@ export const OP_GROUPS = [
 export const NEVER_CHANGED = NEVER;
 export const isReportOnly = (ids) => ids.every((id) => COWORK_OPS[id]?.group === 'report');
 
+// House standard: review before applying is the default, switchable per operation. Only REPORT
+// operations can skip review (ai.autoApply[opId] === true); anything that changes books always
+// waits in the review table. A scheduled reply that needs review is parked in ai.pendingReplies.
+export const reviewFirst = (ai, ids) => !(ids?.length && isReportOnly(ids) && ids.every((id) => ai?.autoApply?.[id] === true));
+export function parkReply(ai, reply, now = Date.now()) {
+  if ((ai?.pendingReplies || []).some((p) => p.hash === reply.hash) || (ai?.ledger || []).includes(reply.hash)) return ai;
+  return { ...(ai || {}), pendingReplies: [{ ...reply, at: now }, ...(ai?.pendingReplies || [])].slice(0, 10) };
+}
+export const unparkReply = (ai, hash) => ({ ...(ai || {}), pendingReplies: (ai?.pendingReplies || []).filter((p) => p.hash !== hash) });
+
+// cowork.json (cowork-manifest v1, CoworkSyncHub/COWORK-PROTOCOL.md) at the cowork folder root, so
+// any agent or hub can discover the channel. snapshot/ is read-only context; inbox/ takes
+// unrequested suggestions (inbox/README.md says how).
+export const COWORK_MANIFEST = {
+  protocol: 'cowork-manifest', protocolVersion: 1, app: 'tachyread',
+  channels: [
+    { name: 'journey', label: 'Literary Journey (Trackyread)', request: ['journey-cowork-request.json'], instructions: 'journey-instructions.md', replyPath: 'journey-cowork-response.json', readOnly: ['snapshot/'] },
+    { name: 'inbox', label: 'Unrequested suggestions', request: ['snapshot/README.md'], instructions: 'inbox/README.md', replyDir: 'inbox', replyPrefix: '', readOnly: ['snapshot/'] },
+  ],
+};
+
 // Union of the requested operations' permissions. Field rules from several ops merge per field; a
 // field allowed without restriction by any op wins over a restricted one.
 export function combinedAllow(ids) {
