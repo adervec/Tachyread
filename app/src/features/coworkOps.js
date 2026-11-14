@@ -93,7 +93,7 @@ export const COWORK_OPS = {
   },
   'cw-session-review': {
     icon: '🎓', group: 'report', label: 'AI review of typing runs & reading-aloud sessions', heavy: false,
-    instruction: 'SESSION REVIEW. dataset.sessions.due lists the typing runs and reading-aloud sessions not yet reviewed (newest first), each with its raw detail and the app\'s own score (appScore); dataset.sessions.recent is the history for trend. For EVERY due session return `sessionReviews` [{sessionId (the due id, verbatim), grade (A+ to F), summary (2–4 sentences), strengths (0–4 short items), fixes (0–4 short items), next (one concrete next step)}]. Rubric — typing: net speed against this person\'s recent runs, accuracy (97%+ is good), consistency, the most-missed keys and problem words, perfect versus corrected words, the mode and text; reading aloud: match quality, exact versus near versus skipped words, misses, filler words, the voice and presenting scores and how the per-minute trend held up. Use only numbers in the data, never invent one. Your grade sits BESIDE the app\'s own score, never replacing it. With nothing due, return "sessionReviews": [].',
+    instruction: 'SESSION REVIEW. dataset.sessions.due lists the typing runs and reading-aloud sessions not yet reviewed (newest first), each with its raw detail and the app\'s own score (appScore); dataset.sessions.recent is the history for trend. For EVERY due session return `reviews` [{sessionId (the due id, verbatim), grade (A+ to F), summary (2–4 sentences), strengths (0–4 short items), fixes (0–4 short items), next (one concrete next step)}]. Rubric — typing: net speed against this person\'s recent runs, accuracy (97%+ is good), consistency, the most-missed keys and problem words, perfect versus corrected words, the mode and text; reading aloud: match quality, exact versus near versus skipped words, misses, filler words, the voice and presenting scores and how the per-minute trend held up. Use only numbers in the data, never invent one. Your grade sits BESIDE the app\'s own score, never replacing it. With nothing due, return "reviews": [].',
     allow: { sessionReviews: true },
     explain: {
       sends: 'The compact dataset plus dataset.sessions: every typing run and reading-aloud session not yet reviewed (raw detail and the app\'s own score) and the recent history.',
@@ -465,7 +465,7 @@ export function schemaFor(ids) {
   if (a.queueAdds) parts.push('"queueAdds": [{"queueId", "ids": ["<unqueued to-read book ids>"], "why"}]');
   if (a.queueMoves) parts.push('"queueMoves": [{"bookId", "toQueueId", "why"}]');
   if (a.duplicates) parts.push('"duplicates": [{"keepId", "foldId", "why"}]');
-  if (a.sessionReviews) parts.push('"sessionReviews": [{"sessionId": "<dataset.sessions.due[].id>", "grade": "A+…F", "summary", "strengths": [], "fixes": [], "next"}]');
+  if (a.sessionReviews) parts.push('"reviews": [{"sessionId": "<dataset.sessions.due[].id>", "grade": "A+…F", "summary", "strengths": [], "fixes": [], "next"}]');
   if (a.reports) parts.push(`"reports": [{"kind": ${a.reports.map((k) => `"${k}"`).join(' | ')}, "title", "text": "markdown"}]`);
   if (a.newBooks) parts.push('"newBooks": [{"title", "author", "genre"?, "pages"?, "why"}]');
   if (a.addTags) parts.push('"addTags": [{"id", "tags": ["…"]}]');
@@ -552,9 +552,9 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
   }
   // Session reviews: only for sessions that exist (sessionIds, when the caller knows them), graded
   // A+…F with a summary; text is length-capped so a reply can't stuff the record.
-  if (raw?.sessionReviews?.length) {
+  if (raw?.reviews?.length) {
     const seen = new Set();
-    out.sessionReviews = raw.sessionReviews.filter((r) => {
+    out.sessionReviews = raw.reviews.filter((r) => {
       const id = String(r?.sessionId || '');
       const why = !a.sessionReviews ? 'not part of the requested operations'
         : !SESSION_ID.test(id) || (sessionIds && !sessionIds.has(id)) ? 'no such session'

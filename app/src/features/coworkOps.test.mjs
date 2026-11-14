@@ -209,8 +209,8 @@ console.log('coworkOps: all cases pass');
 // ── AI session review (house standard 18): one row per session, stored beside the app's score, undoable ──
 {
   const { sanitizeOutput, planRows, buildApply, opForRow, schemaFor } = await import('./coworkOps.js');
-  assert.match(schemaFor(['cw-session-review']), /sessionReviews/);
-  const raw = { sessionReviews: [
+  assert.match(schemaFor(['cw-session-review']), /"reviews"/, 'reply field is reviews (house standard 18)');
+  const raw = { reviews: [
     { sessionId: 'typing:1000', grade: 'B+', summary: 'Steady.', strengths: ['rhythm', 1, '', 'a', 'b', 'c'], fixes: ['e key'], next: 'drill e' },
     { sessionId: 'typing:9999', grade: 'A', summary: 'ghost' },
     { sessionId: 'speech:2000', grade: 'Z', summary: 'bad grade' },

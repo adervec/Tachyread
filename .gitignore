@@ -31,3 +31,6 @@ Thumbs.db
 
 # local launcher for resuming the Claude Code session in this folder
 RESUME CLAUDE*.ps1
+
+# Temporary verify / smoke copies made during local checks
+*.tmp.mjs
