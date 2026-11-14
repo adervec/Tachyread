@@ -14,6 +14,7 @@ import { backupToProvider, restoreFromProvider, syncWithProvider } from '../feat
 import { getRoot, pickRoot, forgetRoot, subDirLabel, folderSupported } from '../features/tachyFolder.js';
 import { getSyncStamps } from '../state/storage.js';
 import { compressAllClips } from '../features/clipCodec.js';
+import { t } from '../i18n.js';
 
 // Where each kind of data goes and when it last moved — the honest answer to "is it syncing?".
 // Book files and audio have no cloud copy at all today; saying so beats letting people assume.
@@ -24,22 +25,22 @@ function SyncStatus({ sync, folderName }) {
     getSyncStamps().then(setStamps).catch(() => {});
     subDirLabel('sync').then(setFolder).catch(() => {});
   }, [sync.provider, sync.lastSync, sync.lastLibrarySync, folderName]);
-  const where = sync.provider === 'googleDrive' ? 'Google Drive › private app folder' : folder ? `📁 ${folder}` : 'Tachyread folder — none chosen yet';
-  const cell = (s, k) => (s ? (s[k] ? fmtDateTime(s[k]) : 'never') : '—'); // null = this data never syncs
+  const where = sync.provider === 'googleDrive' ? t('Google Drive › private app folder') : folder ? `📁 ${folder}` : t('Tachyread folder — none chosen yet');
+  const cell = (s, k) => (s ? (s[k] ? fmtDateTime(s[k]) : t('never')) : '—'); // null = this data never syncs
   const rows = [
-    ['Reading progress & tab settings', where, stamps.progress || {}],
-    ['Trackyread library', where, stamps.library || {}],
-    ['Book files', 'This device only — open each book on every device (or keep the files in a synced folder)', null],
-    ['Audiobook audio (clips, synced audiobooks)', 'This device only — no cloud copy yet', null],
+    [t('Reading progress & tab settings'), where, stamps.progress || {}],
+    [t('Trackyread library'), where, stamps.library || {}],
+    [t('Book files'), t('This device only — open each book on every device (or keep the files in a synced folder)'), null],
+    [t('Audiobook audio (clips, synced audiobooks)'), t('This device only — no cloud copy yet'), null],
   ];
   return (
     <table className="history-table">
-      <thead><tr><th>Data</th><th>Where it goes</th><th>Last pushed</th><th>Last pulled</th></tr></thead>
+      <thead><tr><th>{t('Data')}</th><th>{t('Where it goes')}</th><th>{t('Last pushed')}</th><th>{t('Last pulled')}</th></tr></thead>
       <tbody>
         {rows.map(([what, to, s]) => (
           <tr key={what}>
             <td>{what}</td><td>{to}</td><td>{cell(s, 'pushedAt')}</td>
-            <td>{cell(s, 'pulledAt')}{s?.pulledAt && s.pulledFrom ? <> — written by <b>{s.pulledFrom}</b></> : null}</td>
+            <td>{cell(s, 'pulledAt')}{s?.pulledAt && s.pulledFrom ? <> {t('— written by {device}', { device: s.pulledFrom })}</> : null}</td>
           </tr>
         ))}
       </tbody>
@@ -49,10 +50,10 @@ function SyncStatus({ sync, folderName }) {
 
 // Friendly names + display order for the object stores shown in the Overview.
 const STORE_LABELS = {
-  files: 'Library & reading progress', readstate: 'Reading masks', docs: 'Document cache',
-  grabbed: 'Grabbed (OCR) books', grabSessions: 'Unfinished grabs', typingRuns: 'Typing runs',
-  focusSessions: 'Focus sessions', audiobook: 'Audiobook clips', audiobookManifest: 'Audiobook index',
-  global: 'Settings & session', fsHandles: 'Saved folder handles',
+  files: t('Library & reading progress'), readstate: t('Reading masks'), docs: t('Document cache'),
+  grabbed: t('Grabbed (OCR) books'), grabSessions: t('Unfinished grabs'), typingRuns: t('Typing runs'),
+  focusSessions: t('Focus sessions'), audiobook: t('Audiobook clips'), audiobookManifest: t('Audiobook index'),
+  global: t('Settings & session'), fsHandles: t('Saved folder handles'),
 };
 const fmtMB = (chars) => (chars >= 1048576 ? `${(chars / 1048576).toFixed(chars >= 1073741824 ? 0 : 1)} MB` : `${Math.max(1, Math.round(chars / 1024))} KB`);
 // Buffer many small writes into ~1 MB pieces (the file writer is slow per call).
@@ -64,21 +65,21 @@ function bufferedWriter(sink) {
   };
 }
 const STORE_ORDER = ['files', 'readstate', 'docs', 'grabbed', 'grabSessions', 'typingRuns', 'focusSessions', 'audiobook', 'audiobookManifest'];
-// Stores the Maintenance tab can clear individually (with a friendly label).
+// Stores the Maintenance tab can clear individually (button text + the message once it is done).
 const CLEARABLE = [
-  { store: 'typingRuns', label: 'typing-run history' },
-  { store: 'focusSessions', label: 'focus / look-away sessions' },
-  { store: 'grabbed', label: 'grabbed (OCR) book cache' },
-  { store: 'grabSessions', label: 'unfinished grab sessions' },
-  { store: 'docs', label: 'document cache (rebuilt on reopen)' },
+  { store: 'typingRuns', label: t('Clear typing-run history'), done: t('Cleared typing-run history.') },
+  { store: 'focusSessions', label: t('Clear focus / look-away sessions'), done: t('Cleared focus / look-away sessions.') },
+  { store: 'grabbed', label: t('Clear grabbed (OCR) book cache'), done: t('Cleared grabbed (OCR) book cache.') },
+  { store: 'grabSessions', label: t('Clear unfinished grab sessions'), done: t('Cleared unfinished grab sessions.') },
+  { store: 'docs', label: t('Clear document cache (rebuilt on reopen)'), done: t('Cleared document cache.') },
 ];
 
 const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'backup', label: 'Backup & restore' },
-  { id: 'cloud', label: 'Cloud sync' },
-  { id: 'maintenance', label: 'Maintenance' },
-  { id: 'log', label: 'Diagnostic log' },
+  { id: 'overview', label: t('Overview') },
+  { id: 'backup', label: t('Backup & restore') },
+  { id: 'cloud', label: t('Cloud sync') },
+  { id: 'maintenance', label: t('Maintenance') },
+  { id: 'log', label: t('Diagnostic log') },
 ];
 
 // Data management suite — storage overview, full backup/restore, cloud progress-sync, and
@@ -117,18 +118,22 @@ export default function DataDialog({ onClose }) {
   const refreshFolder = () => getRoot().then((h) => setFolderName(h?.name || '')).catch(() => {});
   useEffect(() => { refreshFolder(); }, []);
   async function chooseFolder() {
-    try { await pickRoot(); await refreshFolder(); setMsg('Tachyread folder chosen — sync files go to its sync/ subfolder; Sync now to push.'); }
-    catch (e) { if (e?.name !== 'AbortError') setMsg('Folder not chosen: ' + (e?.message || e)); }
+    try { await pickRoot(); await refreshFolder(); setMsg(t('Tachyread folder chosen — sync files go to its {folder} subfolder; Sync now to push.', { folder: 'sync/' })); }
+    catch (e) { if (e?.name !== 'AbortError') setMsg(t('Folder not chosen: {error}', { error: e?.message || e })); }
   }
   async function forgetFolder() { await forgetRoot(); await refreshFolder(); }
 
   // Re-encode stored WAV clips to AAC (clipCodec.js) — the one-off catch-up; new clips get it on save.
   async function compressClips() {
-    setBusy(true); setMsg('Compressing clips…');
+    setBusy(true); setMsg(t('Compressing clips…'));
     try {
-      const r = await compressAllClips((p) => setMsg(`Compressing clip ${p.done}/${p.total}… ${fmtMB(p.before)} → ${fmtMB(p.after)} so far`));
-      setMsg(r.changed ? `Compressed ${r.changed} of ${r.total} clip(s): ${fmtMB(r.before)} → ${fmtMB(r.after)}.` : `Nothing to compress — ${r.total} clip(s) are already compact${typeof AudioEncoder === 'undefined' ? ' (this browser has no audio encoder)' : ''}.`);
-    } catch (e) { setMsg('Compression failed: ' + (e?.message || e)); }
+      const r = await compressAllClips((p) => setMsg(t('Compressing clip {done}/{total}… {before} → {after} so far', { done: p.done, total: p.total, before: fmtMB(p.before), after: fmtMB(p.after) })));
+      setMsg(r.changed
+        ? t.n('Compressed {changed} of {n} clip: {before} → {after}.', 'Compressed {changed} of {n} clips: {before} → {after}.', r.total, { changed: r.changed, before: fmtMB(r.before), after: fmtMB(r.after) })
+        : typeof AudioEncoder === 'undefined'
+          ? t.n('Nothing to compress — {n} clip is already compact (this browser has no audio encoder).', 'Nothing to compress — {n} clips are already compact (this browser has no audio encoder).', r.total)
+          : t.n('Nothing to compress — {n} clip is already compact.', 'Nothing to compress — {n} clips are already compact.', r.total));
+    } catch (e) { setMsg(t('Compression failed: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
 
@@ -136,46 +141,46 @@ export default function DataDialog({ onClose }) {
   // Two-way sync (pull-merge-push), then reload so merged settings/progress apply to open tabs.
   // Turning this on flips `auto`, which arms boot-pull + push-on-change (App.jsx).
   async function cloudSyncNow() {
-    setBusy(true); setMsg('Syncing…');
+    setBusy(true); setMsg(t('Syncing…'));
     try {
       await syncWithProvider(sync.provider, sync);
       patchSync({ lastSync: Date.now(), auto: true, profile: getDriveProfile() || sync.profile });
-      setMsg('Synced — reloading to apply…');
+      setMsg(t('Synced — reloading to apply…'));
       setTimeout(() => window.location.reload(), 1000);
-    } catch (e) { setBusy(false); setMsg('Sync failed: ' + (e?.message || e)); }
+    } catch (e) { setBusy(false); setMsg(t('Sync failed: {error}', { error: e?.message || e })); }
   }
   async function cloudBackup() {
-    setBusy(true); setMsg('Backing up to your sync target…');
+    setBusy(true); setMsg(t('Backing up to your sync target…'));
     try {
       const r = await backupToProvider(sync.provider, sync);
       patchSync({ lastSync: r.at, auto: true, profile: getDriveProfile() || sync.profile });
-      setMsg(`Backed up to ${provider.label} (${Math.round(r.bytes / 1024)} KB).`);
-    } catch (e) { setMsg('Sync backup failed: ' + (e?.message || e)); }
+      setMsg(t('Backed up to {target} ({kb} KB).', { target: provider.label, kb: Math.round(r.bytes / 1024) }));
+    } catch (e) { setMsg(t('Sync backup failed: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
   async function cloudRestore() {
-    setBusy(true); setMsg('Restoring from your sync target…');
+    setBusy(true); setMsg(t('Restoring from your sync target…'));
     try {
       const r = await restoreFromProvider(sync.provider, sync);
       patchSync({ auto: true, profile: getDriveProfile() || sync.profile });
-      setMsg(`Merged ${r.merged} item(s) — reloading…`);
+      setMsg(t.n('Merged {n} item — reloading…', 'Merged {n} items — reloading…', r.merged));
       setTimeout(() => window.location.reload(), 1000);
-    } catch (e) { setBusy(false); setMsg('Sync restore failed: ' + (e?.message || e)); }
+    } catch (e) { setBusy(false); setMsg(t('Sync restore failed: {error}', { error: e?.message || e })); }
   }
   // Sign in to Google without syncing yet — verifies OAuth and loads the account name/photo.
   async function connectGoogle() {
-    setBusy(true); setMsg('Opening Google sign-in…');
+    setBusy(true); setMsg(t('Opening Google sign-in…'));
     try {
       await provider.connect(sync);
       patchSync({ profile: getDriveProfile() });
-      setMsg('Signed in to Google.');
-    } catch (e) { setMsg('Google sign-in failed: ' + (e?.message || e)); }
+      setMsg(t('Signed in to Google.'));
+    } catch (e) { setMsg(t('Google sign-in failed: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
   async function signOutGoogle() {
     try { await provider.disconnect(); } catch { /* ignore */ }
     patchSync({ profile: null });
-    setMsg('Signed out of Google on this device.');
+    setMsg(t('Signed out of Google on this device.'));
   }
 
   // ── file backup / restore ──
@@ -187,18 +192,18 @@ export default function DataDialog({ onClose }) {
     let handle = null;
     if (fsSaveSupported()) {
       try {
-        handle = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'Tachyread backup', accept: { 'application/json': ['.json'] } }] });
-      } catch (e) { if (e?.name === 'AbortError') { setMsg('Save canceled.'); return; } }
+        handle = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: t('Tachyread backup'), accept: { 'application/json': ['.json'] } }] });
+      } catch (e) { if (e?.name === 'AbortError') { setMsg(t('Save canceled.')); return; } }
     }
-    setBusy(true); setMsg('Writing your backup…'); setExportInfo(null);
+    setBusy(true); setMsg(t('Writing your backup…')); setExportInfo(null);
     try {
-      let sizes, how;
+      let sizes, where;
       if (handle) {
         const w = await handle.createWritable();
         const out = bufferedWriter((b) => w.write(b));
         try { sizes = await exportBackup(out.write, { includeAudio: withAudio }); await out.flush(); await w.close(); }
         catch (e) { try { await w.abort(); } catch { /* */ } throw e; }
-        how = ` to ${handle.name}`;
+        where = handle.name;
       } else {
         const parts = [];
         const out = bufferedWriter(async (b) => { parts.push(b); });
@@ -207,13 +212,16 @@ export default function DataDialog({ onClose }) {
         const url = URL.createObjectURL(new Blob(parts, { type: 'application/json' }));
         const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 5000);
-        how = ' to your downloads';
+        where = '';
       }
-      const total = Object.values(sizes).reduce((t, x) => t + x.count, 0);
-      const bytes = Object.values(sizes).reduce((t, x) => t + x.bytes, 0);
+      const total = Object.values(sizes).reduce((sum, x) => sum + x.count, 0);
+      const bytes = Object.values(sizes).reduce((sum, x) => sum + x.bytes, 0);
       setExportInfo({ total, bytes, sizes });
-      setMsg(`Backed up ${total.toLocaleString()} records (${fmtMB(bytes)})${how}.`);
-    } catch (e) { setMsg('Export failed: ' + (e?.message || e)); }
+      const vals = { count: total.toLocaleString(), size: fmtMB(bytes), file: where };
+      setMsg(where
+        ? t.n('Backed up {count} record ({size}) to {file}.', 'Backed up {count} records ({size}) to {file}.', total, vals)
+        : t.n('Backed up {count} record ({size}) to your downloads.', 'Backed up {count} records ({size}) to your downloads.', total, vals));
+    } catch (e) { setMsg(t('Export failed: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
   // A streamable backup is restored straight from the file (never read into one string); an older
@@ -223,58 +231,58 @@ export default function DataDialog({ onClose }) {
     if (!f) return;
     const head = await f.slice(0, 4 << 20).text();
     if (isStreamableHeader(head.split('\n')[0])) {
-      setBusy(true); setMsg(`Reading ${f.name}…`); setImportText(''); setPending(null);
+      setBusy(true); setMsg(t('Reading {file}…', { file: f.name })); setImportText(''); setPending(null);
       try {
         const counts = {};
         let total = 0;
         await readBackup(blobLines(f), { onRecord: async (store) => { counts[store] = (counts[store] || 0) + 1; total++; } });
         setImportFile(f);
         setPending({ total, counts });
-        setMsg(`Loaded ${f.name} (${fmtMB(f.size)}) — confirm to restore.${counts.audiobook == null ? ' It has no audiobook audio, so the audio on this device is kept.' : ''}`);
-      } catch (e) { setMsg('That file is not a readable Tachyread backup: ' + (e?.message || e)); }
+        setMsg(t('Loaded {file} ({size}) — confirm to restore.', { file: f.name, size: fmtMB(f.size) }) + (counts.audiobook == null ? ' ' + t('It has no audiobook audio, so the audio on this device is kept.') : ''));
+      } catch (e) { setMsg(t('That file is not a readable Tachyread backup: {error}', { error: e?.message || e })); }
       setBusy(false);
       return;
     }
     setImportFile(null);
     setImportText(await readFileText(f));
-    setMsg(`Loaded ${f.name} — review, then Restore.`);
+    setMsg(t('Loaded {file} — review, then Restore.', { file: f.name }));
   }
   function stageImport() {
     let bundle;
-    try { bundle = JSON.parse(importText); } catch { setMsg('That is not valid backup JSON.'); return; }
-    if (bundle.app !== 'tachyread') { setMsg('That JSON is not a Tachyread backup.'); return; }
+    try { bundle = JSON.parse(importText); } catch { setMsg(t('That is not valid backup JSON.')); return; }
+    if (bundle.app !== 'tachyread') { setMsg(t('That JSON is not a Tachyread backup.')); return; }
     setPending(exportSummary(bundle));
     setMsg('');
   }
   async function confirmRestore() {
-    setBusy(true); setMsg('Restoring…');
+    setBusy(true); setMsg(t('Restoring…'));
     try {
       const r = importFile
-        ? await importBackupStream(blobLines(importFile), { replace: true, onProgress: (n) => setMsg(`Restoring… ${n.toLocaleString()} records`) })
+        ? await importBackupStream(blobLines(importFile), { replace: true, onProgress: (n) => setMsg(t.n('Restoring… {count} record', 'Restoring… {count} records', n, { count: n.toLocaleString() })) })
         : await importAllData(JSON.parse(importText), { replace: true });
-      setMsg(`Restored ${r.written} records — reloading…`);
+      setMsg(t.n('Restored {n} record — reloading…', 'Restored {n} records — reloading…', r.written));
       setTimeout(() => window.location.reload(), 1000);
-    } catch (e) { setBusy(false); setPending(null); setMsg('Import failed: ' + (e?.message || e)); }
+    } catch (e) { setBusy(false); setPending(null); setMsg(t('Import failed: {error}', { error: e?.message || e })); }
   }
 
   // ── maintenance ──
-  async function clearOne(store, label) {
+  async function clearOne(store, done) {
     setBusy(true);
-    try { await clearStore(store); await refreshCounts(); setMsg(`Cleared ${label}.`); }
-    catch (e) { setMsg('Could not clear: ' + (e?.message || e)); }
+    try { await clearStore(store); await refreshCounts(); setMsg(done); }
+    catch (e) { setMsg(t('Could not clear: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
   async function wipeEverything() {
-    setBusy(true); setMsg('Deleting all data…');
-    try { await wipeAllData(); setMsg('All data deleted — reloading…'); setTimeout(() => window.location.reload(), 900); }
-    catch (e) { setBusy(false); setMsg('Wipe failed: ' + (e?.message || e)); }
+    setBusy(true); setMsg(t('Deleting all data…'));
+    try { await wipeAllData(); setMsg(t('All data deleted — reloading…')); setTimeout(() => window.location.reload(), 900); }
+    catch (e) { setBusy(false); setMsg(t('Wipe failed: {error}', { error: e?.message || e })); }
   }
 
   return (
-    <Dialog title="Data management" onClose={onClose} width={660} buttons={<button onClick={onClose}>Close</button>}>
+    <Dialog title={t('Data management')} onClose={onClose} width={660} buttons={<button onClick={onClose}>{t('Close')}</button>}>
       <div className="rh-tabs">
-        {TABS.map((t) => (
-          <button key={t.id} className={`rh-tab${tab === t.id ? ' on' : ''}`} onClick={() => { setTab(t.id); setWipeArm(false); }}>{t.label}</button>
+        {TABS.map((tb) => (
+          <button key={tb.id} className={`rh-tab${tab === tb.id ? ' on' : ''}`} onClick={() => { setTab(tb.id); setWipeArm(false); }}>{tb.label}</button>
         ))}
       </div>
       {msg && <p className="settings-note" style={{ marginTop: 0 }}>{msg}</p>}
@@ -282,103 +290,100 @@ export default function DataDialog({ onClose }) {
       {tab === 'overview' && (
         <>
           <p className="settings-note" style={{ marginTop: 0 }}>
-            Everything Tachyread stores lives in this browser, on this device. Below is what's here now.
+            {t('Everything Tachyread stores lives in this browser, on this device.')}{' '}
+            {t('Below is what’s here now.')}
           </p>
           <table className="history-table">
-            <thead><tr><th>Stored data</th><th style={{ textAlign: 'right' }}>Records</th></tr></thead>
+            <thead><tr><th>{t('Stored data')}</th><th style={{ textAlign: 'right' }}>{t('Records')}</th></tr></thead>
             <tbody>
               {STORE_ORDER.map((k) => (
                 <tr key={k}><td>{STORE_LABELS[k] || k}</td><td style={{ textAlign: 'right' }}>{counts ? (counts[k] || 0).toLocaleString() : '…'}</td></tr>
               ))}
-              <tr><td><strong>Total</strong></td><td style={{ textAlign: 'right' }}><strong>{counts ? totalRecords.toLocaleString() : '…'}</strong></td></tr>
+              <tr><td><strong>{t('Total')}</strong></td><td style={{ textAlign: 'right' }}><strong>{counts ? totalRecords.toLocaleString() : '…'}</strong></td></tr>
             </tbody>
           </table>
           <div className="data-row">
-            <button className="toggle-on" onClick={cloudBackup} disabled={busy || !providerOk} title={providerOk ? '' : 'Set up a sync target on the Cloud sync tab'}>☁ Back up now</button>
-            <button onClick={() => { setTab('backup'); doExport(); }} disabled={busy}>⬇ Export to file</button>
-            {sync.lastSync > 0 && <span className="settings-note" style={{ margin: 0 }}>Last cloud sync: {fmtDateTime(sync.lastSync)}</span>}
+            <button className="toggle-on" onClick={cloudBackup} disabled={busy || !providerOk} title={providerOk ? '' : t('Set up a sync target on the Cloud sync tab')}>☁ {t('Back up now')}</button>
+            <button onClick={() => { setTab('backup'); doExport(); }} disabled={busy}>⬇ {t('Export to file')}</button>
+            {sync.lastSync > 0 && <span className="settings-note" style={{ margin: 0 }}>{t('Last cloud sync: {date}', { date: fmtDateTime(sync.lastSync) })}</span>}
           </div>
         </>
       )}
 
       {tab === 'backup' && (
         <>
-          <div className="field-section">Export a backup</div>
+          <div className="field-section">{t('Export a backup')}</div>
           <p className="settings-note">
-            Saves <strong>everything</strong> — settings, library and reading progress, grabbed/OCR pages,
-            typing &amp; focus history, and audiobook clips — to one JSON file. Nothing leaves your device.
+            {t('Saves everything — settings, library and reading progress, grabbed/OCR pages, typing & focus history, and audiobook clips — to one JSON file.')}{' '}
+            {t('Nothing leaves your device.')}
           </p>
           <div className="data-row">
-            <button className="toggle-on" onClick={doExport} disabled={busy}>⬇ Export to file</button>
-            <label className="settings-note" style={{ margin: 0 }} title="Audiobook clips are usually most of a backup's size. Without them the file is small; restoring it leaves the audio on the device you restore to untouched.">
-              <input type="checkbox" checked={withAudio} onChange={(e) => setWithAudio(e.target.checked)} disabled={busy} /> Include audiobook audio
+            <button className="toggle-on" onClick={doExport} disabled={busy}>⬇ {t('Export to file')}</button>
+            <label className="settings-note" style={{ margin: 0 }} title={t('Audiobook clips are usually most of a backup’s size. Without them the file is small; restoring it leaves the audio on the device you restore to untouched.')}>
+              <input type="checkbox" checked={withAudio} onChange={(e) => setWithAudio(e.target.checked)} disabled={busy} /> {t('Include audiobook audio')}
             </label>
           </div>
           {exportInfo && (
-            <p className="settings-note data-sizes" title="Approximate size of each part of the backup">
-              What's in it: {Object.entries(exportInfo.sizes).filter(([, x]) => x.count).sort((a, b) => b[1].bytes - a[1].bytes)
-                .map(([k, x]) => `${STORE_LABELS[k] || k} ${fmtMB(x.bytes)} (${x.count.toLocaleString()})`).join(' · ')}
+            <p className="settings-note data-sizes" title={t('Approximate size of each part of the backup')}>
+              {t('What’s in it: {list}', { list: Object.entries(exportInfo.sizes).filter(([, x]) => x.count).sort((a, b) => b[1].bytes - a[1].bytes)
+                .map(([k, x]) => `${STORE_LABELS[k] || k} ${fmtMB(x.bytes)} (${x.count.toLocaleString()})`).join(' · ') })}
             </p>
           )}
 
-          <div className="field-section">Restore from a backup</div>
+          <div className="field-section">{t('Restore from a backup')}</div>
           <p className="settings-note" style={{ color: 'var(--danger, #c0392b)' }}>
-            Restoring <strong>replaces</strong> all current Tachyread data on this device, then reloads.
+            {t('Restoring replaces all current Tachyread data on this device, then reloads.')}
           </p>
           <div className="data-row">
-            <button onClick={loadFromFile} disabled={busy}>📂 Load from file…</button>
+            <button onClick={loadFromFile} disabled={busy}>📂 {t('Load from file…')}</button>
             {!pending ? (
-              <button onClick={stageImport} disabled={busy || !importText.trim()}>Restore (replace all)…</button>
+              <button onClick={stageImport} disabled={busy || !importText.trim()}>{t('Restore (replace all)…')}</button>
             ) : (
               <>
-                <button className="grab-trash" onClick={confirmRestore} disabled={busy}>⚠ Confirm restore — replace {pending.total} records</button>
-                <button onClick={() => { setPending(null); setImportFile(null); }} disabled={busy}>Cancel</button>
+                <button className="grab-trash" onClick={confirmRestore} disabled={busy}>⚠ {t.n('Confirm restore — replace {n} record', 'Confirm restore — replace {n} records', pending.total)}</button>
+                <button onClick={() => { setPending(null); setImportFile(null); }} disabled={busy}>{t('Cancel')}</button>
               </>
             )}
           </div>
-          {!importFile && <textarea className="data-json" placeholder="…or paste backup JSON here" value={importText} onChange={(e) => { setImportText(e.target.value); setPending(null); }} rows={5} />}
+          {!importFile && <textarea className="data-json" placeholder={t('…or paste backup JSON here')} value={importText} onChange={(e) => { setImportText(e.target.value); setPending(null); }} rows={5} />}
         </>
       )}
 
       {tab === 'cloud' && (
         <>
-          <div className="field-section">Cloud sync (beta)</div>
+          <div className="field-section">{t('Cloud sync (beta)')}</div>
           <p className="settings-note">
-            Syncs your <strong>reading progress and tab settings</strong> across your devices — reading
-            position per file (keyed by content), your Default Tab Settings, and per-file display — plus
-            the Trackyread library. Your <strong>application &amp; biometric settings are device-specific</strong>
-            and stay put (they’re tuned to each device’s screen, camera and habits). Tabs also show a small 🖥
-            badge when the same file is open on another synced device (as of the last sync).
-            <strong> Book files, document text, grabbed pages and audiobook audio never leave this device</strong>
-            — there is no cloud copy of them. Nothing goes through our servers: it's your browser talking to
-            your own Google Drive (a private app-data folder) or to the Tachyread folder, which you put inside
-            a folder your Drive / Dropbox / OneDrive desktop app already syncs.
+            {t('Syncs your reading progress and tab settings across your devices — reading position per file (keyed by content), your Default Tab Settings, and per-file display — plus the Trackyread library.')}{' '}
+            {t('Your application & biometric settings are device-specific and stay put (they’re tuned to each device’s screen, camera and habits).')}{' '}
+            {t('Tabs also show a small 🖥 badge when the same file is open on another synced device (as of the last sync).')}{' '}
+            <strong>{t('Book files, document text, grabbed pages and audiobook audio never leave this device — there is no cloud copy of them.')}</strong>{' '}
+            {t('Nothing goes through our servers: it’s your browser talking to your own Google Drive (a private app-data folder) or to the Tachyread folder, which you put inside a folder your Drive / Dropbox / OneDrive desktop app already syncs.')}
           </p>
           <SyncStatus sync={sync} folderName={folderName} />
           <div className="field-row">
-            <label>This device's name</label>
+            <label>{t('This device’s name')}</label>
             <div>
-              <input type="text" value={state.global.deviceName || ''} onChange={(e) => updateGlobal({ deviceName: e.target.value })} placeholder="e.g. Laptop, Phone" style={{ width: 200 }} />
-              <span className="settings-note" style={{ margin: '0 0 0 8px' }}>Shown to your other devices on grabs made here.</span>
+              <input type="text" value={state.global.deviceName || ''} onChange={(e) => updateGlobal({ deviceName: e.target.value })} placeholder={t('e.g. Laptop, Phone')} style={{ width: 200 }} />
+              <span className="settings-note" style={{ margin: '0 0 0 8px' }}>{t('Shown to your other devices on grabs made here.')}</span>
             </div>
           </div>
           <div className="field-row">
-            <label>Sync target</label>
+            <label>{t('Sync target')}</label>
             <div>
               <select value={sync.provider} onChange={(e) => patchSync({ provider: e.target.value })}>
                 {SYNC_PROVIDERS.map((p) => (
-                  <option key={p.id} value={p.id} disabled={!p.supported()}>{p.label}{p.supported() ? '' : ' — unsupported here'}</option>
+                  <option key={p.id} value={p.id} disabled={!p.supported()}>{p.supported() ? p.label : t('{name} — unsupported here', { name: p.label })}</option>
                 ))}
               </select>
             </div>
           </div>
           {sync.provider === 'localFolder' && folderSupported() && (
             <div className="field-row">
-              <label>Tachyread folder</label>
+              <label>{t('Tachyread folder')}</label>
               <div className="data-row" style={{ margin: 0 }}>
-                <button onClick={chooseFolder} disabled={busy}>{folderName ? `📁 ${folderName}` : '📁 Choose folder…'}</button>
-                {folderName && <button onClick={forgetFolder} disabled={busy} title="Forget the folder on this device (nothing on disk is deleted)">Forget</button>}
-                <span className="settings-note" style={{ margin: 0 }}>One folder for everything Tachyread writes to disk: <code>sync/</code>, <code>cowork/</code> and <code>speech/</code> inside it.</span>
+                <button onClick={chooseFolder} disabled={busy}>{folderName ? `📁 ${folderName}` : `📁 ${t('Choose folder…')}`}</button>
+                {folderName && <button onClick={forgetFolder} disabled={busy} title={t('Forget the folder on this device (nothing on disk is deleted)')}>{t('Forget')}</button>}
+                <span className="settings-note" style={{ margin: 0 }}>{t('One folder for everything Tachyread writes to disk: {sync}, {cowork} and {speech} inside it.', { sync: 'sync/', cowork: 'cowork/', speech: 'speech/' })}</span>
               </div>
             </div>
           )}
@@ -388,89 +393,87 @@ export default function DataDialog({ onClose }) {
                 ? <img className="gsync-pfp" src={account.picture} alt="" referrerPolicy="no-referrer" />
                 : <span className="gsync-pfp gsync-pfp-fallback">{(account.name || '?').charAt(0).toUpperCase()}</span>}
               <div className="gsync-id">
-                <div>Signed in as <strong>{account.name}</strong></div>
+                <div>{t('Signed in as {name}', { name: account.name })}</div>
                 {account.email && <div className="settings-note" style={{ margin: 0 }}>{account.email}</div>}
               </div>
-              <button onClick={signOutGoogle} disabled={busy}>Sign out</button>
+              <button onClick={signOutGoogle} disabled={busy}>{t('Sign out')}</button>
             </div>
           )}
           {sync.provider === 'googleDrive' && !account && driveOriginAllowed() && (
             <div className="data-row">
-              <button className="toggle-on" onClick={connectGoogle} disabled={busy || !providerOk}> Sign in with Google</button>
-              <span className="settings-note" style={{ margin: 0 }}>Connect your Google account, then Sync now. Data goes to a private Drive app-data folder only this app can see.</span>
+              <button className="toggle-on" onClick={connectGoogle} disabled={busy || !providerOk}> {t('Sign in with Google')}</button>
+              <span className="settings-note" style={{ margin: 0 }}>{t('Connect your Google account, then Sync now.')} {t('Data goes to a private Drive app-data folder only this app can see.')}</span>
             </div>
           )}
           {sync.provider === 'googleDrive' && (
             driveOriginAllowed() ? null : (
               <>
                 <div className="field-row">
-                  <label>Google OAuth client ID</label>
+                  <label>{t('Google OAuth client ID')}</label>
                   <div>
                     <input type="text" value={sync.driveClientId} onChange={(e) => patchSync({ driveClientId: e.target.value.trim() })} placeholder="xxxxx.apps.googleusercontent.com" style={{ width: '100%' }} />
                   </div>
                 </div>
                 <p className="settings-note">
-                  This isn't the authorized deployment, so Drive needs your own OAuth client ID (kept on this device):
-                  in Google Cloud Console create an <em>OAuth client ID → Web application</em>, add this page's origin to
-                  the authorized JavaScript origins, enable the <em>Drive API</em>, and paste the client ID.
+                  {t('This isn’t the authorized deployment, so Drive needs your own OAuth client ID (kept on this device): in Google Cloud Console create an OAuth client ID → Web application, add this page’s origin to the authorized JavaScript origins, enable the Drive API, and paste the client ID.')}
                 </p>
               </>
             )
           )}
           <div className="data-row">
-            <button className="toggle-on" onClick={cloudSyncNow} disabled={busy || !providerOk}>🔄 Sync now</button>
-            <button onClick={cloudBackup} disabled={busy || !providerOk}>☁ Back up only</button>
-            <button onClick={cloudRestore} disabled={busy || !providerOk}>⬇ Restore from sync</button>
+            <button className="toggle-on" onClick={cloudSyncNow} disabled={busy || !providerOk}>🔄 {t('Sync now')}</button>
+            <button onClick={cloudBackup} disabled={busy || !providerOk}>☁ {t('Back up only')}</button>
+            <button onClick={cloudRestore} disabled={busy || !providerOk}>⬇ {t('Restore from sync')}</button>
             {!providerOk && providerReason && providerReason.reason && <span className="settings-note" style={{ margin: 0 }}>{providerReason.reason}</span>}
-            {!providerOk && provider && !provider.supported() && <span className="settings-note" style={{ margin: 0 }}>Needs a Chromium browser.</span>}
-            {sync.lastSync > 0 && <span className="settings-note" style={{ margin: 0 }}>Last sync: {fmtDateTime(sync.lastSync)}</span>}
+            {!providerOk && provider && !provider.supported() && <span className="settings-note" style={{ margin: 0 }}>{t('Needs a Chromium browser.')}</span>}
+            {sync.lastSync > 0 && <span className="settings-note" style={{ margin: 0 }}>{t('Last sync: {date}', { date: fmtDateTime(sync.lastSync) })}</span>}
           </div>
           <div className="data-row">
             <label className="inline-check">
-              <input type="checkbox" checked={!!sync.auto} onChange={(e) => patchSync({ auto: e.target.checked })} /> Keep synced automatically
+              <input type="checkbox" checked={!!sync.auto} onChange={(e) => patchSync({ auto: e.target.checked })} /> {t('Keep synced automatically')}
             </label>
-            <span className="settings-note" style={{ margin: 0 }}>Pull on launch and push shortly after each change (when the target is silently ready — never pops a sign-in on a timer).</span>
+            <span className="settings-note" style={{ margin: 0 }}>{t('Pull on launch and push shortly after each change (when the target is silently ready — never pops a sign-in on a timer).')}</span>
           </div>
         </>
       )}
 
       {tab === 'maintenance' && (
         <>
-          <div className="field-section">Organize</div>
+          <div className="field-section">{t('Organize')}</div>
           <div className="data-row">
-            <button onClick={() => openDialog({ kind: 'book-groups' })}>📚 Book groups…</button>
-            <span className="settings-note" style={{ margin: 0 }}>Group editions of the same book so progress syncs across them.</span>
+            <button onClick={() => openDialog({ kind: 'book-groups' })}>📚 {t('Book groups…')}</button>
+            <span className="settings-note" style={{ margin: 0 }}>{t('Group editions of the same book so progress syncs across them.')}</span>
           </div>
 
-          <div className="field-section">Audiobook clips</div>
+          <div className="field-section">{t('Audiobook clips')}</div>
           <div className="data-row">
-            <button onClick={compressClips} disabled={busy || !(counts && counts.audiobook)}>🗜 Compress audiobook clips</button>
-            <span className="settings-note" style={{ margin: 0 }}>Re-encodes WAV clips (Piper, Kokoro, mic takes) to Opus — 15–30× smaller, same playback. New clips are compressed as they are made.</span>
+            <button onClick={compressClips} disabled={busy || !(counts && counts.audiobook)}>🗜 {t('Compress audiobook clips')}</button>
+            <span className="settings-note" style={{ margin: 0 }}>{t('Re-encodes WAV clips (Piper, Kokoro, mic takes) to Opus — 15–30× smaller, same playback.')} {t('New clips are compressed as they are made.')}</span>
           </div>
 
-          <div className="field-section">Clear specific data</div>
-          <p className="settings-note">Free up space or reset a feature without touching the rest. This can't be undone.</p>
+          <div className="field-section">{t('Clear specific data')}</div>
+          <p className="settings-note">{t('Free up space or reset a feature without touching the rest.')} {t('This can’t be undone.')}</p>
           {CLEARABLE.map((c) => (
             <div key={c.store} className="data-row">
-              <button onClick={() => clearOne(c.store, c.label)} disabled={busy || !(counts && counts[c.store])}>Clear {c.label}</button>
-              <span className="settings-note" style={{ margin: 0 }}>{counts ? `${(counts[c.store] || 0).toLocaleString()} record(s)` : ''}</span>
+              <button onClick={() => clearOne(c.store, c.done)} disabled={busy || !(counts && counts[c.store])}>{c.label}</button>
+              <span className="settings-note" style={{ margin: 0 }}>{counts ? t.n('{count} record', '{count} records', counts[c.store] || 0, { count: (counts[c.store] || 0).toLocaleString() }) : ''}</span>
             </div>
           ))}
 
-          <div className="field-section" style={{ color: '#c0392b' }}>Danger zone</div>
+          <div className="field-section" style={{ color: '#c0392b' }}>{t('Danger zone')}</div>
           <p className="settings-note" style={{ color: 'var(--danger, #c0392b)' }}>
-            Deletes <strong>all</strong> Tachyread data on this device — library, progress, history, grabs,
-            settings — then reloads. Export a backup first if you might want it back. Only Tachyread’s own
-            data goes: the other apps on this site keep theirs. Your synced copy (Google Drive app folder
-            or the Tachyread folder) is <strong>not</strong> touched — remove it there if you want it gone.
+            {t('Deletes all Tachyread data on this device — library, progress, history, grabs, settings — then reloads.')}{' '}
+            {t('Export a backup first if you might want it back.')}{' '}
+            {t('Only Tachyread’s own data goes: the other apps on this site keep theirs.')}{' '}
+            <strong>{t('Your synced copy (Google Drive app folder or the Tachyread folder) is not touched — remove it there if you want it gone.')}</strong>
           </p>
           <div className="data-row">
             {!wipeArm ? (
-              <button className="grab-trash" onClick={() => setWipeArm(true)} disabled={busy}>🗑 Delete everything…</button>
+              <button className="grab-trash" onClick={() => setWipeArm(true)} disabled={busy}>🗑 {t('Delete everything…')}</button>
             ) : (
               <>
-                <button className="grab-trash" onClick={wipeEverything} disabled={busy}>⚠ Confirm — delete everything ({totalRecords.toLocaleString()} records)</button>
-                <button onClick={() => setWipeArm(false)} disabled={busy}>Cancel</button>
+                <button className="grab-trash" onClick={wipeEverything} disabled={busy}>⚠ {t.n('Confirm — delete everything ({count} record)', 'Confirm — delete everything ({count} records)', totalRecords, { count: totalRecords.toLocaleString() })}</button>
+                <button onClick={() => setWipeArm(false)} disabled={busy}>{t('Cancel')}</button>
               </>
             )}
           </div>
@@ -479,36 +482,35 @@ export default function DataDialog({ onClose }) {
 
       {tab === 'log' && (
         <>
-          <div className="field-section">Diagnostic log</div>
+          <div className="field-section">{t('Diagnostic log')}</div>
           <p className="settings-note">
-            A local, capped record of errors and notable events (audiobook generation failures,
-            translation errors, …) — the place to look when something “fails for unclear reasons”.
-            Never leaves this device.
+            {t('A local, capped record of errors and notable events (audiobook generation failures, translation errors, …) — the place to look when something “fails for unclear reasons”.')}{' '}
+            {t('Never leaves this device.')}
           </p>
           <div className="data-row">
             <button
               disabled={!logEntries?.length}
               onClick={async () => {
                 const txt = [...(logEntries || [])].reverse().map((e) => `${new Date(e.ts).toISOString()} [${e.tag}] ${e.message}`).join('\n');
-                await saveBlobToFile(new Blob([txt], { type: 'text/plain' }), 'tachyread-log.txt', [{ description: 'Log', accept: { 'text/plain': ['.txt'] } }]);
+                await saveBlobToFile(new Blob([txt], { type: 'text/plain' }), 'tachyread-log.txt', [{ description: t('Log'), accept: { 'text/plain': ['.txt'] } }]);
               }}
-            >⬇ Download .txt</button>
-            <button className="grab-trash" disabled={!logEntries?.length} onClick={async () => { await clearAppLog(); setLogEntries([]); }}>🗑 Clear log</button>
-            <span className="settings-note" style={{ margin: 0 }}>{logEntries ? `${logEntries.length} entr${logEntries.length === 1 ? 'y' : 'ies'} (newest first, capped at 500)` : 'Loading…'}</span>
+            >⬇ {t('Download {ext}', { ext: '.txt' })}</button>
+            <button className="grab-trash" disabled={!logEntries?.length} onClick={async () => { await clearAppLog(); setLogEntries([]); }}>🗑 {t('Clear log')}</button>
+            <span className="settings-note" style={{ margin: 0 }}>{logEntries ? t.n('{n} entry (newest first, capped at {max})', '{n} entries (newest first, capped at {max})', logEntries.length, { max: 500 }) : t('Loading…')}</span>
           </div>
-          <div className="field-section">Speech log</div>
+          <div className="field-section">{t('Speech log')}</div>
           <p className="settings-note">
-            One compact record per reading-aloud session: words advanced, how exactly they were read,
-            average voice scores and a per-minute trend (no audio, no transcripts). Field meanings are in
-            the file’s <code>fields</code> entry. Kept on this device (last 2000 sessions) and in full backups.
+            {t('One compact record per reading-aloud session: words advanced, how exactly they were read, average voice scores and a per-minute trend (no audio, no transcripts).')}{' '}
+            {t('Field meanings are in the file’s {field} entry.', { field: 'fields' })}{' '}
+            {t('Kept on this device (last {max} sessions) and in full backups.', { max: 2000 })}
           </p>
           <div className="data-row">
             <button onClick={async () => {
               const sessions = await getSpeechLog();
-              if (!sessions.length) { setMsg('No reading-aloud sessions logged yet.'); return; }
+              if (!sessions.length) { setMsg(t('No reading-aloud sessions logged yet.')); return; }
               const body = JSON.stringify({ app: 'tachyread', kind: 'speechLog', v: 1, fields: SPEECH_LOG_FIELDS, sessions });
               await saveBlobToFile(new Blob([body], { type: 'application/json' }), 'tachyread-speech-log.json', [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]);
-            }}>⬇ Download speech log (.json)</button>
+            }}>⬇ {t('Download speech log ({ext})', { ext: '.json' })}</button>
           </div>
           <div className="app-log">
             {(logEntries || []).map((e, i) => (
@@ -518,7 +520,7 @@ export default function DataDialog({ onClose }) {
                 <span className="app-log-msg">{e.message}</span>
               </div>
             ))}
-            {logEntries && logEntries.length === 0 && <p className="settings-note">Log is empty — nothing has gone wrong lately. 🎉</p>}
+            {logEntries && logEntries.length === 0 && <p className="settings-note">{t('Log is empty — nothing has gone wrong lately.')} 🎉</p>}
           </div>
         </>
       )}

@@ -4,17 +4,18 @@
 // entry list, so it works for auto-detected and hand-edited contents alike.
 //
 // Pure: entries in, facts out. The renderer picks which facts to show.
+import { t } from '../i18n.js';
 
 // [id, label] — the chooser's order is the order details render in.
 export const HEADING_DETAIL_ITEMS = [
-  ['words', '🔢 Word count'],
-  ['time', '⏱ Reading time'],
-  ['pct', '💯 Share of book'],
-  ['progress', '✅ Your progress'],
-  ['parent', '⬆️ Parent section'],
-  ['children', '🌿 Sub-sections'],
-  ['position', '📍 Position among siblings'],
-  ['depth', '🪜 Depth'],
+  ['words', t('🔢 Word count')],
+  ['time', t('⏱ Reading time')],
+  ['pct', t('💯 Share of book')],
+  ['progress', t('✅ Your progress')],
+  ['parent', t('⬆️ Parent section')],
+  ['children', t('🌿 Sub-sections')],
+  ['position', t('📍 Position among siblings')],
+  ['depth', t('🪜 Depth')],
 ];
 
 const clampLevel = (n) => Math.max(0, Number.isFinite(n) ? n : 0);

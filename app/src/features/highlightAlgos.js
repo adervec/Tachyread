@@ -12,31 +12,32 @@
 //              (Just & Carpenter 1980); marking starts anchors comprehension rhythm.
 // (Fixation-anchor bolding — "bionic" — already exists as the separate Bionic font toggle.)
 // Pure + node-testable; rendering lives in LinePane.
+import { t } from '../i18n.js';
 
 export const HIGHLIGHT_ALGOS = [
-  { id: 'off', label: 'Off', desc: '' },
+  { id: 'off', label: t('Off'), desc: '' },
   {
-    id: 'content', label: 'Content words (fade function words)',
-    desc: 'Skilled readers fixate only ~35% of function words (the, of, and…) vs ~85% of content words — fading them lets the eye ride the meaning-carrying words.',
+    id: 'content', label: t('Content words (fade function words)'),
+    desc: t('Skilled readers fixate only ~35% of function words (the, of, and…) vs ~85% of content words — fading them lets the eye ride the meaning-carrying words.'),
   },
   {
-    id: 'long', label: 'Long words',
-    desc: 'Fixation time grows with word length — flagging words of 9+ letters cues the upcoming processing load before the eye lands.',
+    id: 'long', label: t('Long words'),
+    desc: t('Fixation time grows with word length — flagging words of 9+ letters cues the upcoming processing load before the eye lands.'),
   },
   {
-    id: 'rare', label: 'Rare words',
-    desc: 'Word frequency is the strongest predictor of fixation duration — emphasizing uncommon words primes them in parafoveal preview.',
+    id: 'rare', label: t('Rare words'),
+    desc: t('Word frequency is the strongest predictor of fixation duration — emphasizing uncommon words primes them in parafoveal preview.'),
   },
   {
-    id: 'sentence', label: 'Sentence starts',
-    desc: 'Sentence onsets anchor comprehension and processing "wrap-up" clusters at boundaries — marking each start paces the reading rhythm.',
+    id: 'sentence', label: t('Sentence starts'),
+    desc: t('Sentence onsets anchor comprehension and processing "wrap-up" clusters at boundaries — marking each start paces the reading rhythm.'),
   },
 ];
 export const HIGHLIGHT_STYLES = [
-  { id: 'bold', label: 'Bold' },
-  { id: 'tint', label: 'Tint (colour)' },
-  { id: 'underline', label: 'Underline' },
-  { id: 'glow', label: 'Glow' },
+  { id: 'bold', label: t('Bold') },
+  { id: 'tint', label: t('Tint (colour)') },
+  { id: 'underline', label: t('Underline') },
+  { id: 'glow', label: t('Glow') },
 ];
 export const highlightAlgoById = (id) => HIGHLIGHT_ALGOS.find((a) => a.id === id) || HIGHLIGHT_ALGOS[0];
 

@@ -79,7 +79,7 @@
 .menu-dropdown {
   position: absolute;
   top: 100%;
-  left: 0;
+  inset-inline-start: 0; /* logical: opens under its menu in right-to-left languages too */
   background: var(--menu-bg);
   border: 1px solid var(--input-border);
   box-shadow: var(--shadow);
@@ -100,7 +100,7 @@
 /* Menu emoji. Fixed width so the labels line up in a column regardless of glyph width, and the
    label takes the slack so `justify-content: space-between` still pins the shortcut right. */
 .item-icon { flex: 0 0 auto; width: 1.35em; margin-right: 6px; text-align: center; font-size: 0.95em; line-height: 1; }
-.menu-dropdown .item .item-label { flex: 1 1 auto; text-align: left; }
+.menu-dropdown .item .item-label { flex: 1 1 auto; text-align: start; }
 .menu-bar > .menu-item .item-icon { width: auto; margin-right: 4px; }
 .menu-cat .item-icon { width: auto; margin-right: 5px; }
 .menu-drawer-section .item-icon { width: auto; margin-right: 5px; }

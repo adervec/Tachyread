@@ -6,12 +6,13 @@
 // This resolves the whole ancestor chain at a position; the bar's display mode decides how many of
 // them to draw. Pure — entries in, chain out.
 import { buildHeadingMeta } from './headingMeta.js';
+import { t } from '../i18n.js';
 
 export const SECTION_BAR_MODES = [
-  ['single', '▬ Single — innermost section only'],
-  ['parallel', '≡ Parallel — one bar per level, stacked'],
-  ['nested', '⧉ Nested — outer sections behind the inner one'],
-  ['cycle', '🔄 Cycling — one bar, rotating through the levels'],
+  ['single', t('▬ Single — innermost section only')],
+  ['parallel', t('≡ Parallel — one bar per level, stacked')],
+  ['nested', t('⧉ Nested — outer sections behind the inner one')],
+  ['cycle', t('🔄 Cycling — one bar, rotating through the levels')],
 ];
 export const DEFAULT_SECTION_BAR_MODE = 'single';
 

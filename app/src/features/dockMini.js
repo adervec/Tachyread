@@ -1,32 +1,33 @@
 // Which controls the COLLAPSED dock shows. The minimized dock is the bar you live with while
 // reading, and what belongs on it is personal: some readers page with it, some only want play and
 // a word count. Catalog + fold, mirroring the STATS_CHIP_ITEMS / focusWidgets idiom.
+import { t } from '../i18n.js';
 
 // [id, label, defaultOn] — order here is the order on the bar.
 export const DOCK_MINI_ITEMS = [
-  ['play', '▶️ Play / pause', true],
-  ['pageUp', '⏫ Page up', true],
-  ['prevLine', '⬆️ Previous line', true],
-  ['nextLine', '⬇️ Next line', true],
-  ['pageDown', '⏬ Page down', true],
-  ['prevWord', '⬅️ Previous word', false],
-  ['nextWord', '➡️ Next word', false],
-  ['prevPara', '🔼 Previous paragraph', false],
-  ['nextPara', '🔽 Next paragraph', false],
-  ['restart', '⏮️ Restart', false],
-  ['sourcePage', '📄 Source page back / forward', true],
-  ['jump', '📍 Jump to current word', true],
+  ['play', t('▶️ Play / pause'), true],
+  ['pageUp', t('⏫ Page up'), true],
+  ['prevLine', t('⬆️ Previous line'), true],
+  ['nextLine', t('⬇️ Next line'), true],
+  ['pageDown', t('⏬ Page down'), true],
+  ['prevWord', t('⬅️ Previous word'), false],
+  ['nextWord', t('➡️ Next word'), false],
+  ['prevPara', t('🔼 Previous paragraph'), false],
+  ['nextPara', t('🔽 Next paragraph'), false],
+  ['restart', t('⏮️ Restart'), false],
+  ['sourcePage', t('📄 Source page back / forward'), true],
+  ['jump', t('📍 Jump to current word'), true],
   // Toggles and shortcuts. All off by default — a saved bar shouldn't grow buttons on upgrade.
-  ['scroll', '📜 Scroll-to-read on / off', false],
-  ['readAloud', '🔊 Read aloud on / off', false],
-  ['focus', '🖥️ Focus mode on / off', false],
-  ['toc', '📑 Contents pane on / off', false],
-  ['wpm', '🐢🐇 Speed down / up', false],
-  ['find', '🔍 Find', false],
+  ['scroll', t('📜 Scroll-to-read on / off'), false],
+  ['readAloud', t('🔊 Read aloud on / off'), false],
+  ['focus', t('🖥️ Focus mode on / off'), false],
+  ['toc', t('📑 Contents pane on / off'), false],
+  ['wpm', t('🐢🐇 Speed down / up'), false],
+  ['find', t('🔍 Find'), false],
   // Readouts — these sit at the right end of the bar.
-  ['counter', '🔢 Word counter', true],
-  ['pct', '📊 Percent complete', false],
-  ['eta', '⏳ Time left at this speed', false],
+  ['counter', t('🔢 Word counter'), true],
+  ['pct', t('📊 Percent complete'), false],
+  ['eta', t('⏳ Time left at this speed'), false],
 ];
 
 const DEFAULTS = Object.fromEntries(DOCK_MINI_ITEMS.map(([id, , on]) => [id, on]));

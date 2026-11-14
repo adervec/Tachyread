@@ -2,6 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- House standard 22 (security): every app shares this origin, so scripts come only from here,
+         adervec.github.io (font.js) and Google sign-in; WebAssembly is allowed for the camera / OCR /
+         voice engines. connect-src stays open to any https host because readers enter their own
+         catalogue (OPDS), web-grab and translation-server addresses, and the AI / Drive APIs. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://adervec.github.io https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' data: https://adervec.github.io https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' data: blob: https: wss: ws://localhost:*; worker-src 'self' blob:; frame-src 'self' blob: https://accounts.google.com; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -17,6 +22,7 @@
     <meta name="app-name" content="Tachyread" />
     <meta name="app-version" content="%APP_BUILD%" />
     <meta name="app-whatsnew" content="%BASE_URL%whatsnew.json" />
+    <meta name="app-locales" content="%BASE_URL%locales/" />
     <meta name="app-license" content="MIT" />
     <meta name="app-source" content="https://github.com/adervec/Tachyread" />
     <meta name="app-data-note" content="Your library, progress and settings stay in this browser. Backup and sync go only to your own Google Drive app folder or a folder you pick." />

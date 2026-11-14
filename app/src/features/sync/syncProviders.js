@@ -15,6 +15,7 @@
 
 import { setFsHandle } from '../../state/storage.js';
 import { subDir, subDirLabel, pickRoot, forgetRoot, folderSupported } from '../tachyFolder.js';
+import { t } from '../../i18n.js';
 
 export const BACKUP_FILE_NAME = 'tachyread-backup.json';
 // Cloud sync carries reading PROGRESS only (see storage.exportProgressData) — a separate, smaller
@@ -29,7 +30,7 @@ export const LIBRARY_FILE_NAME = 'tachyread-library.json';
 // keeps working until the one folder is chosen.
 export const localFolderProvider = {
   id: 'localFolder',
-  label: 'Tachyread folder (in a Drive / Dropbox / OneDrive sync folder)',
+  label: t('Tachyread folder (in a Drive / Dropbox / OneDrive sync folder)'),
   supported: folderSupported,
   available: () => true,
   async connect(cfg, { silent = false } = {}) {
@@ -172,9 +173,9 @@ async function driveFindId(token, name) {
 
 export const googleDriveProvider = {
   id: 'googleDrive',
-  label: 'Google Drive (private app folder)',
+  label: t('Google Drive (private app folder)'),
   supported: () => true,
-  available: (cfg) => (driveClientId(cfg) ? true : { ok: false, reason: 'Google Drive sync isn’t enabled on this deployment — add your own OAuth client ID below.' }),
+  available: (cfg) => (driveClientId(cfg) ? true : { ok: false, reason: t('Google Drive sync isn’t enabled on this deployment — add your own OAuth client ID below.') }),
   // `silent` (used by auto-sync / boot) only reuses an existing grant — it never opens a popup.
   async connect(cfg, { silent = false } = {}) {
     const clientId = driveClientId(cfg);

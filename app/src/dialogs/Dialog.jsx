@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
+import { t } from '../i18n.js';
 
 export default function Dialog({ title, onClose, children, buttons, width = 520, dismissable = true }) {
   useEffect(() => {
     function onKey(e) {
       if (e.key !== 'Escape' || !dismissable) return;
       // First Escape inside a text field only leaves the field (see App's Escape handling).
-      const t = e.target;
-      if ((t.tagName === 'INPUT' && t.type !== 'checkbox' && t.type !== 'radio') || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') { t.blur(); return; }
+      const el = e.target;
+      if ((el.tagName === 'INPUT' && el.type !== 'checkbox' && el.type !== 'radio') || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') { el.blur(); return; }
       onClose?.();
     }
     document.addEventListener('keydown', onKey);
@@ -23,7 +24,7 @@ export default function Dialog({ title, onClose, children, buttons, width = 520,
       >
         <div className="dialog-title">
           <span>{title}</span>
-          <button className="close-x" onClick={onClose}>×</button>
+          <button className="close-x" onClick={onClose} aria-label={t('Close')}>×</button>
         </div>
         <div className="dialog-body">{children}</div>
         {buttons && <div className="dialog-buttons">{buttons}</div>}

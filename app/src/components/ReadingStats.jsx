@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { recordSpark, getSpark, sparkBuckets, sparkPoints, SPARK_MAX_WPM } from '../features/wpmSpark.js';
 import { fmtDate } from '../features/dateFmt.js';
+import { t } from '../i18n.js';
 
 function fmtDuration(ms) {
   const s = Math.floor((ms || 0) / 1000);
@@ -15,19 +16,19 @@ function fmtDuration(ms) {
 // Which blocks the stats chip can show. Defaults reproduce the original layout exactly; the rest
 // are opt-in extras (Tab Settings → Stats chip). Shared by the settings UI so the list stays in sync.
 export const STATS_CHIP_ITEMS = [
-  ['recent', 'Reading now (WPM)', true],
-  ['session', 'Session efficiency (WPM)', true],
-  ['coverage', 'Book read % + active time', true],
-  ['position', 'Word / line position + session words', true],
-  ['set', 'Set speed', true],
-  ['spark', 'WPM trendline (sparkline)', true],
-  ['eta', 'Time to finish (measured pace)', true], // the old timer chip lives here now
-  ['autostop', 'Auto-stop countdown (⏳)', true],  // …and its read-aloud countdown
-  ['lifetime', 'Lifetime WPM', false],
-  ['today', 'Words read today', false],
-  ['regressions', 'Regressions this session', false],
-  ['steadiness', 'Pace steadiness', false],
-  ['pct', 'Position %', false],
+  ['recent', t('Reading now (WPM)'), true],
+  ['session', t('Session efficiency (WPM)'), true],
+  ['coverage', t('Book read % + active time'), true],
+  ['position', t('Word / line position + session words'), true],
+  ['set', t('Set speed'), true],
+  ['spark', t('WPM trendline (sparkline)'), true],
+  ['eta', t('Time to finish (measured pace)'), true], // the old timer chip lives here now
+  ['autostop', t('Auto-stop countdown (⏳)'), true],  // …and its read-aloud countdown
+  ['lifetime', t('Lifetime WPM'), false],
+  ['today', t('Words read today'), false],
+  ['regressions', t('Regressions this session'), false],
+  ['steadiness', t('Pace steadiness'), false],
+  ['pct', t('Position %'), false],
 ];
 export function statsChipShow(settings) {
   const out = {};

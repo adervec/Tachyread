@@ -106,6 +106,8 @@ const SOUNDS = {
 };
 
 // Sound options for the picker (plus a "random each line" mode for variety).
+// Labels are translated where they are shown (SettingsDialog), since this module uses `t` for audio time.
+// i18n-keys: Soft tick | Shutter | Hi tick | Tap | Knock | Clave | Woodblock | Pluck | Ping | Pop | Bubble | Drip | Blip | Zap | Glass | Marimba | Chime | Sonar | Thud | Click | Hiss | Random each line
 export const LINE_SOUNDS = [
   ...Object.entries(SOUNDS).map(([id, s]) => ({ id, label: s.label })),
   { id: 'random', label: 'Random each line' },

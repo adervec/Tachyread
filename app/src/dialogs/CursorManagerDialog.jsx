@@ -12,8 +12,10 @@ const TRAIL_LABELS = { off: 'Off', fade: 'Fade (comet tail)', seismograph: 'Seis
 // A little SVG swatch of a cursor at a given colour/size, for the picker grid.
 function Swatch({ def, color, size }) {
   if (def.native) return <span className="cur-swatch cur-native" title={def.native}>{def.native === 'none' ? '∅' : '↖'}</span>;
-  const s = Math.min(28, size);
-  return <span className="cur-swatch" dangerouslySetInnerHTML={{ __html: `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">${def.svg(color, s)}</svg>` }} />;
+  const s = Math.min(28, Number(size) || 24);
+  // The colour can come from a restored backup (outside text): only a real hex colour reaches the markup.
+  const c = /^#[0-9a-f]{3,8}$/i.test(String(color)) ? color : '#000000';
+  return <span className="cur-swatch" dangerouslySetInnerHTML={{ __html: `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">${def.svg(c, s)}</svg>` }} />;
 }
 
 // Manage per-tab reading cursors: pick one for THIS tab (premades + your saved customs), build new

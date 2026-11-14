@@ -4,22 +4,23 @@
 //
 // Unlike the stats-chip picker (a keyed object, no order), this is an ordered array so the user can
 // REORDER widgets. Stored in global.focusPanels as [{id, on}]; [] means "use the catalog defaults".
+import { t } from '../i18n.js';
 
 // [id, label, defaultOn]. Order here is the initial/default order.
 export const FOCUS_WIDGET_ITEMS = [
-  ['faces', 'Avatars', true],
-  ['nowWpm', 'Reading now (WPM)', true],
-  ['coverage', 'Book read % + active time', true],
-  ['eta', 'Time to finish (measured pace)', true],
-  ['goal', 'Goal progress', true],
-  ['position', 'Word / line position', false],
-  ['sessionWpm', 'Session efficiency (WPM)', false],
-  ['lifetimeWpm', 'Lifetime WPM', false],
-  ['spark', 'WPM sparkline', false],
-  ['trendline', 'Pace trendline', false],
-  ['mode', 'Reading-mode indicator', false],
-  ['clock', 'Clock', false],
-  ['pct', 'Position %', false],
+  ['faces', t('Avatars'), true],
+  ['nowWpm', t('Reading now (WPM)'), true],
+  ['coverage', t('Book read % + active time'), true],
+  ['eta', t('Time to finish (measured pace)'), true],
+  ['goal', t('Goal progress'), true],
+  ['position', t('Word / line position'), false],
+  ['sessionWpm', t('Session efficiency (WPM)'), false],
+  ['lifetimeWpm', t('Lifetime WPM'), false],
+  ['spark', t('WPM sparkline'), false],
+  ['trendline', t('Pace trendline'), false],
+  ['mode', t('Reading-mode indicator'), false],
+  ['clock', t('Clock'), false],
+  ['pct', t('Position %'), false],
 ];
 
 const CATALOG_IDS = FOCUS_WIDGET_ITEMS.map((w) => w[0]);

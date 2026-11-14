@@ -9,6 +9,7 @@ import DeviceInfo from '../components/DeviceInfo.jsx';
 import { LANGUAGES } from '../state/languages.js';
 import { ANTHROPIC_MODELS } from '../features/anthropic.js';
 import { TRANSLATE_PROVIDERS, TARGET_LANGS, translateConfigured, translateText } from '../features/translateService.js';
+import { t } from '../i18n.js';
 
 // General application settings ONLY. Everything domain-specific lives on its own page under the
 // Settings / Typing / Audio menus: Camera & Gestures, Comfort & Breaks, Font Manager (incl. the
@@ -39,7 +40,7 @@ function FocusPanelPicker({ list, onChange }) {
           onDragLeave={() => setDropId((d) => (d === e.id ? null : d))}
           onDrop={(ev) => { ev.preventDefault(); if (dragId.current && dragId.current !== e.id) onChange(reorderPanels(list, dragId.current, e.id)); dragId.current = null; setDropId(null); }}
           onDragEnd={() => { dragId.current = null; setDropId(null); }}
-          title="Drag to reorder"
+          title={t('Drag to reorder')}
         >
           <span className="fpp-grip" aria-hidden="true">⠿</span>
           <label className="inline-check">
@@ -63,7 +64,7 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
   const [trTest, setTrTest] = useState('');
   const [trBusy, setTrBusy] = useState(false);
   async function testTranslate() {
-    setTrBusy(true); setTrTest('Translating “Hello, world”…');
+    setTrBusy(true); setTrTest(t('Translating “Hello, world”…'));
     try {
       const out = await translateText({ ...g, translateSource: g.language || 'en' }, 'Hello, world');
       setTrTest(`✓ “${out}”`);
@@ -73,10 +74,8 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
 
   function resetAll() {
     if (!window.confirm(
-      'Reset all application settings to their defaults?\n\n' +
-      'Your documents, recent files, vocabulary, book groups, sync setup, calibration and your ' +
-      'Default Tab Settings are kept — only app preferences (startup, guards, audio, etc.) ' +
-      'are restored.'
+      t('Reset all application settings to their defaults?') + '\n\n' +
+      t('Your documents, recent files, vocabulary, book groups, sync setup, calibration and your Default Tab Settings are kept — only app preferences (startup, guards, audio, etc.) are restored.')
     )) return;
     const next = resetGlobalToDefaults(g);
     setG(next);
@@ -85,21 +84,20 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
 
   return (
     <Dialog
-      title="Application Settings"
+      title={t('Application Settings')}
       onClose={onClose}
       width={560}
       buttons={
         <>
-          <button onClick={resetAll} title="Restore app preferences to defaults (your data is kept)">↺ Reset to defaults</button>
-          <button onClick={onClose}>Close</button>
+          <button onClick={resetAll} title={t('Restore app preferences to defaults (your data is kept)')}>↺ {t('Reset to defaults')}</button>
+          <button onClick={onClose}>{t('Close')}</button>
         </>
       }
     >
       <p className="settings-note">
-        General app-wide options, <strong>specific to this device</strong>. Camera &amp; Gestures,
-        Comfort &amp; Breaks and the Font Manager have their own pages under <strong>Settings</strong>;
-        typing and audio options live under <strong>Typing</strong> and <strong>Audio</strong>.
-        Per-document appearance is in <strong> Settings → Tab Settings</strong> (that one follows you).
+        {t('General app-wide options, specific to this device.')}{' '}
+        {t('Camera & Gestures, Comfort & Breaks and the Font Manager have their own pages under Settings; typing and audio options live under Typing and Audio.')}{' '}
+        {t('Per-document appearance is in Settings → Tab Settings (that one follows you).')}
       </p>
 
       <DeviceInfo />
@@ -112,47 +110,47 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         apply={(data) => { setG({ ...g, ...data }); onPatch(data); }}
       />
       <div className="dlg-cols">
-      <div className="field-section">Language</div>
-      <Field label="Document language">
+      <div className="field-section">{t('Language')}</div>
+      <Field label={t('Document language')}>
         <select
           value={g.language || 'en'}
           onChange={(e) => patch({ language: e.target.value })}
-          title="Language of the documents you read — drives OCR, dictation & read-along speech recognition, and TTS voice matching. The app UI stays English."
+          title={t('Language of the documents you read — drives OCR, dictation & read-along speech recognition, and TTS voice matching.')}
         >
           {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
         </select>
       </Field>
       <p className="settings-note">
-        Used by Grab Text (OCR), Dictation, read-along Speaking mode, and to pick a matching
-        read-aloud voice. The first Grab in a new language downloads its recognition data once.
+        {t('Used by Grab Text (OCR), Dictation, read-along Speaking mode, and to pick a matching read-aloud voice.')}{' '}
+        {t('The first Grab in a new language downloads its recognition data once.')}
       </p>
 
-      <div className="field-section">Startup &amp; mobile</div>
-      <Field label="Start on the landing page">
+      <div className="field-section">{t('Startup & mobile')}</div>
+      <Field label={t('Start on the landing page')}>
         <label className="inline-check">
           <input
             type="checkbox"
             checked={g.startOnLanding !== false}
             onChange={(e) => patch({ startOnLanding: e.target.checked })}
           />
-          Launch with no tab open, so a document isn’t shown until you pick its tab
+          {t('Launch with no tab open, so a document isn’t shown until you pick its tab')}
         </label>
       </Field>
-      <Field label="Load tabs on demand (small screens)">
+      <Field label={t('Load tabs on demand (small screens)')}>
         <label className="inline-check">
           <input
             type="checkbox"
             checked={g.lazyTabsMobile !== false}
             onChange={(e) => patch({ lazyTabsMobile: e.target.checked })}
           />
-          On phones, don’t parse a restored document until its tab is opened (saves memory)
+          {t('On phones, don’t parse a restored document until its tab is opened (saves memory)')}
         </label>
       </Field>
-      <Field label="Reduce blue light (bedtime)">
+      <Field label={t('Reduce blue light (bedtime)')}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <label className="inline-check">
             <input type="checkbox" checked={!!g.nightShift} onChange={(e) => patch({ nightShift: e.target.checked })} />
-            Warm the whole app to cut blue light for evening reading
+            {t('Warm the whole app to cut blue light for evening reading')}
           </label>
           {g.nightShift && (
             <>
@@ -160,48 +158,48 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
                 type="range" min={10} max={85} step={5}
                 value={Math.round((g.nightShiftStrength ?? 0.4) * 100)}
                 onChange={(e) => patch({ nightShiftStrength: Number(e.target.value) / 100 })}
-                title="How warm — deeper cuts more blue"
+                title={t('How warm — deeper cuts more blue')}
               />
               <span className="range-val">{Math.round((g.nightShiftStrength ?? 0.4) * 100)}%</span>
             </>
           )}
         </div>
       </Field>
-      <Field label="Show performance meter">
+      <Field label={t('Show performance meter')}>
         <label className="inline-check">
           <input
             type="checkbox"
             checked={g.showPerfMeter !== false}
             onChange={(e) => patch({ showPerfMeter: e.target.checked })}
           />
-          A small frame-rate / “working hard” readout in the status bar
+          {t('A small frame-rate / “working hard” readout in the status bar')}
         </label>
       </Field>
-      <Field label="App font & zoom">
+      <Field label={t('App font & zoom')}>
         {/* Shared house picker (font.js): app font, "Allow pinch-zoom", the running build and About. */}
         <app-font-picker label="App font (menus, dialogs, tabs without their own font)"></app-font-picker>
       </Field>
-      <Field label="Swipe gestures">
+      <Field label={t('Swipe gestures')}>
         <label className="inline-check">
           <input
             type="checkbox"
             checked={!!g.gestureControls}
             onChange={(e) => patch({ gestureControls: e.target.checked })}
           />
-          Horizontal swipe over the text steps lines (long swipe = paragraph)
+          {t('Horizontal swipe over the text steps lines (long swipe = paragraph)')}
         </label>
       </Field>
-      <Field label="Auto-minimize controls while reading">
+      <Field label={t('Auto-minimize controls while reading')}>
         <label className="inline-check">
           <input
             type="checkbox"
             checked={!!g.autoMinimizeControls}
             onChange={(e) => patch({ autoMinimizeControls: e.target.checked })}
           />
-          On phones, collapse the bottom controls during playback for more text room
+          {t('On phones, collapse the bottom controls during playback for more text room')}
         </label>
       </Field>
-      <Field label="Shake for full screen">
+      <Field label={t('Shake for full screen')}>
         <label className="inline-check">
           <input
             type="checkbox"
@@ -214,59 +212,57 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
               }
             }}
           />
-          On phones, a vigorous shake toggles full-screen reading (same as the ⛶ button)
+          {t('On phones, a vigorous shake toggles full-screen reading (same as the ⛶ button)')}
         </label>
       </Field>
-      <Field label="Multi-row tab strip">
+      <Field label={t('Multi-row tab strip')}>
         <label className="inline-check">
           <input
             type="checkbox"
             checked={!!g.tabBarMultiRow}
             onChange={(e) => patch({ tabBarMultiRow: e.target.checked })}
           />
-          Wrap open tabs onto multiple rows instead of squeezing them into one (also in a tab’s right-click menu)
+          {t('Wrap open tabs onto multiple rows instead of squeezing them into one (also in a tab’s right-click menu)')}
         </label>
       </Field>
 
-      <div className="field-section">Focus mode panels</div>
-      <Field label="Show widgets on other monitors">
+      <div className="field-section">{t('Focus mode panels')}</div>
+      <Field label={t('Show widgets on other monitors')}>
         <label className="inline-check">
           <input type="checkbox" checked={!!g.focusShowWidgets} onChange={(e) => patch({ focusShowWidgets: e.target.checked })} />
-          In Focus mode, fill the blacked-out other monitors with reading widgets instead of plain black
+          {t('In Focus mode, fill the blacked-out other monitors with reading widgets instead of plain black')}
         </label>
       </Field>
       {g.focusShowWidgets && (
-        <Field label="Panels — pick &amp; drag to reorder">
+        <Field label={t('Panels — pick & drag to reorder')}>
           <FocusPanelPicker list={focusPanelList(g.focusPanels)} onChange={(next) => patch({ focusPanels: next })} />
         </Field>
       )}
       <p className="settings-note">
-        Cover panels need Chrome or Edge with the “window management” permission, pop-ups allowed, and a
-        second monitor — otherwise this setup saves but nothing shows. It’s specific to this device.
+        {t('Cover panels need Chrome or Edge with the “window management” permission, pop-ups allowed, and a second monitor — otherwise this setup saves but nothing shows.')}{' '}
+        {t('It’s specific to this device.')}
       </p>
 
-      <Field label="Keep the screen awake">
+      <Field label={t('Keep the screen awake')}>
         <label className="inline-check">
           <input
             type="checkbox"
             checked={g.keepAwake !== false}
             onChange={(e) => patch({ keepAwake: e.target.checked })}
           />
-          Hold the screen on while playback, read-aloud or a narration recording is running
+          {t('Hold the screen on while playback, read-aloud or a narration recording is running')}
         </label>
       </Field>
       <p className="settings-note">
-        A phone&rsquo;s lock timer only resets when you touch the screen, and locking suspends the
-        browser&rsquo;s speech engine — so without this, read-aloud stops mid-sentence. The lock is
-        released the moment playback stops, and while it&rsquo;s held the screen still dims normally.
+        {t('A phone’s lock timer only resets when you touch the screen, and locking suspends the browser’s speech engine — so without this, read-aloud stops mid-sentence.')}{' '}
+        {t('The lock is released the moment playback stops, and while it’s held the screen still dims normally.')}
       </p>
 
-      <div className="field-section">Section progress bar</div>
+      <div className="field-section">{t('Section progress bar')}</div>
       <p className="settings-note">
-        Reading a subsection also puts you inside its chapter and its part, each a different
-        distance from its end — this picks how many of those the heading bar draws.
+        {t('Reading a subsection also puts you inside its chapter and its part, each a different distance from its end — this picks how many of those the heading bar draws.')}
       </p>
-      <Field label="Show">
+      <Field label={t('Show')}>
         <select
           value={g.sectionBarMode || 'single'}
           onChange={(e) => patch({ sectionBarMode: e.target.value })}
@@ -275,7 +271,7 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         </select>
       </Field>
       {(g.sectionBarMode || 'single') === 'cycle' && (
-        <Field label="Seconds per level">
+        <Field label={t('Seconds per level')}>
           <input
             type="number" min={2} max={60} step={1} style={{ width: 80 }}
             value={g.sectionBarCycleSecs ?? 6}
@@ -284,14 +280,13 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         </Field>
       )}
       <p className="settings-note" style={{ marginTop: 4 }}>
-        A document with only one heading level looks the same in every mode — there is nothing to
-        stack or rotate through.
+        {t('A document with only one heading level looks the same in every mode — there is nothing to stack or rotate through.')}
       </p>
 
-      <div className="field-section">Collapsed controls</div>
+      <div className="field-section">{t('Collapsed controls')}</div>
       <p className="settings-note">
-        What the minimized dock carries. It&rsquo;s the bar you actually live with while reading, so
-        keep the controls you use and drop the rest — an empty bar is a valid choice.
+        {t('What the minimized dock carries.')}{' '}
+        {t('It’s the bar you actually live with while reading, so keep the controls you use and drop the rest — an empty bar is a valid choice.')}
       </p>
       <div className="checkbox-group">
         {DOCK_MINI_ITEMS.map(([id, label]) => {
@@ -309,11 +304,11 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         })}
       </div>
       <p className="settings-note" style={{ marginTop: 4 }}>
-        The source-page pair only appears when the document has scanned pages and the Source view is open.
+        {t('The source-page pair only appears when the document has scanned pages and the Source view is open.')}
       </p>
 
-      <div className="field-section">Reading guard</div>
-      <Field label="Idle grace period (seconds)">
+      <div className="field-section">{t('Reading guard')}</div>
+      <Field label={t('Idle grace period (seconds)')}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
             type="number" min={5} max={600} step={5} style={{ width: 80 }}
@@ -321,45 +316,44 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
             onChange={(e) => patch({ idleGraceSecs: Math.max(5, Math.min(600, Number(e.target.value) || 60)) })}
           />
           <span className="settings-note" style={{ margin: 0 }}>
-            How long a pause still counts as reading. Longer gaps stop crediting active time — the AFK
-            guard, so a bathroom break can’t wreck your WPM — and the mode chip goes idle after it.
+            {t('How long a pause still counts as reading.')}{' '}
+            {t('Longer gaps stop crediting active time — the AFK guard, so a bathroom break can’t wreck your WPM — and the mode chip goes idle after it.')}
           </span>
         </div>
       </Field>
-      <Field label="Blur everything when idle">
-        <label className="inline-check" title="Once the grace period above elapses, blur the whole app behind a “paused” veil. Any key, click, scroll or tap brings it back.">
+      <Field label={t('Blur everything when idle')}>
+        <label className="inline-check" title={t('Once the grace period above elapses, blur the whole app behind a “paused” veil. Any key, click, scroll or tap brings it back.')}>
           <input
             type="checkbox"
             checked={!!g.blurWhenIdle}
             onChange={(e) => patch({ blurWhenIdle: e.target.checked })}
           />
           <span className="settings-note" style={{ margin: 0 }}>
-            Scroll reading has no playback to pause, so stepping away leaves the page readable while
-            the guard has already stopped crediting time. The veil makes that visible, so a distracted
-            stretch can’t masquerade as reading — and nothing resumes until you say so.
+            {t('Scroll reading has no playback to pause, so stepping away leaves the page readable while the guard has already stopped crediting time.')}{' '}
+            {t('The veil makes that visible, so a distracted stretch can’t masquerade as reading — and nothing resumes until you say so.')}
           </span>
         </label>
       </Field>
-      <Field label="Scroll-to-read break-out">
+      <Field label={t('Scroll-to-read break-out')}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <select
             value={String(g.scrollBreakWords ?? 600)}
             onChange={(e) => patch({ scrollBreakWords: Number(e.target.value) })}
           >
-            <option value="0">Never break out</option>
-            <option value="1200">Very tolerant (1200 words)</option>
-            <option value="600">Balanced (600 — default)</option>
-            <option value="300">Sensitive (300 words)</option>
-            <option value="150">Brittle (150 words)</option>
+            <option value="0">{t('Never break out')}</option>
+            <option value="1200">{t('Very tolerant ({n} words)', { n: 1200 })}</option>
+            <option value="600">{t('Balanced ({n} — default)', { n: 600 })}</option>
+            <option value="300">{t('Sensitive ({n} words)', { n: 300 })}</option>
+            <option value="150">{t('Brittle ({n} words)', { n: 150 })}</option>
           </select>
           <span className="settings-note" style={{ margin: 0 }}>
-            How eagerly a fast scroll switches scroll-to-read off. A brittle setting bails the moment
-            you fling; a tolerant one lets you scroll hard and keep reading. “Never” leaves it on no
-            matter how fast you go (the tracker still won’t credit impossibly fast reading as pace).
+            {t('How eagerly a fast scroll switches scroll-to-read off.')}{' '}
+            {t('A brittle setting bails the moment you fling; a tolerant one lets you scroll hard and keep reading.')}{' '}
+            {t('“Never” leaves it on no matter how fast you go (the tracker still won’t credit impossibly fast reading as pace).')}
           </span>
         </div>
       </Field>
-      <Field label="Scroll tick size (lines)">
+      <Field label={t('Scroll tick size (lines)')}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <input
             type="number" min={1} max={20} step={1} style={{ width: 70 }}
@@ -367,98 +361,96 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
             onChange={(e) => patch({ scrollTickLines: Math.max(1, Math.min(20, Number(e.target.value) || 2)) })}
           />
           <span className="settings-note" style={{ margin: 0 }}>
-            How far one “scroll tick” moves. Map the <b>Scroll up/down a tick</b> commands to any voice,
-            gesture, clap or eye/face gesture in Biometric Controls for hands-free scrolling.
+            {t('How far one “scroll tick” moves.')}{' '}
+            {t('Map the Scroll up/down a tick commands to any voice, gesture, clap or eye/face gesture in Biometric Controls for hands-free scrolling.')}
           </span>
         </div>
       </Field>
-      <Field label="Scroll-mode nav uses ticks">
+      <Field label={t('Scroll-mode nav uses ticks')}>
         <label className="inline-check">
           <input type="checkbox" checked={!!g.scrollNavTicks} onChange={(e) => patch({ scrollNavTicks: e.target.checked })} />
-          In scroll mode, make the nav buttons and biometric nav commands scroll by uniform ticks (like
-          the keyboard) instead of jumping by word/line/paragraph
+          {t('In scroll mode, make the nav buttons and biometric nav commands scroll by uniform ticks (like the keyboard) instead of jumping by word/line/paragraph')}
         </label>
       </Field>
-      <Field label="Pause when text isn’t visible">
+      <Field label={t('Pause when text isn’t visible')}>
         <label className="inline-check">
           <input
             type="checkbox"
             checked={g.pauseWhenTextHidden !== false}
             onChange={(e) => patch({ pauseWhenTextHidden: e.target.checked })}
           />
-          Pause fast reading if the text scrolls off-screen (read-aloud keeps going)
+          {t('Pause fast reading if the text scrolls off-screen (read-aloud keeps going)')}
         </label>
       </Field>
 
-      <div className="field-section">AI (Notes suite — optional)</div>
-      <Field label="Anthropic API key">
+      <div className="field-section">{t('AI (Notes suite — optional)')}</div>
+      <Field label={t('Anthropic API key')}>
         <input
           type="password"
           value={g.anthropicKey || ''}
           onChange={(e) => patch({ anthropicKey: e.target.value.trim() })}
-          placeholder="sk-ant-… (from console.anthropic.com)"
+          placeholder={t('sk-ant-… (from {site})', { site: 'console.anthropic.com' })}
           style={{ width: '100%' }}
         />
       </Field>
-      <Field label="Model">
+      <Field label={t('Model')}>
         <select value={g.anthropicModel || 'claude-sonnet-5'} onChange={(e) => patch({ anthropicModel: e.target.value })}>
           {ANTHROPIC_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>
       </Field>
       <p className="settings-note">
-        Enables <strong>Summarize / Analyze / Discuss</strong> in <strong>View → Notes &amp; Annotations</strong>.
-        The key is stored only on this device and is never synced; text you send (document excerpts + your
-        notes) goes to Anthropic and spends your own API credits.
+        {t('Enables Summarize / Analyze / Discuss in View → Notes & Annotations.')}{' '}
+        {t('The key is stored only on this device and is never synced; text you send (document excerpts + your notes) goes to Anthropic and spends your own API credits.')}
       </p>
 
-      <div className="field-section">Readwise (optional)</div>
-      <Field label="Access token">
-        <input type="password" value={g.readwiseKey || ''} onChange={(e) => patch({ readwiseKey: e.target.value.trim() })} placeholder="From readwise.io/access_token" style={{ width: '100%' }}
-          title="Lets Notes → “→ Readwise” send your highlights to your Readwise account. Stays on this device — never synced or saved in profiles." />
+      <div className="field-section">{t('Readwise (optional)')}</div>
+      <Field label={t('Access token')}>
+        <input type="password" value={g.readwiseKey || ''} onChange={(e) => patch({ readwiseKey: e.target.value.trim() })} placeholder={t('From {url}', { url: 'readwise.io/access_token' })} style={{ width: '100%' }}
+          title={t('Lets Notes → “→ Readwise” send your highlights to your Readwise account. Stays on this device — never synced or saved in profiles.')} />
       </Field>
-      <div className="field-section">Translation (optional)</div>
-      <Field label="Service">
+      <div className="field-section">{t('Translation (optional)')}</div>
+      <Field label={t('Service')}>
         <select value={g.translateProvider || 'mymemory'} onChange={(e) => patch({ translateProvider: e.target.value })}>
           {TRANSLATE_PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
         </select>
       </Field>
       {TRANSLATE_PROVIDERS.find((p) => p.id === (g.translateProvider || 'mymemory'))?.needsKey && (
-        <Field label="API key">
-          <input type="password" value={g.translateKey || ''} onChange={(e) => patch({ translateKey: e.target.value.trim() })} placeholder="Translation API key" style={{ width: '100%' }} />
+        <Field label={t('API key')}>
+          <input type="password" value={g.translateKey || ''} onChange={(e) => patch({ translateKey: e.target.value.trim() })} placeholder={t('Translation API key')} style={{ width: '100%' }} />
         </Field>
       )}
       {TRANSLATE_PROVIDERS.find((p) => p.id === (g.translateProvider || 'mymemory'))?.needsEndpoint && (
-        <Field label="Endpoint">
+        <Field label={t('Endpoint')}>
           <input type="text" value={g.translateEndpoint || ''} onChange={(e) => patch({ translateEndpoint: e.target.value.trim() })} placeholder="https://your-libretranslate.example.com" style={{ width: '100%' }} />
         </Field>
       )}
-      <Field label="Translate into">
+      <Field label={t('Translate into')}>
         <select value={g.translateTarget || 'ja'} onChange={(e) => patch({ translateTarget: e.target.value })}>
           {TARGET_LANGS.map(([code, label]) => <option key={code} value={code}>{label} ({code})</option>)}
         </select>
       </Field>
-      <Field label="Check it works">
+      <Field label={t('Check it works')}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button type="button" disabled={!translateConfigured(g) || trBusy} onClick={testTranslate}>🌐 Test</button>
+          <button type="button" disabled={!translateConfigured(g) || trBusy} onClick={testTranslate}>🌐 {t('Test')}</button>
           {trTest && <span className="settings-note" style={{ margin: 0 }}>{trTest}</span>}
         </div>
       </Field>
       <p className="settings-note">
-        Powers the <strong>Translate</strong> obscure mode and the <strong>side-by-side translation</strong> view
-        (both in <strong>Settings → Tab Settings</strong>). The source language follows your Document language
-        above. A key/endpoint stays on this device; the text of lines being translated is sent to the service.
+        {t('Powers the Translate obscure mode and the side-by-side translation view (both in Settings → Tab Settings).')}{' '}
+        {t('The source language follows your Document language above.')}{' '}
+        {t('A key/endpoint stays on this device; the text of lines being translated is sent to the service.')}
       </p>
 
-      <div className="field-section">Table of contents</div>
+      <div className="field-section">{t('Table of contents')}</div>
       <p className="settings-note">
-        Icons shown on the ToC minimap bar for each hierarchy tier (Tier 0 = top, e.g. Book →
-        Part → Chapter). One emoji or character each. Numeral display and per-tier numeral regex
-        are per document — see <strong>Settings → Tab Settings</strong>.
+        {t('Icons shown on the ToC minimap bar for each hierarchy tier (Tier 0 = top, e.g. Book → Part → Chapter).')}{' '}
+        {t('One emoji or character each.')}{' '}
+        {t('Numeral display and per-tier numeral regex are per document — see Settings → Tab Settings.')}
       </p>
       <div className="toc-tier-icons">
         {Array.from({ length: 5 }, (_, lvl) => (
           <label key={lvl} className="toc-tier-icon-field">
-            <span>Tier {lvl}</span>
+            <span>{t('Tier {n}', { n: lvl })}</span>
             <input
               type="text"
               maxLength={3}

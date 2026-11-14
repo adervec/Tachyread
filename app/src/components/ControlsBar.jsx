@@ -9,6 +9,7 @@ import { lastCountableWord } from '../document/toc.js';
 import { playButtonView } from '../features/playButtonMode.js';
 import { getLibraryRef } from '../state/storage.js';
 import { liveQueues } from '../features/readingQueues.js';
+import { t } from '../i18n.js';
 
 // Compact gap for the ghost verdict — "1m 30s" reads at a glance where "00:01:30" doesn't.
 function fmtGap(secs) {
@@ -108,17 +109,21 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
     // Emoji glyphs over typographic characters: they carry colour and read at a glance on a phone,
     // where bare ‹ › ⇈ ⇊ are thin and near-identical. Grain is encoded by SHAPE — page ⏫⏬,
     // paragraph 🔼🔽, line ⬆️⬇️, word ⬅️➡️ — so the pairs stay distinguishable at a size.
-    restart: () => navBtn('Restart (Home)', onRestart, '⏮️', 'Home'),
-    pageUp: () => navBtn('Page up — current line jumps to the top visible line (PgUp)', onPageUp, '⏫', 'PgUp'),
-    prevPara: () => navBtn('Previous paragraph (Ctrl+Up)', onPrevPara, '🔼', 'Ctrl↑'),
-    prevLine: () => navBtn('Previous line (Up)', onPrevLine, '⬆️', '↑'),
-    prevWord: () => navBtn('Previous word (Left)', onPrevWord, '⬅️', '←'),
-    nextWord: () => navBtn('Next word (Right)', onNextWord, '➡️', '→'),
-    nextLine: () => navBtn('Next line (Down)', onNextLine, '⬇️', '↓'),
-    nextPara: () => navBtn('Next paragraph (Ctrl+Down)', onNextPara, '🔽', 'Ctrl↓'),
-    pageDown: () => navBtn('Page down — current line jumps to the bottom visible line (PgDn)', onPageDown, '⏬', 'PgDn'),
+    restart: () => navBtn(t('Restart (Home)'), onRestart, '⏮️', 'Home'),
+    pageUp: () => navBtn(t('Page up — current line jumps to the top visible line (PgUp)'), onPageUp, '⏫', 'PgUp'),
+    prevPara: () => navBtn(t('Previous paragraph (Ctrl+Up)'), onPrevPara, '🔼', 'Ctrl↑'),
+    prevLine: () => navBtn(t('Previous line (Up)'), onPrevLine, '⬆️', '↑'),
+    prevWord: () => navBtn(t('Previous word (Left)'), onPrevWord, '⬅️', '←'),
+    nextWord: () => navBtn(t('Next word (Right)'), onNextWord, '➡️', '→'),
+    nextLine: () => navBtn(t('Next line (Down)'), onNextLine, '⬇️', '↓'),
+    nextPara: () => navBtn(t('Next paragraph (Ctrl+Down)'), onNextPara, '🔽', 'Ctrl↓'),
+    pageDown: () => navBtn(t('Page down — current line jumps to the bottom visible line (PgDn)'), onPageDown, '⏬', 'PgDn'),
   };
 
+  // i18n-keys: peeking | listening | auto | speaking | word-by-word | line-by-line | by paragraph | by page | scroll-reading | navigating | idle
+  // i18n-keys: Previewing elsewhere — the progress tick is not moving | Read-aloud (TTS) is driving the pace | Auto-advance (word/line player) is driving the pace | Advancing by reading aloud (speech recognition follows you)
+  // i18n-keys: Stepping one word at a time | Advancing a line at a time | Hopping paragraph to paragraph | Paging through the text | Scrolling the pane; text passing the top edge counts as read
+  // i18n-keys: Jumping around (ToC / Find / clicks) — not counted as reading | No reading activity in the last few seconds
   return (
     <div className={`controls-bar${isCompact ? ' compact' : ''}${moreOpen ? ' more-open' : ''}`}>
       <div className="progress-row">
@@ -131,48 +136,48 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             Their keyboard shortcuts (J / U / G) and the Lines pane's own affordances still work. */}
         {!isCompact && (
           <>
-            <button className="jump-current-btn" title="Jump to the current word — scroll the Lines pane back to where you're reading (J)" aria-label="Jump to current word" onClick={onJumpToCurrent}>📍<kbd className="key-hint">J</kbd></button>
-            {onJumpToFrontier && <button className="jump-current-btn" title="Jump to the latest unread word — the first word after everything you've ever read (U)" aria-label="Jump to latest unread" onClick={onJumpToFrontier}>⏭️<kbd className="key-hint">U</kbd></button>}
-            {onJumpToGap && <button className="jump-current-btn" title="Jump to the first unread word (skipped sections excluded). Click again from there to hop to the next read/unread boundary — backfill the patchy sections. (G)" aria-label="Jump to first unread gap" onClick={onJumpToGap}>🩹<kbd className="key-hint">G</kbd></button>}
+            <button className="jump-current-btn" title={t("Jump to the current word — scroll the Lines pane back to where you're reading (J)")} aria-label={t('Jump to current word')} onClick={onJumpToCurrent}>📍<kbd className="key-hint">J</kbd></button>
+            {onJumpToFrontier && <button className="jump-current-btn" title={t("Jump to the latest unread word — the first word after everything you've ever read (U)")} aria-label={t('Jump to latest unread')} onClick={onJumpToFrontier}>⏭️<kbd className="key-hint">U</kbd></button>}
+            {onJumpToGap && <button className="jump-current-btn" title={t('Jump to the first unread word (skipped sections excluded). Click again from there to hop to the next read/unread boundary — backfill the patchy sections. (G)')} aria-label={t('Jump to first unread gap')} onClick={onJumpToGap}>🩹<kbd className="key-hint">G</kbd></button>}
           </>
         )}
-        <div className="progress-meta" title={skipRanges.length ? 'Percent of the countable book read (flagged front/back matter excluded)' : 'Percent of the book actually read'}>📖 {coverage.toFixed(1)}%{skipRanges.length ? '*' : ''}</div>
-        <div className="progress-meta" title="Estimated time remaining at your measured pace">⏱ {formatTime(secs)}</div>
+        <div className="progress-meta" title={skipRanges.length ? t('Percent of the countable book read (flagged front/back matter excluded)') : t('Percent of the book actually read')}>📖 {coverage.toFixed(1)}%{skipRanges.length ? '*' : ''}</div>
+        <div className="progress-meta" title={t('Estimated time remaining at your measured pace')}>⏱ {formatTime(secs)}</div>
         {/* Pace-ghost race: how far ahead of (or behind) the auto-speed marker you are, and a
             one-tap restart. The ghost also restarts itself when you go idle or jump. */}
         {ghostRace && (
-          <div className={`progress-meta ghost-race ${ghostRace.status}`} title={`You are ${ghostRace.status === 'level' ? 'level with' : `${Math.abs(ghostRace.delta)} words ${ghostRace.status} of`} the pace ghost — it walks at your set WPM. It restarts when you go idle, jump, or press ↺.`}>
+          <div className={`progress-meta ghost-race ${ghostRace.status}`} title={(ghostRace.status === 'level' ? t('You are level with the pace ghost.') : ghostRace.status === 'ahead' ? t.n('You are {n} word ahead of the pace ghost.', 'You are {n} words ahead of the pace ghost.', Math.abs(ghostRace.delta)) : t.n('You are {n} word behind the pace ghost.', 'You are {n} words behind the pace ghost.', Math.abs(ghostRace.delta))) + ' ' + t('It walks at your set WPM. It restarts when you go idle, jump, or press ↺.')}>
             <span aria-hidden="true">👻</span>
-            <span className="gr-delta">{ghostRace.status === 'level' ? 'level' : `${ghostRace.delta > 0 ? '+' : ''}${ghostRace.delta}`}</span>
+            <span className="gr-delta">{ghostRace.status === 'level' ? t('level') : `${ghostRace.delta > 0 ? '+' : ''}${ghostRace.delta}`}</span>
             {/* With a goal set, the goal's target is the finish line — show who reaches it first. */}
             {ghostGoal && (
               ghostGoal.readerDone || ghostGoal.ghostDone ? (
-                <span className={`gr-verdict ${ghostGoal.leader}`} title={ghostGoal.leader === 'you' ? 'You reached the goal before the ghost' : ghostGoal.leader === 'ghost' ? 'The ghost reached the goal first' : 'You and the ghost reached the goal together'}>
-                  {ghostGoal.leader === 'you' ? '🏁 you win' : ghostGoal.leader === 'ghost' ? '🏁 ghost wins' : '🏁 dead heat'}
+                <span className={`gr-verdict ${ghostGoal.leader}`} title={ghostGoal.leader === 'you' ? t('You reached the goal before the ghost') : ghostGoal.leader === 'ghost' ? t('The ghost reached the goal first') : t('You and the ghost reached the goal together')}>
+                  {'🏁 ' + (ghostGoal.leader === 'you' ? t('you win') : ghostGoal.leader === 'ghost' ? t('ghost wins') : t('dead heat'))}
                 </span>
               ) : ghostGoal.leader ? (
-                <span className={`gr-verdict ${ghostGoal.leader}`} title={`To the goal: you ~${fmtGap(ghostGoal.readerEta)} at your measured pace, ghost ~${fmtGap(ghostGoal.ghostEta)} at its set WPM`}>
-                  {ghostGoal.leader === 'tie' ? 'neck and neck' : `${ghostGoal.leader === 'you' ? 'you' : 'ghost'} by ${fmtGap(ghostGoal.marginSec)}`}
+                <span className={`gr-verdict ${ghostGoal.leader}`} title={t('To the goal: you ~{you} at your measured pace, ghost ~{ghost} at its set WPM', { you: fmtGap(ghostGoal.readerEta), ghost: fmtGap(ghostGoal.ghostEta) })}>
+                  {ghostGoal.leader === 'tie' ? t('neck and neck') : ghostGoal.leader === 'you' ? t('you by {gap}', { gap: fmtGap(ghostGoal.marginSec) }) : t('ghost by {gap}', { gap: fmtGap(ghostGoal.marginSec) })}
                 </span>
               ) : null
             )}
-            <button className="gr-reset" title="Restart the ghost from your current word" aria-label="Restart pace ghost" onClick={onResetGhost}>↺</button>
+            <button className="gr-reset" title={t('Restart the ghost from your current word')} aria-label={t('Restart pace ghost')} onClick={onResetGhost}>↺</button>
           </div>
         )}
         <div
           className={`progress-meta reading-mode${readingMode === 'idle' ? ' rm-idle' : ''}`}
-          title={`How the app thinks you're reading right now — ${MODES[readingMode]?.hint || ''}${modeIdleFrac != null ? ' (the underline drains as this decays to idle)' : ''}`}
+          title={t("How the app thinks you're reading right now — {hint}", { hint: MODES[readingMode]?.hint ? t(MODES[readingMode].hint) : '' }) + (modeIdleFrac != null ? ' ' + t('(the underline drains as this decays to idle)') : '')}
         >
-          {MODES[readingMode]?.icon} {MODES[readingMode]?.label}
+          {MODES[readingMode]?.icon} {MODES[readingMode]?.label ? t(MODES[readingMode].label) : ''}
           {modeIdleFrac != null && <i className="rm-underline" style={{ width: `${modeIdleFrac * 100}%` }} />}
         </div>
         {atEnd && (
           <button
             className={`finish-btn${(settings.completions || []).length ? ' done' : ''}`}
-            title={(settings.completions || []).length ? 'Marked finished — click to review or update your rating & notes' : 'Mark this book finished and review your stats'}
+            title={(settings.completions || []).length ? t('Marked finished — click to review or update your rating & notes') : t('Mark this book finished and review your stats')}
             onClick={onConfirmFinished}
           >
-            {(settings.completions || []).length ? '✓ Finished' : '✓ Confirm finished'}
+            {'✓ ' + ((settings.completions || []).length ? t('Finished') : t('Confirm finished'))}
           </button>
         )}
       </div>
@@ -181,11 +186,11 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
 
       <div className="playback-row">
         <div className="wpm-block">
-          <label>WPM</label>
+          <label>{t('WPM')}</label>
           <button
             className="wpm-step"
-            title="Slower (−25)"
-            aria-label="Slower"
+            title={t('Slower (−25)')}
+            aria-label={t('Slower')}
             onClick={() => patchSettings(tab.id, { wpm: Math.max(60, settings.wpm - 25) })}
           >
             ➖
@@ -201,8 +206,8 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
           />
           <button
             className="wpm-step"
-            title="Faster (+25)"
-            aria-label="Faster"
+            title={t('Faster (+25)')}
+            aria-label={t('Faster')}
             onClick={() => patchSettings(tab.id, { wpm: Math.min(1500, settings.wpm + 25) })}
           >
             ➕
@@ -211,11 +216,11 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
           <select
             value={settings.speedUnit || 'Words'}
             onChange={(e) => patchSettings(tab.id, { speedUnit: e.target.value })}
-            title="Speed unit"
+            title={t('Speed unit')}
           >
-            <option value="Words">📝 Words</option>
-            <option value="Letters">🔤 Letters</option>
-            <option value="Syllables">🗣 Syllables</option>
+            <option value="Words">📝 {t('Words')}</option>
+            <option value="Letters">🔤 {t('Letters')}</option>
+            <option value="Syllables">🗣 {t('Syllables')}</option>
           </select>
         </div>
 
@@ -228,8 +233,8 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
               {B.pageUp()}{B.prevLine()}{playBtn}{B.nextLine()}{B.pageDown()}
             </div>
             {moreOpen && (
-              <div className="more-pager" role="tablist" aria-label="More controls pages">
-                {['⏩ Steps', '🎛 Modes', '🎯 Goal'].map((l, i) => (
+              <div className="more-pager" role="tablist" aria-label={t('More controls pages')}>
+                {['⏩ ' + t('Steps'), '🎛 ' + t('Modes'), '🎯 ' + t('Goal')].map((l, i) => (
                   <button key={l} role="tab" aria-selected={morePage === i} className={`more-page-tab${morePage === i ? ' on' : ''}`} onClick={() => setMorePage(i)}>{l}</button>
                 ))}
               </div>
@@ -251,22 +256,22 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
         {(!isCompact || (moreOpen && morePage === 1)) && (
         <div className="mode-block">
           <div className="mode-pair">
-            <span>TTS{!isCompact && <kbd className="key-hint">A</kbd>}</span>
+            <span>{t('TTS')}{!isCompact && <kbd className="key-hint">A</kbd>}</span>
             <button
               className={readAloud ? 'toggle-on' : ''}
               onClick={onToggleReadAloud}
-              title="Read aloud (TTS): speak from the current position and advance in sync (Play to start)"
+              title={t('Read aloud (TTS): speak from the current position and advance in sync (Play to start)')}
             >
-              {readAloud ? 'On' : 'Off'}
+              {readAloud ? t('On') : t('Off')}
             </button>
           </div>
           {readAloud && (
             <div className="mode-pair">
-              <span title="Read-aloud playback speed">SPEED</span>
+              <span title={t('Read-aloud playback speed')}>{t('SPEED')}</span>
               <select
                 value={state.global.ttsSpeed ?? 1}
                 onChange={(e) => updateGlobal({ ttsSpeed: Number(e.target.value) })}
-                title="Read-aloud playback speed (applies to the native and offline voices). For finer steps use the slider in Audio → Audio Settings."
+                title={t('Read-aloud playback speed (applies to the native and offline voices). For finer steps use the slider in Audio → Audio Settings.')}
               >
                 {/* Always include the current value so an off-grid speed set via the Audio Settings
                     slider (e.g. 0.85) shows its real label instead of collapsing to the first option. */}
@@ -280,19 +285,19 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
           )}
           {readAloud && (
             <div className="mode-pair">
-              <span title="Listen through a queue: when this book ends, its finish is recorded and the queue's next book that this device has opens and keeps playing">QUEUE</span>
+              <span title={t("Listen through a queue: when this book ends, its finish is recorded and the queue's next book that this device has opens and keeps playing")}>{t('QUEUE')}</span>
               <select
                 value={state.global.listenQueue || ''}
                 onChange={(e) => updateGlobal({ listenQueue: e.target.value })}
-                title="Continue with the next book of this queue when the current one ends (Off: just stop)"
+                title={t('Continue with the next book of this queue when the current one ends (Off: just stop)')}
               >
-                <option value="">Off</option>
+                <option value="">{t('Off')}</option>
                 {queues.map((q) => <option key={q.id} value={q.id}>🎧 {q.name}</option>)}
               </select>
             </div>
           )}
           <div className="mode-pair">
-            <span title="Non-driving TTS that speaks as you read: the first word of each sentence (a progress marker), or the whole current line (usually cut off by the next line, since TTS lags fast reading)">FOLLOW</span>
+            <span title={t('Non-driving TTS that speaks as you read: the first word of each sentence (a progress marker), or the whole current line (usually cut off by the next line, since TTS lags fast reading)')}>{t('FOLLOW')}</span>
             <select
               value={settings.ttsFollowMode || (settings.firstWordTts ? 'firstWord' : 'off')}
               onChange={(e) => {
@@ -300,21 +305,21 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
                 // Speak-along FOLLOW is mutually exclusive with full read-aloud TTS.
                 patchSettings(tab.id, { ttsFollowMode: v, firstWordTts: false, ...(v !== 'off' && settings.readAloud ? { readAloud: false } : {}) });
               }}
-              title="Speak-along TTS while reading (does not drive the pace); off while full read-aloud TTS is on"
+              title={t('Speak-along TTS while reading (does not drive the pace); off while full read-aloud TTS is on')}
             >
-              <option value="off">🔇 Off</option>
-              <option value="firstWord">🔤 First word</option>
-              <option value="line">📃 Line</option>
+              <option value="off">🔇 {t('Off')}</option>
+              <option value="firstWord">🔤 {t('First word')}</option>
+              <option value="line">📃 {t('Line')}</option>
             </select>
           </div>
           <div className="mode-pair">
-            <span title="Focus mode: fullscreen the app, fade the controls, and (Chrome/Edge) black out your other monitors">FOCUS{!isCompact && <kbd className="key-hint">F</kbd>}</span>
+            <span title={t('Focus mode: fullscreen the app, fade the controls, and (Chrome/Edge) black out your other monitors')}>{t('FOCUS')}{!isCompact && <kbd className="key-hint">F</kbd>}</span>
             <button
               className={state.global.focusMode ? 'toggle-on' : ''}
               onClick={onToggleFocus}
-              title="Block distractions: fullscreen + black out other monitors"
+              title={t('Block distractions: fullscreen + black out other monitors')}
             >
-              {state.global.focusMode ? 'On' : 'Off'}
+              {state.global.focusMode ? t('On') : t('Off')}
             </button>
             {state.global.focusMode && (
               <input
@@ -324,32 +329,32 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
                 step={0.05}
                 value={state.global.focusDim ?? 0.92}
                 onChange={(e) => updateGlobal({ focusDim: Number(e.target.value) })}
-                title="Other-monitor dimness (black ↔ light)"
+                title={t('Other-monitor dimness (black ↔ light)')}
                 style={{ width: 70 }}
               />
             )}
           </div>
           <div className="mode-pair">
-            <span title="BLB — blue-light blocker: warm the whole app to cut blue light for evening/bedtime reading. Independent of focus mode.">BLB{!isCompact && <kbd className="key-hint">B</kbd>}</span>
+            <span title={t('BLB — blue-light blocker: warm the whole app to cut blue light for evening/bedtime reading. Independent of focus mode.')}>{t('BLB')}{!isCompact && <kbd className="key-hint">B</kbd>}</span>
             <button
               className={state.global.nightShift ? 'toggle-on' : ''}
               onClick={() => updateGlobal({ nightShift: !state.global.nightShift })}
-              title="Reduce blue light (bedtime) — warm the whole app"
+              title={t('Reduce blue light (bedtime) — warm the whole app')}
             >
-              {state.global.nightShift ? 'On' : 'Off'}
+              {state.global.nightShift ? t('On') : t('Off')}
             </button>
             {state.global.nightShift && (
               <input
                 type="range" min={0.1} max={0.85} step={0.05}
                 value={state.global.nightShiftStrength ?? 0.4}
                 onChange={(e) => updateGlobal({ nightShiftStrength: Number(e.target.value) })}
-                title="How warm — deeper cuts more blue"
+                title={t('How warm — deeper cuts more blue')}
                 style={{ width: 70 }}
               />
             )}
           </div>
           <div className="mode-pair">
-            <span title="Scroll-to-read (Lines pane): scroll the text normally and whatever passes the top edge counts as read — your reading position follows the topmost visible line.">SCROLL{!isCompact && <kbd className="key-hint">S</kbd>}</span>
+            <span title={t('Scroll-to-read (Lines pane): scroll the text normally and whatever passes the top edge counts as read — your reading position follows the topmost visible line.')}>{t('SCROLL')}{!isCompact && <kbd className="key-hint">S</kbd>}</span>
             <button
               className={state.global.scrollAdvances ? 'toggle-on' : ''}
               onClick={() => {
@@ -358,16 +363,16 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
                 // Scroll-to-read and read-aloud are mutually exclusive.
                 if (turningOn && tab.settings.readAloud) patchSettings(tab.id, { readAloud: false });
               }}
-              title="Scroll-to-read: scroll the Lines pane; text that leaves the top counts as read"
+              title={t('Scroll-to-read: scroll the Lines pane; text that leaves the top counts as read')}
             >
-              {state.global.scrollAdvances ? 'On' : 'Off'}
+              {state.global.scrollAdvances ? t('On') : t('Off')}
             </button>
             {state.global.scrollAdvances && !settings.scrollReadCrosshair && (
               <input
                 type="range" min={0} max={100} step={5}
                 value={Math.round((settings.scrollReadPoint ?? 0) * 100)}
                 onChange={(e) => patchSettings(tab.id, { scrollReadPoint: Number(e.target.value) / 100 })}
-                title="Where scrolled text counts as read: 0% = once it leaves the top · 100% = as soon as it enters the clear area"
+                title={t('Where scrolled text counts as read: 0% = once it leaves the top · 100% = as soon as it enters the clear area')}
                 style={{ width: 64 }}
               />
             )}
@@ -377,8 +382,8 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
                 disabled={!(settings.linesCrosshairs || []).length}
                 onClick={() => patchSettings(tab.id, { scrollReadCrosshair: !settings.scrollReadCrosshair })}
                 title={(settings.linesCrosshairs || []).length
-                  ? 'Tie the read point to your first placed crosshair — drag the crosshair to move where scrolled text counts as read'
-                  : 'Place a crosshair first (View → Crosshairs) to tie the read point to it'}
+                  ? t('Tie the read point to your first placed crosshair — drag the crosshair to move where scrolled text counts as read')
+                  : t('Place a crosshair first (View → Crosshairs) to tie the read point to it')}
               >
                 🎯
               </button>
@@ -398,40 +403,40 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             );
             return (
               <div className="mode-pair bio-pair" ref={bioRef}>
-                <span title="Biometric controls — voice/clap commands, camera watching (attention & doze) and hand gestures, unified in one popup.">BIOMETRIC</span>
+                <span title={t('Biometric controls — voice/clap commands, camera watching (attention & doze) and hand gestures, unified in one popup.')}>{t('BIOMETRIC')}</span>
                 <button
                   className={bioCount ? 'toggle-on' : ''}
                   onClick={() => setBioOpen((v) => !v)}
-                  title="Voice, camera & gesture controls — click for the quick panel"
+                  title={t('Voice, camera & gesture controls — click for the quick panel')}
                   aria-expanded={bioOpen}
                 >
-                  {bioCount ? `On · ${bioCount}` : 'Off'}
+                  {bioCount ? t('On · {count}', { count: bioCount }) : t('Off')}
                 </button>
                 {bioOpen && (
                   <div className="bio-quick-pop">
-                    {row('🎤', 'Voice / clap commands', !!audioCtrl, onToggleAudioCtrl, !isCompact && <kbd className="key-hint">V</kbd>)}
-                    {onToggleSpeaking && row('🗣', 'Advance by reading aloud (live voice feedback)', !!speaking, onToggleSpeaking)}
-                    {row('👀', 'Watching — pause when you look away', !!g.webcamAttention, () => updateGlobal({ webcamAttention: !g.webcamAttention }))}
-                    {row('😴', 'Doze detection', !!g.webcamDoze, () => updateGlobal({ webcamDoze: !g.webcamDoze }))}
-                    {row('🖐', 'Hand gestures', !!g.handGestures, () => updateGlobal({ handGestures: !g.handGestures }))}
+                    {row('🎤', t('Voice / clap commands'), !!audioCtrl, onToggleAudioCtrl, !isCompact && <kbd className="key-hint">V</kbd>)}
+                    {onToggleSpeaking && row('🗣', t('Advance by reading aloud (live voice feedback)'), !!speaking, onToggleSpeaking)}
+                    {row('👀', t('Watching — pause when you look away'), !!g.webcamAttention, () => updateGlobal({ webcamAttention: !g.webcamAttention }))}
+                    {row('😴', t('Doze detection'), !!g.webcamDoze, () => updateGlobal({ webcamDoze: !g.webcamDoze }))}
+                    {row('🖐', t('Hand gestures'), !!g.handGestures, () => updateGlobal({ handGestures: !g.handGestures }))}
                     <div className="bio-quick-actions">
-                      <button onClick={() => { setBioOpen(false); onOpenBiometric?.(); }} title="Every biometric option — mappings, calibration, eye gestures, alarms">⚙ All controls…</button>
-                      <button onClick={() => { setBioOpen(false); updateGlobal({ webcamPreview: true }); }} title="Show the Biometric Control Feed popup (self-view + event log)">📡 Live feed</button>
+                      <button onClick={() => { setBioOpen(false); onOpenBiometric?.(); }} title={t('Every biometric option — mappings, calibration, eye gestures, alarms')}>⚙ {t('All controls…')}</button>
+                      <button onClick={() => { setBioOpen(false); updateGlobal({ webcamPreview: true }); }} title={t('Show the Biometric Control Feed popup (self-view + event log)')}>📡 {t('Live feed')}</button>
                     </div>
-                    <p className="bio-quick-note">Camera &amp; audio are analysed on your device and never leave it.</p>
+                    <p className="bio-quick-note">{t('Camera & audio are analysed on your device and never leave it.')}</p>
                   </div>
                 )}
               </div>
             );
           })()}
           <div className="mode-pair">
-            <span>TIMER</span>
+            <span>{t('TIMER')}</span>
             <select
               value={state.global.ttsAutoStopMin || 0}
               onChange={(e) => updateGlobal({ ttsAutoStopMin: Number(e.target.value) })}
-              title="Auto-stop reading / read-aloud after this long — handy for winding down"
+              title={t('Auto-stop reading / read-aloud after this long — handy for winding down')}
             >
-              <option value={0}>♾ Off</option>
+              <option value={0}>♾ {t('Off')}</option>
               <option value={5}>⏱ 5m</option>
               <option value={10}>⏱ 10m</option>
               <option value={15}>⏱ 15m</option>
@@ -442,13 +447,13 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             </select>
           </div>
           <div className="mode-pair">
-            <span>ADAPT</span>
+            <span>{t('ADAPT')}</span>
             <button
               className={tab.settings.adaptivePace ? 'toggle-on' : ''}
               onClick={() => patchSettings(tab.id, { adaptivePace: !tab.settings.adaptivePace })}
-              title="Adaptive pace: periodic comprehension checks raise or lower your WPM automatically"
+              title={t('Adaptive pace: periodic comprehension checks raise or lower your WPM automatically')}
             >
-              {tab.settings.adaptivePace ? 'On' : 'Off'}
+              {tab.settings.adaptivePace ? t('On') : t('Off')}
             </button>
           </div>
         </div>
@@ -480,7 +485,7 @@ function GoalRow({ tab, onGoalComplete, goalKills }) {
   return (
     <>
       <div className="goal-row">
-        <span>GOAL</span>
+        <span>{t('GOAL')}</span>
         <select
           value={goal.type}
           onChange={(e) =>
@@ -489,24 +494,24 @@ function GoalRow({ tab, onGoalComplete, goalKills }) {
             })
           }
         >
-          <option value="None">🚫 None</option>
-          <option value="Section">📑 Section (set via ToC)</option>
-          <option value="AbsoluteWords">🔢 Reach word #</option>
-          <option value="AbsoluteLines">📏 Reach line #</option>
-          <option value="AbsolutePercent">💯 Reach % of book</option>
-          <option value="RelativeWords">➕🔢 Read N more words</option>
-          <option value="RelativeLines">➕📏 Read N more lines</option>
-          <option value="RelativePercent">➕💯 Read N% more</option>
-          <option value="ActiveTime">⏱ Read for N minutes</option>
+          <option value="None">🚫 {t('None')}</option>
+          <option value="Section">📑 {t('Section (set via ToC)')}</option>
+          <option value="AbsoluteWords">🔢 {t('Reach word #')}</option>
+          <option value="AbsoluteLines">📏 {t('Reach line #')}</option>
+          <option value="AbsolutePercent">💯 {t('Reach % of book')}</option>
+          <option value="RelativeWords">➕🔢 {t('Read N more words')}</option>
+          <option value="RelativeLines">➕📏 {t('Read N more lines')}</option>
+          <option value="RelativePercent">➕💯 {t('Read N% more')}</option>
+          <option value="ActiveTime">⏱ {t('Read for N minutes')}</option>
         </select>
         <input
           type="text"
           value={goal.value ?? ''}
           onChange={(e) => patchSettings(tab.id, { goal: { ...goal, value: e.target.value } })}
-          placeholder="Goal value"
+          placeholder={t('Goal value')}
         />
-        <button onClick={() => patchSettings(tab.id, { goal: { ...goal, set: true, baseline: tab.settings.wordIndex } })}>Set</button>
-        <button onClick={() => patchSettings(tab.id, { goal: null })}>Clear</button>
+        <button onClick={() => patchSettings(tab.id, { goal: { ...goal, set: true, baseline: tab.settings.wordIndex } })}>{t('Set')}</button>
+        <button onClick={() => patchSettings(tab.id, { goal: null })}>{t('Clear')}</button>
         {frac != null && (
           <div className="goal-bar" title={status}>
             <div className={`goal-fill${complete ? ' goal-fill-done' : ''}`} style={{ width: `${Math.max(0, Math.min(1, frac)) * 100}%` }} />
@@ -515,8 +520,8 @@ function GoalRow({ tab, onGoalComplete, goalKills }) {
         <span className="goal-status">{status}</span>
       </div>
       {goalKills && goalKills.length > 0 && (
-        <div className="goal-killfeed" title="Goals completed this session">
-          <span className="goal-kf-label">🏁 Completed:</span>
+        <div className="goal-killfeed" title={t('Goals completed this session')}>
+          <span className="goal-kf-label">🏁 {t('Completed:')}</span>
           {goalKills.map((k, i) => (
             <span key={i} className="goal-kf-item">✓ {k.label} <span className="goal-kf-ts">{k.time}</span></span>
           ))}

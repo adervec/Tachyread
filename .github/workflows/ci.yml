@@ -68,6 +68,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # House standard 22: npm audit at the high level. sharp (a Node-only image library the voice
+      # models declare, stubbed out of the browser build) has no fix yet and is allow-listed there.
+      - name: npm audit (high and critical)
+        run: node scripts/audit.mjs
+
   test:
     name: Self-checks
     runs-on: ubuntu-latest

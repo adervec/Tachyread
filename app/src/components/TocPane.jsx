@@ -146,7 +146,7 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
     });
     setFlashIndex(target);
     const t = setTimeout(() => {
-      const el = paneRef.current?.querySelector(`[data-toc-index="${target}"]`);
+      const el = paneRef.current?.querySelector(`[data-row-of-toc="${target}"]`);
       el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }, 30);
     const t2 = setTimeout(() => setFlashIndex(-1), 2600);
@@ -307,7 +307,7 @@ export default function TocPane({ tab, onJumpWord, onScrollToLine, onPatch, onSe
                 return (
                   <tr
                     key={`${e.wordIndex}-${row.index}`}
-                    data-toc-index={row.index}
+                    data-row-of-toc={row.index}
                     className={`toc-row${isCurrent ? ' current' : ''}${done ? ' done' : ''}${skipped ? ' toc-skipped' : ''}${row.index === flashIndex ? ' toc-flash' : ''}`}
                   >
                     {editing ? (

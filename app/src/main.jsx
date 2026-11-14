@@ -1,6 +1,5 @@
 import { createRoot } from 'react-dom/client';
 import './index.css';
-import App from './App.jsx';
 import { initPwaInstall } from './features/pwaInstall.js';
 import { initAppHealth } from './features/appHealth.js';
 
@@ -9,7 +8,10 @@ import { initAppHealth } from './features/appHealth.js';
 initPwaInstall();
 initAppHealth(); // new-version notice (font.js in index.html does the other house standards)
 
-createRoot(document.getElementById('root')).render(<App />);
+// Languages: wait for the shared font.js dictionary, THEN load the app, so labels defined at module
+// level (menus, operation names) are translated too. English resolves at once.
+(window.appFont?.ready || Promise.resolve()).catch(() => {}).then(() => import('./App.jsx'))
+  .then(({ default: App }) => createRoot(document.getElementById('root')).render(<App />));
 
 // Let the maker's app portal (adervec.github.io — same origin as this Pages site) know Tachyread is
 // installed, by stamping a timestamp under a shared localStorage key it reads. Only written when

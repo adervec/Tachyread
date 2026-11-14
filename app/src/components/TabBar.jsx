@@ -12,18 +12,19 @@ import { bookFromOpenedDoc } from '../features/trackyreadAdd.js';
 import { bookCoverSrc, proceduralCover } from '../features/bookCovers.js';
 import { bookCoverUrl } from '../features/openLibrary.js';
 import { presenceByChecksum, presenceLabel } from '../features/presence.js';
+import { t } from '../i18n.js';
 
 // Short labels for the dialog tabs (menus use longer "…" titles). Fallback is the raw kind.
 const PANEL_LABELS = {
-  'tab-settings': 'Tab Settings', 'typing-settings': 'Typing Settings', 'audio-settings': 'Audio Settings',
-  'font-manager': 'Fonts', 'help': 'Help', 'def-settings': 'Default Settings', 'app-settings': 'App Settings',
-  'biometric-settings': 'Biometric Controls', 'comfort-settings': 'Comfort', 'data': 'Data', 'book-groups': 'Book Groups',
-  'stats': 'Statistics', 'history': 'History', 'literary-journey': 'Trackyread', 'proper-names': 'Proper Names',
-  'audiobook': 'Audiobook Centre', 'notes': 'Notes', 'tts-popup': 'Text-to-Speech', 'face-library': 'Avatars',
-  'typing-progress': 'Typing Progress', 'span-drill': 'Span Drill', 'eye-warmup': 'Eye Warmup',
-  'flow-writer': 'Flow Writer', 'dictation': 'Dictation', 'ambient': 'Ambient', 'vocab': 'Vocabulary',
-  'regressions': 'Regressions', 'progress-detail': 'Progress', 'attention': 'Attention', 'typing-plan': 'Typing Plans',
-  'crosshairs': 'Crosshairs',
+  'tab-settings': t('Tab Settings'), 'typing-settings': t('Typing Settings'), 'audio-settings': t('Audio Settings'),
+  'font-manager': t('Fonts'), 'help': t('Help'), 'def-settings': t('Default Settings'), 'app-settings': t('App Settings'),
+  'biometric-settings': t('Biometric Controls'), 'comfort-settings': t('Comfort'), 'data': t('Data'), 'book-groups': t('Book Groups'),
+  'stats': t('Statistics'), 'history': t('History'), 'literary-journey': t('Trackyread'), 'proper-names': t('Proper Names'),
+  'audiobook': t('Audiobook Centre'), 'notes': t('Notes'), 'tts-popup': t('Text-to-Speech'), 'face-library': t('Avatars'),
+  'typing-progress': t('Typing Progress'), 'span-drill': t('Span Drill'), 'eye-warmup': t('Eye Warmup'),
+  'flow-writer': t('Flow Writer'), 'dictation': t('Dictation'), 'ambient': t('Ambient'), 'vocab': t('Vocabulary'),
+  'regressions': t('Regressions'), 'progress-detail': t('Progress'), 'attention': t('Attention'), 'typing-plan': t('Typing Plans'),
+  'crosshairs': t('Crosshairs'),
 };
 
 // COMPLETION, not cursor position (0–100). A lazy tab has no tracker, so it falls back to the
@@ -59,14 +60,14 @@ export default function TabBar() {
     const csOf = {};
     for (const [c, id] of Object.entries(bindings)) if (!csOf[id]) csOf[id] = c;
     // Books already open in a tab (any of their linked files — editions included) aren't "next": skip them.
-    const openBookIds = new Set(tabs.map((t) => bindings[t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum]).filter(Boolean));
+    const openBookIds = new Set(tabs.map((tb) => bindings[tb.lazy ? tb.settings?.contentChecksum : tb.doc?.contentChecksum]).filter(Boolean));
     const { book } = await nextInQueue(queueBooks(q, books), bookId, (b) => !!csOf[b.id] && !openBookIds.has(b.id));
     setMenuQ({ tabId: tab.id, queue: q, next: book ? { book, cs: csOf[book.id] } : null });
   }
   async function openQueueNext() {
     const n = menuQ?.next;
     if (!n) return;
-    const openChecksums = tabs.map((t) => (t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum)).filter(Boolean);
+    const openChecksums = tabs.map((tb) => (tb.lazy ? tb.settings?.contentChecksum : tb.doc?.contentChecksum)).filter(Boolean);
     const r = await openBookFile({ cs: n.cs, name: n.book.title, openChecksums, dirs: await getSearchDirs().catch(() => []), openRecent, openFiles })
       .catch((e) => ({ ok: false, msg: e?.message || String(e) }));
     if (!r.ok) setStatus?.(r.msg);
@@ -96,7 +97,7 @@ export default function TabBar() {
   // change event per book and must not thrash the tab bar.
   const [finishedBooks, setFinishedBooks] = useState(() => new Set());
   const finishedKey = useRef('');
-  const boundKey = [...new Set(tabs.map((t) => bindings[t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum]).filter(Boolean))].sort().join(',');
+  const boundKey = [...new Set(tabs.map((tb) => bindings[tb.lazy ? tb.settings?.contentChecksum : tb.doc?.contentChecksum]).filter(Boolean))].sort().join(',');
   useEffect(() => {
     let live = true;
     const load = async () => {
@@ -164,10 +165,10 @@ export default function TabBar() {
         onClick={() => setActivePanel(p.id)}
         onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closePanel(p.id); } }}
         onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }} // stop the browser's middle-click autoscroll
-        title={p.id === activePanelId ? `${label} — tap to minimize` : label}
+        title={p.id === activePanelId ? t('{label} — tap to minimize', { label }) : label}
       >
         <span className="name">{label}</span>
-        <button className="close" onClick={(e) => { e.stopPropagation(); closePanel(p.id); }} title="Close">×</button>
+        <button className="close" onClick={(e) => { e.stopPropagation(); closePanel(p.id); }} title={t('Close')}>×</button>
       </div>
     );
   };
@@ -183,51 +184,53 @@ export default function TabBar() {
     try {
       await saveLibraryBook(book);
       await setBinding(cs, book.id); // fires tachyread-bindings-changed → this bar's dot refreshes
-      setStatus?.(`Added “${book.title}” to Trackyread.`);
+      setStatus?.(t('Added “{title}” to Trackyread.', { title: book.title }));
       if (open) openDialog?.({ kind: 'literary-journey', tab: 'library', focusBookId: book.id });
-    } catch (e) { setStatus?.('Could not add to Trackyread: ' + (e?.message || e)); }
+    } catch (e) { setStatus?.(t('Could not add to Trackyread: {error}', { error: e?.message || e })); }
   }
 
   // Sort the whole strip by one key. Reads each tab's SAVED record (lazy tabs carry only a shell),
   // with the live settings on top for loaded tabs, plus its Trackyread book for status/type.
   async function sortBy(key, dir) {
     const recent = state.global.recentFiles || [];
-    const entries = await Promise.all(tabs.map(async (t) => {
-      const cs = t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum;
+    const entries = await Promise.all(tabs.map(async (tb) => {
+      const cs = tb.lazy ? tb.settings?.contentChecksum : tb.doc?.contentChecksum;
       const saved = cs ? await loadFile(cs).catch(() => null) : null;
-      const rec = { ...(saved || {}), ...(t.lazy ? {} : t.settings), totalWords: t.lazy ? (saved?.totalWords || t.settings?.totalWords) : t.doc.words.length };
+      const rec = { ...(saved || {}), ...(tb.lazy ? {} : tb.settings), totalWords: tb.lazy ? (saved?.totalWords || tb.settings?.totalWords) : tb.doc.words.length };
       const book = bindings[cs] ? await getLibraryBook(bindings[cs]).catch(() => null) : null;
       const live = book && !book.deleted ? book : null;
-      return { id: t.id, info: tabInfo({
-        fileName: t.lazy ? t.fileName : t.doc.fileName, rec, book: live,
+      return { id: tb.id, info: tabInfo({
+        fileName: tb.lazy ? tb.fileName : tb.doc.fileName, rec, book: live,
         status: live && readStatus(live), type: live && contentType(live),
         opened: recent.find((r) => r.checksum === cs)?.lastOpened ?? null,
       }) };
     }));
     sortTabs(sortTabIds(entries, key, dir));
-    setStatus?.(`Tabs sorted by ${TAB_SORT_KEYS[key][0].toLowerCase()} (${TAB_SORT_KEYS[key][dir === 'desc' ? 3 : 2]}).`);
+    // i18n-keys: Name | Length | Completion | Position | Time left | Last read | Opened | Trackyread status | Content type | File type
+    // i18n-keys: A → Z | Z → A | shortest | longest | least read | most read | least far | furthest | least | most | newest | oldest | reading first | untracked first | long-form first
+    setStatus?.(t('Tabs sorted by {key} ({order}).', { key: t(TAB_SORT_KEYS[key][0]).toLowerCase(), order: t(TAB_SORT_KEYS[key][dir === 'desc' ? 3 : 2]) }));
   }
 
   // Build the right-click menu's actions from the tab it was opened on. Left/right are relative to
   // that tab's position among the document tabs; each entry is disabled when it would close nothing.
   const renderMenu = () => {
-    const i = tabs.findIndex((t) => t.id === menu.tabId);
+    const i = tabs.findIndex((tb) => tb.id === menu.tabId);
     if (i < 0) return null;
-    const leftIds = tabs.slice(0, i).map((t) => t.id);
-    const rightIds = tabs.slice(i + 1).map((t) => t.id);
-    const otherIds = tabs.filter((t) => t.id !== menu.tabId).map((t) => t.id);
+    const leftIds = tabs.slice(0, i).map((tb) => tb.id);
+    const rightIds = tabs.slice(i + 1).map((tb) => tb.id);
+    const otherIds = tabs.filter((tb) => tb.id !== menu.tabId).map((tb) => tb.id);
     // Finished (and not being reread) tabs — same heuristic that hides them from Open Recent.
     const shelves = state.global.readingList?.shelves || {};
-    const finishedIds = tabs.filter((t) => {
-      const cs = t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum;
-      const rec = { ...t.settings, totalWords: t.lazy ? (t.settings?.totalWords || 0) : t.doc.words.length };
+    const finishedIds = tabs.filter((tb) => {
+      const cs = tb.lazy ? tb.settings?.contentChecksum : tb.doc?.contentChecksum;
+      const rec = { ...tb.settings, totalWords: tb.lazy ? (tb.settings?.totalWords || 0) : tb.doc.words.length };
       return finishedNotRereading(rec, shelves[cs]);
-    }).map((t) => t.id);
+    }).map((tb) => tb.id);
     // Tracked = bound to a Trackyread book. Untouched = under 2% read (same completion the tab's bar shows).
-    const csOf = (t) => (t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum);
-    const trackedIds = tabs.filter((t) => bindings[csOf(t)]).map((t) => t.id);
-    const untrackedIds = tabs.filter((t) => !bindings[csOf(t)]).map((t) => t.id);
-    const untouchedIds = tabs.filter((t) => tabPct(t) < 2).map((t) => t.id);
+    const csOf = (tb) => (tb.lazy ? tb.settings?.contentChecksum : tb.doc?.contentChecksum);
+    const trackedIds = tabs.filter((tb) => bindings[csOf(tb)]).map((tb) => tb.id);
+    const untrackedIds = tabs.filter((tb) => !bindings[csOf(tb)]).map((tb) => tb.id);
+    const untouchedIds = tabs.filter((tb) => tabPct(tb) < 2).map((tb) => tb.id);
     const menuTab = tabs[i];
     const menuCs = menuTab.lazy ? menuTab.settings?.contentChecksum : menuTab.doc?.contentChecksum;
     const untracked = !!menuCs && !bindings[menuCs];
@@ -236,14 +239,14 @@ export default function TabBar() {
       return (
         <>
           <div className="word-menu-backdrop" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
-          <div className="word-menu tab-sort-menu" style={{ left: menu.x, top: menu.y }} role="menu" aria-label="Sort tabs">
-            <div className="item" onClick={() => setMenu({ ...menu, sort: false })}>‹ Back</div>
+          <div className="word-menu tab-sort-menu" style={{ left: menu.x, top: menu.y }} role="menu" aria-label={t('Sort tabs')}>
+            <div className="item" onClick={() => setMenu({ ...menu, sort: false })}>‹ {t('Back')}</div>
             <div className="sep" />
             {Object.entries(TAB_SORT_KEYS).map(([k, [label, , a, b]]) => (
               <div key={k} className="tab-sort-row">
-                <span>{label}</span>
-                <button type="button" onClick={() => { sortBy(k, 'asc'); setMenu(null); }}>{a}</button>
-                <button type="button" onClick={() => { sortBy(k, 'desc'); setMenu(null); }}>{b}</button>
+                <span>{t(label)}</span>
+                <button type="button" onClick={() => { sortBy(k, 'asc'); setMenu(null); }}>{t(a)}</button>
+                <button type="button" onClick={() => { sortBy(k, 'desc'); setMenu(null); }}>{t(b)}</button>
               </div>
             ))}
           </div>
@@ -251,32 +254,32 @@ export default function TabBar() {
       );
     }
     const items = [
-      { label: 'Sort tabs ›', n: tabs.length > 1 ? undefined : 0, keep: true, fn: () => setMenu({ ...menu, sort: true }) },
+      { label: t('Sort tabs') + ' ›', n: tabs.length > 1 ? undefined : 0, keep: true, fn: () => setMenu({ ...menu, sort: true }) },
       { sep: true },
       ...(menuQ && menuQ.tabId === menu.tabId ? [
         menuQ.next
-          ? { label: `▶ Open next in “${menuQ.queue.name}”: ${menuQ.next.book.title}`, fn: openQueueNext }
-          : { label: `▶ Nothing else to open in “${menuQ.queue.name}” (the rest are finished, already open, or have no file)`, n: 0, fn: () => {} },
-        { label: `↗ Go to queue “${menuQ.queue.name}” in Trackyread`, fn: () => openDialog?.({ kind: 'literary-journey', tab: 'queue', focusQueueId: menuQ.queue.id }) },
+          ? { label: '▶ ' + t('Open next in “{queue}”: {title}', { queue: menuQ.queue.name, title: menuQ.next.book.title }), fn: openQueueNext }
+          : { label: '▶ ' + t('Nothing else to open in “{queue}” (the rest are finished, already open, or have no file)', { queue: menuQ.queue.name }), n: 0, fn: () => {} },
+        { label: '↗ ' + t('Go to queue “{queue}” in Trackyread', { queue: menuQ.queue.name }), fn: () => openDialog?.({ kind: 'literary-journey', tab: 'queue', focusQueueId: menuQ.queue.id }) },
         { sep: true },
       ] : []),
       ...(untracked ? [
-        { label: '＋ Add to Trackyread', fn: () => addTabToTrackyread(menuTab, false) },
-        { label: '＋ Add to Trackyread & open it', fn: () => addTabToTrackyread(menuTab, true) },
+        { label: '＋ ' + t('Add to Trackyread'), fn: () => addTabToTrackyread(menuTab, false) },
+        { label: '＋ ' + t('Add to Trackyread & open it'), fn: () => addTabToTrackyread(menuTab, true) },
         { sep: true },
       ] : []),
-      { label: 'Close', fn: () => closeTab(menu.tabId) },
-      { label: 'Close others', n: otherIds.length, fn: () => closeTabs(otherIds) },
-      { label: 'Close to the left', n: leftIds.length, fn: () => closeTabs(leftIds) },
-      { label: 'Close to the right', n: rightIds.length, fn: () => closeTabs(rightIds) },
-      { label: 'Close finished', n: finishedIds.length, fn: () => closeTabs(finishedIds) },
-      { label: 'Close untouched', n: untouchedIds.length, fn: () => closeTabs(untouchedIds) },
-      { label: 'Close tracked', n: trackedIds.length, fn: () => closeTabs(trackedIds) },
-      { label: 'Close untracked', n: untrackedIds.length, fn: () => closeTabs(untrackedIds) },
-      { label: 'Close all', n: tabs.length, fn: () => closeAllTabs() },
+      { label: t('Close'), fn: () => closeTab(menu.tabId) },
+      { label: t('Close others'), n: otherIds.length, fn: () => closeTabs(otherIds) },
+      { label: t('Close to the left'), n: leftIds.length, fn: () => closeTabs(leftIds) },
+      { label: t('Close to the right'), n: rightIds.length, fn: () => closeTabs(rightIds) },
+      { label: t('Close finished'), n: finishedIds.length, fn: () => closeTabs(finishedIds) },
+      { label: t('Close untouched'), n: untouchedIds.length, fn: () => closeTabs(untouchedIds) },
+      { label: t('Close tracked'), n: trackedIds.length, fn: () => closeTabs(trackedIds) },
+      { label: t('Close untracked'), n: untrackedIds.length, fn: () => closeTabs(untrackedIds) },
+      { label: t('Close all'), n: tabs.length, fn: () => closeAllTabs() },
       { sep: true },
-      { label: multiRow ? '✓ Multi-row tabs' : 'Multi-row tabs', fn: () => updateGlobal({ tabBarMultiRow: !multiRow }) },
-      { label: tiles ? '✓ Tab tiles (covers)' : 'Tab tiles (covers)', fn: () => updateGlobal({ tabTiles: !tiles }) },
+      { label: multiRow ? '✓ ' + t('Multi-row tabs') : t('Multi-row tabs'), fn: () => updateGlobal({ tabBarMultiRow: !multiRow }) },
+      { label: tiles ? '✓ ' + t('Tab tiles (covers)') : t('Tab tiles (covers)'), fn: () => updateGlobal({ tabTiles: !tiles }) },
     ];
     return (
       <>
@@ -303,7 +306,7 @@ export default function TabBar() {
       {/* Unscoped dialog tabs first (leftmost); doc-scoped ones render inside their file's group below. */}
       {panels.filter((p) => p.docTabId == null).map((p) => renderPanel(p, null))}
       {noDocs && panels.length === 0 && (
-        <span className="empty">No documents open — File → Open or drop a file</span>
+        <span className="empty">{t('No documents open — File → Open or drop a file')}</span>
       )}
       {tabs.map((tab) => {
         // Lazy (restored, not-yet-opened) tabs have no parsed doc — read name/progress from the
@@ -340,7 +343,7 @@ export default function TabBar() {
             onDragLeave={() => setDropId((d) => (d === tab.id ? null : d))}
             onDrop={(e) => { e.preventDefault(); if (dragId.current && dragId.current !== tab.id) reorderTabs(dragId.current, tab.id); dragId.current = null; setDropId(null); }}
             onDragEnd={() => { dragId.current = null; setDropId(null); }}
-            title={`${named ? `${named.name} — ${fileName}${cs === masterOf(named) ? ' (master)' : ''}` : (tab.lazy ? `${fileName} — tap to load` : fileName)}\n${pct.toFixed(1)}% of the text read (completion, not position)`}
+            title={`${named ? (cs === masterOf(named) ? t('{group} — {file} (master)', { group: named.name, file: fileName }) : `${named.name} — ${fileName}`) : (tab.lazy ? t('{file} — tap to load', { file: fileName }) : fileName)}\n${t('{pct}% of the text read (completion, not position)', { pct: pct.toFixed(1) })}`}
           >
             {tiles && (
               <img
@@ -353,16 +356,16 @@ export default function TabBar() {
             )}
             {hasBindings && (
               cs && finishedBooks.has(bindings[cs])
-                ? <span className="tab-track done" title="Finished in Trackyread" aria-label="Finished in Trackyread" role="img">★</span>
+                ? <span className="tab-track done" title={t('Finished in Trackyread')} aria-label={t('Finished in Trackyread')} role="img">★</span>
                 : (
                   <span
                     className={`tab-track ${cs && bindings[cs] ? 'in' : 'out'}`}
-                    title={cs && bindings[cs] ? 'Tracked in Trackyread' : 'Not in Trackyread'}
+                    title={cs && bindings[cs] ? t('Tracked in Trackyread') : t('Not in Trackyread')}
                   />
                 )
             )}
             {cs && presence[cs]?.length > 0 && (
-              <span className="tab-elsewhere" title={`Also open on ${presenceLabel(presence[cs])} (as of the last sync)`} aria-label="Also open on another device">🖥</span>
+              <span className="tab-elsewhere" title={t('Also open on {devices} (as of the last sync)', { devices: presenceLabel(presence[cs]) })} aria-label={t('Also open on another device')}>🖥</span>
             )}
             <span className="name">{label}{mark && <sup className="tab-grp-mark">{mark}</sup>}</span>
             <button
@@ -371,7 +374,7 @@ export default function TabBar() {
                 e.stopPropagation();
                 closeTab(tab.id);
               }}
-              title="Close tab"
+              title={t('Close tab')}
             >
               ×
             </button>

@@ -4,6 +4,7 @@ import {
   SYSTEM_FONTS, BUNDLED, GOOGLE_FAMILIES, CATEGORY_LABELS, fontStack, primaryFamily,
   loadFontEntry, queryInstalledFonts, LOCAL_FONTS_SUPPORTED, ensureGoogleFont,
 } from '../state/fonts.js';
+import { t } from '../i18n.js';
 
 const PREVIEW = 'The quick brown fox jumps over the lazy dog — 0123456789';
 
@@ -56,10 +57,10 @@ export default function FontManagerDialog({ tab, global, onPatchSettings, onPatc
     // Advanced search: plain text matches the name; "cat:serif" / "cat:sans" / "cat:mono" /
     // "cat:a11y" filters by category; "src:bundled|system|local|google" by source.
     const terms = q.split(/\s+/).filter(Boolean);
-    let list = all.filter((f) => terms.every((t) => {
-      if (t.startsWith('cat:')) return (f.cat || '') === t.slice(4);
-      if (t.startsWith('src:')) return (f.source || '') === t.slice(4);
-      return f.name.toLowerCase().includes(t);
+    let list = all.filter((f) => terms.every((term) => {
+      if (term.startsWith('cat:')) return (f.cat || '') === term.slice(4);
+      if (term.startsWith('src:')) return (f.source || '') === term.slice(4);
+      return f.name.toLowerCase().includes(term);
     }));
     if (onlyFavs) list = list.filter((f) => favorites.has(f.name));
     const bySort = {
@@ -84,12 +85,12 @@ export default function FontManagerDialog({ tab, global, onPatchSettings, onPatc
     onPatchGlobal({ fontFavorites: [...next] });
   }
   async function loadLocal() {
-    if (!LOCAL_FONTS_SUPPORTED) { setLocalStatus('Installed-font access needs Chrome/Edge.'); return; }
-    setLocalStatus('Requesting permission…');
+    if (!LOCAL_FONTS_SUPPORTED) { setLocalStatus(t('Installed-font access needs Chrome/Edge.')); return; }
+    setLocalStatus(t('Requesting permission…'));
     const list = await queryInstalledFonts();
-    if (!list) { setLocalStatus('Permission denied or unavailable.'); return; }
+    if (!list) { setLocalStatus(t('Permission denied or unavailable.')); return; }
     setLocalFonts(list);
-    setLocalStatus(`${list.length} installed families added.`);
+    setLocalStatus(t.n('{n} installed family added.', '{n} installed families added.', list.length));
   }
   function applyCustom() {
     const fam = custom.trim();
@@ -99,18 +100,19 @@ export default function FontManagerDialog({ tab, global, onPatchSettings, onPatc
     setCustom('');
   }
 
+  // i18n-keys: Serif | Sans-serif | Monospace | High-legibility | Display | Handwriting
   const currentName = primaryFamily(current);
   return (
-    <Dialog title="Font Manager — one reading font for this tab" onClose={onClose} width={700} buttons={<button onClick={onClose}>Done</button>}>
+    <Dialog title={t('Font Manager — one reading font for this tab')} onClose={onClose} width={700} buttons={<button onClick={onClose}>{t('Done')}</button>}>
       <div className="fm-head">
         <div className="fm-current" style={{ fontFamily: current || undefined }}>
-          Current: <strong>{currentName || '(theme default)'}</strong>
-          {current && <button className="fm-clear" onClick={() => onPatchSettings({ fontFamily: '' })} title="Back to the theme's default font">✕ clear</button>}
+          {t('Current:')} <strong>{currentName || t('(theme default)')}</strong>
+          {current && <button className="fm-clear" onClick={() => onPatchSettings({ fontFamily: '' })} title={t("Back to the theme's default font")}>✕ {t('clear')}</button>}
         </div>
         <p className="settings-note" style={{ margin: '4px 0 0' }}>
-          Applies to the Fast Reader word, the Lines pane, and typing (typing stays monospace unless
-          you pick a font here with <code>cat:mono</code>). Search tips: <code>cat:serif</code>, <code>cat:mono</code>, <code>src:bundled</code>.
-          ★ = known readability pedigree (Lexend, Atkinson Hyperlegible, Sitka, Verdana, Garamond…).
+          {t('Applies to the Fast Reader word, the Lines pane, and typing (typing stays monospace unless you pick a font here with cat:mono).')}
+          {' '}{t('Search tips:')} <code>cat:serif</code>, <code>cat:mono</code>, <code>src:bundled</code>.
+          {' '}★ = {t('known readability pedigree')} (Lexend, Atkinson Hyperlegible, Sitka, Verdana, Garamond…).
         </p>
       </div>
       <div className="fm-toolbar">
@@ -118,20 +120,20 @@ export default function FontManagerDialog({ tab, global, onPatchSettings, onPatc
           type="text"
           className="fp-search"
           autoFocus
-          placeholder="Search fonts… (name, cat:, src:)"
+          placeholder={t('Search fonts… (name, cat:, src:)')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <label>Sort
+        <label>{t('Sort')}
           <select value={sort} onChange={(e) => setSort(e.target.value)}>
-            <option value="readability">Readability</option>
-            <option value="name">Name</option>
-            <option value="source">Source</option>
+            <option value="readability">{t('Readability')}</option>
+            <option value="name">{t('Name')}</option>
+            <option value="source">{t('Source')}</option>
           </select>
         </label>
-        <label className="inline-check" title="Show only your favorite fonts">
+        <label className="inline-check" title={t('Show only your favorite fonts')}>
           <input type="checkbox" checked={onlyFavs} onChange={(e) => setOnlyFavs(e.target.checked)} />
-          ♥ favorites
+          ♥ {t('favorites')}
         </label>
       </div>
       <div className="fm-list">
@@ -143,7 +145,7 @@ export default function FontManagerDialog({ tab, global, onPatchSettings, onPatc
               <button
                 type="button"
                 className={`fm-fav${favorites.has(f.name) ? ' on' : ''}`}
-                title={favorites.has(f.name) ? 'Unfavorite' : 'Favorite'}
+                title={favorites.has(f.name) ? t('Unfavorite') : t('Favorite')}
                 onClick={() => toggleFav(f.name)}
               >
                 {favorites.has(f.name) ? '♥' : '♡'}
@@ -151,42 +153,42 @@ export default function FontManagerDialog({ tab, global, onPatchSettings, onPatc
               <button type="button" className="fm-pick" onMouseEnter={() => loadFontEntry(f, googleEnabled)} onClick={() => choose(f)}>
                 <span className="fm-name">
                   {f.name}
-                  {score > 0 && <span className="fm-read" title="Readability pedigree">{READ_BADGE[score]}</span>}
+                  {score > 0 && <span className="fm-read" title={t('Readability pedigree')}>{READ_BADGE[score]}</span>}
                 </span>
                 <span className="fm-preview" style={{ fontFamily: fontStack(f) }}>{PREVIEW}</span>
               </button>
-              <span className="fm-meta">{CATEGORY_LABELS[f.cat] || f.cat || ''}{f.source === 'google' ? ' · CDN' : f.source === 'local' ? ' · installed' : ''}</span>
+              <span className="fm-meta">{CATEGORY_LABELS[f.cat] ? t(CATEGORY_LABELS[f.cat]) : (f.cat || '')}{f.source === 'google' ? ' · CDN' : f.source === 'local' ? ' · ' + t('installed') : ''}</span>
             </div>
           );
         })}
-        {!shown.length && <div className="fp-empty">No matches{onlyFavs ? ' among favorites' : ''}.</div>}
+        {!shown.length && <div className="fp-empty">{onlyFavs ? t('No matches among favorites.') : t('No matches.')}</div>}
       </div>
       <div className="fp-footer">
         {!localFonts && (
           <button type="button" className="fp-action" onClick={loadLocal} disabled={!LOCAL_FONTS_SUPPORTED}
-            title={LOCAL_FONTS_SUPPORTED ? 'Enumerate the fonts installed on this device' : 'Chromium-only feature'}>
-            ＋ Use my installed fonts
+            title={LOCAL_FONTS_SUPPORTED ? t('Enumerate the fonts installed on this device') : t('Chromium-only feature')}>
+            ＋ {t('Use my installed fonts')}
           </button>
         )}
         {localStatus && <span className="fp-status">{localStatus}</span>}
-        <label className="inline-check" title="Adds the ~1,700-family Google Fonts catalogue. Each font loads from Google's servers when used — needs the network and reveals your IP/usage to Google (see PRIVACY.md). Bundled and installed fonts stay fully offline.">
+        <label className="inline-check" title={t("Adds the ~1,700-family Google Fonts catalogue. Each font loads from Google's servers when used — needs the network and reveals your IP/usage to Google (see PRIVACY.md). Bundled and installed fonts stay fully offline.")}>
           <input
             type="checkbox"
             checked={googleEnabled}
             onChange={(e) => onPatchGlobal({ enableGoogleFonts: e.target.checked })}
           />
-          Google Fonts (CDN)
+          {t('Google Fonts (CDN)')}
         </label>
         {googleEnabled && (
           <div className="fp-custom">
             <input
               type="text"
-              placeholder="…or type any Google family name"
+              placeholder={t('…or type any Google family name')}
               value={custom}
               onChange={(e) => setCustom(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyCustom(); } }}
             />
-            <button type="button" onClick={applyCustom}>Use</button>
+            <button type="button" onClick={applyCustom}>{t('Use')}</button>
           </div>
         )}
       </div>

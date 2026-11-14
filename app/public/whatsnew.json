@@ -1,5 +1,11 @@
 [
   {
+    "date": "2026-11-14",
+    "items": [
+      "Tachyread is starting to speak your language: menus, tabs, the controls and the Settings, Application settings, Data and Font manager windows now come in French, Spanish, Portuguese, Italian, Croatian, German, Chinese, Ukrainian, Esperanto, Swahili, Hindi, Bengali, Indonesian, Urdu, Persian and Arabic (pick it under Settings → Application → App font). They are machine translated from English and unchecked; the rest of the app follows."
+    ]
+  },
+  {
     "date": "2026-11-13",
     "items": [
       "New Cowork operation: an AI review of your typing runs and reading-aloud sessions. Each gets a grade, what went well, what to fix and a next step, shown beside Tachyread's own score (Typing Progress has a new AI column). Schedule it and it runs after each session; undo removes it."
