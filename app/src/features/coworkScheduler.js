@@ -6,7 +6,7 @@
 // readwrite grant — otherwise the run is logged as skipped so the user knows to re-grant.
 
 import {
-  getJourneyAi, saveJourneyAi, getLibraryBooks, allFiles, getDeviceId, getBinding, getLibraryRef, loadGlobal,
+  getJourneyAi, saveJourneyAi, getLibraryBooks, allFiles, getDeviceId, getBinding, getLibraryRef, loadGlobal, allTypingRuns, getSpeechLog,
 } from '../state/storage.js';
 import {
   buildDataset, buildProgress, buildDigest, buildCoworkRequest,
@@ -21,6 +21,7 @@ import { askClaude, anthropicConfigured } from './anthropic.js';
 import { syncWithProvider, syncLibraryWithProvider } from './sync/syncManager.js';
 import { getSyncProvider } from './sync/syncProviders.js';
 import { dueActions, syncRole, recordRun, combineCoworkInstruction } from './coworkActions.js';
+import { sessionsForReview } from './sessionReview.js';
 
 const TICK_MS = 60_000;
 
@@ -29,14 +30,16 @@ async function writeToDir(dir, name, text) {
   const w = await fh.createWritable(); await w.write(text); await w.close();
 }
 
-async function datasetWithProgress(light, books) {
+async function datasetWithProgress(light, books, ops = []) {
   const bindMap = await getBinding().catch(() => ({})); // real links — "link files" must see which are linked
   const progress = buildProgress(await allFiles().catch(() => []), { books, bindMap, days: 63 });
   progress.weeklySummaries = weeklySummaries(progress.days, books, { weeks: 8 });
   const ds = buildDataset(books, { light, progress });
   ds.queues = queuesForDataset(await getLibraryRef('queues').catch(() => []), books);
   ds.vocabWords = ((await loadGlobal().catch(() => null))?.vocabDeck || []).map((c) => c.word);
-  ds.requeueSkip = ((await getJourneyAi().catch(() => null))?.requeueSkip || []).map(({ bookId, toQueueId }) => ({ bookId, toQueueId }));
+  const ai = await getJourneyAi().catch(() => null);
+  ds.requeueSkip = (ai?.requeueSkip || []).map(({ bookId, toQueueId }) => ({ bookId, toQueueId }));
+  if (ops.includes('cw-session-review')) ds.sessions = sessionsForReview(await allTypingRuns().catch(() => []), await getSpeechLog().catch(() => []), ai?.sessionReviews);
   return ds;
 }
 
@@ -82,7 +85,7 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
         const instr = combineCoworkInstruction([...new Set([...pending, ...coworkIds])], { question: ai?.question || '' });
         if (!instr) throw new Error('nothing to send ("Ask a question" needs a question)');
         const books = await getLibraryBooks();
-        const dataset = await datasetWithProgress(instr.mode === 'light', books);
+        const dataset = await datasetWithProgress(instr.mode === 'light', books, instr.ops);
         await writeSnapshot(dir, now); // the request's agent reads snapshot/ too
         const req = buildCoworkRequest(dataset, instr);
         await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(req, null, 2));

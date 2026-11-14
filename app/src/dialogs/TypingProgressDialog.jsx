@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSessionState } from '../state/useSessionState.js';
 import Dialog from './Dialog.jsx';
-import { allTypingRuns, clearTypingRuns } from '../state/storage.js';
+import { allTypingRuns, clearTypingRuns, getJourneyAi } from '../state/storage.js';
+import { sessionIdOf, reviewText } from '../features/sessionReview.js';
 import { TYPING_MODE_BY_ID } from '../engine/typingModes.js';
 import { fmtDateTime } from '../features/dateFmt.js';
 import { typingWeekly, typingOverall } from '../features/typingStats.js';
@@ -102,7 +103,9 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
 
   useEffect(() => {
     allTypingRuns().then((r) => setRawRuns(r.sort((a, b) => a.ts - b.ts))).catch(() => setRawRuns([]));
+    getJourneyAi().then((ai) => setAiReviews(ai?.sessionReviews || {})).catch(() => {});
   }, []);
+  const [aiReviews, setAiReviews] = useState({}); // AI session reviews (cowork), beside the app's own tier
 
   // Every aggregate below (chart, weekly, overall, per-keyboard) runs on this one list, so
   // normalising here switches the whole page without touching any of them.
@@ -336,7 +339,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
           <div className="tp-table-wrap">
             <table className="tp-table">
               <thead>
-                <tr><th>When</th><th>Mode</th><th>Device</th><th>Text</th><th>{adjust ? 'Adj' : 'Net'}</th><th>Gross</th><th>Acc</th><th>Consist.</th><th>Words</th><th>Time</th><th>Tier{anySet(runF) && <button className="ab-clearf" onClick={() => setRunF(NO_RUNF)} title="Clear these filters">✕</button>}</th></tr>
+                <tr><th>When</th><th>Mode</th><th>Device</th><th>Text</th><th>{adjust ? 'Adj' : 'Net'}</th><th>Gross</th><th>Acc</th><th>Consist.</th><th>Words</th><th>Time</th><th title="AI review from the cowork “AI review of typing runs” operation, beside the app's own tier">AI</th><th>Tier{anySet(runF) && <button className="ab-clearf" onClick={() => setRunF(NO_RUNF)} title="Clear these filters">✕</button>}</th></tr>
                 <tr className="ab-filter-row">
                   <th><DateF value={runF.when} onChange={setR('when')} label="Run date" /></th>
                   <th><TextF value={runF.mode} onChange={setR('mode')} label="mode" /></th>
@@ -352,6 +355,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                   <th><RangeF value={runF.cons} onChange={setR('cons')} label="consistency %" /></th>
                   <th><RangeF value={runF.words} onChange={setR('words')} label="words" /></th>
                   <th><RangeF value={runF.time} onChange={setR('time')} label="duration" unit=" min" /></th>
+                  <th />
                   <th><TextF value={runF.tier} onChange={setR('tier')} label="tier" /></th>
                 </tr>
               </thead>
@@ -375,6 +379,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                     <td>{r.consistency != null ? `${r.consistency}%` : '—'}</td>
                     <td>{r.words}</td>
                     <td>{fmtDur(r.durationMs)}</td>
+                    <td>{aiReviews[sessionIdOf('typing', r.ts)] ? <details className="tp-ai"><summary>🎓 {aiReviews[sessionIdOf('typing', r.ts)].grade}</summary><div style={{ whiteSpace: 'pre-wrap', maxWidth: 360 }}>{reviewText(aiReviews[sessionIdOf('typing', r.ts)])}</div></details> : '—'}</td>
                     <td>{r.tier}</td>
                   </tr>
                 ))}

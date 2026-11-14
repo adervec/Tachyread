@@ -35,6 +35,7 @@ const TYPING_MODE_IDS = TYPING_MODES.filter((m) => m.kind !== 'doc').map((m) => 
 import { liveQueues, queueBooks, queueOf } from './readingQueues.js';
 import { AI_NOTE_TYPES } from './journeyAi.js';
 import { localDay } from './localDay.js';
+import { SESSION_ID, sessionLabel } from './sessionReview.js';
 
 const NEVER = 'Titles, authors, ids, reading/finished status and dates, ratings, your own notes, queues, reading progress and history, file links that already exist — and anything about a book you have locked (🔒).';
 
@@ -88,6 +89,16 @@ export const COWORK_OPS = {
       sends: 'The compact dataset; the agent reads snapshot/typing.json (runs, weekly aggregates, most-missed keys).',
       changes: 'Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.',
       review: 'Report only. Undo removes it.',
+    },
+  },
+  'cw-session-review': {
+    icon: '🎓', group: 'report', label: 'AI review of typing runs & reading-aloud sessions', heavy: false,
+    instruction: 'SESSION REVIEW. dataset.sessions.due lists the typing runs and reading-aloud sessions not yet reviewed (newest first), each with its raw detail and the app\'s own score (appScore); dataset.sessions.recent is the history for trend. For EVERY due session return `sessionReviews` [{sessionId (the due id, verbatim), grade (A+ to F), summary (2–4 sentences), strengths (0–4 short items), fixes (0–4 short items), next (one concrete next step)}]. Rubric — typing: net speed against this person\'s recent runs, accuracy (97%+ is good), consistency, the most-missed keys and problem words, perfect versus corrected words, the mode and text; reading aloud: match quality, exact versus near versus skipped words, misses, filler words, the voice and presenting scores and how the per-minute trend held up. Use only numbers in the data, never invent one. Your grade sits BESIDE the app\'s own score, never replacing it. With nothing due, return "sessionReviews": [].',
+    allow: { sessionReviews: true },
+    explain: {
+      sends: 'The compact dataset plus dataset.sessions: every typing run and reading-aloud session not yet reviewed (raw detail and the app\'s own score) and the recent history.',
+      changes: 'Stores one AI review per session beside the app\'s own score: shown in Typing Progress (AI column) and on this page. Changes no book, queue or link.',
+      review: 'Report only: one row per session. Undo removes the reviews.',
     },
   },
   'cw-speak-coach': {
@@ -417,7 +428,7 @@ export function combinedAllow(ids) {
   for (const id of ids) {
     const a = COWORK_OPS[id]?.allow;
     if (!a) continue;
-    for (const k of ['analysis', 'recommendations', 'brief', 'weeklies', 'treeMeta', 'crossNotes', 'answer', 'queueOrder', 'duplicates', 'queueAdds', 'queueMoves']) if (a[k]) out[k] = true;
+    for (const k of ['analysis', 'recommendations', 'brief', 'weeklies', 'treeMeta', 'crossNotes', 'answer', 'queueOrder', 'duplicates', 'queueAdds', 'queueMoves', 'sessionReviews']) if (a[k]) out[k] = true;
     if (a.aiNotes) out.aiNotes = a.aiNotes === true || out.aiNotes === true ? true : 'prep'; // unrestricted wins over prep-only
     if (a.bindings) out.bindings = a.bindings;
     if (a.reports) out.reports = [...(out.reports || []), a.reports];
@@ -454,6 +465,7 @@ export function schemaFor(ids) {
   if (a.queueAdds) parts.push('"queueAdds": [{"queueId", "ids": ["<unqueued to-read book ids>"], "why"}]');
   if (a.queueMoves) parts.push('"queueMoves": [{"bookId", "toQueueId", "why"}]');
   if (a.duplicates) parts.push('"duplicates": [{"keepId", "foldId", "why"}]');
+  if (a.sessionReviews) parts.push('"sessionReviews": [{"sessionId": "<dataset.sessions.due[].id>", "grade": "A+…F", "summary", "strengths": [], "fixes": [], "next"}]');
   if (a.reports) parts.push(`"reports": [{"kind": ${a.reports.map((k) => `"${k}"`).join(' | ')}, "title", "text": "markdown"}]`);
   if (a.newBooks) parts.push('"newBooks": [{"title", "author", "genre"?, "pages"?, "why"}]');
   if (a.addTags) parts.push('"addTags": [{"id", "tags": ["…"]}]');
@@ -484,7 +496,7 @@ const short = (v) => (typeof v === 'string' && v.length > 120 ? `${v.slice(0, 12
 
 // Keep only what the requested operations may change. ctx: { booksById, bindMap, queuedIds:Set }.
 // → { output (sanitized), dropped: [{ what, why }] }
-export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedIds = new Set(), queues = [], vocabWords = [], requeueSkip = [] } = {}) {
+export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedIds = new Set(), queues = [], vocabWords = [], requeueSkip = [], sessionIds = null } = {}) {
   const a = combinedAllow(ids);
   const out = {}, dropped = [];
   const drop = (what, why) => dropped.push({ what, why });
@@ -537,6 +549,25 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
         return true;
       });
     }
+  }
+  // Session reviews: only for sessions that exist (sessionIds, when the caller knows them), graded
+  // A+…F with a summary; text is length-capped so a reply can't stuff the record.
+  if (raw?.sessionReviews?.length) {
+    const seen = new Set();
+    out.sessionReviews = raw.sessionReviews.filter((r) => {
+      const id = String(r?.sessionId || '');
+      const why = !a.sessionReviews ? 'not part of the requested operations'
+        : !SESSION_ID.test(id) || (sessionIds && !sessionIds.has(id)) ? 'no such session'
+        : !/^[A-F][+-]?$/.test(String(r?.grade || '')) ? 'grade must be A+ to F'
+        : !String(r?.summary || '').trim() ? 'empty summary'
+        : seen.has(id) ? 'session reviewed twice in one reply' : null;
+      if (why) { drop(`review of ${id || '?'}`, why); return false; }
+      seen.add(id); return true;
+    }).map((r) => {
+      const list = (xs) => (Array.isArray(xs) ? xs : []).map((x) => String(x).slice(0, 300)).filter(Boolean).slice(0, 4);
+      return { sessionId: String(r.sessionId), grade: String(r.grade), summary: String(r.summary).slice(0, 1500), strengths: list(r.strengths), fixes: list(r.fixes), next: String(r.next || '').slice(0, 300) };
+    });
+    if (!out.sessionReviews.length) delete out.sessionReviews;
   }
   if (raw?.reports?.length) {
     out.reports = raw.reports.filter((r) => {
@@ -676,7 +707,7 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
 }
 
 // Sanitized output → review rows: [{ key, kind, label, from, to, ...payload }], all ticked by default.
-export function planRows(output, { booksById = {}, files = {}, goals = {}, queues = [], year = new Date().getFullYear() } = {}) {
+export function planRows(output, { booksById = {}, files = {}, goals = {}, queues = [], scores = {}, year = new Date().getFullYear() } = {}) {
   const rows = [];
   const title = (id) => booksById[id]?.title || id;
   const qname = (id) => queues.find((q) => q.id === id)?.name || id;
@@ -705,6 +736,7 @@ export function planRows(output, { booksById = {}, files = {}, goals = {}, queue
     rows.push({ key: `x:${i}`, kind: 'cross', label: `Shared note — ${n.series || ids.map(title).join(' + ')}`, to: short(n.text), value: { bookIds: ids, series: n.series || null, type: AI_NOTE_TYPES[n.type] ? n.type : 'other', text: String(n.text).trim() } });
   });
   for (const b of output.bindings || []) rows.push({ key: `l:${b.checksum}`, kind: 'link', label: `Link ${files[b.checksum]?.fileName || `${b.checksum.slice(0, 8)}…`}`, from: '(unlinked)', to: title(b.bookId), value: b });
+  for (const r of output.sessionReviews || []) rows.push({ key: `sr:${r.sessionId}`, kind: 'sessionReview', label: `AI review — ${sessionLabel(r.sessionId)}`, from: scores[r.sessionId] || '', to: `${r.grade} — ${short(r.summary)}`, value: r });
   (output.reports || []).forEach((r, i) => rows.push({ key: `r:${i}`, kind: 'report', label: `Report — ${r.title || r.kind}`, to: short(r.text), value: { kind: r.kind, title: String(r.title || r.kind), text: String(r.text) } }));
   (output.newBooks || []).forEach((nb, i) => rows.push({ key: `nb:${i}`, kind: 'newBook', label: `New to-read book — ${nb.title} — ${nb.author}`, from: '(not in library)', to: short(String(nb.why || '')), value: nb }));
   for (const t of output.addTags || []) rows.push({ key: `t:${t.id}`, kind: 'tags', label: `${title(t.id)} — tags`, from: bookTags(booksById[t.id]).join(', ') || '—', to: `+ ${t.tags.join(', ')}`, bookId: t.id, value: t.tags });
@@ -772,7 +804,12 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now(), so
     else if (r.kind === 'vocab') vocabAdds.push(r.value);
     else if (r.kind === 'typingPlan') planAdds.push(r.value);
     else if (r.kind === 'goal') goalSets.push(r.value);
-    else if (r.kind === 'report') { keepAi('reports'); aiNext.reports = [{ at: now, ...r.value }, ...(aiNext.reports || [])].slice(0, 60); }
+    else if (r.kind === 'sessionReview') {
+      keepAi('sessionReviews');
+      const { sessionId, ...rv } = r.value;
+      const all = { ...(aiNext.sessionReviews || {}), [sessionId]: { ...rv, at: now } };
+      aiNext.sessionReviews = Object.fromEntries(Object.entries(all).sort((x, y) => y[1].at - x[1].at).slice(0, 1000)); // ponytail: newest 1000 kept
+    } else if (r.kind === 'report') { keepAi('reports'); aiNext.reports = [{ at: now, ...r.value }, ...(aiNext.reports || [])].slice(0, 60); }
     else if (r.kind === 'newBook') {
       const nb = r.value;
       const rec = setReadStatus({ title: String(nb.title).trim(), author: String(nb.author).trim(), ...(nb.genre ? { genre: String(nb.genre) } : {}), ...(Number(nb.pages) > 0 ? { pages: Number(nb.pages) } : {}), recBy: 'Cowork agent', description: String(nb.why || '').trim() || undefined, addedAt: now }, 'toread');
@@ -797,7 +834,7 @@ export function buildApply(rows, { booksById = {}, ai = {}, now = Date.now(), so
 // Which of the requested operations a review row belongs to — the first whose permission covers it
 // (the Cowork page's per-subtask view). A rename row goes to the renaming op, not a blank-filler
 // that happens to allow the same field. null = none of them (not possible for sanitized output).
-const ROW_ALLOW = { note: 'aiNotes', cross: 'crossNotes', queueAdd: 'queueAdds', queueMove: 'queueMoves', link: 'bindings', newBook: 'newBooks', tags: 'addTags', vocab: 'vocab', typingPlan: 'typingPlan', goal: 'goalAdvice', queueOrder: 'queueOrder', dupe: 'duplicates', weekly: 'weeklies', brief: 'brief', analysis: 'analysis', recommendations: 'recommendations', treeMeta: 'treeMeta', answer: 'answer' };
+const ROW_ALLOW = { sessionReview: 'sessionReviews', note: 'aiNotes', cross: 'crossNotes', queueAdd: 'queueAdds', queueMove: 'queueMoves', link: 'bindings', newBook: 'newBooks', tags: 'addTags', vocab: 'vocab', typingPlan: 'typingPlan', goal: 'goalAdvice', queueOrder: 'queueOrder', dupe: 'duplicates', weekly: 'weeklies', brief: 'brief', analysis: 'analysis', recommendations: 'recommendations', treeMeta: 'treeMeta', answer: 'answer' };
 export function opForRow(row, ids) {
   const covers = (a) => (row.kind === 'field' ? (row.rename ? (a.renames || []).includes(row.field) : !!a.fields?.[row.field])
     : row.kind === 'report' ? a.reports === row.value?.kind
@@ -821,6 +858,7 @@ export function applySummary(rows) {
     n('dupe') && `${n('dupe')} duplicate suggestion${n('dupe') === 1 ? '' : 's'}`,
     n('answer') && 'answer',
     n('report') && `${n('report')} report${n('report') === 1 ? '' : 's'}`,
+    n('sessionReview') && `${n('sessionReview')} session review${n('sessionReview') === 1 ? '' : 's'}`,
     n('newBook') && `${n('newBook')} new book${n('newBook') === 1 ? '' : 's'}`,
     n('tags') && `tags on ${n('tags')} book${n('tags') === 1 ? '' : 's'}`,
     n('vocab') && `${n('vocab')} vocabulary card${n('vocab') === 1 ? '' : 's'}`,

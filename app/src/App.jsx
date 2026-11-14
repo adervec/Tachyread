@@ -158,6 +158,8 @@ import { backupToProvider, syncWithProvider } from './features/sync/syncManager.
 import { applyTheme, tabThemeName, systemPrefersDark } from './state/themes.js';
 import { ensureFamilyLoaded } from './state/fonts.js';
 import './App.css';
+import { markDue } from './features/coworkActions.js';
+import { getJourneyAi, saveJourneyAi } from './state/storage.js';
 
 // A word at index i starts a new sentence if it's the first word or the previous word ends with
 // sentence-terminating punctuation (allowing trailing quotes / brackets). Used by the "first word"
@@ -334,7 +336,7 @@ function AppInner() {
   const [typingRuns, setTypingRuns] = useState([]); // session killfeed of completed typing runs
   const onSaveTypingRun = useCallback((run) => {
     setTypingRuns((r) => [...r, run]);
-    saveTypingRun(run).catch(() => {});
+    saveTypingRun(run).then(sessionEnded).catch(() => {});
   }, []);
   const [planState, setPlanState] = useState(null); // running typing plan: { plan, step, set } | null
   const planStateRef = useRef(null);
@@ -2182,7 +2184,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       }
       // Kept on this device (Data → Speech log) and, when the Tachyread folder is set up, written to
       // its speech/ subfolder for SpeechImprover.
-      if (keepSession(rec)) { appendSpeechLog(rec); writeSpeakingLog(rec).catch(() => {}); }
+      if (keepSession(rec)) { appendSpeechLog(rec); writeSpeakingLog(rec).catch(() => {}); sessionEnded(); }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab?.id, speakingOn, docLang.bcp]);
@@ -3953,6 +3955,12 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       )}
     </div>
   );
+}
+
+// House standard 18: a graded session (typing run, reading-aloud sitting) just ended — if the AI
+// session review is scheduled, make it due so the sync machine sends it at the next tick.
+function sessionEnded() {
+  getJourneyAi().then((ai) => { const next = markDue(ai, 'cw-session-review'); if (next) return saveJourneyAi(next); }).catch(() => {});
 }
 
 export default function App() {

@@ -205,3 +205,36 @@ console.log('coworkOps: all cases pass');
   assert.equal(COWORK_MANIFEST.protocol, 'cowork-manifest');
   for (const c of COWORK_MANIFEST.channels) assert.ok(c.name && c.request.length && (!!c.replyPath !== !!c.replyDir), `manifest channel ${c.name} is valid`);
 }
+
+// ── AI session review (house standard 18): one row per session, stored beside the app's score, undoable ──
+{
+  const { sanitizeOutput, planRows, buildApply, opForRow, schemaFor } = await import('./coworkOps.js');
+  assert.match(schemaFor(['cw-session-review']), /sessionReviews/);
+  const raw = { sessionReviews: [
+    { sessionId: 'typing:1000', grade: 'B+', summary: 'Steady.', strengths: ['rhythm', 1, '', 'a', 'b', 'c'], fixes: ['e key'], next: 'drill e' },
+    { sessionId: 'typing:9999', grade: 'A', summary: 'ghost' },
+    { sessionId: 'speech:2000', grade: 'Z', summary: 'bad grade' },
+    { sessionId: 'speech:2000', grade: 'C', summary: '' },
+    { sessionId: 'typing:1000', grade: 'A', summary: 'twice' },
+  ] };
+  const ids = new Set(['typing:1000', 'speech:2000']);
+  const { output, dropped } = sanitizeOutput(raw, ['cw-session-review'], { sessionIds: ids });
+  assert.equal(output.sessionReviews.length, 1, 'only the valid review of an existing session');
+  assert.deepEqual(output.sessionReviews[0].strengths, ['rhythm', '1', 'a', 'b'], 'lists capped at 4, empties dropped');
+  assert.deepEqual(dropped.map((d) => d.why), ['no such session', 'grade must be A+ to F', 'empty summary', 'session reviewed twice in one reply']);
+  assert.equal(sanitizeOutput(raw, ['cw-light'], { sessionIds: ids }).output.sessionReviews, undefined, 'not allowed unless requested');
+  const rows = planRows(output, {});
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].kind, 'sessionReview');
+  assert.equal(opForRow(rows[0], ['cw-session-review']), 'cw-session-review');
+  const ap = buildApply(rows, { booksById: {}, ai: { sessionReviews: { 'speech:2000': { grade: 'A', at: 1 } } }, now: 5 });
+  assert.deepEqual(Object.keys(ap.aiNext.sessionReviews).sort(), ['speech:2000', 'typing:1000'], 'stored beside earlier reviews');
+  assert.equal(ap.aiNext.sessionReviews['typing:1000'].grade, 'B+');
+  assert.deepEqual(ap.undo.ai.sessionReviews, { 'speech:2000': { grade: 'A', at: 1 } }, 'undo restores the previous reviews');
+}
+{
+  const { markDue } = await import('./coworkActions.js');
+  assert.equal(markDue({ schedules: {} }, 'cw-session-review'), null, 'not scheduled → nothing');
+  assert.equal(markDue({ schedules: { 'cw-session-review': 'off' } }, 'cw-session-review'), null);
+  assert.equal(markDue({ schedules: { 'cw-session-review': 'daily' }, actionRuns: { 'cw-session-review': { at: 99, note: 'x' } } }, 'cw-session-review').actionRuns['cw-session-review'].at, 0, 'scheduled → due now');
+}

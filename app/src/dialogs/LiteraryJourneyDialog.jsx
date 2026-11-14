@@ -15,7 +15,7 @@ import {
   getJourneyAi, saveJourneyAi, exportLibraryData, importLibraryData, librarySize, clearLibrary,
   getBinding, setBinding, getSectionBindings, setSectionBinding, allDocMeta, allFiles,
   loadFile, loadReadState, loadDocPayload,
-  getCrossNotes, saveCrossNote, deleteCrossNote,
+  getCrossNotes, saveCrossNote, deleteCrossNote, allTypingRuns, getSpeechLog,
 } from '../state/storage.js';
 import { extractTextMeta } from '../features/textMeta.js';
 import { createReadingTracker } from '../engine/readingTracker.js';
@@ -64,6 +64,7 @@ import { subDir, subDirLabel, pickRoot } from '../features/tachyFolder.js';
 import { deviceKind } from '../state/device.js';
 import { AXES, READER_ARCHETYPES, readerProfile, matchArchetype, currentArchetype, archetypeTrend, archetypeAxes } from '../features/readerArchetype.js';
 import { localDay, parseDay } from '../features/localDay.js';
+import { sessionsForReview, allSessionIds, sessionLabel, reviewText, appScores } from '../features/sessionReview.js';
 
 // Trigger a client-side file download (same anchor trick DataDialog uses; showSaveFilePicker hangs
 // headless so a plain anchor is the reliable path).
@@ -2242,7 +2243,7 @@ function QueueView({ initialSel = null, books, onOpen, fileStats = {}, bindMap =
   );
 }
 
-const ROW_KIND = { field: 'Book field', note: 'Book note', cross: 'Shared note', link: 'File link', analysis: 'Analysis', recommendations: 'Read-next list', weekly: 'Weekly summary', brief: 'Morning brief', treeMeta: 'Tree links', answer: 'Answer', queueOrder: 'Queue order', queueAdd: 'Queue add', queueMove: 'Queue move', dupe: 'Duplicate pair', report: 'Report', newBook: 'New book', tags: 'Tags', vocab: 'Vocab card', typingPlan: 'Typing plan', goal: 'Goal' };
+const ROW_KIND = { field: 'Book field', note: 'Book note', cross: 'Shared note', link: 'File link', analysis: 'Analysis', recommendations: 'Read-next list', weekly: 'Weekly summary', brief: 'Morning brief', treeMeta: 'Tree links', answer: 'Answer', queueOrder: 'Queue order', queueAdd: 'Queue add', queueMove: 'Queue move', sessionReview: 'Session review', dupe: 'Duplicate pair', report: 'Report', newBook: 'New book', tags: 'Tags', vocab: 'Vocab card', typingPlan: 'Typing plan', goal: 'Goal' };
 const APPLY_CAP = 200; // most changes one apply may write (bigger replies are reviewed in pages)
 
 // Dashboard: every queue's progress and what's left, plus totals across all of them.
@@ -3316,13 +3317,14 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   // Reading-progress bundle (daily/weekly totals, streak, in-flight books) attached to every export,
   // so cowork daily/weekly summary tasks have the data. Built fresh at call time from the file records.
   // The algorithmic weekly summaries ride along so a cowork task can return dressed-up `weeklies`.
-  const datasetWithProgress = async (light) => {
+  const datasetWithProgress = async (light, ops = []) => {
     const progress = buildProgress(await allFiles().catch(() => []), { books, bindMap, days: 63 });
     progress.weeklySummaries = weeklySummaries(progress.days, books, { weeks: 8 });
     const ds = buildDataset(books, { light, progress });
     ds.queues = queuesForDataset(await getLibraryRef('queues').catch(() => []), books); // for queue advice
     ds.vocabWords = (global?.vocabDeck || []).map((c) => c.word); // so vocabulary suggestions skip known words
     ds.requeueSkip = (ai?.requeueSkip || []).map(({ bookId, toQueueId }) => ({ bookId, toQueueId })); // re-queue pairs already declined
+    if (ops.includes('cw-session-review')) ds.sessions = sessionsForReview(await allTypingRuns().catch(() => []), await getSpeechLog().catch(() => []), ai?.sessionReviews);
     return ds;
   };
   // Request builder: a checkbox TREE of every sync action (cowork folder / direct API / cloud),
@@ -3356,6 +3358,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   const outputs = useMemo(() => [
     ...Object.entries(ai?.briefs || {}).map(([date, b]) => ({ key: `b:${date}`, at: b.at || parseDay(date), date, kind: 'brief', op: 'cw-brief', title: `Morning brief ${date}`, text: b.text })),
     ...(ai?.reports || []).map((r, i) => ({ key: `r:${r.at}:${i}`, at: r.at, kind: `report · ${r.kind}`, op: opForReport(r.kind), title: r.title || r.kind, text: r.text })),
+    ...Object.entries(ai?.sessionReviews || {}).map(([id, r]) => ({ key: `sr:${id}`, at: r.at, kind: 'session review', op: 'cw-session-review', title: `${sessionLabel(id)} — AI grade ${r.grade}`, text: reviewText(r) })),
     ...(ai?.answers || []).map((a, i) => ({ key: `a:${a.at}:${i}`, at: a.at, kind: 'answer', op: 'cw-ask', title: a.question || 'Answer', text: a.text })),
     ...(ai?.analysis ? [{ key: 'an:current', at: ai.updatedAt || 0, kind: 'analysis (current)', op: 'cw-light', title: 'Dashboard analysis', text: ai.analysis }] : []),
     ...(ai?.analysisHistory || []).map((h, i) => ({ key: `ah:${h.at}:${i}`, at: h.at, kind: 'analysis (archived)', op: 'cw-light', title: 'Earlier analysis', text: h.text, analysisIndex: i })),
@@ -3402,10 +3405,11 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     if ((ai?.ledger || []).includes(hash)) { setMsg('That reply was already applied.'); return; }
     const queues = (await getLibraryRef('queues').catch(() => null)) || [];
     const queuedIds = new Set(liveQueues(queues).flatMap((q) => q.ids || []));
-    const { output, dropped } = sanitizeOutput(parseAiOutput(text), ops, { booksById, bindMap, queuedIds, queues, vocabWords: (global?.vocabDeck || []).map((c) => c.word), requeueSkip: ai?.requeueSkip || [] });
+    const [runs, speech] = await Promise.all([allTypingRuns().catch(() => []), getSpeechLog().catch(() => [])]);
+    const { output, dropped } = sanitizeOutput(parseAiOutput(text), ops, { booksById, bindMap, queuedIds, queues, vocabWords: (global?.vocabDeck || []).map((c) => c.word), requeueSkip: ai?.requeueSkip || [], sessionIds: allSessionIds(runs, speech) });
     const files = Object.fromEntries((await allFiles().catch(() => [])).map((f) => [f.checksum, f]));
     const goals = (await getLibraryRef('goals').catch(() => null)) || {};
-    const rows = planRows(output, { booksById, files, goals, queues });
+    const rows = planRows(output, { booksById, files, goals, queues, scores: appScores(runs, speech) }); // scores: the app's own, shown beside AI grades
     setReview({ rows, dropped, ops, source, hash, ...extra });
     setPicked(new Set(rows.slice(0, APPLY_CAP).map((r) => r.key))); // a huge reply goes in pages, never one click
     setMsg(rows.length
@@ -3512,7 +3516,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
         try {
           const ci = combineCoworkInstruction(coworkIds, { question });
           if (!ci) throw new Error('nothing to send — “Ask a question” needs a question');
-          const dataset = await datasetWithProgress(ci.mode === 'light');
+          const dataset = await datasetWithProgress(ci.mode === 'light', ci.ops);
           if (!ids.includes('cw-snapshot')) await writeSnapshot(dir); // the agent reads snapshot/ too
           const req = buildCoworkRequest(dataset, ci);
           await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(req, null, 2));
@@ -3565,7 +3569,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   async function copyDigest() {
     try {
       const ci = combineCoworkInstruction([...sel], { question }) || opsInstruction(['cw-light']);
-      await navigator.clipboard.writeText(buildDigest(await datasetWithProgress(ci.mode === 'light'), ci));
+      await navigator.clipboard.writeText(buildDigest(await datasetWithProgress(ci.mode === 'light', ci.ops), ci));
       await logActivity('digest', `Copied ${ci.mode} digest to clipboard`);
       setMsg('Digest copied — paste it into a Claude chat, then paste the JSON reply below.');
     } catch { setMsg('Clipboard blocked — use the cowork folder instead.'); }

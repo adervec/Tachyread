@@ -1,5 +1,11 @@
 [
   {
+    "date": "2026-11-13",
+    "items": [
+      "New Cowork operation: an AI review of your typing runs and reading-aloud sessions. Each gets a grade, what went well, what to fix and a next step, shown beside Tachyread's own score (Typing Progress has a new AI column). Schedule it and it runs after each session; undo removes it."
+    ]
+  },
+  {
     "date": "2026-11-10",
     "items": [
       "Scheduled Cowork replies now wait for your review before anything changes. Switch that off per report under AI / Cowork if you'd rather they apply themselves.",

@@ -147,3 +147,11 @@ export function fmtAgo(ts, now = Date.now()) {
   if (h < 48) return `${h}h ago`;
   return `${Math.round(h / 24)}d ago`;
 }
+
+// A session just ended: if the AI session review is on a schedule, make it due now (the sync
+// machine's scheduler picks it up within a minute). null = not scheduled, nothing to change.
+export function markDue(ai, id) {
+  const sched = ai?.schedules?.[id];
+  if (!sched || sched === 'off') return null;
+  return { ...ai, actionRuns: { ...(ai.actionRuns || {}), [id]: { ...(ai.actionRuns?.[id] || {}), at: 0 } } };
+}
