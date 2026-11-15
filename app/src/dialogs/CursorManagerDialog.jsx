@@ -6,8 +6,9 @@ import {
   clampCursorSize, CURSOR_MIN_SIZE, CURSOR_MAX_SIZE, DEFAULT_CURSOR_COLOR, DEFAULT_CURSOR_SIZE,
 } from '../features/cursors.js';
 import { TRAIL_MODES, clampTrailMs, TRAIL_MIN_MS, TRAIL_MAX_MS } from '../features/cursorTrail.js';
+import { t } from '../i18n.js';
 
-const TRAIL_LABELS = { off: 'Off', fade: 'Fade (comet tail)', seismograph: 'Seismograph (draws as text scrolls under it)' };
+const TRAIL_LABELS = { off: t('Off'), fade: t('Fade (comet tail)'), seismograph: t('Seismograph (draws as text scrolls under it)') };
 
 // A little SVG swatch of a cursor at a given colour/size, for the picker grid.
 function Swatch({ def, color, size }) {
@@ -45,25 +46,24 @@ export default function CursorManagerDialog({ tab, onClose }) {
     if (s.cursorId === id) setTab({ cursorId: '' });
   }
 
-  const activeCss = resolveCursorCss(s.cursorId, customs) || 'the system pointer';
+  const activeCss = resolveCursorCss(s.cursorId, customs) || t('the system pointer');
 
   return (
-    <Dialog title="Reading cursor & trail" onClose={onClose} width={640} buttons={<button onClick={onClose}>Close</button>}>
-      {!tab && <p className="settings-note">Open a document to set its reading cursor.</p>}
+    <Dialog title={t('Reading cursor & trail')} onClose={onClose} width={640} buttons={<button onClick={onClose}>{t('Close')}</button>}>
+      {!tab && <p className="settings-note">{t('Open a document to set its reading cursor.')}</p>}
       {tab && (
         <>
           <p className="settings-note">
-            A cursor and trail just for <b>this tab</b>, shown only over the reader panes — menus and dialogs
-            keep the normal pointer. Per-tab, so each book can read differently.
+            {t('A cursor and trail just for this tab, shown only over the reader panes — menus and dialogs keep the normal pointer. Per-tab, so each book can read differently.')}
           </p>
 
-          <div className="field-section">Cursor for this tab</div>
+          <div className="field-section">{t('Cursor for this tab')}</div>
           <div className="cur-grid">
             <button
               className={`cur-cell${!s.cursorId ? ' on' : ''}`}
               onClick={() => setTab({ cursorId: '' })}
-              title="System default"
-            ><span className="cur-swatch cur-native">↖</span><span className="cur-name">System</span></button>
+              title={t('System default')}
+            ><span className="cur-swatch cur-native">↖</span><span className="cur-name">{t('System')}</span></button>
             {PREMADE_CURSORS.filter((c) => c.id !== 'default').map((c) => (
               <button
                 key={c.id}
@@ -86,33 +86,33 @@ export default function CursorManagerDialog({ tab, onClose }) {
                 >
                   {def && <Swatch def={def} color={c.color} size={c.size} />}
                   <span className="cur-name">{c.name}</span>
-                  <span className="cur-del" title="Delete this custom cursor" onClick={(e) => { e.stopPropagation(); deleteCustom(c.id); }}>×</span>
+                  <span className="cur-del" title={t('Delete this custom cursor')} onClick={(e) => { e.stopPropagation(); deleteCustom(c.id); }}>×</span>
                 </button>
               );
             })}
           </div>
 
-          <div className="field-section">Make a custom cursor</div>
+          <div className="field-section">{t('Make a custom cursor')}</div>
           <div className="cur-builder">
-            <select value={base} onChange={(e) => setBase(e.target.value)} title="Shape">
+            <select value={base} onChange={(e) => setBase(e.target.value)} title={t('Shape')}>
               {SVG_CURSORS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
-            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} title="Colour" />
+            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} title={t('Colour')} />
             <input
               type="range" min={CURSOR_MIN_SIZE} max={CURSOR_MAX_SIZE} step={2}
-              value={clampCursorSize(size)} onChange={(e) => setSize(Number(e.target.value))} title="Size"
+              value={clampCursorSize(size)} onChange={(e) => setSize(Number(e.target.value))} title={t('Size')}
             />
             <span className="range-val">{clampCursorSize(size)}px</span>
             {/* Live preview at true size, over a strip of text. */}
             <span className="cur-preview" style={{ cursor: cursorCss(PREMADE_CURSORS.find((c) => c.id === base), { color, size }) }}>
-              hover here to preview
+              {t('hover here to preview')}
             </span>
-            <button className="toggle-on" onClick={saveCustom}>Save &amp; use</button>
+            <button className="toggle-on" onClick={saveCustom}>{t('Save & use')}</button>
           </div>
 
-          <div className="field-section">Trail</div>
+          <div className="field-section">{t('Trail')}</div>
           <div className="field-row">
-            <label>Trail effect</label>
+            <label>{t('Trail effect')}</label>
             <div>
               <select value={s.cursorTrail || 'off'} onChange={(e) => setTab({ cursorTrail: e.target.value })}>
                 {TRAIL_MODES.map((m) => <option key={m} value={m}>{TRAIL_LABELS[m]}</option>)}
@@ -122,11 +122,11 @@ export default function CursorManagerDialog({ tab, onClose }) {
           {s.cursorTrail && s.cursorTrail !== 'off' && (
             <>
               <div className="field-row">
-                <label>Trail colour</label>
+                <label>{t('Trail colour')}</label>
                 <div><input type="color" value={s.cursorTrailColor || DEFAULT_CURSOR_COLOR} onChange={(e) => setTab({ cursorTrailColor: e.target.value })} /></div>
               </div>
               <div className="field-row">
-                <label>Trail length</label>
+                <label>{t('Trail length')}</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <input
                     type="range" min={TRAIL_MIN_MS} max={TRAIL_MAX_MS} step={100}
@@ -137,12 +137,12 @@ export default function CursorManagerDialog({ tab, onClose }) {
               </div>
               <p className="settings-note">
                 {s.cursorTrail === 'seismograph'
-                  ? 'Seismograph: hold the pointer over the text and scroll — the trace draws like a needle on a drum as the lines pass under it.'
-                  : 'Fade: a comet tail follows the pointer and fades out over the trail length.'}
+                  ? t('Seismograph: hold the pointer over the text and scroll — the trace draws like a needle on a drum as the lines pass under it.')
+                  : t('Fade: a comet tail follows the pointer and fades out over the trail length.')}
               </p>
             </>
           )}
-          <p className="settings-note">Active cursor: <code>{typeof activeCss === 'string' ? activeCss.slice(0, 48) : 'system'}{activeCss.length > 48 ? '…' : ''}</code></p>
+          <p className="settings-note">{t('Active cursor:')} <code>{typeof activeCss === 'string' ? activeCss.slice(0, 48) : t('system')}{activeCss.length > 48 ? '…' : ''}</code></p>
         </>
       )}
     </Dialog>

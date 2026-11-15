@@ -5,6 +5,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { getNotes, saveNote, deleteNote } from '../state/storage.js';
 import { getTocEntries, currentChapter } from '../document/toc.js';
 import { askClaude, anthropicConfigured, ANTHROPIC_MODELS } from '../features/anthropic.js';
+import { t } from '../i18n.js';
 
 const MAX_CONTEXT = 14000; // chars of document text sent to the AI (keeps token use in check)
 const when = (ts) => (ts ? fmtDateTime(ts) : '');
@@ -97,40 +98,40 @@ export default function NotesDialog({ tab, onJumpWord, onClose }) {
   }
 
   return (
-    <Dialog title={`Notes — ${tab.doc.fileName}`} onClose={onClose} width={640} buttons={<button onClick={onClose}>Close</button>}>
+    <Dialog title={t('Notes — {file}', { file: tab.doc.fileName })} onClose={onClose} width={640} buttons={<button onClick={onClose}>{t('Close')}</button>}>
       <div className="rh-tabs">
-        <button className={`rh-tab${pane === 'notes' ? ' on' : ''}`} onClick={() => setPane('notes')}>📝 Notes ({notes.length})</button>
+        <button className={`rh-tab${pane === 'notes' ? ' on' : ''}`} onClick={() => setPane('notes')}>📝 {t('Notes ({n})', { n: notes.length })}</button>
         <button className={`rh-tab${pane === 'ai' ? ' on' : ''}`} onClick={() => setPane('ai')}>✨ AI</button>
       </div>
 
       {pane === 'notes' ? (
         <>
           <div className="note-add">
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} placeholder="Write a note…" />
+            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} placeholder={t('Write a note…')} />
             <div className="note-add-row">
-              <label className="inline-check" title="Link this note to your current reading position so you can jump back to it">
-                <input type="checkbox" checked={anchor} onChange={(e) => setAnchor(e.target.checked)} /> Anchor to current position (word {tab.settings.wordIndex + 1})
+              <label className="inline-check" title={t('Link this note to your current reading position so you can jump back to it')}>
+                <input type="checkbox" checked={anchor} onChange={(e) => setAnchor(e.target.checked)} /> {t('Anchor to current position (word {n})', { n: tab.settings.wordIndex + 1 })}
               </label>
               {entries.length > 0 && (
-                <select value={secPick} onChange={(e) => setSecPick(e.target.value)} title="Attach this note to a ToC section — it stays with the section (orphaned, not deleted, if the ToC changes)">
-                  <option value="none">§ no section</option>
-                  {curSec && <option value="current">§ current: {curSec.title}</option>}
+                <select value={secPick} onChange={(e) => setSecPick(e.target.value)} title={t('Attach this note to a ToC section — it stays with the section (orphaned, not deleted, if the ToC changes)')}>
+                  <option value="none">§ {t('no section')}</option>
+                  {curSec && <option value="current">§ {t('current: {title}', { title: curSec.title })}</option>}
                   {entries.map((e) => <option key={e.wordIndex} value={String(e.wordIndex)}>§ {e.title}</option>)}
                 </select>
               )}
-              <button className="toggle-on" disabled={!draft.trim()} onClick={() => addNote(draft, anchor ? tab.settings.wordIndex : null)}>Add note</button>
+              <button className="toggle-on" disabled={!draft.trim()} onClick={() => addNote(draft, anchor ? tab.settings.wordIndex : null)}>{t('Add note')}</button>
             </div>
           </div>
           <div className="note-list">
-            {notes.length === 0 && <p className="settings-note">No notes yet. Add one above, or from the reader (long-press / right-click a word → 📝 Add note).</p>}
+            {notes.length === 0 && <p className="settings-note">{t('No notes yet. Add one above, or from the reader (long-press / right-click a word → 📝 Add note).')}</p>}
             {notes.map((n) => (
               <div key={n.id} className="note-card">
                 {editing?.id === n.id ? (
                   <>
                     <textarea value={editing.text} onChange={(e) => setEditing({ ...editing, text: e.target.value })} rows={2} />
                     <div className="note-card-actions">
-                      <button className="toggle-on" onClick={saveEdit}>Save</button>
-                      <button onClick={() => setEditing(null)}>Cancel</button>
+                      <button className="toggle-on" onClick={saveEdit}>{t('Save')}</button>
+                      <button onClick={() => setEditing(null)}>{t('Cancel')}</button>
                     </div>
                   </>
                 ) : (
@@ -140,14 +141,14 @@ export default function NotesDialog({ tab, onJumpWord, onClose }) {
                     {n.section && (() => {
                       const live = resolveSection(n.section);
                       return live
-                        ? <button className="note-anchor note-sec" title="Jump to this section" onClick={() => onJumpWord(live.wordIndex)}>§ {n.section.title}</button>
-                        : <span className="note-sec-orphan" title="The section this note was attached to was renamed or removed — the note is kept">⚠ § {n.section.title} (section changed)</span>;
+                        ? <button className="note-anchor note-sec" title={t('Jump to this section')} onClick={() => onJumpWord(live.wordIndex)}>§ {n.section.title}</button>
+                        : <span className="note-sec-orphan" title={t('The section this note was attached to was renamed or removed — the note is kept')}>⚠ § {t('{title} (section changed)', { title: n.section.title })}</span>;
                     })()}
                     <div className="note-card-actions">
-                      {n.wordIndex != null && <button className="note-anchor" title="Jump to this position" onClick={() => { onJumpWord(n.wordIndex); }}>↪ word {n.wordIndex + 1}</button>}
+                      {n.wordIndex != null && <button className="note-anchor" title={t('Jump to this position')} onClick={() => { onJumpWord(n.wordIndex); }}>↪ {t('word {n}', { n: n.wordIndex + 1 })}</button>}
                       <span className="note-when">{when(n.updatedAt)}</span>
                       <span style={{ flex: 1 }} />
-                      <button onClick={() => setEditing({ id: n.id, text: n.text, wordIndex: n.wordIndex, section: n.section })}>Edit</button>
+                      <button onClick={() => setEditing({ id: n.id, text: n.text, wordIndex: n.wordIndex, section: n.section })}>{t('Edit')}</button>
                       <button className="grab-trash" onClick={() => remove(n.id)}>🗑</button>
                     </div>
                   </>
@@ -160,38 +161,37 @@ export default function NotesDialog({ tab, onJumpWord, onClose }) {
         <>
           {!hasKey ? (
             <p className="settings-note">
-              Add your <strong>Anthropic API key</strong> in{' '}
-              <button className="link-btn" onClick={() => { onClose(); openDialog({ kind: 'app-settings' }); }}>Application Settings</button>{' '}
-              to summarize, analyze, and discuss this text with AI. The key stays on this device; text you send goes to Anthropic.
+              {t('Add your Anthropic API key in Application Settings to summarize, analyze, and discuss this text with AI. The key stays on this device; text you send goes to Anthropic.')}{' '}
+              <button className="link-btn" onClick={() => { onClose(); openDialog({ kind: 'app-settings' }); }}>{t('Application Settings')}</button>
             </p>
           ) : (
             <>
               <div className="note-add-row" style={{ marginTop: 4 }}>
-                <select value={model} onChange={(e) => updateGlobal({ anthropicModel: e.target.value })} title="Anthropic model">
+                <select value={model} onChange={(e) => updateGlobal({ anthropicModel: e.target.value })} title={t('Anthropic model')}>
                   {ANTHROPIC_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
                 </select>
-                <button onClick={() => runAI('summary')} disabled={aiBusy}>Summarize</button>
-                <button onClick={() => runAI('analyze')} disabled={aiBusy}>Analyze</button>
-                {aiBusy && <span className="settings-note" style={{ margin: 0 }}>Thinking…</span>}
+                <button onClick={() => runAI('summary')} disabled={aiBusy}>{t('Summarize')}</button>
+                <button onClick={() => runAI('analyze')} disabled={aiBusy}>{t('Analyze')}</button>
+                {aiBusy && <span className="settings-note" style={{ margin: 0 }}>{t('Thinking…')}</span>}
               </div>
               {aiErr && <p className="settings-note" style={{ color: '#c0392b' }}>{aiErr}</p>}
               {output && (
                 <div className="ai-output">
                   <div className="ai-output-text">{output}</div>
-                  <button className="note-anchor" onClick={() => { addNote(output, null); setOutput(''); setPane('notes'); }}>＋ Save as note</button>
+                  <button className="note-anchor" onClick={() => { addNote(output, null); setOutput(''); setPane('notes'); }}>＋ {t('Save as note')}</button>
                 </div>
               )}
-              <div className="field-section" style={{ marginTop: 10 }}>Discuss</div>
+              <div className="field-section" style={{ marginTop: 10 }}>{t('Discuss')}</div>
               <div className="ai-chat">
-                {chat.length === 0 && <div className="settings-note">Ask about the text or your notes — e.g. “What’s the main argument?”, “Summarize my notes”, “Explain the passage at word {tab.settings.wordIndex + 1}”.</div>}
-                {chat.map((m, i) => <div key={i} className={`ai-msg ${m.role}`}><span className="ai-role">{m.role === 'user' ? 'You' : 'Claude'}</span><div className="ai-msg-text">{m.content}</div></div>)}
+                {chat.length === 0 && <div className="settings-note">{t('Ask about the text or your notes — e.g. “What’s the main argument?”, “Summarize my notes”, “Explain the passage at word {n}”.', { n: tab.settings.wordIndex + 1 })}</div>}
+                {chat.map((m, i) => <div key={i} className={`ai-msg ${m.role}`}><span className="ai-role">{m.role === 'user' ? t('You') : 'Claude'}</span><div className="ai-msg-text">{m.content}</div></div>)}
                 <div ref={chatEndRef} />
               </div>
               <div className="ai-chat-input">
-                <textarea value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }} rows={2} placeholder="Ask about this text…" />
-                <button className="toggle-on" disabled={aiBusy || !chatInput.trim()} onClick={sendChat}>Send</button>
+                <textarea value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }} rows={2} placeholder={t('Ask about this text…')} />
+                <button className="toggle-on" disabled={aiBusy || !chatInput.trim()} onClick={sendChat}>{t('Send')}</button>
               </div>
-              <p className="settings-note" style={{ margin: '4px 0 0' }}>Sends a text excerpt (first {(MAX_CONTEXT / 1000) | 0}k chars) + your notes to Anthropic — spends your API credits.</p>
+              <p className="settings-note" style={{ margin: '4px 0 0' }}>{t('Sends a text excerpt (first {k}k chars) + your notes to Anthropic — spends your API credits.', { k: (MAX_CONTEXT / 1000) | 0 })}</p>
             </>
           )}
         </>

@@ -6,8 +6,29 @@ import { readerDocFromText, attachChecksum } from '../document/readerDocument.js
 import { createReadingTracker } from '../engine/readingTracker.js';
 import { groupForChecksum, bestGroupPercent } from '../features/bookGroups.js';
 import { isCompactScreen } from './device.js';
+import { t } from '../i18n.js';
 
 const AppCtx = createContext(null);
+
+// "Opened <file> (<n> words)", plus where a book group caught it up to (whole sentences, not glued).
+function openedStatus(doc, caughtUp) {
+  const count = doc.words.length;
+  return caughtUp
+    ? t.n('Opened {file} ({count} word) — caught up to {pct}% from “{group}”', 'Opened {file} ({count} words) — caught up to {pct}% from “{group}”', count, { count, file: doc.fileName, pct: caughtUp.pct, group: caughtUp.name })
+    : t.n('Opened {file} ({count} word)', 'Opened {file} ({count} words)', count, { count, file: doc.fileName });
+}
+
+// A `skipIf` callback returns a reason CODE: 'finished', or anything else truthy = already tracked.
+function skippedOneStatus(file, why) {
+  return why === 'finished'
+    ? t('“{file}” is already finished — not opened.', { file })
+    : t('“{file}” is already in Trackyread — not opened.', { file });
+}
+function skippedManyStatus(count, why) {
+  return why === 'finished'
+    ? t.n('Skipped {n} finished document.', 'Skipped {n} finished documents.', count)
+    : t.n('Skipped {n} document already in Trackyread.', 'Skipped {n} documents already in Trackyread.', count);
+}
 
 let nextTabId = 1;
 
@@ -54,7 +75,7 @@ const init = {
   globalHydrated: false, // true once stored global settings have loaded (guards boot-once prompts)
   tabs: [],
   activeTabId: null,
-  appStatus: 'Ready.',
+  appStatus: t('Ready.'),
   // Dialogs come in two flavours. MODAL_KINDS (legal gate, confirmations, transient step-wizards)
   // stay as one blocking centered overlay in `modal`. Everything else opens as a dockable TAB in
   // `panels` — many can be open at once, shown leftmost in the tab bar, one focused (`activePanelId`)
@@ -119,7 +140,7 @@ function reducer(state, action) {
       return { ...state, tabs, activeTabId: action.activeId ?? null };
     }
     case 'CLOSE_TAB': {
-      const tabs = state.tabs.filter((t) => t.id !== action.id);
+      const tabs = state.tabs.filter((tb) => tb.id !== action.id);
       const active = state.activeTabId === action.id
         ? (tabs[tabs.length - 1]?.id ?? null)
         : state.activeTabId;
@@ -133,7 +154,7 @@ function reducer(state, action) {
       // right"). Same active-tab + doc-scoped-panel cleanup as CLOSE_TAB, done in one pass.
       const kill = new Set(action.ids);
       if (kill.size === 0) return state;
-      const tabs = state.tabs.filter((t) => !kill.has(t.id));
+      const tabs = state.tabs.filter((tb) => !kill.has(tb.id));
       const active = kill.has(state.activeTabId)
         ? (tabs[tabs.length - 1]?.id ?? null)
         : state.activeTabId;
@@ -147,8 +168,8 @@ function reducer(state, action) {
         activePanelId: panels.some((p) => p.id === state.activePanelId) ? state.activePanelId : null };
     }
     case 'REORDER_TABS': {
-      const from = state.tabs.findIndex((t) => t.id === action.fromId);
-      const to = state.tabs.findIndex((t) => t.id === action.toId);
+      const from = state.tabs.findIndex((tb) => tb.id === action.fromId);
+      const to = state.tabs.findIndex((tb) => tb.id === action.toId);
       if (from < 0 || to < 0 || from === to) return state;
       const tabs = [...state.tabs];
       const [moved] = tabs.splice(from, 1);
@@ -157,23 +178,23 @@ function reducer(state, action) {
     }
     // Whole-strip reorder (tab sort). Ids not listed keep their relative order at the end.
     case 'SORT_TABS': {
-      const byId = new Map(state.tabs.map((t) => [t.id, t]));
+      const byId = new Map(state.tabs.map((tb) => [tb.id, tb]));
       const tabs = action.ids.map((id) => byId.get(id)).filter(Boolean);
-      for (const t of state.tabs) if (!action.ids.includes(t.id)) tabs.push(t);
+      for (const tb of state.tabs) if (!action.ids.includes(tb.id)) tabs.push(tb);
       return { ...state, tabs };
     }
     case 'SET_ACTIVE_TAB':
       // Going to read a document minimizes any focused dialog overlay (its tab stays in the strip).
       return { ...state, activeTabId: action.id, activePanelId: null };
     case 'PATCH_TAB': {
-      const tabs = state.tabs.map((t) =>
-        t.id === action.id ? { ...t, ...action.patch } : t
+      const tabs = state.tabs.map((tb) =>
+        tb.id === action.id ? { ...tb, ...action.patch } : tb
       );
       return { ...state, tabs };
     }
     case 'PATCH_SETTINGS': {
-      const tabs = state.tabs.map((t) =>
-        t.id === action.id ? { ...t, settings: { ...t.settings, ...action.patch } } : t
+      const tabs = state.tabs.map((tb) =>
+        tb.id === action.id ? { ...tb, settings: { ...tb.settings, ...action.patch } } : tb
       );
       return { ...state, tabs };
     }
@@ -230,15 +251,15 @@ function reducer(state, action) {
       if (!state.incognito) {
         // Entering: snapshot every open tab's reading position so it can be rewound on exit.
         const snap = {};
-        for (const t of state.tabs) if (!t.lazy) snap[t.id] = t.settings.wordIndex;
+        for (const tb of state.tabs) if (!tb.lazy) snap[tb.id] = tb.settings.wordIndex;
         return { ...state, incognito: true, incognitoSnap: snap };
       }
       // Exiting: rewind each tab to where it was — incognito reading leaves no trace at all.
       const snap = state.incognitoSnap || {};
-      const tabs = state.tabs.map((t) =>
-        (!t.lazy && snap[t.id] != null && snap[t.id] !== t.settings.wordIndex)
-          ? { ...t, settings: { ...t.settings, wordIndex: snap[t.id] } }
-          : t
+      const tabs = state.tabs.map((tb) =>
+        (!tb.lazy && snap[tb.id] != null && snap[tb.id] !== tb.settings.wordIndex)
+          ? { ...tb, settings: { ...tb.settings, wordIndex: snap[tb.id] } }
+          : tb
       );
       return { ...state, incognito: false, incognitoSnap: null, tabs };
     }
@@ -328,7 +349,7 @@ export function AppProvider({ children }) {
     return () => clearTimeout(saveTimer.current);
   }, [state.tabs]);
 
-  const activeTab = state.tabs.find((t) => t.id === state.activeTabId) || null;
+  const activeTab = state.tabs.find((tb) => tb.id === state.activeTabId) || null;
   const hydratingRef = useRef(new Set()); // tab ids currently being hydrated (dedupe double-opens)
 
   // The heavy part of opening a document: merge stored settings, build the reading tracker, and
@@ -374,7 +395,7 @@ export function AppProvider({ children }) {
     });
     // Book-group catch-up: if this file is grouped with other editions, resume at the furthest
     // percent any of them reached (progress shared as a fraction, since masks can't cross editions).
-    let groupNote = '';
+    let caughtUp = null;
     const group = groupForChecksum(stateRef.current.global.bookGroups, doc.contentChecksum);
     if (group && doc.words.length > 0) {
       const sibs = [];
@@ -395,18 +416,18 @@ export function AppProvider({ children }) {
             paraTsB64: tracker.serializeParaTs(),
           }).catch(() => {});
         }
-        groupNote = ` — caught up to ${Math.round(best * 100)}% from “${group.name}”`;
+        caughtUp = { pct: Math.round(best * 100), name: group.name };
       }
     }
-    return { baseSettings, tracker, groupNote };
+    return { baseSettings, tracker, caughtUp };
   }, []);
 
   const openDoc = useCallback(async (doc, opts = {}) => {
     const { silent = false, persist = true } = opts;
-    const { baseSettings, tracker, groupNote } = await buildTabData(doc);
+    const { baseSettings, tracker, caughtUp } = await buildTabData(doc);
     const tab = makeTab(doc, baseSettings, tracker);
     dispatch({ type: 'ADD_TAB', tab });
-    if (!silent) dispatch({ type: 'SET_STATUS', text: `Opened ${doc.fileName} (${doc.words.length} words)${groupNote}` });
+    if (!silent) dispatch({ type: 'SET_STATUS', text: openedStatus(doc, caughtUp) });
     // Persist a rebuildable payload so this tab can be reconnected next session (never in incognito).
     if (persist && !stateRef.current.incognito) {
       saveDocPayload({
@@ -437,14 +458,14 @@ export function AppProvider({ children }) {
   // Turn a lazy placeholder into a real tab, in place (same id/position), the first time it's
   // opened. Builds the parsed doc from the stored payload + the tracker, then patches the tab.
   const hydrateTab = useCallback(async (id) => {
-    const tab = stateRef.current.tabs.find((t) => t.id === id);
+    const tab = stateRef.current.tabs.find((tb) => tb.id === id);
     if (!tab || !tab.lazy || hydratingRef.current.has(id)) return;
     hydratingRef.current.add(id);
-    dispatch({ type: 'SET_STATUS', text: `Opening ${tab.fileName}…` });
+    dispatch({ type: 'SET_STATUS', text: t('Opening {file}…', { file: tab.fileName }) });
     try {
       const rec = await loadDocPayload(tab.checksum);
       if (!rec?.fullText) {
-        dispatch({ type: 'SET_STATUS', text: `Couldn’t load ${tab.fileName} — its saved copy is missing.` });
+        dispatch({ type: 'SET_STATUS', text: t('Couldn’t load {file} — its saved copy is missing.', { file: tab.fileName }) });
         return;
       }
       const doc = readerDocFromText(rec.fullText, rec.fileName || tab.fileName || 'Document');
@@ -452,7 +473,7 @@ export function AppProvider({ children }) {
       if (rec.wordToSegment) doc.wordToSegment = rec.wordToSegment;
       if (rec.segmentCount) doc.segmentCount = rec.segmentCount;
       await attachChecksum(doc);
-      const { baseSettings, tracker, groupNote } = await buildTabData(doc);
+      const { baseSettings, tracker, caughtUp } = await buildTabData(doc);
       dispatch({
         type: 'PATCH_TAB',
         id,
@@ -469,9 +490,9 @@ export function AppProvider({ children }) {
         },
       });
       if (stateRef.current.incognito) dispatch({ type: 'SNAP_INCOGNITO_TAB', id, wordIndex: baseSettings.wordIndex });
-      dispatch({ type: 'SET_STATUS', text: `Opened ${doc.fileName} (${doc.words.length} words)${groupNote}` });
+      dispatch({ type: 'SET_STATUS', text: openedStatus(doc, caughtUp) });
     } catch (e) {
-      dispatch({ type: 'SET_STATUS', text: `Couldn’t open ${tab.fileName}: ${e?.message || e}` });
+      dispatch({ type: 'SET_STATUS', text: t('Couldn’t open {file}: {error}', { file: tab.fileName, error: e?.message || e }) });
     } finally {
       hydratingRef.current.delete(id);
     }
@@ -481,10 +502,10 @@ export function AppProvider({ children }) {
   // the persisted doc payload. Returns silently if the saved copy is gone. (Declared after hydrateTab
   // because it calls it.)
   const openRecent = useCallback(async (checksum) => {
-    const existing = stateRef.current.tabs.find((t) => (t.lazy ? t.checksum : t.doc?.contentChecksum) === checksum);
+    const existing = stateRef.current.tabs.find((tb) => (tb.lazy ? tb.checksum : tb.doc?.contentChecksum) === checksum);
     if (existing) { dispatch({ type: 'SET_ACTIVE_TAB', id: existing.id }); if (existing.lazy) await hydrateTab(existing.id); return true; }
     const rec = await loadDocPayload(checksum);
-    if (!rec?.fullText) { dispatch({ type: 'SET_STATUS', text: 'That file’s saved copy is no longer available.' }); return false; }
+    if (!rec?.fullText) { dispatch({ type: 'SET_STATUS', text: t('That file’s saved copy is no longer available.') }); return false; }
     const doc = readerDocFromText(rec.fullText, rec.fileName || 'Document');
     if (rec.source) doc.source = rec.source;
     if (rec.wordToSegment) doc.wordToSegment = rec.wordToSegment;
@@ -572,7 +593,7 @@ export function AppProvider({ children }) {
             activeId = act?.id ?? null; // App hydrates this lazy tab on render
           }
           dispatch({ type: 'RESTORE_TABS', tabs: placeholders, activeId });
-          dispatch({ type: 'SET_STATUS', text: `Reconnected — ${placeholders.length} file(s) ready. Open a tab to load it.` });
+          dispatch({ type: 'SET_STATUS', text: t.n('Reconnected — {n} file ready. Open a tab to load it.', 'Reconnected — {n} files ready. Open a tab to load it.', placeholders.length) });
           return;
         }
 
@@ -593,11 +614,11 @@ export function AppProvider({ children }) {
         if (opened.length) {
           if (startLanding) {
             dispatch({ type: 'SET_ACTIVE_TAB', id: null }); // openDoc activated each — reset to landing
-            dispatch({ type: 'SET_STATUS', text: `Reconnected — restored ${opened.length} file(s). Pick a tab to start.` });
+            dispatch({ type: 'SET_STATUS', text: t.n('Reconnected — restored {n} file. Pick a tab to start.', 'Reconnected — restored {n} files. Pick a tab to start.', opened.length) });
           } else {
             const act = opened.find((o) => o.checksum === sess.active) || opened[opened.length - 1];
             dispatch({ type: 'SET_ACTIVE_TAB', id: act.id });
-            dispatch({ type: 'SET_STATUS', text: `Reconnected — restored ${opened.length} file(s).` });
+            dispatch({ type: 'SET_STATUS', text: t.n('Reconnected — restored {n} file.', 'Reconnected — restored {n} files.', opened.length) });
           }
         }
       } finally {
@@ -612,10 +633,10 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (!sessionReady.current) return;
     if (state.incognito) return; // incognito: don't record the open-tab session
-    const open = state.tabs.map((t) => (
-      t.lazy ? { checksum: t.checksum, fileName: t.fileName } : { checksum: t.doc.contentChecksum, fileName: t.doc.fileName }
+    const open = state.tabs.map((tb) => (
+      tb.lazy ? { checksum: tb.checksum, fileName: tb.fileName } : { checksum: tb.doc.contentChecksum, fileName: tb.doc.fileName }
     ));
-    const activeT = state.tabs.find((t) => t.id === state.activeTabId) || null;
+    const activeT = state.tabs.find((tb) => tb.id === state.activeTabId) || null;
     const active = activeT ? (activeT.lazy ? activeT.checksum : activeT.doc.contentChecksum) : null;
     saveSession({ open, active }).catch(() => {});
   }, [state.tabs, state.activeTabId]);
@@ -624,10 +645,10 @@ export function AppProvider({ children }) {
   // reason to drop it, or null. A checksum is needed to judge it, and only a parse yields one — so
   // the document is read, then dropped without ever becoming a tab.
   const openFile = useCallback(async (file, { skipIf = null } = {}) => {
-    dispatch({ type: 'SET_STATUS', text: `Parsing ${file.name}…` });
+    dispatch({ type: 'SET_STATUS', text: t('Parsing {file}…', { file: file.name }) });
     // Import wizard: stream parser phases into state.importing; end on a summary card with the
     // detected structure + suggested next steps (or clear on failure).
-    dispatch({ type: 'SET_IMPORT', payload: { fileName: file.name, phase: 'Reading file' } });
+    dispatch({ type: 'SET_IMPORT', payload: { fileName: file.name, phase: t('Reading file') } });
     try {
       const doc = await parseFile(file, (p) => dispatch({ type: 'SET_IMPORT', payload: { fileName: file.name, ...p } }));
       if (skipIf) {
@@ -635,11 +656,11 @@ export function AppProvider({ children }) {
         const why = await skipIf(doc);
         if (why) {
           dispatch({ type: 'SET_IMPORT', payload: null });
-          dispatch({ type: 'SET_STATUS', text: `“${file.name}” is ${why} — not opened.` });
+          dispatch({ type: 'SET_STATUS', text: skippedOneStatus(file.name, why) });
           return;
         }
       }
-      dispatch({ type: 'SET_IMPORT', payload: { fileName: file.name, phase: 'Opening tab' } });
+      dispatch({ type: 'SET_IMPORT', payload: { fileName: file.name, phase: t('Opening tab') } });
       await openDoc(doc);
       const exactToc = !!doc.tocEntries?.length;
       dispatch({
@@ -658,7 +679,7 @@ export function AppProvider({ children }) {
     } catch (e) {
       console.error(e);
       dispatch({ type: 'SET_IMPORT', payload: null });
-      dispatch({ type: 'SET_STATUS', text: `Failed to open ${file.name}: ${e.message}` });
+      dispatch({ type: 'SET_STATUS', text: t('Failed to open {file}: {error}', { file: file.name, error: e.message }) });
     }
   }, [openDoc]);
 
@@ -672,7 +693,7 @@ export function AppProvider({ children }) {
     let firstTab = null, opened = 0, skipped = 0, why = '';
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
-      const prog = (p) => dispatch({ type: 'SET_IMPORT', payload: { fileName: f.name, phase: `${i + 1}/${files.length} · ${(p && p.phase) || f.name}`, done: i, total: files.length } });
+      const prog = (p) => dispatch({ type: 'SET_IMPORT', payload: { fileName: f.name, phase: t('{i}/{total} · {phase}', { i: i + 1, total: files.length, phase: (p && p.phase) || f.name }), done: i, total: files.length } });
       prog(null);
       try {
         const doc = await parseFile(f, prog);
@@ -690,7 +711,8 @@ export function AppProvider({ children }) {
     if (firstTab) dispatch({ type: 'SET_ACTIVE_TAB', id: firstTab.id });
     dispatch({
       type: 'SET_STATUS',
-      text: `Opened ${opened} of ${files.length} document${files.length === 1 ? '' : 's'}.${skipped ? ` Skipped ${skipped} ${why}.` : ''}`,
+      text: t.n('Opened {opened} of {n} document.', 'Opened {opened} of {n} documents.', files.length, { opened })
+        + (skipped ? ' ' + skippedManyStatus(skipped, why) : ''),
     });
   }, [openFile, openDoc]);
 
@@ -700,17 +722,17 @@ export function AppProvider({ children }) {
       await openDoc(doc);
     } catch (e) {
       console.error(e);
-      dispatch({ type: 'SET_STATUS', text: `Clipboard read failed: ${e.message}` });
+      dispatch({ type: 'SET_STATUS', text: t('Clipboard read failed: {error}', { error: e.message }) });
     }
   }, [openDoc]);
 
   // Save what's pending for tabs about to close (reading mask + settings) — see persistTab.
   const flushClosing = (keep) => {
     if (stateRef.current.incognito) return;
-    for (const t of stateRef.current.tabs) if (keep(t)) { flushReadState(t); persistTab(t); }
+    for (const tb of stateRef.current.tabs) if (keep(tb)) { flushReadState(tb); persistTab(tb); }
   };
   const closeTab = useCallback((id) => {
-    flushClosing((t) => t.id === id);
+    flushClosing((tb) => tb.id === id);
     dispatch({ type: 'CLOSE_TAB', id });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -720,12 +742,12 @@ export function AppProvider({ children }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closeTabs = useCallback((ids) => {
-    flushClosing((t) => ids.includes(t.id));
+    flushClosing((tb) => ids.includes(tb.id));
     dispatch({ type: 'CLOSE_TABS', ids });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setActiveTab = useCallback(async (id) => {
-    const tab = stateRef.current.tabs.find((t) => t.id === id);
+    const tab = stateRef.current.tabs.find((tb) => tb.id === id);
     if (tab?.lazy) await hydrateTab(id); // build the document the first time this tab is opened
     dispatch({ type: 'SET_ACTIVE_TAB', id });
   }, [hydrateTab]);

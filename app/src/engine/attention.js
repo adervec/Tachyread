@@ -10,6 +10,7 @@
 //   • pace instability    — high variation in word-dwell (attention wandering on and off)
 //
 // Pure: callers pass the already-counted signals in (windowing / timing lives in the component).
+import { t } from '../i18n.js';
 
 export const DEFAULT_ATTENTION = Object.freeze({
   regWindowMs: 20000, // window the component counts regressions over (used by the caller)
@@ -70,6 +71,6 @@ export function attentionAdvice(score, wpm, opts = {}) {
   return {
     ease: true,
     slowTo: Math.max(1, Math.round(cur * factor)),
-    message: 'Attention is dipping — ease off the pace or take a short break.',
+    message: t('Attention is dipping — ease off the pace or take a short break.'),
   };
 }

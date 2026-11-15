@@ -18,13 +18,14 @@
 // audio cue matters: it tells you live which window you're in, so you can let go at the right time.
 //
 // Pure and framework-free — feed it samples, it emits events. See eyeGestures.test.mjs.
+import { t } from '../i18n.js';
 
 export const EYE_KINDS = [
-  { id: 'blink', label: 'Both eyes (blink)', icon: '😑' },
-  { id: 'winkL', label: 'Left eye only (wink)', icon: '😉' },
-  { id: 'winkR', label: 'Right eye only (wink)', icon: '🙂' },
-  { id: 'rollCW', label: 'Eye roll — clockwise', icon: '🔃' },
-  { id: 'rollCCW', label: 'Eye roll — anticlockwise', icon: '🔄' },
+  { id: 'blink', label: t('Both eyes (blink)'), icon: '😑' },
+  { id: 'winkL', label: t('Left eye only (wink)'), icon: '😉' },
+  { id: 'winkR', label: t('Right eye only (wink)'), icon: '🙂' },
+  { id: 'rollCW', label: t('Eye roll — clockwise'), icon: '🔃' },
+  { id: 'rollCCW', label: t('Eye roll — anticlockwise'), icon: '🔄' },
 ];
 
 // Held GAZE positions: park your eyes hard left / right / up (without moving your head) and hold.
@@ -33,9 +34,9 @@ export const EYE_KINDS = [
 // zones too, but only for a fraction of a second each, so it never reaches a gaze floor; and a
 // parked gaze accumulates no roll angle — the two coexist cleanly.
 export const GAZE_KINDS = [
-  { id: 'gazeLeft', label: 'Gaze far left (held)', icon: '⬅👀', floor: 800, natural: true },
-  { id: 'gazeRight', label: 'Gaze far right (held)', icon: '👀➡', floor: 800, natural: true },
-  { id: 'gazeUp', label: 'Gaze up (held)', icon: '👀⬆', floor: 700 },
+  { id: 'gazeLeft', label: t('Gaze far left (held)'), icon: '⬅👀', floor: 800, natural: true },
+  { id: 'gazeRight', label: t('Gaze far right (held)'), icon: '👀➡', floor: 800, natural: true },
+  { id: 'gazeUp', label: t('Gaze up (held)'), icon: '👀⬆', floor: 700 },
 ];
 export const GAZE_BY_ID = Object.fromEntries(GAZE_KINDS.map((k) => [k.id, k]));
 export const GAZE_OFF_X = 0.30;  // how far off-centre (0..0.5) the iris must sit horizontally
@@ -49,23 +50,23 @@ export const GAZE_OFF_Y = 0.26;  // and vertically (up only — reading looks do
 // deliberate hold before they can mean anything. `natural` flags the ones the UI should caution
 // about. `min` is how pronounced the pose must be — a faint half-smile shouldn't count as a command.
 export const FACE_KINDS = [
-  { id: 'tongueOut', label: 'Tongue out', icon: '😛', shapes: ['tongueOut'], min: 0.32, floor: 450, hint: 'The face model reads this one less confidently than the rest — stick it out clearly.' },
-  { id: 'cheekPuff', label: 'Puffed cheeks', icon: '😗', shapes: ['cheekPuff'], min: 0.4, floor: 500 },
-  { id: 'pucker', label: 'Pucker / kiss', icon: '😙', shapes: ['mouthPucker'], min: 0.5, floor: 600 },
-  { id: 'mouthLeft', label: 'Mouth to the left', icon: '↖', shapes: ['mouthLeft'], min: 0.45, floor: 600 },
-  { id: 'mouthRight', label: 'Mouth to the right', icon: '↗', shapes: ['mouthRight'], min: 0.45, floor: 600 },
-  { id: 'jawLeft', label: 'Jaw to the left', icon: '↰', shapes: ['jawLeft'], min: 0.4, floor: 600 },
-  { id: 'jawRight', label: 'Jaw to the right', icon: '↱', shapes: ['jawRight'], min: 0.4, floor: 600 },
-  { id: 'jawForward', label: 'Jaw jutted forward', icon: '🗿', shapes: ['jawForward'], min: 0.45, floor: 700 },
-  { id: 'sneer', label: 'Nose scrunch (sneer)', icon: '😤', shapes: ['noseSneerLeft', 'noseSneerRight'], min: 0.4, floor: 600 },
-  { id: 'funnel', label: 'Mouth “O” (funnel)', icon: '⭕', shapes: ['mouthFunnel'], min: 0.5, floor: 600 },
-  { id: 'eyesWide', label: 'Eyes wide open', icon: '😳', shapes: ['eyeWideLeft', 'eyeWideRight'], min: 0.55, floor: 600, natural: true },
-  { id: 'squint', label: 'Squint (held)', icon: '😖', shapes: ['eyeSquintLeft', 'eyeSquintRight'], min: 0.6, floor: 800, natural: true },
-  { id: 'browsUp', label: 'Eyebrows raised', icon: '😯', shapes: ['browInnerUp', 'browOuterUpLeft', 'browOuterUpRight'], min: 0.5, floor: 700, natural: true },
-  { id: 'mouthOpen', label: 'Mouth open (held)', icon: '😮', shapes: ['jawOpen'], min: 0.45, floor: 700, natural: true },
-  { id: 'frown', label: 'Brows down (frown)', icon: '😠', shapes: ['browDownLeft', 'browDownRight'], min: 0.5, floor: 800, natural: true },
-  { id: 'mouthFrown', label: 'Mouth corners down', icon: '☹', shapes: ['mouthFrownLeft', 'mouthFrownRight'], min: 0.5, floor: 800, natural: true },
-  { id: 'smile', label: 'Smile (held)', icon: '😊', shapes: ['mouthSmileLeft', 'mouthSmileRight'], min: 0.5, floor: 900, natural: true },
+  { id: 'tongueOut', label: t('Tongue out'), icon: '😛', shapes: ['tongueOut'], min: 0.32, floor: 450, hint: t('The face model reads this one less confidently than the rest — stick it out clearly.') },
+  { id: 'cheekPuff', label: t('Puffed cheeks'), icon: '😗', shapes: ['cheekPuff'], min: 0.4, floor: 500 },
+  { id: 'pucker', label: t('Pucker / kiss'), icon: '😙', shapes: ['mouthPucker'], min: 0.5, floor: 600 },
+  { id: 'mouthLeft', label: t('Mouth to the left'), icon: '↖', shapes: ['mouthLeft'], min: 0.45, floor: 600 },
+  { id: 'mouthRight', label: t('Mouth to the right'), icon: '↗', shapes: ['mouthRight'], min: 0.45, floor: 600 },
+  { id: 'jawLeft', label: t('Jaw to the left'), icon: '↰', shapes: ['jawLeft'], min: 0.4, floor: 600 },
+  { id: 'jawRight', label: t('Jaw to the right'), icon: '↱', shapes: ['jawRight'], min: 0.4, floor: 600 },
+  { id: 'jawForward', label: t('Jaw jutted forward'), icon: '🗿', shapes: ['jawForward'], min: 0.45, floor: 700 },
+  { id: 'sneer', label: t('Nose scrunch (sneer)'), icon: '😤', shapes: ['noseSneerLeft', 'noseSneerRight'], min: 0.4, floor: 600 },
+  { id: 'funnel', label: t('Mouth “O” (funnel)'), icon: '⭕', shapes: ['mouthFunnel'], min: 0.5, floor: 600 },
+  { id: 'eyesWide', label: t('Eyes wide open'), icon: '😳', shapes: ['eyeWideLeft', 'eyeWideRight'], min: 0.55, floor: 600, natural: true },
+  { id: 'squint', label: t('Squint (held)'), icon: '😖', shapes: ['eyeSquintLeft', 'eyeSquintRight'], min: 0.6, floor: 800, natural: true },
+  { id: 'browsUp', label: t('Eyebrows raised'), icon: '😯', shapes: ['browInnerUp', 'browOuterUpLeft', 'browOuterUpRight'], min: 0.5, floor: 700, natural: true },
+  { id: 'mouthOpen', label: t('Mouth open (held)'), icon: '😮', shapes: ['jawOpen'], min: 0.45, floor: 700, natural: true },
+  { id: 'frown', label: t('Brows down (frown)'), icon: '😠', shapes: ['browDownLeft', 'browDownRight'], min: 0.5, floor: 800, natural: true },
+  { id: 'mouthFrown', label: t('Mouth corners down'), icon: '☹', shapes: ['mouthFrownLeft', 'mouthFrownRight'], min: 0.5, floor: 800, natural: true },
+  { id: 'smile', label: t('Smile (held)'), icon: '😊', shapes: ['mouthSmileLeft', 'mouthSmileRight'], min: 0.5, floor: 900, natural: true },
 ];
 export const FACE_BY_ID = Object.fromEntries(FACE_KINDS.map((k) => [k.id, k]));
 export const ALL_KINDS = [...EYE_KINDS, ...GAZE_KINDS, ...FACE_KINDS];
@@ -99,14 +100,14 @@ export function validateEyeMappings(rows) {
   const list = Array.isArray(rows) ? rows : [];
   list.forEach((r, i) => {
     const min = Number(r?.minMs), max = Number(r?.maxMs);
-    if (!EYE_KIND_IDS.includes(r?.kind)) out.push({ index: i, level: 'error', code: 'kind', message: 'Pick an eye gesture' });
-    if (!r?.commandId) out.push({ index: i, level: 'error', code: 'command', message: 'Pick an action' });
+    if (!EYE_KIND_IDS.includes(r?.kind)) out.push({ index: i, level: 'error', code: 'kind', message: t('Pick an eye gesture') });
+    if (!r?.commandId) out.push({ index: i, level: 'error', code: 'command', message: t('Pick an action') });
     if (!Number.isFinite(min) || !Number.isFinite(max)) {
-      out.push({ index: i, level: 'error', code: 'range', message: 'Hold range must be two numbers' });
+      out.push({ index: i, level: 'error', code: 'range', message: t('Hold range must be two numbers') });
       return;
     }
-    if (max <= min) out.push({ index: i, level: 'error', code: 'range', message: 'The longest hold must be more than the shortest' });
-    else if (max - min < MIN_RANGE_MS) out.push({ index: i, level: 'warn', code: 'narrow', message: `A window under ${MIN_RANGE_MS}ms is very hard to hit` });
+    if (max <= min) out.push({ index: i, level: 'error', code: 'range', message: t('The longest hold must be more than the shortest') });
+    else if (max - min < MIN_RANGE_MS) out.push({ index: i, level: 'warn', code: 'narrow', message: t('A window under {ms}ms is very hard to hit', { ms: MIN_RANGE_MS }) });
     const floor = kindFloorMs(r?.kind);
     if (min < floor) {
       out.push({
@@ -114,13 +115,13 @@ export function validateEyeMappings(rows) {
         level: 'error',
         code: 'floor',
         message: FACE_BY_ID[r?.kind]
-          ? `${FACE_BY_ID[r.kind].label} needs at least ${floor}ms — anything shorter happens on its own while you read or talk`
+          ? t('{gesture} needs at least {ms}ms — anything shorter happens on its own while you read or talk', { gesture: FACE_BY_ID[r.kind].label, ms: floor })
           : GAZE_BY_ID[r?.kind]
-            ? `${GAZE_BY_ID[r.kind].label} needs at least ${floor}ms — reading parks the eyes there briefly all the time`
-            : `Under ${floor}ms is natural blinking — it would fire while you read`,
+            ? t('{gesture} needs at least {ms}ms — reading parks the eyes there briefly all the time', { gesture: GAZE_BY_ID[r.kind].label, ms: floor })
+            : t('Under {ms}ms is natural blinking — it would fire while you read', { ms: floor }),
       });
     }
-    if (max > MAX_HOLD_MS) out.push({ index: i, level: 'error', code: 'ceiling', message: `Over ${MAX_HOLD_MS / 1000}s is resting your eyes, not signalling` });
+    if (max > MAX_HOLD_MS) out.push({ index: i, level: 'error', code: 'ceiling', message: t('Over {s}s is resting your eyes, not signalling', { s: MAX_HOLD_MS / 1000 }) });
   });
   // Overlap, per gesture kind, among enabled + otherwise-sane rows.
   const usable = list.map((r, i) => ({ r, i })).filter(({ r }) => r?.on !== false && EYE_KIND_IDS.includes(r?.kind)
@@ -134,7 +135,7 @@ export function validateEyeMappings(rows) {
           index: same[k].i,
           level: 'error',
           code: 'overlap',
-          message: `Overlaps another ${kind} mapping (${prev.minMs}–${prev.maxMs}ms) — one hold can't mean two things`,
+          message: t('Overlaps another {gesture} mapping ({min}–{max}ms) — one hold can’t mean two things', { gesture: kind, min: prev.minMs, max: prev.maxMs }),
         });
       }
     }
@@ -196,23 +197,23 @@ export function createEyeGestureDetector({
     return best;
   }
 
-  function finishPose(t) {
+  function finishPose(ts) {
     if (!pose) return;
-    const ms = t - pose.start;
+    const ms = ts - pose.start;
     const k = pose.kind;
     pose = null;
     lastInWindow = null;
     if (ms < kindFloorMs(k)) return;                  // happened on its own — say nothing
     if (ms > MAX_HOLD_MS) { onIgnored?.({ kind: k, ms, why: 'too long' }); return; }
     const row = matchEyeHold(rows(), k, ms);
-    quietUntil = t + refractoryMs;
+    quietUntil = ts + refractoryMs;
     if (row) onGesture?.({ kind: k, ms, row });
     else onIgnored?.({ kind: k, ms, why: 'no window' });
   }
 
-  function finishHold(t) {
+  function finishHold(ts) {
     if (!hold) return;
-    const ms = t - hold.start;
+    const ms = ts - hold.start;
     const h = hold;
     hold = null;
     lastInWindow = null;
@@ -222,13 +223,13 @@ export function createEyeGestureDetector({
     let kind = h.kind;
     if (kind !== 'blink' && h.n && h.asymSum / h.n < WINK_MARGIN) kind = 'blink';
     const row = matchEyeHold(rows(), kind, ms);
-    quietUntil = t + refractoryMs;
+    quietUntil = ts + refractoryMs;
     if (row) onGesture?.({ kind, ms, row });
     else onIgnored?.({ kind, ms, why: 'no window' });
   }
 
   function push(s) {
-    const t = Number(s?.t) || 0;
+    const ts = Number(s?.t) || 0;
     const bl = Number(s?.blinkL) || 0;
     const br = Number(s?.blinkR) || 0;
     const L = bl > closeThreshold, R = br > closeThreshold;
@@ -236,15 +237,15 @@ export function createEyeGestureDetector({
     // Eyes shut → blink/wink tracking; the roll accumulator can't survive a blink.
     if (L || R) {
       roll = null;
-      finishPose(t); // a pose that ends in a blink still ends
-      if (t < quietUntil) return;
+      finishPose(ts); // a pose that ends in a blink still ends
+      if (ts < quietUntil) return;
       const kindNow = L && R ? 'blink' : L ? 'winkL' : 'winkR';
-      if (!hold) hold = { kind: kindNow, start: t, both: L && R, asymSum: 0, n: 0 };
+      if (!hold) hold = { kind: kindNow, start: ts, both: L && R, asymSum: 0, n: 0 };
       // Both eyes shut at any point in the hold makes it a blink, whatever it started as.
       else if (kindNow === 'blink') hold.kind = 'blink';
       hold.asymSum += Math.abs(bl - br);
       hold.n += 1;
-      const ms = t - hold.start;
+      const ms = ts - hold.start;
       const kind = hold.kind !== 'blink' && hold.n && hold.asymSum / hold.n < WINK_MARGIN ? 'blink' : hold.kind;
       const inWindow = ms >= deliberateMs ? matchEyeHold(rows(), kind, ms) : null;
       const next = nextEyeWindow(rows(), kind, ms);
@@ -256,16 +257,16 @@ export function createEyeGestureDetector({
       return;
     }
 
-    if (hold) { finishHold(t); return; }
-    if (t < quietUntil) { roll = null; pose = null; return; }
+    if (hold) { finishHold(ts); return; }
+    if (ts < quietUntil) { roll = null; pose = null; return; }
 
     // Face poses. Same duration windows as the eye gestures, so the meter, the cue and the matcher
     // are all shared — only the "am I holding it" test differs.
     const poseNow = dominantPose(s?.shapes);
     if (poseNow) {
       roll = null; // a face pose owns the gesture channel while it lasts
-      if (!pose || pose.kind !== poseNow) { finishPose(t); pose = { kind: poseNow, start: t }; }
-      const ms = t - pose.start;
+      if (!pose || pose.kind !== poseNow) { finishPose(ts); pose = { kind: poseNow, start: ts }; }
+      const ms = ts - pose.start;
       const inWindow = ms >= kindFloorMs(poseNow) ? matchEyeHold(rows(), poseNow, ms) : null;
       const next = nextEyeWindow(rows(), poseNow, ms);
       onHold?.({ kind: poseNow, ms, inWindow, next });
@@ -274,18 +275,18 @@ export function createEyeGestureDetector({
       lastInWindow = inWindow;
       return;
     }
-    if (pose && !GAZE_BY_ID[pose.kind]) { finishPose(t); return; }
+    if (pose && !GAZE_BY_ID[pose.kind]) { finishPose(ts); return; }
 
     // Iris-derived signals, eyes open. Parked-GAZE holds and rolling sweeps track in PARALLEL: a
     // roll transits each gaze zone far too briefly to reach a gaze floor, and a parked gaze
     // accumulates no roll angle — neither steals the other.
     const x = Number(s?.irisX), y = Number(s?.irisY);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) { if (pose) finishPose(t); roll = null; return; }
+    if (!Number.isFinite(x) || !Number.isFinite(y)) { if (pose) finishPose(ts); roll = null; return; }
     // Gaze zone — unmirrored camera, so the USER's left is frame-x-increasing (like the swipes).
     const gz = x - 0.5 > GAZE_OFF_X ? 'gazeLeft' : 0.5 - x > GAZE_OFF_X ? 'gazeRight' : 0.5 - y > GAZE_OFF_Y ? 'gazeUp' : null;
     if (gz) {
-      if (!pose || pose.kind !== gz) { finishPose(t); pose = { kind: gz, start: t }; }
-      const gms = t - pose.start;
+      if (!pose || pose.kind !== gz) { finishPose(ts); pose = { kind: gz, start: ts }; }
+      const gms = ts - pose.start;
       const inWindow = gms >= kindFloorMs(gz) ? matchEyeHold(rows(), gz, gms) : null;
       const next = nextEyeWindow(rows(), gz, gms);
       onHold?.({ kind: gz, ms: gms, inWindow, next });
@@ -293,23 +294,23 @@ export function createEyeGestureDetector({
       else if (!inWindow && lastInWindow) onCue?.(next ? 'leave' : 'over');
       lastInWindow = inWindow;
       // fall through — the roll accumulator below keeps tracking during the hold
-    } else if (pose) finishPose(t); // gaze back toward centre — the hold ends (and matches, if windowed)
+    } else if (pose) finishPose(ts); // gaze back toward centre — the hold ends (and matches, if windowed)
     const dx = x - 0.5, dy = y - 0.5;
     const r = Math.hypot(dx, dy);
     if (r < ROLL_RADIUS) { roll = null; return; }     // too near centre for the angle to mean much
     const a = Math.atan2(dy, dx);
-    if (!roll || t - roll.last > 700) { roll = { start: t, angle: a, last: t, turned: 0 }; return; }
+    if (!roll || ts - roll.last > 700) { roll = { start: ts, angle: a, last: ts, turned: 0 }; return; }
     let d = a - roll.angle;
     while (d > Math.PI) d -= 2 * Math.PI;             // shortest way round
     while (d < -Math.PI) d += 2 * Math.PI;
     roll.turned += d;
     roll.angle = a;
-    roll.last = t;
-    const ms = t - roll.start;
+    roll.last = ts;
+    const ms = ts - roll.start;
     if (Math.abs(roll.turned) >= ROLL_TURN && ms <= MAX_HOLD_MS) {
       const kind = roll.turned > 0 ? 'rollCW' : 'rollCCW';
       roll = null;
-      quietUntil = t + refractoryMs;
+      quietUntil = ts + refractoryMs;
       if (ms < deliberateMs) return;                  // a flick that fast wasn't a roll
       const row = matchEyeHold(rows(), kind, ms);
       if (row) onGesture?.({ kind, ms, row });

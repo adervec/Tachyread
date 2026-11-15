@@ -4,6 +4,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { planBulkAdd, extCounts, selectableRows, SUPPORTED_EXTS } from '../features/bulkAdd.js';
 import { allFiles, getBinding } from '../state/storage.js';
 import { trackFiles } from '../features/bulkTrack.js';
+import { t } from '../i18n.js';
 
 const MAX_ROWS = 400; // ponytail: cap the rendered checklist; the FULL selection is still added
 
@@ -34,15 +35,15 @@ export default function BulkAddWizard({ onClose, track = false }) {
   const [knownNames, setKnownNames] = useState(() => {
     const s = new Set();
     for (const r of state.global.recentFiles || []) if (r?.name) s.add(String(r.name).toLowerCase());
-    for (const t of state.tabs || []) { const n = t?.lazy ? t.fileName : t?.doc?.fileName; if (n) s.add(String(n).toLowerCase()); }
+    for (const tab of state.tabs || []) { const n = tab?.lazy ? tab.fileName : tab?.doc?.fileName; if (n) s.add(String(n).toLowerCase()); }
     return s;
   });
   const [trackedNames, setTrackedNames] = useState(() => new Set());
   useEffect(() => {
     Promise.all([getBinding(), allFiles()]).then(([map, recs]) => {
-      const t = new Set(recs.filter((r) => map[r.checksum] && r.fileName).map((r) => String(r.fileName).toLowerCase()));
-      setTrackedNames(t);
-      setKnownNames((prev) => new Set([...prev, ...t]));
+      const tracked = new Set(recs.filter((r) => map[r.checksum] && r.fileName).map((r) => String(r.fileName).toLowerCase()));
+      setTrackedNames(tracked);
+      setKnownNames((prev) => new Set([...prev, ...tracked]));
     }).catch(() => {});
   }, []);
 
@@ -65,7 +66,7 @@ export default function BulkAddWizard({ onClose, track = false }) {
     input.onchange = () => {
       const list = [...(input.files || [])];
       setFiles(list);
-      setFolderName(list[0]?.webkitRelativePath?.split('/')[0] || 'folder');
+      setFolderName(list[0]?.webkitRelativePath?.split('/')[0] || t('folder'));
       setFormats(null);
       setOnlyNew(true);
       setProg(null);
@@ -97,7 +98,7 @@ export default function BulkAddWizard({ onClose, track = false }) {
     const fs = picked();
     if (!fs.length) return;
     onClose?.();
-    setStatus?.(`Adding ${fs.length} file${fs.length === 1 ? '' : 's'} from ${folderName}…`);
+    setStatus?.(t.n('Adding {n} file from {folder}…', 'Adding {n} files from {folder}…', fs.length, { folder: folderName }));
     await openFiles(fs);
   }
 
@@ -112,11 +113,15 @@ export default function BulkAddWizard({ onClose, track = false }) {
     stopRef.current = false;
     setProg({ i: 0, total: fs.length, name: fs[0].name });
     const r = await trackFiles(fs, { onProgress: setProg, shouldStop: () => stopRef.current });
-    const parts = [`${r.tracked} added to Trackyread`];
-    if (r.linked) parts.push(`${r.linked} linked to books already there`);
-    if (r.skipped) parts.push(`${r.skipped} already tracked`);
-    if (r.failed) parts.push(`${r.failed} couldn’t be read`);
-    setProg(`${r.stopped ? 'Stopped — ' : ''}${parts.join(', ')}. Nothing was left open.`);
+    // One sentence per part (never a sentence glued from translated fragments).
+    const parts = [];
+    if (r.stopped) parts.push(t('Stopped.'));
+    parts.push(t.n('{n} file added to Trackyread.', '{n} files added to Trackyread.', r.tracked));
+    if (r.linked) parts.push(t.n('{n} linked to a book already there.', '{n} linked to books already there.', r.linked));
+    if (r.skipped) parts.push(t.n('{n} already tracked.', '{n} already tracked.', r.skipped));
+    if (r.failed) parts.push(t.n('{n} couldn’t be read.', '{n} couldn’t be read.', r.failed));
+    parts.push(t('Nothing was left open.'));
+    setProg(parts.join(' '));
     const names = r.bound.map((n) => n.toLowerCase());
     setTrackedNames((prev) => new Set([...prev, ...names]));
     setKnownNames((prev) => new Set([...prev, ...names])); // the list re-ticks to what is still new
@@ -124,32 +129,32 @@ export default function BulkAddWizard({ onClose, track = false }) {
 
   return (
     <Dialog
-      title="Bulk add from folder"
+      title={t('Bulk add from folder')}
       onClose={onClose}
       width={640}
       buttons={<>
-        {busy ? <button onClick={() => { stopRef.current = true; }}>■ Stop</button> : <button onClick={onClose}>{typeof prog === 'string' ? 'Close' : 'Cancel'}</button>}
-        <button className={track ? '' : 'primary'} disabled={!checked.size || busy} onClick={add} title="Open every ticked file as a tab">Open {checked.size || ''} file{checked.size === 1 ? '' : 's'}</button>
+        {busy ? <button onClick={() => { stopRef.current = true; }}>■ {t('Stop')}</button> : <button onClick={onClose}>{typeof prog === 'string' ? t('Close') : t('Cancel')}</button>}
+        <button className={track ? '' : 'primary'} disabled={!checked.size || busy} onClick={add} title={t('Open every ticked file as a tab')}>{checked.size ? t.n('Open {n} file', 'Open {n} files', checked.size) : t('Open files')}</button>
         <button className={track ? 'primary' : ''} disabled={!checked.size || busy} onClick={trackAll}
-          title="Add every ticked file to Trackyread (status: to read) without opening it — each is parsed for its length and fingerprint, then dropped, so hundreds at once are fine">＋ Track {checked.size || ''} in Trackyread</button>
+          title={t('Add every ticked file to Trackyread (status: to read) without opening it — each is parsed for its length and fingerprint, then dropped, so hundreds at once are fine')}>＋ {checked.size ? t('Track {n} in Trackyread', { n: checked.size }) : t('Track in Trackyread')}</button>
       </>}
     >
       {!files.length ? (
         <>
-          <p>Pick a folder (subfolders included) and Tachyread lists every readable file in it, preselecting the ones you haven’t added yet. <b>Open</b> them as tabs, or <b>Track</b> them — into Trackyread without opening anything, safe for a whole shelf of books.</p>
-          <p className="settings-note">Readable formats: {SUPPORTED_EXTS.filter((e) => e !== 'text' && e !== 'markdown').join(', ')}. Everything in the folder is scanned locally — nothing is uploaded.</p>
-          <button className="primary" onClick={pickFolder}>📂 Choose folder…</button>
+          <p>{t('Pick a folder (subfolders included) and Tachyread lists every readable file in it, preselecting the ones you haven’t added yet. Open them as tabs, or Track them — into Trackyread without opening anything, safe for a whole shelf of books.')}</p>
+          <p className="settings-note">{t('Readable formats: {formats}. Everything in the folder is scanned locally — nothing is uploaded.', { formats: SUPPORTED_EXTS.filter((e) => e !== 'text' && e !== 'markdown').join(', ') })}</p>
+          <button className="primary" onClick={pickFolder}>📂 {t('Choose folder…')}</button>
         </>
       ) : (
         <>
           <div className="ba-head">
-            <span><b>{folderName}</b> — {files.length} file{files.length === 1 ? '' : 's'} scanned, {Object.values(counts).reduce((a, b) => a + b, 0)} readable</span>
-            <button onClick={pickFolder} disabled={busy}>Change folder…</button>
+            <span><b>{folderName}</b> — {t.n('{n} file scanned, {readable} readable', '{n} files scanned, {readable} readable', files.length, { readable: Object.values(counts).reduce((a, b) => a + b, 0) })}</span>
+            <button onClick={pickFolder} disabled={busy}>{t('Change folder…')}</button>
           </div>
 
-          <div className="rh-section-h">Formats</div>
+          <div className="rh-section-h">{t('Formats')}</div>
           <div className="ba-formats">
-            {Object.keys(counts).length === 0 && <span className="settings-note">No readable files in this folder.</span>}
+            {Object.keys(counts).length === 0 && <span className="settings-note">{t('No readable files in this folder.')}</span>}
             {Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([ext, n]) => (
               <button key={ext} className={`ba-fmt${chosenExts.includes(ext) ? ' on' : ''}`} onClick={() => toggleFormat(ext)}>.{ext} ({n})</button>
             ))}
@@ -157,26 +162,26 @@ export default function BulkAddWizard({ onClose, track = false }) {
 
           <label className="ba-onlynew">
             <input type="checkbox" checked={onlyNew} onChange={(e) => setOnlyNew(e.target.checked)} />
-            Only files not already opened or tracked{onlyNew ? '' : ' (showing those too)'}
+            {onlyNew ? t('Only files not already opened or tracked') : t('Only files not already opened or tracked (showing those too)')}
           </label>
 
-          {prog && <p className="settings-note" aria-live="polite">{typeof prog === 'string' ? prog : `Tracking ${prog.i + 1} of ${prog.total} — ${prog.name}`}</p>}
+          {prog && <p className="settings-note" aria-live="polite">{typeof prog === 'string' ? prog : t('Tracking {i} of {total} — {name}', { i: prog.i + 1, total: prog.total, name: prog.name })}</p>}
 
           <div className="rh-section-h ba-listh">
-            <span>Files to add</span>
-            <span className="ba-count">{checked.size} selected · {rows.filter((r) => r.isNew).length} new{unsupportedCount ? ` · ${unsupportedCount} skipped (unsupported)` : ''}</span>
+            <span>{t('Files to add')}</span>
+            <span className="ba-count">{t('{n} selected', { n: checked.size })} · {t('{n} new', { n: rows.filter((r) => r.isNew).length })}{unsupportedCount ? <> · {t('{n} skipped (unsupported)', { n: unsupportedCount })}</> : ''}</span>
           </div>
           <div className="ba-list">
-            {rows.length === 0 && <p className="settings-note">Nothing matches the current filters.</p>}
+            {rows.length === 0 && <p className="settings-note">{t('Nothing matches the current filters.')}</p>}
             {rows.slice(0, MAX_ROWS).map((r) => (
               <label key={r.path} className={`ba-row${r.isNew ? '' : ' seen'}`}>
                 <input type="checkbox" checked={checked.has(r.path)} onChange={() => toggleRow(r.path)} disabled={busy} />
                 <span className="ba-name" title={r.path}>{r.name}</span>
-                <span className="ba-badge">{r.isNew ? <em className="ba-new">new</em> : <em className="ba-old">{trackedNames.has(String(r.name).toLowerCase()) ? 'tracked' : 'added'}</em>}</span>
+                <span className="ba-badge">{r.isNew ? <em className="ba-new">{t('new')}</em> : <em className="ba-old">{trackedNames.has(String(r.name).toLowerCase()) ? t('tracked') : t('added')}</em>}</span>
                 <span className="ba-meta">.{r.ext}{r.size ? ` · ${fmtSize(r.size)}` : ''}</span>
               </label>
             ))}
-            {rows.length > MAX_ROWS && <p className="settings-note">…and {rows.length - MAX_ROWS} more (checked ones still get added).</p>}
+            {rows.length > MAX_ROWS && <p className="settings-note">{t('…and {n} more (checked ones still get added).', { n: rows.length - MAX_ROWS })}</p>}
           </div>
         </>
       )}

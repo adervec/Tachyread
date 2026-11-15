@@ -3,22 +3,23 @@ import { readerDocFromText, attachChecksum, countWords } from './readerDocument.
 import { mdToHtml } from './markdown.js';
 import { sanitizeHtml } from './sanitizeHtml.js';
 import { resolveLink } from '../features/webGrab.js';
+import { t } from '../i18n.js';
 
 async function parseTxt(file, onProgress) {
-  onProgress?.({ phase: 'Reading file' });
+  onProgress?.({ phase: t('Reading file') });
   const text = await file.text();
-  onProgress?.({ phase: 'Building document' });
+  onProgress?.({ phase: t('Building document') });
   return readerDocFromText(text, file.name);
 }
 
 async function parseDocx(file, onProgress) {
-  onProgress?.({ phase: 'Loading DOCX engine' });
+  onProgress?.({ phase: t('Loading DOCX engine') });
   const mammoth = await import('mammoth/mammoth.browser.js');
   const arrayBuffer = await file.arrayBuffer();
-  onProgress?.({ phase: 'Extracting text' });
+  onProgress?.({ phase: t('Extracting text') });
   const { value } = await mammoth.extractRawText({ arrayBuffer });
   const text = value || '';
-  onProgress?.({ phase: 'Building document' });
+  onProgress?.({ phase: t('Building document') });
   return readerDocFromText(text, file.name);
 }
 
@@ -37,7 +38,7 @@ function attachSegments(doc, segmentTexts, source) {
 }
 
 async function parsePdf(file, onProgress) {
-  onProgress?.({ phase: 'Loading PDF engine' });
+  onProgress?.({ phase: t('Loading PDF engine') });
   const pdfjs = await import('pdfjs-dist/build/pdf.mjs');
   // Configure worker — Vite worker URL trick
   const workerUrl = (await import('pdfjs-dist/build/pdf.worker.mjs?url')).default;
@@ -48,7 +49,7 @@ async function parsePdf(file, onProgress) {
   const pdf = await loadingTask.promise;
   const pageTexts = [];
   for (let p = 1; p <= pdf.numPages; p++) {
-    onProgress?.({ phase: 'Extracting pages', done: p, total: pdf.numPages });
+    onProgress?.({ phase: t('Extracting pages'), done: p, total: pdf.numPages });
     const page = await pdf.getPage(p);
     const tc = await page.getTextContent();
     let lastY = null;
@@ -66,14 +67,14 @@ async function parsePdf(file, onProgress) {
     if (line.trim()) lines.push(line.trim());
     pageTexts.push(lines.join('\n'));
   }
-  onProgress?.({ phase: 'Building document' });
+  onProgress?.({ phase: t('Building document') });
   const doc = readerDocFromText(pageTexts.join('\n\n'), file.name);
   attachSegments(doc, pageTexts, { kind: 'pdf', pdfData, pageCount: pdf.numPages });
   return doc;
 }
 
 async function parseEpub(file, onProgress) {
-  onProgress?.({ phase: 'Loading EPUB engine' });
+  onProgress?.({ phase: t('Loading EPUB engine') });
   const ePubModule = await import('epubjs');
   const ePub = ePubModule.default || ePubModule;
   const buf = await file.arrayBuffer();
@@ -84,7 +85,7 @@ async function parseEpub(file, onProgress) {
   const spine = book.spine.spineItems || [];
   let si = 0;
   for (const item of spine) {
-    onProgress?.({ phase: 'Extracting sections', done: ++si, total: spine.length });
+    onProgress?.({ phase: t('Extracting sections'), done: ++si, total: spine.length });
     try {
       // epub.js resolves load() with the section's <html> ELEMENT (not a Document), so look for its
       // <body> inside it — reading .body / .documentElement off it gave '' and every EPUB opened empty.
@@ -186,9 +187,9 @@ function domToText(root, onHeading) {
 // spliced in. Lets us tell a real <main> from an empty <main> placeholder that a page fills via JS
 // (some readers ship <main></main> and inject the chapters, which live as siblings in the static file).
 function richTextLen(el) {
-  let t = el.textContent || '';
-  for (const tpl of el.querySelectorAll('template')) t += tpl.content ? (tpl.content.textContent || '') : '';
-  return t.trim().length;
+  let txt = el.textContent || '';
+  for (const tpl of el.querySelectorAll('template')) txt += tpl.content ? (tpl.content.textContent || '') : '';
+  return txt.trim().length;
 }
 function pickContentRoot(dom) {
   const main = dom.querySelector('main');
@@ -209,10 +210,10 @@ function pickContentRoot(dom) {
 // page renders client-side from templates is recovered too (DOMParser doesn't run scripts). Empty
 // templates are dropped.
 function expandTemplates(root) {
-  for (const t of [...root.querySelectorAll('template')]) {
-    const frag = t.content && t.content.cloneNode(true);
-    if (frag && (frag.textContent || '').trim()) t.replaceWith(frag);
-    else t.remove();
+  for (const tpl of [...root.querySelectorAll('template')]) {
+    const frag = tpl.content && tpl.content.cloneNode(true);
+    if (frag && (frag.textContent || '').trim()) tpl.replaceWith(frag);
+    else tpl.remove();
   }
 }
 
@@ -248,8 +249,8 @@ function htmlToSections(htmlString, rootSelector = null) {
   const sections = [];
   let cur = [];
   for (const child of [...root.children]) {
-    const t = child.tagName;
-    const startsChapter = /^(ARTICLE|SECTION)$/.test(t) || /^H[12]$/.test(t)
+    const tag = child.tagName;
+    const startsChapter = /^(ARTICLE|SECTION)$/.test(tag) || /^H[12]$/.test(tag)
       || (child.firstElementChild && /^H[12]$/.test(child.firstElementChild.tagName) && child.children.length > 1);
     if (startsChapter && cur.length) { sections.push(cur); cur = []; }
     cur.push(child);
@@ -358,7 +359,7 @@ export function docFromHtmlRange(taggedHtml, fileName, startIdx, endIdx) {
   const dom = new DOMParser().parseFromString(taggedHtml, 'text/html');
   const a = dom.querySelector(`[data-tx-idx="${startIdx}"]`);
   const b = dom.querySelector(`[data-tx-idx="${endIdx}"]`);
-  if (!a) throw new Error('Region not found.');
+  if (!a) throw new Error(t('Region not found.'));
   if (!b) return docFromHtmlString(taggedHtml, fileName, `[data-tx-idx="${startIdx}"]`);
   const { kids, i0, i1 } = siblingRange(a, b);
   const styles = [...dom.querySelectorAll('style')].map((s) => s.outerHTML).join('');
@@ -450,16 +451,16 @@ export async function docFromWebContent(content, { url = '', asHtml = null } = {
 }
 
 async function parseHtml(file, onProgress) {
-  onProgress?.({ phase: 'Converting HTML' });
+  onProgress?.({ phase: t('Converting HTML') });
   const doc = docFromHtmlString(await file.text(), file.name);
-  onProgress?.({ phase: 'Building document' });
+  onProgress?.({ phase: t('Building document') });
   return doc;
 }
 
 async function parseMarkdown(file, onProgress) {
-  onProgress?.({ phase: 'Rendering Markdown' });
+  onProgress?.({ phase: t('Rendering Markdown') });
   const doc = docFromHtmlString(mdToHtml(await file.text()), file.name);
-  onProgress?.({ phase: 'Building document' });
+  onProgress?.({ phase: t('Building document') });
   return doc;
 }
 
@@ -473,7 +474,7 @@ export async function parseFile(file, onProgress) {
   else if (name.endsWith('.html') || name.endsWith('.htm') || name.endsWith('.xhtml')) doc = await parseHtml(file, onProgress);
   else if (name.endsWith('.md') || name.endsWith('.markdown')) doc = await parseMarkdown(file, onProgress);
   else doc = await parseTxt(file, onProgress);
-  onProgress?.({ phase: 'Indexing & fingerprinting' });
+  onProgress?.({ phase: t('Indexing & fingerprinting') });
   await attachChecksum(doc);
   return doc;
 }

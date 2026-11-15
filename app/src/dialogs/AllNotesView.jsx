@@ -6,16 +6,17 @@ import { saveTextToFile } from '../features/fileSystem.js';
 import { AI_NOTE_TYPES } from '../features/journeyAi.js';
 import { readStatus } from '../features/journeyLibrary.js';
 import { fmtDateTime } from '../features/dateFmt.js';
+import { t } from '../i18n.js';
 
 // One screen for EVERY note in the app: document notes (incl. section-attached + orphans), each
 // book's own notes field, the AI's categorized notes, and the shared multi-book/series notes —
 // searchable, filterable by kind, and manageable (edit/delete/open) in place. Rendered as a
 // Trackyread tab so it sits beside the library it annotates.
 const KIND_LABEL = {
-  doc: '📄 Document',
-  book: '📖 Book',
-  ai: '✨ AI',
-  shared: '🔗 Shared',
+  doc: `📄 ${t('Document')}`,
+  book: `📖 ${t('Book')}`,
+  ai: `✨ ${t('AI')}`,
+  shared: `🔗 ${t('Shared')}`,
 };
 
 export default function AllNotesView({ books, crossNotes, fileStats, onSaveBook, onReloadCross }) {
@@ -31,9 +32,9 @@ export default function AllNotesView({ books, crossNotes, fileStats, onSaveBook,
   }
   async function exportReadwise() {
     const token = (state.global.readwiseKey || '').trim();
-    if (!token) { setExportMsg('Add your Readwise access token in Application Settings → Readwise first.'); return; }
-    setExportMsg('Sending to Readwise…');
-    try { setExportMsg(`Sent ${await sendToReadwise(token, exportItems())} highlight(s) to Readwise (it skips ones it already has).`); }
+    if (!token) { setExportMsg(t('Add your Readwise access token in Application Settings → Readwise first.')); return; }
+    setExportMsg(t('Sending to Readwise…'));
+    try { const sent = await sendToReadwise(token, exportItems()); setExportMsg(t.n('Sent {n} highlight to Readwise (it skips ones it already has).', 'Sent {n} highlights to Readwise (it skips ones it already has).', sent)); }
     catch (e) { setExportMsg(String(e?.message || e)); }
   }
   const [docNotes, setDocNotes] = useState(null);
@@ -54,7 +55,7 @@ export default function AllNotesView({ books, crossNotes, fileStats, onSaveBook,
     for (const n of docNotes || []) {
       out.push({
         key: `doc:${n.checksum}:${n.id}`, kind: 'doc', when: n.updatedAt || n.createdAt || 0,
-        where: nameOf(n.checksum), sub: n.section ? `§ ${n.section.title}` : (n.wordIndex != null ? `@ word ${n.wordIndex + 1}` : ''),
+        where: nameOf(n.checksum), sub: n.section ? `§ ${n.section.title}` : (n.wordIndex != null ? `@ ${t('word {n}', { n: n.wordIndex + 1 })}` : ''),
         text: n.quote ? `❝ ${n.quote} ❞${n.text ? `\n${n.text}` : ''}` : n.text, raw: n,
       });
     }
@@ -66,7 +67,7 @@ export default function AllNotesView({ books, crossNotes, fileStats, onSaveBook,
         const spoiler = (n.type === 'summary' || n.type === 'section-summary') && readStatus(b) !== 'finished';
         out.push({
           key: `ai:${b.id}:${i}`, kind: 'ai', when: n.createdAt || 0, where: b.title,
-          sub: `${AI_NOTE_TYPES[n.type] || 'Note'}${n.sectionTitle ? ` · § ${n.sectionTitle}` : ''}`,
+          sub: `${AI_NOTE_TYPES[n.type] || t('Note')}${n.sectionTitle ? ` · § ${n.sectionTitle}` : ''}`,
           text: n.text, raw: { book: b, index: i }, spoiler,
         });
       });
@@ -78,7 +79,7 @@ export default function AllNotesView({ books, crossNotes, fileStats, onSaveBook,
       out.push({
         key: `shared:${n.id}`, kind: 'shared', when: n.updatedAt || n.createdAt || 0,
         where: [...spanTitles, ...(n.series ? [`📚 ${n.series}`] : [])].join(' · '),
-        sub: `${AI_NOTE_TYPES[n.type] || 'Note'}${n.source === 'ai' ? ' · AI' : ''}`,
+        sub: `${AI_NOTE_TYPES[n.type] || t('Note')}${n.source === 'ai' ? ` · ${t('AI')}` : ''}`,
         text: n.text, raw: n, spoiler,
       });
     }
@@ -108,21 +109,21 @@ export default function AllNotesView({ books, crossNotes, fileStats, onSaveBook,
     setEditing(null);
   }
 
-  if (docNotes === null) return <p>Loading…</p>;
+  if (docNotes === null) return <p>{t('Loading…')}</p>;
   return (
     <div className="an-view">
       <div className="lj-toolbar">
-        <input className="lj-search" placeholder="Search all notes…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <button onClick={exportMd} title="Every document note, highlight and book note as one Markdown file, grouped by book">⬇ Markdown</button>
-        <button onClick={exportReadwise} title="Send highlights and notes to your Readwise account (your own access token, from Application Settings)">→ Readwise</button>
+        <input className="lj-search" placeholder={t('Search all notes…')} value={q} onChange={(e) => setQ(e.target.value)} />
+        <button onClick={exportMd} title={t('Every document note, highlight and book note as one Markdown file, grouped by book')}>⬇ Markdown</button>
+        <button onClick={exportReadwise} title={t('Send highlights and notes to your Readwise account (your own access token, from Application Settings)')}>→ Readwise</button>
         {exportMsg && <span className="settings-note" role="status" style={{ margin: 0 }}>{exportMsg}</span>}
         {['all', 'doc', 'book', 'ai', 'shared'].map((k) => (
           <button key={k} className={`lj-qcat${kind === k ? ' on' : ''}`} onClick={() => setKind(k)}>
-            {k === 'all' ? 'All' : KIND_LABEL[k]} ({counts[k]})
+            {k === 'all' ? t('All') : KIND_LABEL[k]} ({counts[k]})
           </button>
         ))}
       </div>
-      {shown.length === 0 && <p className="settings-note">No notes match. Document notes come from the reader (View → Notes & Annotations); book, AI and shared notes live on your tracker books.</p>}
+      {shown.length === 0 && <p className="settings-note">{t('No notes match. Document notes come from the reader (View → Notes & Annotations); book, AI and shared notes live on your tracker books.')}</p>}
       <div className="an-list">
         {shown.map((it) => {
           const hidden = it.spoiler && !revealed.has(it.key);
@@ -135,13 +136,13 @@ export default function AllNotesView({ books, crossNotes, fileStats, onSaveBook,
                 {it.sub && <em className="an-sub">{it.sub}</em>}
                 <span className="an-when">{it.when ? fmtDateTime(it.when) : ''}</span>
               </div>
-              {hidden ? <span className="lj-spoiler-label">🙈 Spoiler — unfinished. Click to reveal.</span> : null}
+              {hidden ? <span className="lj-spoiler-label">🙈 {t('Spoiler — unfinished. Click to reveal.')}</span> : null}
               {editing?.key === it.key ? (
                 <>
                   <textarea rows={3} value={editing.text} onChange={(e) => setEditing({ ...editing, text: e.target.value })} />
                   <div className="an-actions">
-                    <button className="toggle-on" onClick={() => saveEdit(it, editing.text)}>Save</button>
-                    <button onClick={() => setEditing(null)}>Cancel</button>
+                    <button className="toggle-on" onClick={() => saveEdit(it, editing.text)}>{t('Save')}</button>
+                    <button onClick={() => setEditing(null)}>{t('Cancel')}</button>
                   </div>
                 </>
               ) : (
@@ -149,10 +150,10 @@ export default function AllNotesView({ books, crossNotes, fileStats, onSaveBook,
                   <div className={`an-text${hidden ? ' an-blur' : ''}`}>{it.text}</div>
                   <div className="an-actions">
                     {it.kind === 'doc' && (
-                      <button title="Open this document in the reader" onClick={async () => { if (await openRecent(it.raw.checksum)) closeDialog?.(); }}>▶ Open file</button>
+                      <button title={t('Open this document in the reader')} onClick={async () => { if (await openRecent(it.raw.checksum)) closeDialog?.(); }}>▶ {t('Open file')}</button>
                     )}
                     <span style={{ flex: 1 }} />
-                    <button onClick={() => setEditing({ key: it.key, text: it.text })}>Edit</button>
+                    <button onClick={() => setEditing({ key: it.key, text: it.text })}>{t('Edit')}</button>
                     <button className="grab-trash" onClick={() => remove(it)}>🗑</button>
                   </div>
                 </>

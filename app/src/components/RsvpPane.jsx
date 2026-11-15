@@ -76,7 +76,7 @@ export default function RsvpPane({ tab, onVisible, playing = false }) {
 
   return (
     // The Font Manager's per-tab font wins; the legacy serif/sans class is the fallback look.
-    <div className={themeClass} ref={visRef} style={settings.fontFamily ? { fontFamily: settings.fontFamily } : undefined}>
+    <div dir="auto" className={themeClass} ref={visRef} style={settings.fontFamily ? { fontFamily: settings.fontFamily } : undefined}>
       <div className="rsvp-context-before">
         {beforeWords.map((w, i) => (
           <ContextWordChar key={i} word={w} highlightOrp={settings.highlightORP} />

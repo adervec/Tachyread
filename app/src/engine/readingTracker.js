@@ -19,6 +19,7 @@
 // Two headline numbers fall out: a live "recent WPM" (eyes pace over a sliding window) and a
 // "session/lifetime WPM" (unique new words read per active minute = reading efficiency). A
 // per-word WPM trace + read mask back the coverage stat and the mountain-graph trendline.
+import { t } from '../i18n.js';
 
 const DEFAULT_IDLE_CAP_MS = 60000; // max active time credited to a single gap between moves.
 // The cap is the AFK guard: a bathroom break can't tank WPM, because only this much of the gap is
@@ -153,16 +154,16 @@ const SESSION_GAP_MS = 5 * 60000; // a pause longer than this starts a new readi
 const MAX_SESSIONS = 300;
 export const READ_SRC = { auto: 1, word: 2, line: 3, para: 4, page: 5, scroll: 6, listen: 7, speak: 8, typing: 9, marked: 10 };
 export const READ_SRC_INFO = {
-  1: { label: 'auto-play', color: '#5e60ce' },
-  2: { label: 'word-by-word', color: '#3a86ff' },
-  3: { label: 'line-by-line', color: '#2a9d8f' },
-  4: { label: 'by paragraph', color: '#90be6d' },
-  5: { label: 'by page', color: '#f4a261' },
-  6: { label: 'scroll-reading', color: '#e76f51' },
-  7: { label: 'listening (TTS)', color: '#b5179e' },
-  8: { label: 'speaking', color: '#ff5c8a' },
-  9: { label: 'typing', color: '#ffd166' },
-  10: { label: 'marked read', color: '#8d99ae' },
+  1: { label: t('auto-play'), color: '#5e60ce' },
+  2: { label: t('word-by-word'), color: '#3a86ff' },
+  3: { label: t('line-by-line'), color: '#2a9d8f' },
+  4: { label: t('by paragraph'), color: '#90be6d' },
+  5: { label: t('by page'), color: '#f4a261' },
+  6: { label: t('scroll-reading'), color: '#e76f51' },
+  7: { label: t('listening (TTS)'), color: '#b5179e' },
+  8: { label: t('speaking'), color: '#ff5c8a' },
+  9: { label: t('typing'), color: '#ffd166' },
+  10: { label: t('marked read'), color: '#8d99ae' },
 };
 function encodeRuns(arr) {
   const bytes = [];

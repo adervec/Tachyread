@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import Avatar from './Avatar.jsx';
 import { useLineSweep } from './useLineSweep.js';
 import { useApp } from '../state/AppContext.jsx';
+import { t } from '../i18n.js';
 
 // Mobile: the reader face(s) as a floating, draggable overlay with adjustable transparency —
 // so it can sit anywhere over the reading area instead of taking a slice of a small screen. The
@@ -78,16 +79,16 @@ export default function FloatingFace({ tab, pos, onMove, onDrop, scale = 1, onSc
       onPointerMove={onPointerMove}
       onPointerUp={onUp}
       onPointerCancel={onUp}
-      title="Drag to move · transparency in Tab Settings → Avatars"
+      title={t('Drag to move · transparency in Tab Settings → Avatars')}
     >
       {min ? (
         <>
           <span className="chip-stub-icon">🙂</span>
-          <button className="chip-mini-btn" title="Expand" onClick={() => setMin(false)}>+</button>
+          <button className="chip-mini-btn" title={t('Expand')} onClick={() => setMin(false)}>+</button>
         </>
       ) : (
         <>
-          <button className="chip-mini-btn" title="Minimize" onClick={() => setMin(true)}>–</button>
+          <button className="chip-mini-btn" title={t('Minimize')} onClick={() => setMin(true)}>–</button>
           <div className="rsvp-faces">
             {Array.from({ length: count }, (_, i) => (
               <Avatar key={i} wpm={wpm} lineProgress={lineProgress} faceStyle={styles[i] || 'Man'} artStyle={settings.artStyle || 'Cartoon'} size={Math.round(62 * k)}
@@ -95,7 +96,7 @@ export default function FloatingFace({ tab, pos, onMove, onDrop, scale = 1, onSc
             ))}
           </div>
           {onScale && (
-            <span className="chip-resize" title="Drag to resize (double-click to reset)" onPointerDown={onResizeDown} onDoubleClick={() => { setLiveScale(null); onScale(1); }}>◢</span>
+            <span className="chip-resize" title={t('Drag to resize (double-click to reset)')} onPointerDown={onResizeDown} onDoubleClick={() => { setLiveScale(null); onScale(1); }}>◢</span>
           )}
         </>
       )}

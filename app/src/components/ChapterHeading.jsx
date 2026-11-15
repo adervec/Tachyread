@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getTocEntries, currentChapter } from '../document/toc.js';
 import { sectionChain, barsForMode, DEFAULT_SECTION_BAR_MODE } from '../features/sectionBars.js';
+import { t } from '../i18n.js';
 
 function fmtDur(secs) {
   if (!isFinite(secs) || secs < 0) return '—';
@@ -42,7 +43,7 @@ function SectionBar({ sec, pct, pages, title, depth, nested, labelled }) {
         ...(nested ? { marginLeft: `${sec.offset * 100}%`, width: `${sec.extent * 100}%` } : null),
       }}
     >
-      <span className="ch-bar-name" title={title}>{sec.title || `Level ${sec.level + 1}`}</span>
+      <span className="ch-bar-name" title={title}>{sec.title || t('Level {n}', { n: sec.level + 1 })}</span>
       {row}
     </div>
   );
@@ -59,8 +60,8 @@ export default function ChapterHeading({ tab, onJumpWord, visibleRef, barMode = 
   // Live clock so elapsed / ETA refresh while reading — and, in cycling mode, so the bar rotates.
   const [now, setNow] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setNow((n) => n + 1), 1000);
-    return () => clearInterval(t);
+    const iv = setInterval(() => setNow((n) => n + 1), 1000);
+    return () => clearInterval(iv);
   }, []);
 
   // Every section containing the cursor, outermost first — you are in a part AND a chapter AND a
@@ -95,7 +96,10 @@ export default function ChapterHeading({ tab, onJumpWord, visibleRef, barMode = 
   const barTitleFor = (sec) => {
     const p = (sec.progress * 100).toFixed(1);
     const raw = pageWords > 0 && sec.words > 0 ? Math.ceil(sec.words / pageWords) : 0;
-    return `${sec.title || 'Section'} — ${p}% through${raw > 1 ? ` · about ${raw} screenfuls at this text size` : ''}`;
+    const name = sec.title || t('Section');
+    return raw > 1
+      ? t('{name} — {pct}% through · about {n} screenfuls at this text size', { name, pct: p, n: raw })
+      : t('{name} — {pct}% through', { name, pct: p });
   };
   // The cycling label names which level is on screen right now, or the whole set would be a mystery.
   const cycling = barMode === 'cycle' && chain.length > 1;
@@ -104,7 +108,7 @@ export default function ChapterHeading({ tab, onJumpWord, visibleRef, barMode = 
     <div className={`chapter-heading ch-mode-${barMode}${bars.length > 1 ? ' ch-multi' : ''}`}>
       <button
         className="ch-prev"
-        title="Jump to start of this section"
+        title={t('Jump to start of this section')}
         onClick={() => onJumpWord(Math.max(0, chapter.start))}
       >
         ▸
@@ -124,16 +128,16 @@ export default function ChapterHeading({ tab, onJumpWord, visibleRef, barMode = 
             labelled={barMode === 'parallel' || barMode === 'nested'}
           />
         )) : (
-          <div className="ch-bar" title={`${pct}% through this section`}>
+          <div className="ch-bar" title={t('{pct}% through this section', { pct })}>
             <div className="ch-fill" style={{ width: `${pct}%` }} />
           </div>
         )}
       </div>
       <span className="ch-pct">{bars.length ? (bars[bars.length - 1].progress * 100).toFixed(1) : pct}%</span>
-      <span className="ch-times" title="Time spent in this section · ETA to finish · estimated total">
-        <span title="Time spent in this section">⏱ {spentSecs != null ? fmtDur(spentSecs) : '—'}</span>
-        <span title="Estimated time to finish this section">→ {fmtDur(etaSecs)}</span>
-        <span title="Estimated total time for this section (spent + ETA)">Σ {totalSecs != null ? fmtDur(totalSecs) : '—'}</span>
+      <span className="ch-times" title={t('Time spent in this section · ETA to finish · estimated total')}>
+        <span title={t('Time spent in this section')}>⏱ {spentSecs != null ? fmtDur(spentSecs) : '—'}</span>
+        <span title={t('Estimated time to finish this section')}>→ {fmtDur(etaSecs)}</span>
+        <span title={t('Estimated total time for this section (spent + ETA)')}>Σ {totalSecs != null ? fmtDur(totalSecs) : '—'}</span>
       </span>
     </div>
   );

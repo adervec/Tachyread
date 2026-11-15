@@ -2,13 +2,14 @@ import { useMemo } from 'react';
 import { TextF, RangeF, DateF } from './ColFilter.jsx';
 import { filterSortRows, anySet } from '../features/tableFilter.js';
 import { useSessionState } from '../state/useSessionState.js';
+import { t } from '../i18n.js';
 
 // A sortable, filterable table: click a header to sort (again to flip), a filter under every column
 // (text: regex · number: min/max · date: from/to · select). Filters and sort are remembered for the
 // session under `stateKey`.
 //   columns: [{ key, label, type, get(row), render?(row), options?: [[value, label]] (select), unit?, title? }]
 //   lead: { header, cell(row) } — an extra first column (e.g. a tick box); toolbar(visibleRows) renders above
-export default function DataTable({ columns, rows, rowKey, stateKey, lead = null, toolbar = null, maxRows = 500, empty = 'Nothing here.', className = '' }) {
+export default function DataTable({ columns, rows, rowKey, stateKey, lead = null, toolbar = null, maxRows = 500, empty = t('Nothing here.'), className = '' }) {
   const [filters, setFilters] = useSessionState(`tr-dt-${stateKey}-f`, {});
   const [sort, setSort] = useSessionState(`tr-dt-${stateKey}-s`, null);
   const shown = useMemo(() => filterSortRows(rows, columns, filters, sort), [rows, columns, filters, sort]);
@@ -19,8 +20,8 @@ export default function DataTable({ columns, rows, rowKey, stateKey, lead = null
       {(toolbar || any) && (
         <div className="lj-inline dt-bar">
           {toolbar?.(shown)}
-          <span className="settings-note" style={{ margin: 0 }}>{shown.length === rows.length ? `${rows.length}` : `${shown.length} of ${rows.length}`}</span>
-          {any && <button onClick={() => setFilters({})}>Clear filters</button>}
+          <span className="settings-note" style={{ margin: 0 }}>{shown.length === rows.length ? `${rows.length}` : t('{shown} of {total}', { shown: shown.length, total: rows.length })}</span>
+          {any && <button onClick={() => setFilters({})}>{t('Clear filters')}</button>}
         </div>
       )}
       <div className="dt-scroll">
@@ -29,7 +30,7 @@ export default function DataTable({ columns, rows, rowKey, stateKey, lead = null
             <tr>
               {lead && <th>{lead.header}</th>}
               {columns.map((c) => (
-                <th key={c.key} title={c.title || 'Click to sort (again to reverse)'} className="dt-sortable"
+                <th key={c.key} title={c.title || t('Click to sort (again to reverse)')} className="dt-sortable"
                   aria-sort={sort?.key === c.key ? (sort.dir > 0 ? 'ascending' : 'descending') : undefined}
                   onClick={() => setSort((s) => (s?.key === c.key ? (s.dir > 0 ? { key: c.key, dir: -1 } : null) : { key: c.key, dir: c.type === 'num' || c.type === 'date' ? -1 : 1 }))}>
                   {c.label}{sort?.key === c.key ? (sort.dir > 0 ? ' ▴' : ' ▾') : ''}
@@ -44,8 +45,8 @@ export default function DataTable({ columns, rows, rowKey, stateKey, lead = null
                   {c.type === 'num' && <RangeF value={filters[c.key] || ['', '']} onChange={setF(c.key)} label={c.label} unit={c.unit || ''} />}
                   {c.type === 'date' && <DateF value={filters[c.key] || ['', '']} onChange={setF(c.key)} label={c.label} />}
                   {c.type === 'select' && (
-                    <select value={filters[c.key] || 'all'} onChange={(e) => setF(c.key)(e.target.value)} aria-label={`Filter ${c.label}`}>
-                      <option value="all">all</option>{(c.options || []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    <select value={filters[c.key] || 'all'} onChange={(e) => setF(c.key)(e.target.value)} aria-label={t('Filter {label}', { label: c.label })}>
+                      <option value="all">{t('all')}</option>{(c.options || []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
                   )}
                 </th>
@@ -61,8 +62,8 @@ export default function DataTable({ columns, rows, rowKey, stateKey, lead = null
             ))}
           </tbody>
         </table>
-        {!shown.length && <p className="settings-note">{rows.length ? 'No rows match these filters.' : empty}</p>}
-        {shown.length > maxRows && <p className="settings-note">Showing {maxRows} of {shown.length} — filter to narrow.</p>}
+        {!shown.length && <p className="settings-note">{rows.length ? t('No rows match these filters.') : empty}</p>}
+        {shown.length > maxRows && <p className="settings-note">{t('Showing {n} of {total} — filter to narrow.', { n: maxRows, total: shown.length })}</p>}
       </div>
     </div>
   );

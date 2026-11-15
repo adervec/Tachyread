@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { filterCss } from '../features/displayFilters.js';
 import FilterControls from './FilterControls.jsx';
+import { t } from '../i18n.js';
 
 // Renders the original document page/section beside the reader, synced to the reading
 // position via doc.wordToSegment. PDF pages are rasterized with pdf.js; EPUB sections show
@@ -93,7 +94,7 @@ function PdfSource({ doc, page, curOff, curStyle, curColor }) {
   const wrapStyle = curColor ? { '--src-cur': curColor } : undefined;
   return (
     <div className="source-canvas-wrap source-canvas-cursor" ref={wrapRef} style={wrapStyle}>
-      {err ? <div className="source-msg">Could not render page: {err}</div> : <canvas ref={canvasRef} />}
+      {err ? <div className="source-msg">{t('Could not render page: {error}', { error: err })}</div> : <canvas ref={canvasRef} />}
       {box && <span ref={markRef} className={`src-canvas-mark cur-${curStyle}`} style={{ left: `${box.left}%`, top: `${box.top}%`, width: `${Math.max(box.w, 1.5)}%`, height: `${Math.max(box.h, 1.6)}%` }} />}
     </div>
   );
@@ -156,7 +157,7 @@ function EpubSource({ doc, section, curOff, pad, curStyle, curColor }) {
   }, [curOff, section, html, curStyle]);
   const st = { padding: pad };
   if (curColor) st['--src-cur'] = curColor;
-  return <div className="source-html" ref={ref} style={st} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div dir="auto" className="source-html" ref={ref} style={st} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 // HTML/Markdown source: a sandboxed iframe (scripts allowed but origin-isolated; document
@@ -253,7 +254,7 @@ function HtmlSource({ doc, section, checks, onCheck, curOff, pad, curStyle, curC
     <iframe
       ref={frameRef}
       className="source-frame"
-      title="Original document"
+      title={t('Original document')}
       sandbox="allow-scripts"
       srcDoc={srcdoc}
     />
@@ -269,14 +270,14 @@ function ImageSource({ doc, index, frac, curColor }) {
   const wrapStyle = curColor ? { '--src-cur': curColor } : undefined;
   return (
     <div className="source-canvas-wrap source-canvas-cursor" style={wrapStyle}>
-      {url ? <img className="source-image" src={url} alt={`grabbed page ${index + 1}`} /> : <div className="source-msg">No image.</div>}
+      {url ? <img className="source-image" src={url} alt={t('grabbed page {n}', { n: index + 1 })} /> : <div className="source-msg">{t('No image.')}</div>}
       {url && frac != null && frac >= 0 && <span ref={markRef} className="src-band-mark" style={{ top: `${Math.min(98, frac * 100)}%` }} />}
     </div>
   );
 }
 
-const CUR_STYLES = [['vortex', 'Invert'], ['box', 'Box'], ['underline', 'Underline'], ['highlight', 'Highlight']];
-const CUR_COLORS = [['', 'Auto'], ['#ffd54f', 'Amber'], ['#4fd8ff', 'Cyan'], ['#7dff8a', 'Green'], ['#ff7ab0', 'Pink'], ['#ffb04f', 'Orange'], ['#b58cff', 'Purple'], ['#ff5c5c', 'Red']];
+const CUR_STYLES = [['vortex', t('Invert')], ['box', t('Box')], ['underline', t('Underline')], ['highlight', t('Highlight')]];
+const CUR_COLORS = [['', t('Auto')], ['#ffd54f', t('Amber')], ['#4fd8ff', t('Cyan')], ['#7dff8a', t('Green')], ['#ff7ab0', t('Pink')], ['#ffb04f', t('Orange')], ['#b58cff', t('Purple')], ['#ff5c5c', t('Red')]];
 
 export default function SourcePane({ tab, onPatch, onSourcePage }) {
   const { doc, settings } = tab;
@@ -297,8 +298,8 @@ export default function SourcePane({ tab, onPatch, onSourcePage }) {
   if (!src) {
     return (
       <div className="source-pane">
-        <div className="source-toolbar"><span>Original</span></div>
-        <div className="source-msg">No original page view for this format (plain text / DOCX).</div>
+        <div className="source-toolbar"><span>{t('Original')}</span></div>
+        <div className="source-msg">{t('No original page view for this format (plain text / DOCX).')}</div>
       </div>
     );
   }
@@ -306,7 +307,10 @@ export default function SourcePane({ tab, onPatch, onSourcePage }) {
   const wIdx = Math.min(idx, (doc.wordToSegment?.length || 1) - 1);
   const seg = doc.wordToSegment ? doc.wordToSegment[wIdx] || 0 : 0;
   const totalSeg = src.kind === 'pdf' ? src.pageCount : src.kind === 'images' ? src.images.length : src.sections.length;
-  const label = src.kind === 'pdf' ? 'PDF page' : src.kind === 'images' ? 'Grabbed page' : src.kind === 'html' ? 'Section' : 'EPUB section';
+  const [label, prevLabel, nextLabel] = src.kind === 'pdf' ? [t('PDF page'), t('Previous PDF page'), t('Next PDF page')]
+    : src.kind === 'images' ? [t('Grabbed page'), t('Previous grabbed page'), t('Next grabbed page')]
+      : src.kind === 'html' ? [t('Section'), t('Previous section'), t('Next section')]
+        : [t('EPUB section'), t('Previous EPUB section'), t('Next EPUB section')];
 
   // Token offset of the current word WITHIN its segment (+ segment length) — text cursors count
   // tokens per section; the image band uses the offset/length fraction. Scan back to the segment
@@ -330,40 +334,40 @@ export default function SourcePane({ tab, onPatch, onSourcePage }) {
     <div className="source-pane">
       <div className="source-toolbar">
         <span className="source-page-nav">
-          <button className="src-tool" title={`Previous ${label.toLowerCase()}`} disabled={seg <= 0} onClick={() => onSourcePage?.(-1)}>◀</button>
-          <span>{label} {seg + 1} / {totalSeg}</span>
-          <button className="src-tool" title={`Next ${label.toLowerCase()}`} disabled={seg >= totalSeg - 1} onClick={() => onSourcePage?.(1)}>▶</button>
+          <button className="src-tool" title={prevLabel} disabled={seg <= 0} onClick={() => onSourcePage?.(-1)}>◀</button>
+          <span>{t('{label} {n} / {total}', { label, n: seg + 1, total: totalSeg })}</span>
+          <button className="src-tool" title={nextLabel} disabled={seg >= totalSeg - 1} onClick={() => onSourcePage?.(1)}>▶</button>
         </span>
         <span className="source-tools">
           <button
             className={`src-tool${settings.sourceCursor !== false ? ' on' : ''}`}
-            title="Mark the current word on the page"
+            title={t('Mark the current word on the page')}
             onClick={() => onPatch?.({ sourceCursor: settings.sourceCursor === false })}
           >◎</button>
           {settings.sourceCursor !== false && (
             <>
               {src.kind !== 'images' && (
-                <select className="src-tool-sel" value={curStyle} title="Cursor style" onChange={(e) => onPatch?.({ sourceCursorStyle: e.target.value })}>
+                <select className="src-tool-sel" value={curStyle} title={t('Cursor style')} onChange={(e) => onPatch?.({ sourceCursorStyle: e.target.value })}>
                   {CUR_STYLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               )}
-              <select className="src-tool-sel" value={curColor} title="Cursor colour" onChange={(e) => onPatch?.({ sourceCursorColor: e.target.value })}>
+              <select className="src-tool-sel" value={curColor} title={t('Cursor colour')} onChange={(e) => onPatch?.({ sourceCursorColor: e.target.value })}>
                 {CUR_COLORS.map(([v, l]) => <option key={v || 'auto'} value={v}>{l}</option>)}
               </select>
             </>
           )}
           {textSource && (
             <>
-              <button className="src-tool" title="Less page padding" onClick={() => onPatch?.({ sourcePad: Math.max(0, pad - 4) })}>–</button>
-              <button className="src-tool" title="More page padding" onClick={() => onPatch?.({ sourcePad: Math.min(48, pad + 4) })}>+</button>
+              <button className="src-tool" title={t('Less page padding')} onClick={() => onPatch?.({ sourcePad: Math.max(0, pad - 4) })}>–</button>
+              <button className="src-tool" title={t('More page padding')} onClick={() => onPatch?.({ sourcePad: Math.min(48, pad + 4) })}>+</button>
             </>
           )}
           <button
             className={`src-tool${srcFxCss || showFx ? ' on' : ''}`}
-            title="Page look — display-flavour filters (old paper, noir, thermal… or your own mix)"
+            title={t('Page look — display-flavour filters (old paper, noir, thermal… or your own mix)')}
             onClick={() => setShowFx((v) => !v)}
           >🎛</button>
-          <span className="source-sync" title="Follows your reading position">⟳ synced</span>
+          <span className="source-sync" title={t('Follows your reading position')}>⟳ {t('synced')}</span>
         </span>
       </div>
       {showFx && (

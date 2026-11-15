@@ -10,41 +10,42 @@
 // Missing ctx entries are safe no-ops, so a partial bag (e.g. tests) never throws.
 
 import { wordMatches } from './speechRecognition.js';
+import { t } from '../i18n.js';
 
 export const COMMANDS = [
-  { id: 'playPause', label: 'Play / pause', icon: '⏯', run: (c) => c.playPause?.() },
-  { id: 'play', label: 'Play', icon: '▶', run: (c) => c.setPlaying?.(true) },
-  { id: 'pause', label: 'Pause', icon: '❚❚', run: (c) => c.setPlaying?.(false) },
-  { id: 'nextWord', label: 'Next word', icon: '→', run: (c) => c.nav?.('nextWord') },
-  { id: 'prevWord', label: 'Previous word', icon: '←', run: (c) => c.nav?.('prevWord') },
-  { id: 'nextLine', label: 'Next line', icon: '⤓', run: (c) => c.nav?.('nextLine') },
-  { id: 'prevLine', label: 'Previous line', icon: '⤒', run: (c) => c.nav?.('prevLine') },
-  { id: 'nextPara', label: 'Next paragraph', icon: '⏭', run: (c) => c.nav?.('nextPara') },
-  { id: 'prevPara', label: 'Previous paragraph', icon: '⏮', run: (c) => c.nav?.('prevPara') },
-  { id: 'restart', label: 'Restart (to top)', icon: '⟲', run: (c) => c.nav?.('restart') },
-  { id: 'pageDown', label: 'Page down', icon: '⇟', run: (c) => c.page?.(1) },
-  { id: 'pageUp', label: 'Page up', icon: '⇞', run: (c) => c.page?.(-1) },
+  { id: 'playPause', label: t('Play / pause'), icon: '⏯', run: (c) => c.playPause?.() },
+  { id: 'play', label: t('Play'), icon: '▶', run: (c) => c.setPlaying?.(true) },
+  { id: 'pause', label: t('Pause'), icon: '❚❚', run: (c) => c.setPlaying?.(false) },
+  { id: 'nextWord', label: t('Next word'), icon: '→', run: (c) => c.nav?.('nextWord') },
+  { id: 'prevWord', label: t('Previous word'), icon: '←', run: (c) => c.nav?.('prevWord') },
+  { id: 'nextLine', label: t('Next line'), icon: '⤓', run: (c) => c.nav?.('nextLine') },
+  { id: 'prevLine', label: t('Previous line'), icon: '⤒', run: (c) => c.nav?.('prevLine') },
+  { id: 'nextPara', label: t('Next paragraph'), icon: '⏭', run: (c) => c.nav?.('nextPara') },
+  { id: 'prevPara', label: t('Previous paragraph'), icon: '⏮', run: (c) => c.nav?.('prevPara') },
+  { id: 'restart', label: t('Restart (to top)'), icon: '⟲', run: (c) => c.nav?.('restart') },
+  { id: 'pageDown', label: t('Page down'), icon: '⇟', run: (c) => c.page?.(1) },
+  { id: 'pageUp', label: t('Page up'), icon: '⇞', run: (c) => c.page?.(-1) },
   // Direct scroll by a "tick" (the App Settings tick size); great for hands-free scroll-reading.
-  { id: 'scrollTickDown', label: 'Scroll down a tick', icon: '⤓', run: (c) => c.scrollTicks?.(1, 1) },
-  { id: 'scrollTickUp', label: 'Scroll up a tick', icon: '⤒', run: (c) => c.scrollTicks?.(-1, 1) },
-  { id: 'scrollTickDownBig', label: 'Scroll down 3 ticks', icon: '⏬', run: (c) => c.scrollTicks?.(1, 3) },
-  { id: 'scrollTickUpBig', label: 'Scroll up 3 ticks', icon: '⏫', run: (c) => c.scrollTicks?.(-1, 3) },
-  { id: 'jumpToCurrent', label: 'Jump to current word', icon: '⌖', run: (c) => c.jumpToCurrent?.() },
-  { id: 'jumpFrontier', label: 'Jump to latest unread', icon: '⇥', run: (c) => c.jumpToFrontier?.() },
-  { id: 'jumpGap', label: 'Jump to first unread gap', icon: '↷', run: (c) => c.jumpToGap?.() },
-  { id: 'wpmUp', label: 'Speed up (+25 WPM)', icon: '➕', run: (c) => c.adjustWpm?.(25) },
-  { id: 'wpmDown', label: 'Slow down (−25 WPM)', icon: '➖', run: (c) => c.adjustWpm?.(-25) },
-  { id: 'wpmUp100', label: 'Speed up a lot (+100 WPM)', icon: '⏫', run: (c) => c.adjustWpm?.(100) },
-  { id: 'wpmDown100', label: 'Slow down a lot (−100 WPM)', icon: '⏬', run: (c) => c.adjustWpm?.(-100) },
-  { id: 'toggleReadAloud', label: 'Read-aloud (TTS) on/off', icon: '🗣', run: (c) => c.toggleReadAloud?.() },
-  { id: 'toggleScroll', label: 'Scroll-to-read on/off', icon: '📜', run: (c) => c.toggleScroll?.() },
-  { id: 'toggleFocus', label: 'Focus mode on/off', icon: '🎯', run: (c) => c.toggleFocus?.() },
-  { id: 'toggleFaces', label: 'Avatars on/off', icon: '🙂', run: (c) => c.toggleFaces?.() },
-  { id: 'toggleStats', label: 'Reading stats on/off', icon: '📊', run: (c) => c.toggleStats?.() },
-  { id: 'nextTab', label: 'Next tab', icon: '📑→', run: (c) => c.switchTab?.(1) },
-  { id: 'prevTab', label: 'Previous tab', icon: '←📑', run: (c) => c.switchTab?.(-1) },
-  { id: 'nextSourcePage', label: 'Next source page', icon: '▤▶', run: (c) => c.sourcePage?.(1) },
-  { id: 'prevSourcePage', label: 'Previous source page', icon: '◀▤', run: (c) => c.sourcePage?.(-1) },
+  { id: 'scrollTickDown', label: t('Scroll down a tick'), icon: '⤓', run: (c) => c.scrollTicks?.(1, 1) },
+  { id: 'scrollTickUp', label: t('Scroll up a tick'), icon: '⤒', run: (c) => c.scrollTicks?.(-1, 1) },
+  { id: 'scrollTickDownBig', label: t('Scroll down 3 ticks'), icon: '⏬', run: (c) => c.scrollTicks?.(1, 3) },
+  { id: 'scrollTickUpBig', label: t('Scroll up 3 ticks'), icon: '⏫', run: (c) => c.scrollTicks?.(-1, 3) },
+  { id: 'jumpToCurrent', label: t('Jump to current word'), icon: '⌖', run: (c) => c.jumpToCurrent?.() },
+  { id: 'jumpFrontier', label: t('Jump to latest unread'), icon: '⇥', run: (c) => c.jumpToFrontier?.() },
+  { id: 'jumpGap', label: t('Jump to first unread gap'), icon: '↷', run: (c) => c.jumpToGap?.() },
+  { id: 'wpmUp', label: t('Speed up (+25 WPM)'), icon: '➕', run: (c) => c.adjustWpm?.(25) },
+  { id: 'wpmDown', label: t('Slow down (−25 WPM)'), icon: '➖', run: (c) => c.adjustWpm?.(-25) },
+  { id: 'wpmUp100', label: t('Speed up a lot (+100 WPM)'), icon: '⏫', run: (c) => c.adjustWpm?.(100) },
+  { id: 'wpmDown100', label: t('Slow down a lot (−100 WPM)'), icon: '⏬', run: (c) => c.adjustWpm?.(-100) },
+  { id: 'toggleReadAloud', label: t('Read-aloud (TTS) on/off'), icon: '🗣', run: (c) => c.toggleReadAloud?.() },
+  { id: 'toggleScroll', label: t('Scroll-to-read on/off'), icon: '📜', run: (c) => c.toggleScroll?.() },
+  { id: 'toggleFocus', label: t('Focus mode on/off'), icon: '🎯', run: (c) => c.toggleFocus?.() },
+  { id: 'toggleFaces', label: t('Avatars on/off'), icon: '🙂', run: (c) => c.toggleFaces?.() },
+  { id: 'toggleStats', label: t('Reading stats on/off'), icon: '📊', run: (c) => c.toggleStats?.() },
+  { id: 'nextTab', label: t('Next tab'), icon: '📑→', run: (c) => c.switchTab?.(1) },
+  { id: 'prevTab', label: t('Previous tab'), icon: '←📑', run: (c) => c.switchTab?.(-1) },
+  { id: 'nextSourcePage', label: t('Next source page'), icon: '▤▶', run: (c) => c.sourcePage?.(1) },
+  { id: 'prevSourcePage', label: t('Previous source page'), icon: '◀▤', run: (c) => c.sourcePage?.(-1) },
 ];
 
 export const COMMAND_BY_ID = Object.fromEntries(COMMANDS.map((c) => [c.id, c]));
@@ -72,14 +73,14 @@ export function runCommand(id, ctx) {
 
 export function labelFor(id) {
   const wpm = parseSetWpm(id);
-  if (wpm != null) return `Set speed to ${wpm} WPM`;
-  return COMMAND_BY_ID[id]?.label || id || '(none)';
+  if (wpm != null) return t('Set speed to {wpm} WPM', { wpm });
+  return COMMAND_BY_ID[id]?.label || id || t('(none)');
 }
 
 // "⏯ Play / pause" — the feed / legend action string for a command id.
 export function actionLabel(id) {
   const wpm = parseSetWpm(id);
-  if (wpm != null) return `🎯 Set ${wpm} WPM`;
+  if (wpm != null) return '🎯 ' + t('Set {wpm} WPM', { wpm });
   const c = COMMAND_BY_ID[id];
   return c ? `${c.icon} ${c.label}` : '';
 }

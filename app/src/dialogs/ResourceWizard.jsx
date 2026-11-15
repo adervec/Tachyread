@@ -5,29 +5,55 @@ import {
   detectListSection, parseNamesRegion, buildProperNamesFromList,
   parseIndexRegion, detectFootnotes,
 } from '../document/resourceWizard.js';
+import { t } from '../i18n.js';
 
 // One wizard for the book's reference apparatus — cast list (proper names), printed index, and notes.
 // Like the TOC wizard, the headline path locates the in-text resource and uses it as ground truth,
 // with a blind auto-detect offered only as a fallback. `kind` is 'names' | 'index' | 'notes'.
+// Every sentence that names the resource is written out whole per kind (never glued from a noun).
 const META = {
   names: {
-    title: 'Proper Names', noun: 'cast list',
-    locateH: '🎭 From the cast list (Dramatis Personae)',
-    locateP: 'Point at the list of characters printed in the book. We highlight exactly those names in the text — far more precise than guessing from capitalisation.',
-    blindH: '🔎 Auto-detect (capitalised words)',
-    blindP: 'Scan the whole book for capitalised words that recur. Works without a cast list, but catches false positives.',
+    title: t('Proper Names'),
+    titleMethod: t('Generate Proper Names — choose a source'),
+    titleRegion: t('Generate Proper Names — point at the cast list'),
+    titleReview: t('Generate Proper Names — review'),
+    detected: (from, to) => t('✓ A cast list looks to be around line {from}–{to}.', { from, to }),
+    notFound: t('No cast list was auto-found — you can still select the region by hand.'),
+    regionNote: t('Set the line range of the cast list. The preview shows which lines become entries.'),
+    skipLabel: t('Don’t count this cast list toward completion % (reading it still counts toward WPM)'),
+    count: (n) => t.n('{n} proper names entry.', '{n} proper names entries.', n),
+    locateH: `🎭 ${t('From the cast list (Dramatis Personae)')}`,
+    locateP: t('Point at the list of characters printed in the book. We highlight exactly those names in the text — far more precise than guessing from capitalisation.'),
+    blindH: `🔎 ${t('Auto-detect (capitalised words)')}`,
+    blindP: t('Scan the whole book for capitalised words that recur. Works without a cast list, but catches false positives.'),
   },
   index: {
-    title: 'Index', noun: 'printed index',
-    locateH: '📑 From the book’s printed index',
-    locateP: 'Point at the index at the back of the book. We read its terms and page numbers, and make each term jump to where it appears in the text.',
+    title: t('Index'),
+    titleMethod: t('Generate Index — choose a source'),
+    titleRegion: t('Generate Index — point at the printed index'),
+    titleReview: t('Generate Index — review'),
+    detected: (from, to) => t('✓ A printed index looks to be around line {from}–{to}.', { from, to }),
+    notFound: t('No printed index was auto-found — you can still select the region by hand.'),
+    regionNote: t('Set the line range of the printed index. The preview shows which lines become entries.'),
+    skipLabel: t('Don’t count this printed index toward completion % (reading it still counts toward WPM)'),
+    count: (n) => t.n('{n} index entry.', '{n} index entries.', n),
+    locateH: `📑 ${t('From the book’s printed index')}`,
+    locateP: t('Point at the index at the back of the book. We read its terms and page numbers, and make each term jump to where it appears in the text.'),
   },
   notes: {
-    title: 'Footnotes', noun: 'notes section',
-    locateH: '🗒 Locate the notes section + marker style',
-    locateP: 'Point at the foot/endnotes section and pick the in-text marker style, so note bodies are matched from the right place.',
-    blindH: '🔎 Auto-detect everywhere',
-    blindP: 'Scan the whole book for [1] / (1) / superscript markers and matching “1. …” note bodies.',
+    title: t('Footnotes'),
+    titleMethod: t('Generate Footnotes — choose a source'),
+    titleRegion: t('Generate Footnotes — point at the notes section'),
+    titleReview: t('Generate Footnotes — review'),
+    detected: (from, to) => t('✓ A notes section looks to be around line {from}–{to}.', { from, to }),
+    notFound: t('No notes section was auto-found — you can still select the region by hand.'),
+    regionNote: t('Set the line range of the notes section. The preview shows which lines become entries.'),
+    skipLabel: t('Don’t count this notes section toward completion % (reading it still counts toward WPM)'),
+    count: (n) => t.n('{n} footnotes entry.', '{n} footnotes entries.', n),
+    locateH: `🗒 ${t('Locate the notes section + marker style')}`,
+    locateP: t('Point at the foot/endnotes section and pick the in-text marker style, so note bodies are matched from the right place.'),
+    blindH: `🔎 ${t('Auto-detect everywhere')}`,
+    blindP: t('Scan the whole book for [1] / (1) / superscript markers and matching “1. …” note bodies.'),
   },
 };
 
@@ -113,7 +139,7 @@ export default function ResourceWizard({ kind, tab, onApply, onClose }) {
     onClose();
   }
 
-  const title = `Generate ${meta.title} — ${step === 'method' ? 'choose a source' : step === 'region' ? `point at the ${meta.noun}` : 'review'}`;
+  const title = step === 'method' ? meta.titleMethod : step === 'region' ? meta.titleRegion : meta.titleReview;
   const backStep = () => setStep(step === 'review' ? 'method' : 'method');
 
   return (
@@ -122,16 +148,16 @@ export default function ResourceWizard({ kind, tab, onApply, onClose }) {
       onClose={onClose}
       width={680}
       buttons={
-        step === 'method' ? <button onClick={onClose}>Cancel</button>
+        step === 'method' ? <button onClick={onClose}>{t('Cancel')}</button>
           : step === 'region' ? (
             <>
-              <button onClick={() => setStep('method')}>← Back</button>
-              <button className="toggle-on" disabled={kind !== 'notes' && parsed.length === 0} onClick={buildLocate}>Build →</button>
+              <button onClick={() => setStep('method')}>← {t('Back')}</button>
+              <button className="toggle-on" disabled={kind !== 'notes' && parsed.length === 0} onClick={buildLocate}>{t('Build')} →</button>
             </>
           ) : (
             <>
-              <button onClick={backStep}>← Back</button>
-              <button className="toggle-on" disabled={items.length === 0} onClick={apply}>Apply {items.length}</button>
+              <button onClick={backStep}>← {t('Back')}</button>
+              <button className="toggle-on" disabled={items.length === 0} onClick={apply}>{t('Apply {n}', { n: items.length })}</button>
             </>
           )
       }
@@ -139,11 +165,11 @@ export default function ResourceWizard({ kind, tab, onApply, onClose }) {
       {step === 'method' && (
         <div className="tw-methods">
           <button className="tw-method" onClick={() => { if (detected) { setStart(detected.startLine); setEnd(detected.endLine); } setStep('region'); }}>
-            <div className="tw-method-h">{meta.locateH} <span className="tw-rec">recommended</span></div>
+            <div className="tw-method-h">{meta.locateH} <span className="tw-rec">{t('recommended')}</span></div>
             <p>{meta.locateP}</p>
             {detected
-              ? <p className="tw-detected">✓ A {meta.noun} looks to be around line {detected.startLine + 1}–{detected.endLine + 1}.</p>
-              : <p className="settings-note">No {meta.noun} was auto-found — you can still select the region by hand.</p>}
+              ? <p className="tw-detected">{meta.detected(detected.startLine + 1, detected.endLine + 1)}</p>
+              : <p className="settings-note">{meta.notFound}</p>}
           </button>
           {meta.blindH && (
             <button className="tw-method" onClick={buildBlind}>
@@ -156,16 +182,16 @@ export default function ResourceWizard({ kind, tab, onApply, onClose }) {
 
       {step === 'region' && (
         <div className="tw-region">
-          <p className="settings-note">Set the line range of the {meta.noun}. The preview shows which lines become entries.</p>
+          <p className="settings-note">{meta.regionNote}</p>
           <div className="tw-region-controls">
-            <label>Start line <input type="number" min={1} max={doc.lines.length} value={start + 1} onChange={(e) => setStart(Math.max(0, (Number(e.target.value) || 1) - 1))} /></label>
-            <label>End line <input type="number" min={1} max={doc.lines.length} value={end + 1} onChange={(e) => setEnd(Math.max(0, (Number(e.target.value) || 1) - 1))} /></label>
-            <button onClick={autoRegion}>↻ Auto-detect</button>
-            {kind !== 'notes' && <span className="tw-parse-count">{parsed.length} found</span>}
+            <label>{t('Start line')} <input type="number" min={1} max={doc.lines.length} value={start + 1} onChange={(e) => setStart(Math.max(0, (Number(e.target.value) || 1) - 1))} /></label>
+            <label>{t('End line')} <input type="number" min={1} max={doc.lines.length} value={end + 1} onChange={(e) => setEnd(Math.max(0, (Number(e.target.value) || 1) - 1))} /></label>
+            <button onClick={autoRegion}>↻ {t('Auto-detect')}</button>
+            {kind !== 'notes' && <span className="tw-parse-count">{t('{n} found', { n: parsed.length })}</span>}
           </div>
           {kind === 'notes' && (
             <div className="tw-region-controls" style={{ marginTop: 0 }}>
-              <span>Markers:</span>
+              <span>{t('Markers:')}</span>
               {['bracket', 'paren', 'super'].map((s) => (
                 <label key={s} className="inline-check"><input type="checkbox" checked={styles[s]} onChange={(e) => setStyles((st) => ({ ...st, [s]: e.target.checked }))} /> {s === 'bracket' ? '[1]' : s === 'paren' ? '(1)' : '¹'}</label>
               ))}
@@ -173,7 +199,7 @@ export default function ResourceWizard({ kind, tab, onApply, onClose }) {
           )}
           <label className="inline-check" style={{ marginTop: 6, marginBottom: 6 }}>
             <input type="checkbox" checked={skipFromCompletion} onChange={(e) => setSkipFromCompletion(e.target.checked)} />
-            Don’t count this {meta.noun} toward completion % (reading it still counts toward WPM)
+            {meta.skipLabel}
           </label>
           <div className="tw-preview">
             {Array.from({ length: Math.min(240, Math.max(0, end - start + 1)) }, (_, k) => start + k).map((li) => {
@@ -193,8 +219,8 @@ export default function ResourceWizard({ kind, tab, onApply, onClose }) {
 
       {step === 'review' && (
         <div className="tw-review">
-          <div className="tw-review-head"><span><b>{items.length}</b> {meta.title.toLowerCase()} entr{items.length === 1 ? 'y' : 'ies'}.</span></div>
-          {items.length === 0 && <p className="settings-note">Nothing found — go back and widen the region.</p>}
+          <div className="tw-review-head"><span>{meta.count(items.length)}</span></div>
+          {items.length === 0 && <p className="settings-note">{t('Nothing found — go back and widen the region.')}</p>}
           <div className="tw-rev-list">
             {items.map((it, i) => (
               <div key={i} className={`tw-rev-row${kind === 'index' && it.level ? ' tw-sub' : ''}`}>
@@ -202,7 +228,7 @@ export default function ResourceWizard({ kind, tab, onApply, onClose }) {
                   <>
                     <input className="tw-rev-title" value={it.name} onChange={(e) => setItems((xs) => xs.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))} />
                     {it.note && <span className="tw-rev-note" title={it.note}>{it.note}</span>}
-                    <span className="tw-rev-pos" title="occurrences in the text">{it.count ?? '—'}×</span>
+                    <span className="tw-rev-pos" title={t('occurrences in the text')}>{it.count ?? '—'}×</span>
                   </>
                 )}
                 {kind === 'index' && (
@@ -215,11 +241,11 @@ export default function ResourceWizard({ kind, tab, onApply, onClose }) {
                 {kind === 'notes' && (
                   <>
                     <span className="tw-rev-status" style={{ color: 'var(--toggle-active-bg)' }}>[{it.number}]</span>
-                    <span className="tw-rev-title tw-rev-fnbody" title={it.body}>{it.body || '(marker only — no body matched)'}</span>
+                    <span className="tw-rev-title tw-rev-fnbody" title={it.body}>{it.body || t('(marker only — no body matched)')}</span>
                     <span className="tw-rev-pos">{(it.anchors || []).length}×</span>
                   </>
                 )}
-                <button className="tw-rev-x" title="Remove" onClick={() => setItems((xs) => xs.filter((_, k) => k !== i))}>✕</button>
+                <button className="tw-rev-x" title={t('Remove')} onClick={() => setItems((xs) => xs.filter((_, k) => k !== i))}>✕</button>
               </div>
             ))}
           </div>

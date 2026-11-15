@@ -5,6 +5,7 @@ import { autoDetectToc, isMatterTitle, sectionSpan } from '../document/toc.js';
 import { detectTocRegion, parsePrintedToc, buildFromParsed, finalizeEntries, joinRegion, autoSplitSquashed, parseManualToc, outOfSequence, seqWindow, autoLocateRemaining , fuzzyFindLines } from '../document/tocWizard.js';
 import { findInDoc } from '../document/findText.js';
 import FindResults from '../components/FindResults.jsx';
+import { t } from '../i18n.js';
 
 const TIER_SYM = ['◆', '▸', '▹', '·', '·', '·']; // per-level glyph shown next to the explicit L-number
 
@@ -110,16 +111,16 @@ export default function TocWizard({ tab, onApply, onClose }) {
         const ln = doc.lines[li];
         if (ln && ln.startWordIndex >= 0) { if (a < 0) a = ln.startWordIndex; if (ln.endWordIndex >= 0) b = ln.endWordIndex + 1; }
       }
-      if (a >= 0 && b > a) skip.push({ start: a, end: b, label: 'Contents' });
+      if (a >= 0 && b > a) skip.push({ start: a, end: b, label: t('Contents') });
     }
     onApply(entries, skip);
     onClose();
   }
 
   const title =
-    step === 'method' ? 'Generate Contents — choose a source'
-      : step === 'region' ? 'Generate Contents — point at the printed ToC'
-        : 'Generate Contents — review';
+    step === 'method' ? t('Generate Contents — choose a source')
+      : step === 'region' ? t('Generate Contents — point at the printed ToC')
+        : t('Generate Contents — review');
 
   return (
     <Dialog
@@ -127,16 +128,16 @@ export default function TocWizard({ tab, onApply, onClose }) {
       onClose={onClose}
       width={680}
       buttons={
-        step === 'method' ? <button onClick={onClose}>Cancel</button>
+        step === 'method' ? <button onClick={onClose}>{t('Cancel')}</button>
           : step === 'region' ? (
             <>
-              <button onClick={() => setStep('method')}>← Back</button>
-              <button className="toggle-on" disabled={!parsed.length} onClick={buildFromRegion}>Match to text →</button>
+              <button onClick={() => setStep('method')}>← {t('Back')}</button>
+              <button className="toggle-on" disabled={!parsed.length} onClick={buildFromRegion}>{t('Match to text')} →</button>
             </>
           ) : (
             <>
-              <button onClick={() => setStep(method === 'printed' ? 'region' : 'method')}>← Back</button>
-              <button className="toggle-on" disabled={matchedCount === 0} onClick={apply}>Apply {matchedCount} entrie{matchedCount === 1 ? 'y' : 's'}</button>
+              <button onClick={() => setStep(method === 'printed' ? 'region' : 'method')}>← {t('Back')}</button>
+              <button className="toggle-on" disabled={matchedCount === 0} onClick={apply}>{t.n('Apply {n} entry', 'Apply {n} entries', matchedCount)}</button>
             </>
           )
       }
@@ -144,19 +145,19 @@ export default function TocWizard({ tab, onApply, onClose }) {
       {step === 'method' && (
         <div className="tw-methods">
           <button className="tw-method" onClick={gotoRegion}>
-            <div className="tw-method-h">📖 From the book’s printed Contents <span className="tw-rec">recommended</span></div>
-            <p>Point at the table of contents printed in the text. The wizard reads those titles and finds where each one actually begins in the body — the most accurate result.</p>
+            <div className="tw-method-h">📖 {t('From the book’s printed Contents')} <span className="tw-rec">{t('recommended')}</span></div>
+            <p>{t('Point at the table of contents printed in the text. The wizard reads those titles and finds where each one actually begins in the body — the most accurate result.')}</p>
             {detected
-              ? <p className="tw-detected">✓ A Contents section looks to be around line {detected.startLine + 1}–{detected.endLine + 1}.</p>
-              : <p className="settings-note">No printed “Contents” heading was auto-found — you can still select the region by hand.</p>}
+              ? <p className="tw-detected">✓ {t('A Contents section looks to be around line {from}–{to}.', { from: detected.startLine + 1, to: detected.endLine + 1 })}</p>
+              : <p className="settings-note">{t('No printed “Contents” heading was auto-found — you can still select the region by hand.')}</p>}
           </button>
           <button className="tw-method" onClick={buildFromHeadings}>
-            <div className="tw-method-h">🔎 From detected headings</div>
-            <p>Scan the whole document for lines that look like headings (Chapter / Part / short capitalised lines). Good when there’s no printed contents list.</p>
+            <div className="tw-method-h">🔎 {t('From detected headings')}</div>
+            <p>{t('Scan the whole document for lines that look like headings (Chapter / Part / short capitalised lines). Good when there’s no printed contents list.')}</p>
           </button>
           <button className="tw-method" onClick={() => { onApply([]); onClose(); }}>
-            <div className="tw-method-h">✏️ Start blank / reset</div>
-            <p>Clear any custom contents, then add entries yourself in the Contents pane’s Edit mode.</p>
+            <div className="tw-method-h">✏️ {t('Start blank / reset')}</div>
+            <p>{t('Clear any custom contents, then add entries yourself in the Contents pane’s Edit mode.')}</p>
           </button>
         </div>
       )}
@@ -164,36 +165,32 @@ export default function TocWizard({ tab, onApply, onClose }) {
       {step === 'region' && (
         <div className="tw-region">
           <p className="settings-note">
-            Set the line range that contains the printed table of contents. The preview shows which lines
-            will become entries (and their page numbers, if present). Adjust until only the contents list
-            is highlighted.
+            {t('Set the line range that contains the printed table of contents. The preview shows which lines will become entries (and their page numbers, if present). Adjust until only the contents list is highlighted.')}
           </p>
           <div className="tw-region-controls">
-            <label>Start line <input type="number" min={1} max={doc.lines.length} value={start + 1} onChange={(e) => setStart(Math.max(0, (Number(e.target.value) || 1) - 1))} /></label>
-            <label>End line <input type="number" min={1} max={doc.lines.length} value={end + 1} onChange={(e) => setEnd(Math.max(0, (Number(e.target.value) || 1) - 1))} /></label>
-            <button onClick={autoDetectRegion}>↻ Auto-detect</button>
+            <label>{t('Start line')} <input type="number" min={1} max={doc.lines.length} value={start + 1} onChange={(e) => setStart(Math.max(0, (Number(e.target.value) || 1) - 1))} /></label>
+            <label>{t('End line')} <input type="number" min={1} max={doc.lines.length} value={end + 1} onChange={(e) => setEnd(Math.max(0, (Number(e.target.value) || 1) - 1))} /></label>
+            <button onClick={autoDetectRegion}>↻ {t('Auto-detect')}</button>
             {manualText == null
-              ? <button onClick={startManualSplit} title="Use this when the whole contents sit on one wrapped line and nothing was found">✂ One line? Split manually</button>
-              : <button onClick={() => setManualText(null)}>↺ Back to auto</button>}
-            <span className="tw-parse-count">{parsed.length} entr{parsed.length === 1 ? 'y' : 'ies'} found</span>
+              ? <button onClick={startManualSplit} title={t('Use this when the whole contents sit on one wrapped line and nothing was found')}>✂ {t('One line? Split manually')}</button>
+              : <button onClick={() => setManualText(null)}>↺ {t('Back to auto')}</button>}
+            <span className="tw-parse-count">{t.n('{n} entry found', '{n} entries found', parsed.length)}</span>
           </div>
           {manualText == null && parsedAuto.length < 2 && (
             <p className="settings-note tw-squash-hint">
-              Only {parsedAuto.length} entr{parsedAuto.length === 1 ? 'y' : 'ies'} found — if this book’s contents are squashed onto one line,
-              click <b>✂ One line? Split manually</b> and break them apart yourself.
+              {t.n('Only {n} entry found — if this book’s contents are squashed onto one line, click ✂ One line? Split manually and break them apart yourself.', 'Only {n} entries found — if this book’s contents are squashed onto one line, click ✂ One line? Split manually and break them apart yourself.', parsedAuto.length)}
             </p>
           )}
           {manualText != null ? (
             <div className="tw-manual">
               <p className="settings-note">
-                One entry per line — edit the split below (add or remove line breaks until each contents
-                entry is on its own line). A trailing page number after each title is read automatically.
-                {' '}<button className="link-btn" onClick={startManualSplit}>↻ Re-suggest split</button>
+                {t('One entry per line — edit the split below (add or remove line breaks until each contents entry is on its own line). A trailing page number after each title is read automatically.')}
+                {' '}<button className="link-btn" onClick={startManualSplit}>↻ {t('Re-suggest split')}</button>
               </p>
               <textarea className="tw-manual-text" rows={10} value={manualText} onChange={(e) => setManualText(e.target.value)} spellCheck={false} />
               <div className="tw-manual-preview">
-                {parsed.length} entr{parsed.length === 1 ? 'y' : 'ies'}:{' '}
-                {parsed.slice(0, 14).map((p, i) => <span key={i} className="tw-manual-chip">{p.title}{p.page != null ? ` · p.${p.page}` : ''}</span>)}
+                {t.n('{n} entry:', '{n} entries:', parsed.length)}{' '}
+                {parsed.slice(0, 14).map((p, i) => <span key={i} className="tw-manual-chip">{p.title}{p.page != null ? ` · ${t('p.{page}', { page: p.page })}` : ''}</span>)}
                 {parsed.length > 14 ? ' …' : ''}
               </div>
             </div>
@@ -207,7 +204,7 @@ export default function TocWizard({ tab, onApply, onClose }) {
                   <div key={li} className={`tw-pl${ent ? ' entry' : ''}${line.isEmpty ? ' blank' : ''}`}>
                     <span className="tw-pl-n">{li + 1}</span>
                     {ent ? (
-                      <span className="tw-pl-t"><b style={{ marginLeft: (ent.indent || 0) }}>{ent.title}</b>{ent.page != null && <span className="tw-pl-pg"> · p.{ent.page}</span>}</span>
+                      <span className="tw-pl-t"><b style={{ marginLeft: (ent.indent || 0) }}>{ent.title}</b>{ent.page != null && <span className="tw-pl-pg"> · {t('p.{page}', { page: ent.page })}</span>}</span>
                     ) : (
                       <span className="tw-pl-t tw-pl-skip">{line.isEmpty ? '·' : line.text.trim() || '·'}</span>
                     )}
@@ -222,37 +219,36 @@ export default function TocWizard({ tab, onApply, onClose }) {
       {step === 'review' && (
         <div className="tw-review">
           <div className="tw-review-head">
-            <span><b>{matchedCount}</b> of {candidates.length} located{seqBad.size ? <> · <span className="tw-seq-warn">⚠ {seqBad.size} out of sequence</span></> : ''}.</span>
+            <span>{t('{matched} of {total} located', { matched: matchedCount, total: candidates.length })}{seqBad.size ? <> · <span className="tw-seq-warn">⚠ {t('{n} out of sequence', { n: seqBad.size })}</span></> : ''}</span>
             <span style={{ flex: 1 }} />
             {unmatchedCount > 0 && (
-              <button className="tw-autoloc" title="Locate every remaining entry automatically — walks the missing ones in order and grabs the first in-sequence match for each" onClick={() => setCandidates((cs) => autoLocateRemaining(doc, cs))}>🪄 Auto-locate {unmatchedCount}</button>
+              <button className="tw-autoloc" title={t('Locate every remaining entry automatically — walks the missing ones in order and grabs the first in-sequence match for each')} onClick={() => setCandidates((cs) => autoLocateRemaining(doc, cs))}>🪄 {t('Auto-locate {n}', { n: unmatchedCount })}</button>
             )}
             {candidates.some((c) => !c.matched) && (
-              <label className="inline-check"><input type="checkbox" checked={showUnmatched} onChange={(e) => setShowUnmatched(e.target.checked)} /> show unmatched</label>
+              <label className="inline-check"><input type="checkbox" checked={showUnmatched} onChange={(e) => setShowUnmatched(e.target.checked)} /> {t('show unmatched')}</label>
             )}
           </div>
           {method === 'printed' && (
             <label className="inline-check" style={{ marginBottom: 6 }}>
-              <input type="checkbox" checked={skipContents} onChange={(e) => setSkipContents(e.target.checked)} /> Exclude the contents pages themselves from completion %
+              <input type="checkbox" checked={skipContents} onChange={(e) => setSkipContents(e.target.checked)} /> {t('Exclude the contents pages themselves from completion %')}
             </label>
           )}
           <p className="settings-note" style={{ marginTop: 0 }}>
-            Tick <b>skip</b> to leave a section out of your completion % (reading it still counts toward WPM).
-            Copyright, contents, index, notes, acknowledgements and about-the-author are pre-checked.
+            {t('Tick skip to leave a section out of your completion % (reading it still counts toward WPM). Copyright, contents, index, notes, acknowledgements and about-the-author are pre-checked.')}
           </p>
-          {candidates.length === 0 && <p className="settings-note">No entries — go back and widen the region, or use detected headings.</p>}
+          {candidates.length === 0 && <p className="settings-note">{t('No entries — go back and widen the region, or use detected headings.')}</p>}
           {findFor != null && (
             <div className="tw-find">
               <div className="tw-find-head">
-                <span>🔍 Find the line for <b>{candidates[findFor]?.title}</b></span>
-                <button className="tw-rev-x" title="Close find" onClick={() => setFindFor(null)}>✕</button>
+                <span>🔍 {t('Find the line for {title}', { title: candidates[findFor]?.title })}</span>
+                <button className="tw-rev-x" title={t('Close find')} onClick={() => setFindFor(null)}>✕</button>
               </div>
               <input
                 className="tw-find-input"
                 autoFocus
                 value={findQuery}
                 onChange={(e) => setFindQuery(e.target.value)}
-                placeholder="Search the document text…"
+                placeholder={t('Search the document text…')}
               />
               <div className="tw-find-results">
                 <FindResults
@@ -262,9 +258,9 @@ export default function TocWizard({ tab, onApply, onClose }) {
                   showSection={false}
                   showRead={false}
                   seqRange={findSeq}
-                  actions={[{ icon: '✓ use', title: 'Use this line as the entry’s start', cls: 'find-use', onClick: (r) => { assignLine(findFor, r.lineIndex + 1); setFindFor(null); } }]}
+                  actions={[{ icon: `✓ ${t('use')}`, title: t('Use this line as the entry’s start'), cls: 'find-use', onClick: (r) => { assignLine(findFor, r.lineIndex + 1); setFindFor(null); } }]}
                 />
-                {findQuery.trim().length >= 2 && wizHits.length === 0 && <div className="settings-note" style={{ padding: '4px 8px' }}>No lines match “{findQuery.trim()}”.</div>}
+                {findQuery.trim().length >= 2 && wizHits.length === 0 && <div className="settings-note" style={{ padding: '4px 8px' }}>{t('No lines match “{query}”.', { query: findQuery.trim() })}</div>}
               </div>
             </div>
           )}
@@ -277,20 +273,20 @@ export default function TocWizard({ tab, onApply, onClose }) {
               const badSeq = c.matched && seqBad.has(i);
               return (
                 <div key={i} className={`tw-rev-row${c.matched ? '' : ' unmatched'}${badSeq ? ' out-of-seq' : ''}`}>
-                  <span className="tw-rev-status" title={!c.matched ? 'Not found — set a line or it will be skipped' : badSeq ? 'Located OUT OF SEQUENCE — its % is before an entry above it or after one below. Check this match.' : 'Located in the text'}>{c.matched ? (badSeq ? '⚠' : '✓') : '✗'}</span>
+                  <span className="tw-rev-status" title={!c.matched ? t('Not found — set a line or it will be skipped') : badSeq ? t('Located OUT OF SEQUENCE — its % is before an entry above it or after one below. Check this match.') : t('Located in the text')}>{c.matched ? (badSeq ? '⚠' : '✓') : '✗'}</span>
                   <span className="tw-rev-indent" style={{ width: lvl * 11 }} />
-                  <span className="tw-rev-lvl-badge" title={`Heading level ${lvl} (0 = top-level section)`} style={{ '--lvl-hue': lvl * 52 }}>L{lvl}<i>{TIER_SYM[Math.min(lvl, TIER_SYM.length - 1)]}</i></span>
-                  <button className="tw-rev-lvl" title="Promote a tier (outdent)" disabled={!(c.level > 0)} onClick={() => bump(i, -1)}>⇤</button>
-                  <button className="tw-rev-lvl" title="Demote a tier (indent)" onClick={() => bump(i, 1)}>⇥</button>
+                  <span className="tw-rev-lvl-badge" title={t('Heading level {level} (0 = top-level section)', { level: lvl })} style={{ '--lvl-hue': lvl * 52 }}>L{lvl}<i>{TIER_SYM[Math.min(lvl, TIER_SYM.length - 1)]}</i></span>
+                  <button className="tw-rev-lvl" title={t('Promote a tier (outdent)')} disabled={!(c.level > 0)} onClick={() => bump(i, -1)}>⇤</button>
+                  <button className="tw-rev-lvl" title={t('Demote a tier (indent)')} onClick={() => bump(i, 1)}>⇥</button>
                   <input className="tw-rev-title" value={c.title} onChange={(e) => setTitle(i, e.target.value)} />
                   {c.matched
-                    ? <span className={`tw-rev-pos${badSeq ? ' bad' : ''}`} title={`Line ${line}${badSeq ? ' — out of sequence' : ''}`}>{pct.toFixed(1)}%</span>
-                    : <input className="tw-rev-line" type="number" min={1} placeholder="line #" onChange={(e) => assignLine(i, e.target.value)} title="Type the line where this section starts" />}
-                  <button className="tw-rev-find" title="Find this section in the text" onClick={() => { setFindFor(i); setFindQuery(c.title || ''); }}>🔍</button>
-                  <label className="tw-rev-skip" title="Exclude this section from the completion %">
-                    <input type="checkbox" checked={!!c.skip} onChange={(e) => setSkip(i, e.target.checked)} />skip
+                    ? <span className={`tw-rev-pos${badSeq ? ' bad' : ''}`} title={badSeq ? t('Line {line} — out of sequence', { line }) : t('Line {line}', { line })}>{pct.toFixed(1)}%</span>
+                    : <input className="tw-rev-line" type="number" min={1} placeholder={t('line #')} onChange={(e) => assignLine(i, e.target.value)} title={t('Type the line where this section starts')} />}
+                  <button className="tw-rev-find" title={t('Find this section in the text')} onClick={() => { setFindFor(i); setFindQuery(c.title || ''); }}>🔍</button>
+                  <label className="tw-rev-skip" title={t('Exclude this section from the completion %')}>
+                    <input type="checkbox" checked={!!c.skip} onChange={(e) => setSkip(i, e.target.checked)} />{t('skip')}
                   </label>
-                  <button className="tw-rev-x" title="Remove" onClick={() => remove(i)}>✕</button>
+                  <button className="tw-rev-x" title={t('Remove')} onClick={() => remove(i)}>✕</button>
                 </div>
               );
             })}

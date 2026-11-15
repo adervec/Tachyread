@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { orpIndex } from '../document/readerDocument.js';
+import { t } from '../i18n.js';
 
 // The chunk you are narrating with the FULL text of the chunks around it in book order, so you can
 // read into and out of it naturally. `n` = chunks shown on each side (0 = just a two-line peek at
@@ -14,12 +15,12 @@ export function useContextSize() {
 export function ContextPicker({ n, onChange }) {
   return (
     <label className="ck-pick">
-      Context
-      <select value={n} onChange={(e) => onChange(Number(e.target.value))} aria-label="Neighbouring chunks to show">
-        <option value={0}>peek</option>
-        <option value={1}>1 chunk each side</option>
-        <option value={2}>2 chunks each side</option>
-        <option value={3}>3 chunks each side</option>
+      {t('Context')}
+      <select value={n} onChange={(e) => onChange(Number(e.target.value))} aria-label={t('Neighbouring chunks to show')}>
+        <option value={0}>{t('peek')}</option>
+        <option value={1}>{t.n('{n} chunk each side', '{n} chunks each side', 1)}</option>
+        <option value={2}>{t.n('{n} chunk each side', '{n} chunks each side', 2)}</option>
+        <option value={3}>{t.n('{n} chunk each side', '{n} chunks each side', 3)}</option>
       </select>
     </label>
   );
@@ -30,16 +31,16 @@ export function ContextPicker({ n, onChange }) {
 // without saying are flagged. `done` = Set of word indexes said, `upTo` = furthest said + 1.
 export function ReadableText({ text, done = null, upTo = 0 }) {
   let wi = -1;
-  return String(text || '').split(/(\s+)/).map((t, k) => {
-    if (!t || /^\s+$/.test(t)) return t;
+  return String(text || '').split(/(\s+)/).map((w, k) => {
+    if (!w || /^\s+$/.test(w)) return w;
     wi++;
-    const chars = Array.from(t);
+    const chars = Array.from(w);
     const letters = chars.map((c, i) => (/[\p{L}\p{N}]/u.test(c) ? i : -1)).filter((i) => i >= 0);
     const o = letters.length ? letters[orpIndex(letters.length)] : -1;
     const cls = done?.has(wi) ? ' said' : wi < upTo && letters.length ? ' missed' : ''; // a lone dash can't be "missed"
     return (
       <span key={k} className={`rd-w${cls}`}>
-        {o < 0 ? t : <>{chars.slice(0, o).join('')}<b className="rd-orp">{chars[o]}</b>{chars.slice(o + 1).join('')}</>}
+        {o < 0 ? w : <>{chars.slice(0, o).join('')}<b className="rd-orp">{chars[o]}</b>{chars.slice(o + 1).join('')}</>}
       </span>
     );
   });

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { DEFAULT_CATALOGS, parseOpds, searchTemplate, fillSearch, fileNameFor } from '../features/opds.js';
+import { t } from '../i18n.js';
 
 // File → Browse Online Catalogs: OPDS catalogues (Project Gutenberg built in; add Calibre-web,
 // Komga, …). Navigate, search, and Open a book straight into a tab — or, when the server doesn't let
@@ -25,13 +26,13 @@ export default function OpdsDialog({ onClose }) {
     (async () => {
       try {
         const r = await fetch(cur);
-        if (!r.ok) throw new Error(`The catalogue answered HTTP ${r.status}${r.status === 401 ? ' (it needs a login, which isn’t supported here)' : ''}.`);
+        if (!r.ok) throw new Error(r.status === 401 ? t('The catalogue answered HTTP {status} (it needs a login, which isn’t supported here).', { status: r.status }) : t('The catalogue answered HTTP {status}.', { status: r.status }));
         const f = parseOpds(await r.text(), cur);
         if (dead) return;
         setFeed(f);
         setTpl(await searchTemplate(f.search, cur).catch(() => ''));
       } catch (e) {
-        if (!dead) setMsg(e instanceof TypeError ? 'That catalogue doesn’t let browsers read it (no CORS) — it can only be used from an e-reader app.' : String(e?.message || e));
+        if (!dead) setMsg(e instanceof TypeError ? t('That catalogue doesn’t let browsers read it (no CORS) — it can only be used from an e-reader app.') : String(e?.message || e));
       }
       if (!dead) setBusy(false);
     })();
@@ -39,7 +40,7 @@ export default function OpdsDialog({ onClose }) {
   }, [cur]);
 
   async function openBook(e) {
-    setMsg(`Fetching “${e.title}”…`);
+    setMsg(t('Fetching “{title}”…', { title: e.title }));
     try {
       const r = await fetch(e.acq.href);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -48,44 +49,44 @@ export default function OpdsDialog({ onClose }) {
       onClose();
     } catch (err) {
       setMsg(err instanceof TypeError
-        ? `This catalogue doesn’t let browsers download its files directly — use ⬇ Download, then drop the file into Tachyread.`
-        : `Couldn’t open it: ${err?.message || err}`);
+        ? t('This catalogue doesn’t let browsers download its files directly — use ⬇ Download, then drop the file into Tachyread.')
+        : t('Couldn’t open it: {error}', { error: err?.message || err }));
     }
   }
   const saveCatalogs = (list) => updateGlobal({ opdsCatalogs: list });
 
   return (
-    <Dialog title="Online catalogs (OPDS)" onClose={onClose} width={760}>
+    <Dialog title={t('Online catalogs (OPDS)')} onClose={onClose} width={760}>
       {!cur ? (
         <div className="opds">
-          <p className="settings-note">Browse free and personal book catalogues that publish OPDS. Project Gutenberg is built in; add your own Calibre-web / Komga address if it allows browser access (CORS).</p>
+          <p className="settings-note">{t('Browse free and personal book catalogues that publish OPDS. Project Gutenberg is built in; add your own Calibre-web / Komga address if it allows browser access (CORS).')}</p>
           {catalogs.map((c, i) => (
             <div key={c.url} className="lj-inline">
               <button className="toggle-on" onClick={() => setStack([c.url])}>{c.name}</button>
               <span className="lj-qdim">{c.url}</span>
-              {state.global.opdsCatalogs?.length > 0 && <button className="grab-trash" aria-label={`Remove ${c.name}`} onClick={() => saveCatalogs(catalogs.filter((_, j) => j !== i))}>🗑</button>}
+              {state.global.opdsCatalogs?.length > 0 && <button className="grab-trash" aria-label={t('Remove {name}', { name: c.name })} onClick={() => saveCatalogs(catalogs.filter((_, j) => j !== i))}>🗑</button>}
             </div>
           ))}
           <form className="lj-inline" onSubmit={(ev) => { ev.preventDefault(); if (!/^https?:\/\//.test(adding.url)) return; saveCatalogs([...catalogs, { name: adding.name.trim() || new URL(adding.url).hostname, url: adding.url.trim() }]); setAdding({ name: '', url: '' }); }}>
-            <input value={adding.name} onChange={(ev) => setAdding({ ...adding, name: ev.target.value })} placeholder="Name" aria-label="Catalogue name" />
-            <input value={adding.url} onChange={(ev) => setAdding({ ...adding, url: ev.target.value })} placeholder="https://…/opds" aria-label="Catalogue address" style={{ flex: 1 }} />
-            <button type="submit" disabled={!/^https?:\/\//.test(adding.url)}>＋ Add catalogue</button>
+            <input value={adding.name} onChange={(ev) => setAdding({ ...adding, name: ev.target.value })} placeholder={t('Name')} aria-label={t('Catalogue name')} />
+            <input value={adding.url} onChange={(ev) => setAdding({ ...adding, url: ev.target.value })} placeholder="https://…/opds" aria-label={t('Catalogue address')} style={{ flex: 1 }} />
+            <button type="submit" disabled={!/^https?:\/\//.test(adding.url)}>＋ {t('Add catalogue')}</button>
           </form>
         </div>
       ) : (
         <div className="opds">
           <div className="lj-inline">
-            <button onClick={() => setStack(stack.slice(0, -1))}>← Back</button>
+            <button onClick={() => setStack(stack.slice(0, -1))}>← {t('Back')}</button>
             <b>{feed?.title || '…'}</b>
             {tpl && (
               <form className="lj-inline" onSubmit={(ev) => { ev.preventDefault(); if (q.trim()) setStack([...stack, fillSearch(tpl, q.trim())]); }} style={{ marginLeft: 'auto' }}>
-                <input value={q} onChange={(ev) => setQ(ev.target.value)} placeholder="Search this catalogue" aria-label="Search this catalogue" />
-                <button type="submit" disabled={!q.trim()}>Search</button>
+                <input value={q} onChange={(ev) => setQ(ev.target.value)} placeholder={t('Search this catalogue')} aria-label={t('Search this catalogue')} />
+                <button type="submit" disabled={!q.trim()}>{t('Search')}</button>
               </form>
             )}
           </div>
           {msg && <p className="settings-note" role="status">{msg}</p>}
-          {busy && <p className="settings-note">Loading…</p>}
+          {busy && <p className="settings-note">{t('Loading…')}</p>}
           <div className="opds-list">
             {feed?.entries.map((e, i) => (
               <div key={i} className="opds-entry">
@@ -95,15 +96,15 @@ export default function OpdsDialog({ onClose }) {
                   {e.summary && <div className="lj-qdim opds-sum">{e.summary}</div>}
                 </div>
                 <div className="opds-acts">
-                  {e.nav && !e.acq && <button onClick={() => setStack([...stack, e.nav.href])}>Open ›</button>}
-                  {e.acq && <button className="toggle-on" onClick={() => openBook(e)} title="Read it here now">📖 Open</button>}
-                  {e.acq && <a className="link-btn" href={e.acq.href} target="_blank" rel="noreferrer noopener" download title="Download the file, then drop it into Tachyread">⬇ Download</a>}
+                  {e.nav && !e.acq && <button onClick={() => setStack([...stack, e.nav.href])}>{t('Open')} ›</button>}
+                  {e.acq && <button className="toggle-on" onClick={() => openBook(e)} title={t('Read it here now')}>📖 {t('Open')}</button>}
+                  {e.acq && <a className="link-btn" href={e.acq.href} target="_blank" rel="noreferrer noopener" download title={t('Download the file, then drop it into Tachyread')}>⬇ {t('Download')}</a>}
                   {!e.acq && !e.nav && e.title && <span className="lj-qdim">—</span>}
                 </div>
               </div>
             ))}
           </div>
-          {feed?.next && <button onClick={() => setStack([...stack.slice(0, -1), feed.next])}>More ›</button>}
+          {feed?.next && <button onClick={() => setStack([...stack.slice(0, -1), feed.next])}>{t('More')} ›</button>}
         </div>
       )}
     </Dialog>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useVoices, speak, cancelSpeech, rateFromIndex } from '../features/tts.js';
+import { t } from '../i18n.js';
 
 export default function TtsPopupDialog({ tab, onClose }) {
   const voices = useVoices();
@@ -31,37 +32,37 @@ export default function TtsPopupDialog({ tab, onClose }) {
 
   return (
     <Dialog
-      title="Text-to-Speech Reader"
+      title={t('Text-to-Speech Reader')}
       onClose={() => { stop(); onClose(); }}
       width={520}
       buttons={
         <>
           {running ? (
-            <button className="toggle-on" onClick={stop}>Stop</button>
+            <button className="toggle-on" onClick={stop}>{t('Stop')}</button>
           ) : (
-            <button className="toggle-on" onClick={start}>Speak</button>
+            <button className="toggle-on" onClick={start}>{t('Speak')}</button>
           )}
-          <button onClick={onClose}>Close</button>
+          <button onClick={onClose}>{t('Close')}</button>
         </>
       }
     >
       <div className="field-row">
-        <label>Voice</label>
+        <label>{t('Voice')}</label>
         <select value={voice} onChange={(e) => setVoice(e.target.value)}>
-          <option value="">(default)</option>
+          <option value="">{t('(default)')}</option>
           {voices.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
         </select>
       </div>
       <div className="field-row">
-        <label>Rate (−5..+8)</label>
+        <label>{t('Rate ({min}..{max})', { min: '−5', max: '+8' })}</label>
         <input type="number" min={-5} max={8} value={rateIdx} onChange={(e) => setRateIdx(Number(e.target.value))} />
       </div>
       <div className="field-row">
-        <label>From word</label>
+        <label>{t('From word')}</label>
         <input type="number" value={from} min={0} max={tab.doc.words.length - 1} onChange={(e) => setFrom(Number(e.target.value))} />
       </div>
       <div className="field-row">
-        <label>To word</label>
+        <label>{t('To word')}</label>
         <input type="number" value={to} min={1} max={tab.doc.words.length} onChange={(e) => setTo(Number(e.target.value))} />
       </div>
     </Dialog>

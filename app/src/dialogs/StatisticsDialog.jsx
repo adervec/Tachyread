@@ -4,13 +4,15 @@ import { allFiles } from '../state/storage.js';
 import { MAX_REAL_WPM } from '../engine/readingTracker.js';
 import { fmtDate } from '../features/dateFmt.js';
 import { parseDay } from '../features/localDay.js';
+import { t } from '../i18n.js';
 
 function fmtTime(secs) {
-  if (!secs) return '0s';
+  if (!secs) return t('{s}s', { s: 0 });
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = Math.floor(secs % 60);
-  return `${h ? h + 'h ' : ''}${m ? m + 'm ' : ''}${s}s`;
+  if (h) return m ? t('{h}h {m}m {s}s', { h, m, s }) : t('{h}h {s}s', { h, s });
+  return m ? t('{m}m {s}s', { m, s }) : t('{s}s', { s });
 }
 
 // Live per-file card for one OPEN tab (has a hydrated tracker). Lazy tabs (not yet loaded) show a
@@ -21,34 +23,34 @@ function OpenFileCard({ tab, active }) {
     const pct = s.totalWords ? ((s.wordIndex / s.totalWords) * 100).toFixed(0) : '0';
     return (
       <div className={`stat-file-card${active ? ' active' : ''}`}>
-        <div className="stat-file-name">{tab.fileName || s.fileName || 'Untitled'}{active ? ' ·' : ''} <span className="settings-note">not loaded — {pct}% ({s.wordIndex || 0} words in)</span></div>
+        <div className="stat-file-name">{tab.fileName || s.fileName || t('Untitled')}{active ? ' ·' : ''} <span className="settings-note">{t('not loaded — {pct}% ({n} words in)', { pct, n: s.wordIndex || 0 })}</span></div>
       </div>
     );
   }
-  const t = tab.tracker;
+  const tr = tab.tracker;
   return (
     <div className={`stat-file-card${active ? ' active' : ''}`}>
-      <div className="stat-file-name">{tab.doc.fileName}{active && <span className="stat-active-tag"> · current</span>}</div>
+      <div className="stat-file-name">{tab.doc.fileName}{active && <span className="stat-active-tag"> · {t('current')}</span>}</div>
       <table className="history-table">
         <tbody>
           <tr>
-            <td>Coverage</td>
-            <td>{(t.coverage() * 100).toFixed(1)}% ({t.readCount} / {t.wordCount} words)</td>
+            <td>{t('Coverage')}</td>
+            <td>{t('{pct}% ({read} / {total} words)', { pct: (tr.coverage() * 100).toFixed(1), read: tr.readCount, total: tr.wordCount })}</td>
           </tr>
           <tr>
-            <td>This session</td>
-            <td>{t.sessionNewWords} new words · {fmtTime(Math.round(t.sessionActiveMs / 1000))} active · {t.sessionWpm()} WPM</td>
+            <td>{t('This session')}</td>
+            <td>{t('{n} new words · {time} active · {wpm} WPM', { n: tr.sessionNewWords, time: fmtTime(Math.round(tr.sessionActiveMs / 1000)), wpm: tr.sessionWpm() })}</td>
           </tr>
           <tr>
-            <td>Reading now</td>
-            <td>{t.recentWpm()} WPM</td>
+            <td>{t('Reading now')}</td>
+            <td>{tr.recentWpm()} WPM</td>
           </tr>
           <tr>
-            <td>Lifetime (this file)</td>
-            <td>{fmtTime(Math.round(t.lifetimeActiveMs / 1000))} active · {t.lifetimeWpm()} WPM</td>
+            <td>{t('Lifetime (this file)')}</td>
+            <td>{t('{time} active · {wpm} WPM', { time: fmtTime(Math.round(tr.lifetimeActiveMs / 1000)), wpm: tr.lifetimeWpm() })}</td>
           </tr>
           <tr>
-            <td>Completions</td>
+            <td>{t('Completions')}</td>
             <td>{(tab.settings.completions || []).length}</td>
           </tr>
         </tbody>
@@ -95,42 +97,42 @@ export default function StatisticsDialog({ tabs = [], activeTabId, onClose }) {
     return secs > 0 ? Math.min(MAX_REAL_WPM, Math.round((words / secs) * 60)) : 0;
   }
 
-  const openTabs = tabs.filter((t) => t && (t.doc || t.lazy));
+  const openTabs = tabs.filter((tb) => tb && (tb.doc || tb.lazy));
 
   return (
-    <Dialog title="Statistics" onClose={onClose} width={640}>
-      <div className="field-section">Aggregate (all files)</div>
+    <Dialog title={t('Statistics')} onClose={onClose} width={640}>
+      <div className="field-section">{t('Aggregate (all files)')}</div>
       <table className="history-table">
         <thead>
           <tr>
-            <th>Period</th>
-            <th>Words read</th>
-            <th>Active time</th>
-            <th>Effective WPM</th>
+            <th>{t('Period')}</th>
+            <th>{t('Words read')}</th>
+            <th>{t('Active time')}</th>
+            <th>{t('Effective WPM')}</th>
           </tr>
         </thead>
         <tbody>
-          <tr><td>Today</td><td>{todayAgg.words}</td><td>{fmtTime(todayAgg.secs)}</td><td>{wpm(todayAgg)}</td></tr>
-          <tr><td>This week</td><td>{week.words}</td><td>{fmtTime(week.secs)}</td><td>{wpm(week)}</td></tr>
-          <tr><td>This month</td><td>{month.words}</td><td>{fmtTime(month.secs)}</td><td>{wpm(month)}</td></tr>
-          <tr><td>All time</td><td>{all.words}</td><td>{fmtTime(all.secs)}</td><td>{wpm(all)}</td></tr>
+          <tr><td>{t('Today')}</td><td>{todayAgg.words}</td><td>{fmtTime(todayAgg.secs)}</td><td>{wpm(todayAgg)}</td></tr>
+          <tr><td>{t('This week')}</td><td>{week.words}</td><td>{fmtTime(week.secs)}</td><td>{wpm(week)}</td></tr>
+          <tr><td>{t('This month')}</td><td>{month.words}</td><td>{fmtTime(month.secs)}</td><td>{wpm(month)}</td></tr>
+          <tr><td>{t('All time')}</td><td>{all.words}</td><td>{fmtTime(all.secs)}</td><td>{wpm(all)}</td></tr>
         </tbody>
       </table>
 
-      <div className="field-section">Last 7 days</div>
+      <div className="field-section">{t('Last 7 days')}</div>
       <table className="history-table">
         <thead>
           <tr>
-            <th>Day</th>
-            <th>Words read</th>
-            <th>Active time</th>
-            <th>Effective WPM</th>
+            <th>{t('Day')}</th>
+            <th>{t('Words read')}</th>
+            <th>{t('Active time')}</th>
+            <th>{t('Effective WPM')}</th>
           </tr>
         </thead>
         <tbody>
           {last7.map((d) => (
             <tr key={d.date} className={d.words || d.secs ? '' : 'stat-day-empty'}>
-              <td>{d.date}{d.date === today ? ' · today' : ''}</td>
+              <td>{d.date}{d.date === today ? ` · ${t('today')}` : ''}</td>
               <td>{d.words}</td>
               <td>{fmtTime(d.secs)}</td>
               <td>{wpm(d)}</td>
@@ -139,15 +141,14 @@ export default function StatisticsDialog({ tabs = [], activeTabId, onClose }) {
         </tbody>
       </table>
 
-      <div className="field-section">Open files ({openTabs.length})</div>
-      {openTabs.length === 0 && <p className="settings-note">No files open.</p>}
-      {openTabs.map((t) => (
-        <OpenFileCard key={t.id} tab={t} active={t.id === activeTabId} />
+      <div className="field-section">{t('Open files ({n})', { n: openTabs.length })}</div>
+      {openTabs.length === 0 && <p className="settings-note">{t('No files open.')}</p>}
+      {openTabs.map((tb) => (
+        <OpenFileCard key={tb.id} tab={tb} active={tb.id === activeTabId} />
       ))}
 
       <p className="settings-note">
-        “Effective WPM” = unique new words read per active minute (excludes idle, skips, and
-        re-reads). “Reading now” is your pace over the last ~30s of active reading.
+        {t('“Effective WPM” = unique new words read per active minute (excludes idle, skips, and re-reads). “Reading now” is your pace over the last ~30s of active reading.')}
       </p>
     </Dialog>
   );

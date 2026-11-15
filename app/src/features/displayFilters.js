@@ -3,19 +3,20 @@
 // into a CSS `filter` string — pure flavour, never fed back into detection or OCR (the camera
 // pipeline analyses its own unfiltered element, and the source filter paints over the render).
 // Pure — see displayFilters.test.mjs.
+import { t } from '../i18n.js';
 
 export const FILTER_DEFAULTS = { blur: 0, brightness: 1, contrast: 1, saturate: 1, hueRotate: 0, sepia: 0, invert: 0, grayscale: 0 };
 
 export const FILTER_PRESETS = [
-  { id: 'none', label: 'None', fx: {} },
-  { id: 'sepia', label: 'Old paper (sepia)', fx: { sepia: 0.85, contrast: 1.05, brightness: 1.03 } },
-  { id: 'noir', label: 'Noir', fx: { grayscale: 1, contrast: 1.3, brightness: 1.05 } },
-  { id: 'faded', label: 'Faded print', fx: { contrast: 0.85, brightness: 1.12, sepia: 0.25 } },
-  { id: 'night', label: 'Night (inverted)', fx: { invert: 0.92, hueRotate: 180 } },
-  { id: 'blueprint', label: 'Blueprint', fx: { grayscale: 1, sepia: 1, hueRotate: 180, saturate: 3, brightness: 0.9 } },
-  { id: 'thermal', label: 'Thermal', fx: { invert: 1, hueRotate: 175, saturate: 1.8, contrast: 1.1 } },
-  { id: 'neon', label: 'Neon', fx: { saturate: 2.3, contrast: 1.35, hueRotate: 20 } },
-  { id: 'dream', label: 'Dreamy', fx: { blur: 1.1, brightness: 1.12, saturate: 1.35 } },
+  { id: 'none', label: t('None'), fx: {} },
+  { id: 'sepia', label: t('Old paper (sepia)'), fx: { sepia: 0.85, contrast: 1.05, brightness: 1.03 } },
+  { id: 'noir', label: t('Noir'), fx: { grayscale: 1, contrast: 1.3, brightness: 1.05 } },
+  { id: 'faded', label: t('Faded print'), fx: { contrast: 0.85, brightness: 1.12, sepia: 0.25 } },
+  { id: 'night', label: t('Night (inverted)'), fx: { invert: 0.92, hueRotate: 180 } },
+  { id: 'blueprint', label: t('Blueprint'), fx: { grayscale: 1, sepia: 1, hueRotate: 180, saturate: 3, brightness: 0.9 } },
+  { id: 'thermal', label: t('Thermal'), fx: { invert: 1, hueRotate: 175, saturate: 1.8, contrast: 1.1 } },
+  { id: 'neon', label: t('Neon'), fx: { saturate: 2.3, contrast: 1.35, hueRotate: 20 } },
+  { id: 'dream', label: t('Dreamy'), fx: { blur: 1.1, brightness: 1.12, saturate: 1.35 } },
 ];
 export const FILTER_PRESET_BY_ID = Object.fromEntries(FILTER_PRESETS.map((p) => [p.id, p]));
 

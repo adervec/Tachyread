@@ -8,6 +8,8 @@
 // fully offline after. The whole module (and the heavy ORT dependency) is lazy-imported — nothing
 // loads until the user turns on offline voice.
 
+import { t } from '../i18n.js';
+
 let libPromise = null;
 function lib() {
   libPromise = libPromise || import('@diffusionstudio/vits-web');
@@ -113,7 +115,7 @@ export async function installedVoices() {
 
 // A friendly label for a Piper voice id (curated English names, else a prettified id).
 export function voiceLabel(id) {
-  if (!id) return 'unknown voice';
+  if (!id) return t('unknown voice');
   if (id.startsWith('kokoro:')) return `Kokoro — ${id.slice(7).replace(/_/g, ' ')}`;
   const e = ENGLISH_VOICES.find((v) => v.id === id);
   return e ? e.label : id.replace(/_/g, ' ').replace(/-/g, ' · ');

@@ -5,6 +5,10 @@ import {
   XH_SHAPES, XH_ANIMS, XH_ANIM_LABELS, XH_DEFAULT_ANIM, newCrosshair, newShapeLayer, newImageLayer,
   newEmojiLayer, newCrosshairId, starterStable, placeCrosshair, removeCrosshair, resizeCrosshair,
 } from '../features/crosshairs.js';
+import { t } from '../i18n.js';
+
+// XH_SHAPES are design values (kept English); only their display is translated.
+// i18n-keys: cross | x | circle | ring | dot | square | triangle | brackets | chevron | hline | vline
 
 // The crosshair STABLE manager: design overlay markers for the Lines area by combining shape,
 // image and emoji layers with transparency and behind-the-glass distortion effects, then place
@@ -20,7 +24,7 @@ function Field({ label, children }) {
   );
 }
 
-const PREVIEW_TEXT = 'The quick brown fox jumps over the lazy dog while the reader holds a steady line of focus across the page, word after word after word. '.repeat(3);
+const PREVIEW_TEXT = `${t('The quick brown fox jumps over the lazy dog while the reader holds a steady line of focus across the page, word after word after word.')} `.repeat(3);
 
 export default function CrosshairDialog({ global, onPatchGlobal, settings, onPatch, onClose }) {
   const stable = global.crosshairStable || [];
@@ -38,7 +42,7 @@ export default function CrosshairDialog({ global, onPatchGlobal, settings, onPat
   const dropLayer = (i) => patchSel({ layers: sel.layers.filter((_, j) => j !== i) });
 
   function create() {
-    const name = (window.prompt('Name the new crosshair:', 'My crosshair') || '').trim();
+    const name = (window.prompt(t('Name the new crosshair:'), t('My crosshair')) || '').trim();
     if (!name) return;
     const c = newCrosshair(name, Date.now());
     setStable([...stable, c]);
@@ -46,18 +50,18 @@ export default function CrosshairDialog({ global, onPatchGlobal, settings, onPat
   }
   function duplicate() {
     if (!sel) return;
-    const copy = { ...sel, id: newCrosshairId(Date.now()), name: `${sel.name} copy` };
+    const copy = { ...sel, id: newCrosshairId(Date.now()), name: t('{name} copy', { name: sel.name }) };
     setStable([...stable, copy]);
     setSelId(copy.id);
   }
   function rename() {
     if (!sel) return;
-    const name = (window.prompt('Rename crosshair to:', sel.name) || '').trim();
+    const name = (window.prompt(t('Rename crosshair to:'), sel.name) || '').trim();
     if (name) patchSel({ name });
   }
   function remove() {
     if (!sel) return;
-    if (!window.confirm(`Delete “${sel.name}” from the stable? Tabs where it's placed will simply stop showing it.`)) return;
+    if (!window.confirm(t('Delete “{name}” from the stable? Tabs where it’s placed will simply stop showing it.', { name: sel.name }))) return;
     setStable(stable.filter((c) => c.id !== selId));
     setSelId(stable.find((c) => c.id !== selId)?.id || '');
   }
@@ -89,26 +93,21 @@ export default function CrosshairDialog({ global, onPatchGlobal, settings, onPat
   const num = (v, d = 1) => Math.round(v * 10 ** d) / 10 ** d;
 
   return (
-    <Dialog title="Crosshairs (Lines overlays)" onClose={onClose} width={640} buttons={<button onClick={onClose}>Close</button>}>
+    <Dialog title={t('Crosshairs (Lines overlays)')} onClose={onClose} width={640} buttons={<button onClick={onClose}>{t('Close')}</button>}>
       <p className="settings-note">
-        Design reading crosshairs — combine <b>shapes, images and emoji</b> with transparency,
-        <b> distortion of the text behind them</b> (blur, invert, hue, heat-haze warp) and
-        <b> animation</b> (breathe, pulse, spin, orbiting/scanning dots, trippy fractals — on a fixed
-        period or paced to the current line) — then place any of them on this tab’s Lines area and
-        <b> drag them</b> where your eye should anchor. The stable is shared by all tabs; placements
-        are per tab.
+        {t('Design reading crosshairs — combine shapes, images and emoji with transparency, distortion of the text behind them (blur, invert, hue, heat-haze warp) and animation (breathe, pulse, spin, orbiting/scanning dots, trippy fractals — on a fixed period or paced to the current line) — then place any of them on this tab’s Lines area and drag them where your eye should anchor. The stable is shared by all tabs; placements are per tab.')}
       </p>
 
       <div className="xh-bar">
         <select value={selId} onChange={(e) => setSelId(e.target.value)}>
-          <option value="">— pick a crosshair —</option>
+          <option value="">{t('— pick a crosshair —')}</option>
           {stable.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <button onClick={create}>+ New</button>
-        <button onClick={addStarters} title="Add eight ready-made designs to play with — including animated ones">✨ Starter pack</button>
-        <button disabled={!sel} onClick={duplicate}>Duplicate</button>
-        <button disabled={!sel} onClick={rename}>Rename</button>
-        <button disabled={!sel} className="grab-trash" onClick={remove}>🗑</button>
+        <button onClick={create}>+ {t('New')}</button>
+        <button onClick={addStarters} title={t('Add eight ready-made designs to play with — including animated ones')}>✨ {t('Starter pack')}</button>
+        <button disabled={!sel} onClick={duplicate}>{t('Duplicate')}</button>
+        <button disabled={!sel} onClick={rename}>{t('Rename')}</button>
+        <button disabled={!sel} className="grab-trash" onClick={remove} title={t('Delete')} aria-label={t('Delete')}>🗑</button>
       </div>
 
       {sel && (
@@ -119,82 +118,82 @@ export default function CrosshairDialog({ global, onPatchGlobal, settings, onPat
             <Crosshair design={sel} size={110} style={{ left: '50%', top: '50%', position: 'absolute', transform: 'translate(-50%, -50%)' }} />
           </div>
 
-          <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>Layers (drawn in order)</div>
+          <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>{t('Layers (drawn in order)')}</div>
           {sel.layers.map((l, i) => (
             <div key={i} className="xh-layer-row">
               {l.kind === 'shape' && (
                 <>
                   <select value={l.shape} onChange={(e) => patchLayer(i, { shape: e.target.value })}>
-                    {XH_SHAPES.map((sh) => <option key={sh} value={sh}>{sh}</option>)}
+                    {XH_SHAPES.map((sh) => <option key={sh} value={sh}>{t(sh)}</option>)}
                   </select>
-                  <input type="color" value={l.color || '#ff5c5c'} onChange={(e) => patchLayer(i, { color: e.target.value })} title="Layer colour" />
-                  <label title="Stroke thickness">t<input type="range" min={1} max={12} step={1} value={l.thickness ?? 3} onChange={(e) => patchLayer(i, { thickness: Number(e.target.value) })} /></label>
+                  <input type="color" value={l.color || '#ff5c5c'} onChange={(e) => patchLayer(i, { color: e.target.value })} title={t('Layer colour')} />
+                  <label title={t('Stroke thickness')}>t<input type="range" min={1} max={12} step={1} value={l.thickness ?? 3} onChange={(e) => patchLayer(i, { thickness: Number(e.target.value) })} /></label>
                 </>
               )}
-              {l.kind === 'image' && <span className="xh-layer-tag">🖼 image{l.src ? '' : ' (pick one)'}</span>}
+              {l.kind === 'image' && <span className="xh-layer-tag">🖼 {l.src ? t('image') : t('image (pick one)')}</span>}
               {l.kind === 'emoji' && (
                 <input className="xh-emoji-in" type="text" value={l.char || ''} maxLength={4}
-                  onChange={(e) => patchLayer(i, { char: e.target.value })} title="The emoji / character to show" />
+                  onChange={(e) => patchLayer(i, { char: e.target.value })} title={t('The emoji / character to show')} />
               )}
-              <label title="Layer size">s<input type="range" min={0.1} max={1.6} step={0.05} value={l.scale ?? 1} onChange={(e) => patchLayer(i, { scale: Number(e.target.value) })} /></label>
-              <label title="Rotation">↻<input type="range" min={-180} max={180} step={5} value={l.rotate ?? 0} onChange={(e) => patchLayer(i, { rotate: Number(e.target.value) })} /></label>
-              <label title="Layer transparency">◐<input type="range" min={0.05} max={1} step={0.05} value={l.opacity ?? 1} onChange={(e) => patchLayer(i, { opacity: Number(e.target.value) })} /></label>
-              <button title="Remove this layer" onClick={() => dropLayer(i)}>✕</button>
+              <label title={t('Layer size')}>s<input type="range" min={0.1} max={1.6} step={0.05} value={l.scale ?? 1} onChange={(e) => patchLayer(i, { scale: Number(e.target.value) })} /></label>
+              <label title={t('Rotation')}>↻<input type="range" min={-180} max={180} step={5} value={l.rotate ?? 0} onChange={(e) => patchLayer(i, { rotate: Number(e.target.value) })} /></label>
+              <label title={t('Layer transparency')}>◐<input type="range" min={0.05} max={1} step={0.05} value={l.opacity ?? 1} onChange={(e) => patchLayer(i, { opacity: Number(e.target.value) })} /></label>
+              <button title={t('Remove this layer')} onClick={() => dropLayer(i)}>✕</button>
             </div>
           ))}
           <div className="xh-bar">
-            <button onClick={() => addLayer(newShapeLayer('circle'))}>+ Shape</button>
-            <button onClick={pickImage}>+ Image…</button>
-            <button onClick={() => addLayer(newEmojiLayer('🎯'))}>+ Emoji</button>
+            <button onClick={() => addLayer(newShapeLayer('circle'))}>+ {t('Shape')}</button>
+            <button onClick={pickImage}>+ {t('Image…')}</button>
+            <button onClick={() => addLayer(newEmojiLayer('🎯'))}>+ {t('Emoji')}</button>
             <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onImageFile} />
           </div>
 
-          <Field label="Overall transparency">
+          <Field label={t('Overall transparency')}>
             <input type="range" min={0.05} max={1} step={0.05} value={sel.opacity ?? 0.9} onChange={(e) => patchSel({ opacity: Number(e.target.value) })} />
             <span className="range-val">{Math.round((sel.opacity ?? 0.9) * 100)}%</span>
           </Field>
 
-          <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>Distortion of the text behind (the glass)</div>
-          <Field label="Blur">
+          <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>{t('Distortion of the text behind (the glass)')}</div>
+          <Field label={t('Blur')}>
             <input type="range" min={0} max={12} step={0.5} value={sel.fx?.blur ?? 0} onChange={(e) => patchFx({ blur: Number(e.target.value) })} />
             <span className="range-val">{num(sel.fx?.blur ?? 0)}px</span>
           </Field>
-          <Field label="Invert">
+          <Field label={t('Invert')}>
             <input type="range" min={0} max={1} step={0.05} value={sel.fx?.invert ?? 0} onChange={(e) => patchFx({ invert: Number(e.target.value) })} />
             <span className="range-val">{Math.round((sel.fx?.invert ?? 0) * 100)}%</span>
           </Field>
-          <Field label="Grayscale">
+          <Field label={t('Grayscale')}>
             <input type="range" min={0} max={1} step={0.05} value={sel.fx?.grayscale ?? 0} onChange={(e) => patchFx({ grayscale: Number(e.target.value) })} />
             <span className="range-val">{Math.round((sel.fx?.grayscale ?? 0) * 100)}%</span>
           </Field>
-          <Field label="Hue shift">
+          <Field label={t('Hue shift')}>
             <input type="range" min={0} max={360} step={5} value={sel.fx?.hueRotate ?? 0} onChange={(e) => patchFx({ hueRotate: Number(e.target.value) })} />
             <span className="range-val">{sel.fx?.hueRotate ?? 0}°</span>
           </Field>
-          <Field label="Contrast">
+          <Field label={t('Contrast')}>
             <input type="range" min={0.4} max={2.5} step={0.05} value={sel.fx?.contrast ?? 1} onChange={(e) => patchFx({ contrast: Number(e.target.value) })} />
             <span className="range-val">{num(sel.fx?.contrast ?? 1, 2)}×</span>
           </Field>
-          <Field label="Warp (heat haze)">
+          <Field label={t('Warp (heat haze)')}>
             <input type="range" min={0} max={60} step={2} value={sel.fx?.warp ?? 0} onChange={(e) => patchFx({ warp: Number(e.target.value) })} />
             <span className="range-val">{sel.fx?.warp ?? 0}</span>
           </Field>
 
-          <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>Animation</div>
-          <Field label="Style">
+          <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>{t('Animation')}</div>
+          <Field label={t('Style')}>
             <select value={sel.anim?.style || 'none'} onChange={(e) => patchAnim({ style: e.target.value })}>
               {XH_ANIMS.map((a) => <option key={a} value={a}>{XH_ANIM_LABELS[a]}</option>)}
             </select>
           </Field>
           {(sel.anim?.style || 'none') !== 'none' && (
             <>
-              <Field label="Period">
+              <Field label={t('Period')}>
                 <select
                   value={sel.anim?.periodMode === 'line' ? 'line' : 'fixed'}
                   onChange={(e) => patchAnim({ periodMode: e.target.value })}
                 >
-                  <option value="fixed">fixed seconds</option>
-                  <option value="line">current line read time</option>
+                  <option value="fixed">{t('fixed seconds')}</option>
+                  <option value="line">{t('current line read time')}</option>
                 </select>
                 {(sel.anim?.periodMode ?? 'fixed') === 'fixed' && (
                   <>
@@ -205,9 +204,7 @@ export default function CrosshairDialog({ global, onPatchGlobal, settings, onPat
               </Field>
               {sel.anim?.periodMode === 'line' && (
                 <p className="settings-note" style={{ margin: '2px 0 0' }}>
-                  One cycle = how long the <b>current display line</b> (the visual line under your eye,
-                  not the file line) would take at your auto pace — WPM, speed unit and word
-                  multipliers included — even when auto play is off. The preview above uses a 3s stand-in.
+                  {t('One cycle = how long the current display line (the visual line under your eye, not the file line) would take at your auto pace — WPM, speed unit and word multipliers included — even when auto play is off. The preview above uses a 3s stand-in.')}
                 </p>
               )}
             </>
@@ -215,10 +212,10 @@ export default function CrosshairDialog({ global, onPatchGlobal, settings, onPat
 
           {settings && onPatch && (
             <>
-              <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>On this tab</div>
+              <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>{t('On this tab')}</div>
               <div className="xh-bar">
                 <button className="toggle-on" onClick={() => onPatch({ linesCrosshairs: placeCrosshair(placements, sel.id) })}>
-                  ➕ Place “{sel.name}” on this tab
+                  ➕ {t('Place “{name}” on this tab', { name: sel.name })}
                 </button>
               </div>
             </>
@@ -232,20 +229,20 @@ export default function CrosshairDialog({ global, onPatchGlobal, settings, onPat
             const d = stable.find((c) => c.id === p.id);
             return (
               <div key={i} className="xh-layer-row">
-                <span className="xh-layer-tag">{d ? d.name : '(deleted design)'}</span>
-                <label title="Placed size">size<input type="range" min={24} max={400} step={4} value={p.size || 90}
+                <span className="xh-layer-tag">{d ? d.name : t('(deleted design)')}</span>
+                <label title={t('Placed size')}>{t('size')}<input type="range" min={24} max={400} step={4} value={p.size || 90}
                   onChange={(e) => onPatch({ linesCrosshairs: resizeCrosshair(placements, i, Number(e.target.value)) })} /></label>
                 <span className="range-val">{p.size || 90}px</span>
-                <button title="Remove from this tab" onClick={() => onPatch({ linesCrosshairs: removeCrosshair(placements, i) })}>✕</button>
+                <button title={t('Remove from this tab')} onClick={() => onPatch({ linesCrosshairs: removeCrosshair(placements, i) })}>✕</button>
               </div>
             );
           })}
-          <p className="settings-note" style={{ margin: '4px 0 0' }}>Drag a crosshair in the Lines area to move it. Positions are per tab.</p>
+          <p className="settings-note" style={{ margin: '4px 0 0' }}>{t('Drag a crosshair in the Lines area to move it. Positions are per tab.')}</p>
         </div>
       )}
 
       {!stable.length && (
-        <p className="settings-note">The stable is empty — hit <b>✨ Starter pack</b> for eight ready-made designs (including animated ones), or <b>+ New</b> to build your own.</p>
+        <p className="settings-note">{t('The stable is empty — hit ✨ Starter pack for eight ready-made designs (including animated ones), or + New to build your own.')}</p>
       )}
     </Dialog>
   );

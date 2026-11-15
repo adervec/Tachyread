@@ -4,21 +4,23 @@
 // scrolling doesn't flap the label. States that aren't advancement events — peeking, read-aloud,
 // auto-play — override live, since they describe the present, not the recent past.
 
+import { t } from '../i18n.js';
+
 export const WINDOW_MS = 10000;
 const CAP = 60;
 
 export const MODES = {
-  peek: { icon: '👀', label: 'peeking', hint: 'Previewing elsewhere — the progress tick is not moving' },
-  listen: { icon: '🔊', label: 'listening', hint: 'Read-aloud (TTS) is driving the pace' },
-  auto: { icon: '⏩', label: 'auto', hint: 'Auto-advance (word/line player) is driving the pace' },
-  speak: { icon: '🎤', label: 'speaking', hint: 'Advancing by reading aloud (speech recognition follows you)' },
-  word: { icon: '🔤', label: 'word-by-word', hint: 'Stepping one word at a time' },
-  line: { icon: '↩️', label: 'line-by-line', hint: 'Advancing a line at a time' },
-  para: { icon: '📃', label: 'by paragraph', hint: 'Hopping paragraph to paragraph' },
-  page: { icon: '📄', label: 'by page', hint: 'Paging through the text' },
-  scroll: { icon: '📜', label: 'scroll-reading', hint: 'Scrolling the pane; text passing the top edge counts as read' },
-  jump: { icon: '🧭', label: 'navigating', hint: 'Jumping around (ToC / Find / clicks) — not counted as reading' },
-  idle: { icon: '💤', label: 'idle', hint: 'No reading activity in the last few seconds' },
+  peek: { icon: '👀', label: t('peeking'), hint: t('Previewing elsewhere — the progress tick is not moving') },
+  listen: { icon: '🔊', label: t('listening'), hint: t('Read-aloud (TTS) is driving the pace') },
+  auto: { icon: '⏩', label: t('auto'), hint: t('Auto-advance (word/line player) is driving the pace') },
+  speak: { icon: '🎤', label: t('speaking'), hint: t('Advancing by reading aloud (speech recognition follows you)') },
+  word: { icon: '🔤', label: t('word-by-word'), hint: t('Stepping one word at a time') },
+  line: { icon: '↩️', label: t('line-by-line'), hint: t('Advancing a line at a time') },
+  para: { icon: '📃', label: t('by paragraph'), hint: t('Hopping paragraph to paragraph') },
+  page: { icon: '📄', label: t('by page'), hint: t('Paging through the text') },
+  scroll: { icon: '📜', label: t('scroll-reading'), hint: t('Scrolling the pane; text passing the top edge counts as read') },
+  jump: { icon: '🧭', label: t('navigating'), hint: t('Jumping around (ToC / Find / clicks) — not counted as reading') },
+  idle: { icon: '💤', label: t('idle'), hint: t('No reading activity in the last few seconds') },
 };
 
 export function createModeDetector(getWindowMs = () => WINDOW_MS) {

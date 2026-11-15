@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { t } from '../i18n.js';
 
 export default function GoToLineDialog({ tab, onJumpWord, onClose }) {
   const [n, setN] = useState('');
@@ -13,17 +14,17 @@ export default function GoToLineDialog({ tab, onJumpWord, onClose }) {
   }
   return (
     <Dialog
-      title="Go to Line"
+      title={t('Go to Line')}
       onClose={onClose}
       buttons={
         <>
-          <button onClick={onClose}>Cancel</button>
-          <button className="toggle-on" onClick={go}>Go</button>
+          <button onClick={onClose}>{t('Cancel')}</button>
+          <button className="toggle-on" onClick={go}>{t('Go')}</button>
         </>
       }
     >
       <div className="field-row">
-        <label>Line number (1–{tab.doc.lines.length})</label>
+        <label>{t('Line number (1–{max})', { max: tab.doc.lines.length })}</label>
         <input
           autoFocus
           type="number"

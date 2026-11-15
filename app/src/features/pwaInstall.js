@@ -5,6 +5,7 @@
 // State: 'ready' (we hold a prompt — installable right now) | 'installed' (running standalone or
 // just installed) | 'unavailable' (browser never offered one: already installed in another window,
 // an unsupported browser like Firefox/Safari desktop, or criteria not met).
+import { t } from '../i18n.js';
 
 let deferred = null;
 let state = 'unavailable';
@@ -47,8 +48,8 @@ function recheck(ms = 4000) {
   if (!link) return Promise.resolve();
   link.href = `${link.href.split('?')[0]}?recheck=${++probe}`;
   return new Promise((res) => {
-    const done = () => { clearTimeout(t); window.removeEventListener('beforeinstallprompt', done); res(); };
-    const t = setTimeout(done, ms);
+    const done = () => { clearTimeout(timer); window.removeEventListener('beforeinstallprompt', done); res(); };
+    const timer = setTimeout(done, ms);
     window.addEventListener('beforeinstallprompt', done);
   });
 }
@@ -76,7 +77,7 @@ export async function promptInstall() {
 export function installHelp() {
   if (typeof navigator === 'undefined') return '';
   const ua = navigator.userAgent || '';
-  if (/Firefox/.test(ua)) return 'Firefox has no install prompt — use a Chromium browser (Chrome, Edge, Brave) to install Tachyread as an app.';
-  if (/^((?!chrome|android).)*safari/i.test(ua)) return 'In Safari, use Share → Add to Dock (macOS) or Add to Home Screen (iOS).';
-  return 'Your browser has not offered an install prompt yet. If Tachyread is already installed, open it from your apps — otherwise reload the page and try again (Chrome re-offers it on a later visit).';
+  if (/Firefox/.test(ua)) return t('Firefox has no install prompt — use a Chromium browser (Chrome, Edge, Brave) to install Tachyread as an app.');
+  if (/^((?!chrome|android).)*safari/i.test(ua)) return t('In Safari, use Share → Add to Dock (macOS) or Add to Home Screen (iOS).');
+  return t('Your browser has not offered an install prompt yet. If Tachyread is already installed, open it from your apps — otherwise reload the page and try again (Chrome re-offers it on a later visit).');
 }

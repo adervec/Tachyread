@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import ReadingStats, { STATS_SACRIFICE_ORDER } from './ReadingStats.jsx';
 import { useIsCompact } from '../state/device.js';
+import { t } from '../i18n.js';
 
 // The reading stats as a floating, draggable chip. On desktop it's RESIZABLE by dragging the ↘
 // bottom corner; when the box gets too small to fit everything, blocks are sacrificed least
@@ -82,23 +83,23 @@ export default function FloatingStats({ tab, pos, onMove, onDrop, size, onSize, 
       onPointerMove={onPointerMove}
       onPointerUp={onUp}
       onPointerCancel={onUp}
-      title="Drag to move · transparency in Tab Settings"
+      title={t('Drag to move · transparency in Tab Settings')}
     >
       {min ? (
         <>
           <span className="chip-stub-icon">📊</span>
-          <button className="chip-mini-btn" title="Expand" onClick={() => setMin(false)}>+</button>
+          <button className="chip-mini-btn" title={t('Expand')} onClick={() => setMin(false)}>+</button>
         </>
       ) : (
         <>
-          <button className="chip-mini-btn" title="Minimize" onClick={() => setMin(true)}>–</button>
+          <button className="chip-mini-btn" title={t('Minimize')} onClick={() => setMin(true)}>–</button>
           <div className="chip-body" ref={bodyRef}>
             <ReadingStats tab={tab} autoStopAt={autoStopAt} omit={omit} />
           </div>
           {!isCompact && (
             <span
               className="chip-resize"
-              title="Drag to resize — too small and the least important stats bow out first (double-click to reset)"
+              title={t('Drag to resize — too small and the least important stats bow out first (double-click to reset)')}
               onPointerDown={onResizeDown}
               onDoubleClick={() => { setLiveSize(null); onSize?.(null); }}
             >◢</span>

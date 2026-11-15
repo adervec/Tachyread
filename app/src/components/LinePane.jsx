@@ -16,6 +16,7 @@ import CrosshairOverlay from './CrosshairOverlay.jsx';
 import { beelineMix } from '../features/beeline.js';
 import DefinePopup from './DefinePopup.jsx';
 import { contextAt } from '../engine/vocab.js';
+import { t } from '../i18n.js';
 
 // Reading-pointer feature archived for now (not useful). Flip to true to restore it, and uncomment
 // its Settings section in dialogs/SettingsDialog.jsx.
@@ -316,7 +317,7 @@ function LineRowImpl({ index, doc, dsettings, ctx, propNameKeys, headingMap, hea
             return (
               <>
                 <span className="pl-col">{words}</span>
-                <span className="pl-col pl-trans">{typeof translated === 'string' ? translated : <span className="pl-wait">{translated === null ? '⚠ translation failed' : '…'}</span>}</span>
+                <span className="pl-col pl-trans">{typeof translated === 'string' ? translated : <span className="pl-wait">{translated === null ? `⚠ ${t('translation failed')}` : '…'}</span>}</span>
               </>
             );
           })()
@@ -385,7 +386,7 @@ function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, pr
   if (index >= doc.lines.length) {
     return (
       <div ref={ref} style={style} {...ariaAttributes}>
-        <div className="lp-endpad" aria-hidden="true"><span>— end —</span></div>
+        <div className="lp-endpad" aria-hidden="true"><span>{t('— end —')}</span></div>
       </div>
     );
   }
@@ -441,7 +442,7 @@ function SplitView({ doc, dsettings, ctx, onJumpWord, propNameKeys, baseFont, li
         {cur < total && <LineRow index={cur} {...common} />}
       </div>
       <div className={`lps-zone lps-after${peeking ? ' lps-peeking' : ''}`} ref={afterRef}>
-        {peeking && <div className="lps-peek-label">👁 Peeking line {peekLine + 1} — resume reading to return</div>}
+        {peeking && <div className="lps-peek-label">👁 {t('Peeking line {n} — resume reading to return', { n: peekLine + 1 })}</div>}
         {after.map((i) => (
           <LineRow key={i} index={i} {...common} />
         ))}
@@ -460,14 +461,14 @@ function WordMenu({ menu, onClose, onJumpWord, onAddNote, onHighlight, onDefine 
   };
   const sel = menu.sel;
   const items = [
-    ...(sel ? [{ label: `🖍 Highlight “${sel.text.length > 28 ? `${sel.text.slice(0, 28)}…` : sel.text}”`, fn: () => { onHighlight?.(sel); onClose(); } }] : []),
-    { label: `📖 Define “${w}”`, fn: () => { onDefine?.(menu); onClose(); } },
-    { label: '📝 Add note here', fn: () => { onAddNote?.(menu.start >= 0 ? menu.start : 0); onClose(); } },
-    { label: `Copy “${w}”`, fn: () => { navigator.clipboard?.writeText(w).catch(() => {}); onClose(); } },
-    { label: 'Translate (Google)', fn: () => open(`https://translate.google.com/?sl=auto&tl=en&text=${enc}&op=translate`) },
-    { label: 'Dictionary (Merriam-Webster)', fn: () => open(`https://www.merriam-webster.com/dictionary/${enc}`) },
-    { label: 'Thesaurus (Merriam-Webster)', fn: () => open(`https://www.merriam-webster.com/thesaurus/${enc}`) },
-    { label: 'Go to this line', fn: () => { if (menu.start >= 0) onJumpWord(menu.start); onClose(); } },
+    ...(sel ? [{ label: `🖍 ${t('Highlight “{text}”', { text: sel.text.length > 28 ? `${sel.text.slice(0, 28)}…` : sel.text })}`, fn: () => { onHighlight?.(sel); onClose(); } }] : []),
+    { label: `📖 ${t('Define “{word}”', { word: w })}`, fn: () => { onDefine?.(menu); onClose(); } },
+    { label: `📝 ${t('Add note here')}`, fn: () => { onAddNote?.(menu.start >= 0 ? menu.start : 0); onClose(); } },
+    { label: t('Copy “{word}”', { word: w }), fn: () => { navigator.clipboard?.writeText(w).catch(() => {}); onClose(); } },
+    { label: t('Translate (Google)'), fn: () => open(`https://translate.google.com/?sl=auto&tl=en&text=${enc}&op=translate`) },
+    { label: t('Dictionary (Merriam-Webster)'), fn: () => open(`https://www.merriam-webster.com/dictionary/${enc}`) },
+    { label: t('Thesaurus (Merriam-Webster)'), fn: () => open(`https://www.merriam-webster.com/thesaurus/${enc}`) },
+    { label: t('Go to this line'), fn: () => { if (menu.start >= 0) onJumpWord(menu.start); onClose(); } },
   ];
   return (
     <>
@@ -509,9 +510,9 @@ function useLineTranslations(doc, needed, cfg, enabled) {
         pendingRef.current.add(li);
         try {
           const key = cacheKey(cfg, text);
-          let t = await getCachedTranslation(key);
-          if (t == null) { t = await translateText(cfg, text); putCachedTranslation(key, t); }
-          if (alive) setMap((m) => new Map(m).set(li, t));
+          let tr = await getCachedTranslation(key);
+          if (tr == null) { tr = await translateText(cfg, text); putCachedTranslation(key, tr); }
+          if (alive) setMap((m) => new Map(m).set(li, tr));
         } catch (e) {
           if (alive) setMap((m) => new Map(m).set(li, null)); // failed — marked, not retried in a loop
           appendAppLog('translate', `line ${li + 1} (${cfg.translateProvider} → ${cfg.translateTarget}): ${e?.message || e}`);
@@ -737,8 +738,8 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
     const ro = new ResizeObserver(() => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => root.querySelectorAll('.line-row').forEach((r) => {
-        const t = r.querySelector('.text');
-        if (t) paintBeeline(t, beelineOrd?.[Number(r.dataset.line)] ?? Number(r.dataset.line), settings.beelineStrength ?? 70);
+        const txt = r.querySelector('.text');
+        if (txt) paintBeeline(txt, beelineOrd?.[Number(r.dataset.line)] ?? Number(r.dataset.line), settings.beelineStrength ?? 70);
       }));
     });
     ro.observe(root);
@@ -758,10 +759,10 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       setAutoSize((s) => (Math.abs(s - size) >= 0.5 ? size : s));
     };
     compute();
-    const t = setTimeout(compute, 350); // rows render async — one settling pass
+    const tm = setTimeout(compute, 350); // rows render async — one settling pass
     const ro = new ResizeObserver(compute);
     ro.observe(root);
-    return () => { clearTimeout(t); ro.disconnect(); };
+    return () => { clearTimeout(tm); ro.disconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoCpl, settings.fontFamily]);
 
@@ -865,11 +866,11 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
   // settles it. (Scroll-to-read has its own resume; split view centres by construction.)
   useEffect(() => {
     if (split || scrollRead) return;
-    const t = setTimeout(() => {
+    const tm = setTimeout(() => {
       listRef.current?.scrollToRow?.({ index: currentLine, align: 'center' });
       centerCurrentWordSoon(currentLine);
     }, 400); // ponytail: one-shot delay beats a ResizeObserver settle-detector here
-    return () => clearTimeout(t);
+    return () => clearTimeout(tm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc]);
 
@@ -1289,7 +1290,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
       style={Object.keys(paneStyle).length ? paneStyle : undefined}
     >
       <div className="line-pane-toolbar">
-        <span>Lines</span>
+        <span>{t('Lines')}</span>
       </div>
       {split ? (
         <SplitView
@@ -1309,7 +1310,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
           headingMetaMap={headingMetaMap}
         />
       ) : (
-        <div className={`line-pane-list${settings.linesGridH || settings.linesGridV ? ' has-grid' : ''}`} ref={listWrapRef} data-tie={crossTieY != null ? crossTieY.toFixed(3) : undefined} style={{ fontSize: `${baseFont}px`, lineHeight: lineSpacing, ...gridStyle }} onContextMenu={onContextMenu} {...pressHandlers}>
+        <div dir="auto" className={`line-pane-list${settings.linesGridH || settings.linesGridV ? ' has-grid' : ''}`} ref={listWrapRef} data-tie={crossTieY != null ? crossTieY.toFixed(3) : undefined} style={{ fontSize: `${baseFont}px`, lineHeight: lineSpacing, ...gridStyle }} onContextMenu={onContextMenu} {...pressHandlers}>
           <List
             listRef={listRef}
             rowCount={totalLines + (scrollRead ? 1 : 0)}

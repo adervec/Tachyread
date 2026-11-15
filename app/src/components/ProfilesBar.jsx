@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { deepEqual } from '../features/deepEqual.js';
 import { builtinProfiles, appliesCleanly } from '../features/builtinProfiles.js';
+import { t } from '../i18n.js';
 
 const UNDO_MS = 120000; // an "Update" can be undone for two minutes
 const BUILTIN_PREFIX = '__builtin:'; // <select> values for built-ins, so they can't collide with saved names
@@ -58,7 +59,7 @@ export default function ProfilesBar({ kind, profiles, onChange, capture, apply, 
 
   const write = (nextList) => onChange({ ...all, [kind]: nextList });
   function saveAs() {
-    const name = (window.prompt('Save these settings as a profile named:', sel || '') || '').trim();
+    const name = (window.prompt(t('Save these settings as a profile named:'), sel || '') || '').trim();
     if (!name) return;
     write([...list.filter((p) => p.name !== name), { name, data: capture(), savedAt: Date.now() }]);
     setSel(name);
@@ -81,57 +82,57 @@ export default function ProfilesBar({ kind, profiles, onChange, capture, apply, 
   }
   function rename() {
     if (!selProfile) return;
-    const name = (window.prompt('Rename profile to:', sel) || '').trim();
+    const name = (window.prompt(t('Rename profile to:'), sel) || '').trim();
     if (!name || name === sel) return;
     write(list.filter((p) => p.name !== name).map((p) => (p.name === sel ? { ...p, name } : p)));
     setSel(name);
   }
   function remove() {
     if (!selProfile) return;
-    if (!window.confirm(`Delete the profile “${sel}”?`)) return;
+    if (!window.confirm(t('Delete the profile “{name}”?', { name: sel }))) return;
     write(list.filter((p) => p.name !== sel));
     setSel('');
   }
 
   return (
     <div className="profiles-bar">
-      <span className="profiles-label">Profiles</span>
+      <span className="profiles-label">{t('Profiles')}</span>
       <select value={sel} onChange={(e) => setSel(e.target.value)}>
-        <option value="">— pick a profile —</option>
+        <option value="">{t('— pick a profile —')}</option>
         {builtins.length > 0 && (
-          <optgroup label="Built-in (by device)">
-            {builtins.map((b) => <option key={b.name} value={BUILTIN_PREFIX + b.name}>{b.name}</option>)}
+          <optgroup label={t('Built-in (by device)')}>
+            {builtins.map((b) => <option key={b.name} value={BUILTIN_PREFIX + b.name}>{b.label || b.name}</option>)}
           </optgroup>
         )}
         {builtins.length > 0 && list.length > 0
-          ? <optgroup label="Yours">{list.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}</optgroup>
+          ? <optgroup label={t('Yours')}>{list.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}</optgroup>
           : list.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
       </select>
       <button
         disabled={(!selProfile && !selBuiltin) || selMatchesCurrent}
         onClick={() => apply(selBuiltin ? selBuiltin.data : selProfile.data)}
         title={selMatchesCurrent
-          ? (selBuiltin ? 'This preset is already in effect' : 'These settings already match this profile')
-          : (selBuiltin ? 'Apply this built-in device preset (only the settings it covers change)' : 'Apply this profile\'s settings')}
-      >Load</button>
+          ? (selBuiltin ? t('This preset is already in effect') : t('These settings already match this profile'))
+          : (selBuiltin ? t('Apply this built-in device preset (only the settings it covers change)') : t('Apply this profile’s settings'))}
+      >{t('Load')}</button>
       {applyAll && (
         <button
           disabled={!selProfile && !selBuiltin}
           onClick={() => {
             const name = selBuiltin ? selBuiltin.name : sel;
-            if (!window.confirm(`Load “${name}” into all ${allCount} open tabs? Each tab’s current settings are replaced (reading positions are kept).`)) return;
+            if (!window.confirm(t('Load “{name}” into all {count} open tabs? Each tab’s current settings are replaced (reading positions are kept).', { name, count: allCount }))) return;
             applyAll(selBuiltin ? selBuiltin.data : selProfile.data);
           }}
-          title={`Apply this profile to every open tab (${allCount}), not just this one`}
-        >Load in all tabs ({allCount})</button>
+          title={t('Apply this profile to every open tab ({count}), not just this one', { count: allCount })}
+        >{t('Load in all tabs ({count})', { count: allCount })}</button>
       )}
-      <button disabled={!!matching} onClick={saveAs} title={matching ? `These settings are already saved as “${matching.name}”` : 'Save the current settings as a new profile'}>Save as…</button>
-      <button disabled={!selProfile || selMatchesCurrent} onClick={update} title={selBuiltin ? 'Built-in presets can\'t be changed — use Save as… to make your own copy' : selMatchesCurrent ? 'This profile already holds these exact settings' : 'Overwrite this profile with the current settings'}>Update</button>
-      <button disabled={!selProfile} onClick={rename} title={selBuiltin ? 'Built-in presets can\'t be renamed' : 'Rename this profile'}>Rename</button>
-      <button disabled={!selProfile} className="grab-trash" onClick={remove} title={selBuiltin ? 'Built-in presets can\'t be deleted' : 'Delete this profile'}>🗑</button>
+      <button disabled={!!matching} onClick={saveAs} title={matching ? t('These settings are already saved as “{name}”', { name: matching.name }) : t('Save the current settings as a new profile')}>{t('Save as…')}</button>
+      <button disabled={!selProfile || selMatchesCurrent} onClick={update} title={selBuiltin ? t('Built-in presets can’t be changed — use Save as… to make your own copy') : selMatchesCurrent ? t('This profile already holds these exact settings') : t('Overwrite this profile with the current settings')}>{t('Update')}</button>
+      <button disabled={!selProfile} onClick={rename} title={selBuiltin ? t('Built-in presets can’t be renamed') : t('Rename this profile')}>{t('Rename')}</button>
+      <button disabled={!selProfile} className="grab-trash" onClick={remove} title={selBuiltin ? t('Built-in presets can’t be deleted') : t('Delete this profile')}>🗑</button>
       {undo && (
-        <button className="profiles-undo" onClick={undoUpdate} title={`Restore “${undo.name}” to what it was before the last Update`}>
-          ↩ Undo update ({Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')})
+        <button className="profiles-undo" onClick={undoUpdate} title={t('Restore “{name}” to what it was before the last Update', { name: undo.name })}>
+          ↩ {t('Undo update ({time})', { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` })}
         </button>
       )}
     </div>

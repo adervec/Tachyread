@@ -4,6 +4,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { tagHtmlForPicking, docFromHtmlRange, htmlRangeChildIdxs, collectLinks, contentHtmlOf, buildDocFromPages } from '../document/parsers.js';
 import { fetchPageText } from '../features/webGrab.js';
 import { attachChecksum } from '../document/readerDocument.js';
+import { t } from '../i18n.js';
 
 // Interactive fallback for when the auto content-root heuristic grabs the wrong region of an HTML
 // page (a preface / site chrome, missing the real text). The page renders in a sandboxed iframe; you
@@ -44,7 +45,7 @@ const PICKER_SHIM = `
     })();
   </script>`;
 
-export default function HtmlStructureWizard({ html, fileName = 'Web page', sourceUrl = '', onClose }) {
+export default function HtmlStructureWizard({ html, fileName = t('Web page'), sourceUrl = '', onClose }) {
   const { openDoc, setStatus } = useApp();
   const frameRef = useRef(null);
   const rootRef = useRef(null);
@@ -118,9 +119,9 @@ export default function HtmlStructureWizard({ html, fileName = 'Web page', sourc
       if (!doc.words.length) { setBusy(false); return; }
       await attachChecksum(doc);
       await openDoc(doc);
-      setStatus(`Opened “${doc.fileName}” from the chosen region (${doc.words.length.toLocaleString()} words).`);
+      setStatus(t.n('Opened “{name}” from the chosen region ({count} word).', 'Opened “{name}” from the chosen region ({count} words).', doc.words.length, { name: doc.fileName, count: doc.words.length.toLocaleString() }));
       onClose();
-    } catch (e) { setBusy(false); setStatus('Could not open that region: ' + (e?.message || e)); }
+    } catch (e) { setBusy(false); setStatus(t('Could not open that region: {error}', { error: e?.message || e })); }
   }
 
   // ── Follow ToC links: when this page came from a web grab, the selected region may be a
@@ -133,7 +134,7 @@ export default function HtmlStructureWizard({ html, fileName = 'Web page', sourc
   async function followLinks() {
     if (!links.length) return;
     abortRef.current = false;
-    setFollowMsg(''); setFollow({ done: 0, total: links.length, label: 'Starting…' });
+    setFollowMsg(''); setFollow({ done: 0, total: links.length, label: t('Starting…') });
     const pages = []; const errors = [];
     let preferProxy = false;
     for (let i = 0; i < links.length; i++) {
@@ -144,21 +145,24 @@ export default function HtmlStructureWizard({ html, fileName = 'Web page', sourc
         const { text, viaProxy } = await fetchPageText(lk.url, { preferProxy });
         if (viaProxy) preferProxy = true; // once the relay was needed, the rest of the site needs it too
         const { title, html: chapterHtml } = contentHtmlOf(text);
-        if (chapterHtml && chapterHtml.replace(/<[^>]+>/g, '').trim()) pages.push({ title: title || lk.text || `Part ${i + 1}`, html: chapterHtml });
-        else errors.push(`${lk.text || lk.url}: no readable text`);
+        if (chapterHtml && chapterHtml.replace(/<[^>]+>/g, '').trim()) pages.push({ title: title || lk.text || t('Part {n}', { n: i + 1 }), html: chapterHtml });
+        else errors.push(t('{page}: no readable text', { page: lk.text || lk.url }));
       } catch (e) { errors.push(`${lk.text || lk.url}: ${e?.message || e}`); }
       setFollow({ done: i + 1, total: links.length, label: lk.text || lk.url });
     }
-    if (abortRef.current) { setFollow(null); setFollowMsg(`Stopped — ${pages.length} page(s) fetched.`); return; }
-    if (!pages.length) { setFollow(null); setFollowMsg(`Couldn’t read any linked page. ${errors.slice(0, 2).join(' · ')}`); return; }
+    if (abortRef.current) { setFollow(null); setFollowMsg(t.n('Stopped — {n} page fetched.', 'Stopped — {n} pages fetched.', pages.length)); return; }
+    if (!pages.length) { setFollow(null); setFollowMsg(t('Couldn’t read any linked page. {errors}', { errors: errors.slice(0, 2).join(' · ') })); return; }
     try {
       const doc = buildDocFromPages(pages, fileName);
       doc.sourceUrl = sourceUrl;
       await attachChecksum(doc);
       await openDoc(doc);
-      setStatus(`Opened “${doc.fileName}” — stitched ${pages.length} linked page(s)${errors.length ? `, ${errors.length} failed` : ''} (${doc.words.length.toLocaleString()} words).`);
+      const words = doc.words.length.toLocaleString();
+      setStatus(errors.length
+        ? t.n('Opened “{name}” — stitched {n} linked page, {failed} failed ({words} words).', 'Opened “{name}” — stitched {n} linked pages, {failed} failed ({words} words).', pages.length, { name: doc.fileName, failed: errors.length, words })
+        : t.n('Opened “{name}” — stitched {n} linked page ({words} words).', 'Opened “{name}” — stitched {n} linked pages ({words} words).', pages.length, { name: doc.fileName, words }));
       onClose();
-    } catch (e) { setFollow(null); setFollowMsg('Could not assemble the book: ' + (e?.message || e)); }
+    } catch (e) { setFollow(null); setFollowMsg(t('Could not assemble the book: {error}', { error: e?.message || e })); }
   }
 
   const label = (c) => `${c.tag}${c.id ? '#' + c.id : ''}${c.cls ? '.' + c.cls.split(/\s+/)[0] : ''}`;
@@ -177,55 +181,53 @@ export default function HtmlStructureWizard({ html, fileName = 'Web page', sourc
 
   return (
     <Dialog
-      title="Pick the HTML content region"
+      title={t('Pick the HTML content region')}
       onClose={onClose}
       width={960}
       buttons={<>
-        <button onClick={onClose}>Cancel</button>
-        <button className="toggle-on" onClick={useRegion} disabled={busy || startIdx == null || !preview?.words}>Use this region ▸</button>
+        <button onClick={onClose}>{t('Cancel')}</button>
+        <button className="toggle-on" onClick={useRegion} disabled={busy || startIdx == null || !preview?.words}>{t('Use this region')} ▸</button>
       </>}
     >
       <p className="settings-note" style={{ marginTop: 0 }}>
-        Auto-detection missed the text? Click the block that holds the reading content, then use the
-        arrows below to <strong>widen / narrow / step</strong> until the preview shows the whole book.
-        Shift-click (or <strong>Extend ▸</strong>) to span a run of blocks — handy to skip a preface.
-        {sourceUrl ? <> If this is a <strong>table of contents</strong>, click its list of chapter links and use <strong>Follow links</strong> to stitch the linked pages into one book.</> : null}
+        {t('Auto-detection missed the text? Click the block that holds the reading content, then use the arrows below to widen / narrow / step until the preview shows the whole book. Shift-click (or Extend ▸) to span a run of blocks — handy to skip a preface.')}
+        {sourceUrl ? <> {t('If this is a table of contents, click its list of chapter links and use Follow links to stitch the linked pages into one book.')}</> : null}
       </p>
 
       {/* Navigation toolbar + breadcrumb */}
       <div className="hsw-nav" ref={rootRef} tabIndex={0} onKeyDown={onKey}>
         <div className="hsw-navbtns">
-          <button onClick={() => nav(parentIdx)} disabled={parentIdx(startIdx) == null} title="Select the parent block (wider) — ↑">⬆ Wider</button>
-          <button onClick={() => nav(childIdx)} disabled={childIdx(startIdx) == null} title="Select the first child block (narrower) — ↓">⬇ Narrower</button>
+          <button onClick={() => nav(parentIdx)} disabled={parentIdx(startIdx) == null} title={t('Select the parent block (wider) — ↑')}>⬆ {t('Wider')}</button>
+          <button onClick={() => nav(childIdx)} disabled={childIdx(startIdx) == null} title={t('Select the first child block (narrower) — ↓')}>⬇ {t('Narrower')}</button>
           <span className="grab-sep" />
-          <button onClick={() => nav((i) => sibIdx(i, -1))} disabled={sibIdx(startIdx, -1) == null} title="Previous sibling block — ←">◀ Prev</button>
-          <button onClick={() => nav((i) => sibIdx(i, +1))} disabled={sibIdx(startIdx, +1) == null} title="Next sibling block — →">Next ▶</button>
+          <button onClick={() => nav((i) => sibIdx(i, -1))} disabled={sibIdx(startIdx, -1) == null} title={t('Previous sibling block — ←')}>◀ {t('Prev')}</button>
+          <button onClick={() => nav((i) => sibIdx(i, +1))} disabled={sibIdx(startIdx, +1) == null} title={t('Next sibling block — →')}>{t('Next')} ▶</button>
           <span className="grab-sep" />
-          <button onClick={extend} disabled={startIdx == null || sibIdx(endIdx ?? startIdx, +1) == null} title="Extend the selection to include the next block — Shift+→">＋ Extend</button>
-          <button onClick={reduce} disabled={!isRange} title="Drop the last block from the selection — Shift+←">－ Reduce</button>
-          {isRange && <button onClick={() => setEndIdx(null)} title="Back to a single block">✕ range</button>}
+          <button onClick={extend} disabled={startIdx == null || sibIdx(endIdx ?? startIdx, +1) == null} title={t('Extend the selection to include the next block — {key}', { key: 'Shift+→' })}>＋ {t('Extend')}</button>
+          <button onClick={reduce} disabled={!isRange} title={t('Drop the last block from the selection — {key}', { key: 'Shift+←' })}>－ {t('Reduce')}</button>
+          {isRange && <button onClick={() => setEndIdx(null)} title={t('Back to a single block')}>✕ {t('range')}</button>}
         </div>
         <div className="hsw-crumbs">
           {chain.map((el) => {
             const idx = idxOf(el);
             return (
-              <button key={idx} className={`hsw-crumb${idx === startIdx ? ' on' : ''}`} onClick={() => setSingle(idx)} title={`${wordsOf(el).toLocaleString()} words`}>
+              <button key={idx} className={`hsw-crumb${idx === startIdx ? ' on' : ''}`} onClick={() => setSingle(idx)} title={t.n('{count} word', '{count} words', wordsOf(el), { count: wordsOf(el).toLocaleString() })}>
                 {elLabel(el)}
               </button>
             );
           })}
-          {!chain.length && <span className="settings-note" style={{ margin: 0 }}>Click a block in the preview to start.</span>}
+          {!chain.length && <span className="settings-note" style={{ margin: 0 }}>{t('Click a block in the preview to start.')}</span>}
         </div>
       </div>
 
       <div className="hsw">
         <div className="hsw-preview">
-          <iframe ref={frameRef} title="HTML structure" sandbox="allow-scripts" srcDoc={srcDoc} />
+          <iframe ref={frameRef} title={t('HTML structure')} sandbox="allow-scripts" srcDoc={srcDoc} />
         </div>
         <div className="hsw-side">
-          <div className="field-section" style={{ marginTop: 0 }}>Suggested regions</div>
+          <div className="field-section" style={{ marginTop: 0 }}>{t('Suggested regions')}</div>
           <div className="hsw-cands">
-            {candidates.length === 0 && <p className="settings-note">No obvious containers — click a block in the preview.</p>}
+            {candidates.length === 0 && <p className="settings-note">{t('No obvious containers — click a block in the preview.')}</p>}
             {candidates.map((c) => (
               <button
                 key={c.idx}
@@ -234,45 +236,45 @@ export default function HtmlStructureWizard({ html, fileName = 'Web page', sourc
                 title={c.sample}
               >
                 <span className="hsw-cand-tag">{label(c)}</span>
-                <span className="hsw-cand-words">{c.words.toLocaleString()} words</span>
+                <span className="hsw-cand-words">{t.n('{count} word', '{count} words', c.words, { count: c.words.toLocaleString() })}</span>
                 <span className="hsw-cand-sample">{c.sample}</span>
               </button>
             ))}
           </div>
-          <div className="field-section">Extraction preview {isRange ? `· ${rangeIdxs.length} blocks` : ''}</div>
+          <div className="field-section">{t('Extraction preview')} {isRange ? `· ${t.n('{n} block', '{n} blocks', rangeIdxs.length)}` : ''}</div>
           {preview ? (
             <div className="hsw-extract">
-              <div className="hsw-extract-stat">{preview.words.toLocaleString()} words{preview.toc ? ` · ${preview.toc} headings` : ''}</div>
+              <div className="hsw-extract-stat">{t.n('{count} word', '{count} words', preview.words, { count: preview.words.toLocaleString() })}{preview.toc ? ` · ${t.n('{n} heading', '{n} headings', preview.toc)}` : ''}</div>
               <div className="hsw-extract-lines">
                 {preview.lines.map((l, i) => <div key={i}>{l || ' '}</div>)}
                 {preview.words > 0 && <div className="settings-note">…</div>}
               </div>
             </div>
-          ) : <p className="settings-note">Pick a region to preview its text.</p>}
+          ) : <p className="settings-note">{t('Pick a region to preview its text.')}</p>}
 
           {sourceUrl && (
             <>
-              <div className="field-section">Table of contents {links.length ? `· ${links.length} links` : ''}</div>
+              <div className="field-section">{t('Table of contents')} {links.length ? `· ${t.n('{n} link', '{n} links', links.length)}` : ''}</div>
               {links.length ? (
                 <div className="hsw-follow">
                   <p className="settings-note" style={{ marginTop: 0 }}>
-                    This region links to <strong>{links.length}</strong> separate page(s). Follow them to fetch each and stitch them into one book (each page becomes a section).
+                    {t.n('This region links to {n} separate page. Follow it to fetch it and stitch it into one book (each page becomes a section).', 'This region links to {n} separate pages. Follow them to fetch each and stitch them into one book (each page becomes a section).', links.length)}
                   </p>
                   {follow ? (
                     <>
                       <div className="imp-bar"><div className="imp-fill" style={{ width: `${follow.total ? (follow.done / follow.total) * 100 : 0}%` }} /></div>
                       <div className="hsw-follow-row">
-                        <span className="settings-note" style={{ margin: 0 }}>Fetching {follow.done}/{follow.total} — {follow.label?.slice(0, 40)}…</span>
-                        <button onClick={() => { abortRef.current = true; }}>Stop</button>
+                        <span className="settings-note" style={{ margin: 0 }}>{t('Fetching {done}/{total} — {page}…', { done: follow.done, total: follow.total, page: follow.label?.slice(0, 40) })}</span>
+                        <button onClick={() => { abortRef.current = true; }}>{t('Stop')}</button>
                       </div>
                     </>
                   ) : (
-                    <button className="toggle-on" onClick={followLinks}>Follow {links.length} links ▸</button>
+                    <button className="toggle-on" onClick={followLinks}>{t.n('Follow {n} link', 'Follow {n} links', links.length)} ▸</button>
                   )}
                   {followMsg && <p className="settings-note">{followMsg}</p>}
                 </div>
               ) : (
-                <p className="settings-note" style={{ marginTop: 0 }}>No off-page links in this region. If this is a contents page, click its list of chapter links, then Follow.</p>
+                <p className="settings-note" style={{ marginTop: 0 }}>{t('No off-page links in this region. If this is a contents page, click its list of chapter links, then Follow.')}</p>
               )}
             </>
           )}

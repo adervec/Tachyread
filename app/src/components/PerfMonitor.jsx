@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { t } from '../i18n.js';
 
 // Lightweight "is the app struggling?" readout. A single requestAnimationFrame loop times each
 // frame; we report a smoothed FPS and the share of recent frames that ran long (jank). The cost
@@ -17,11 +18,11 @@ export default function PerfMonitor() {
   useEffect(() => {
     let raf = 0;
     let alive = true;
-    function tick(t) {
+    function tick(ts) {
       if (!alive) return;
       const s = ref.current;
       if (s.last) {
-        const dt = t - s.last;
+        const dt = ts - s.last;
         s.acc += dt;
         s.frames += 1;
         if (dt > LONG_FRAME_MS) s.long += 1;
@@ -36,7 +37,7 @@ export default function PerfMonitor() {
           s.frames = 0; s.long = 0; s.acc = 0;
         }
       }
-      s.last = t;
+      s.last = ts;
       raf = requestAnimationFrame(tick);
     }
     // Pause measuring while the tab is hidden (rAF already throttles, but reset so we don't log a
@@ -52,13 +53,13 @@ export default function PerfMonitor() {
   const pct = Math.round(stat.jank * 100);
   const title =
     stat.level === 'ok'
-      ? `Running smoothly — ~${stat.fps} fps`
-      : `Working hard — ~${stat.fps} fps, ${pct}% of recent frames dropped`;
+      ? t('Running smoothly — ~{fps} fps', { fps: stat.fps })
+      : t('Working hard — ~{fps} fps, {pct}% of recent frames dropped', { fps: stat.fps, pct });
   return (
     <span className={`perf-meter perf-${stat.level}`} title={title} aria-label={title}>
       <span className="perf-dot" />
       <span className="perf-fps">{stat.fps}<span className="perf-unit">fps</span></span>
-      {stat.level !== 'ok' && <span className="perf-load">· {pct}% jank</span>}
+      {stat.level !== 'ok' && <span className="perf-load">· {t('{pct}% jank', { pct })}</span>}
     </span>
   );
 }

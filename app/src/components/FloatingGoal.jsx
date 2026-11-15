@@ -1,5 +1,6 @@
 import FloatingChip from './FloatingChip.jsx';
-import { goalFraction, computeGoalStatus } from '../engine/goals.js';
+import { goalFraction, computeGoalStatus, GOAL_TYPE_LABELS } from '../engine/goals.js';
+import { t } from '../i18n.js';
 
 // The active goal as a floating transparent chip (mobile always; desktop when chip mode is on) —
 // its status line + a progress bar. Renders nothing when no goal is set.
@@ -23,9 +24,9 @@ export default function FloatingGoal({ tab, pos, onMove, onDrop, scale = 1, onSc
       stub="🏁"
       scale={scale}
       onScale={onScale}
-      title="Active goal · drag to move · transparency in Tab Settings"
+      title={t('Active goal · drag to move · transparency in Tab Settings')}
     >
-      <div className="chip-label">🏁 {goal.type.replace(/^(Absolute|Relative)/, '$1 ')}</div>
+      <div className="chip-label">🏁 {GOAL_TYPE_LABELS[goal.type] || goal.type.replace(/^(Absolute|Relative)/, '$1 ')}</div>
       <div className="chip-status">{status}</div>
       {frac != null && (
         <div className="goal-bar" style={{ marginTop: 4 }}>

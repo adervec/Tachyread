@@ -3,10 +3,11 @@ import Dialog from './Dialog.jsx';
 import { fmtDateTime } from '../features/dateFmt.js';
 import { getApiUsage, clearApiUsage } from '../state/storage.js';
 import { summarizeUsage, fmtUsd, fmtTokens } from '../features/apiPricing.js';
+import { t } from '../i18n.js';
 
 const SOURCE_LABEL = {
-  'notes-summary': 'Notes — summary', 'notes-analysis': 'Notes — analysis', 'notes-chat': 'Notes — chat',
-  'trackyread-ai': 'Trackyread AI', audiobook: 'Audiobook (ElevenLabs)', ai: 'AI',
+  'notes-summary': t('Notes — summary'), 'notes-analysis': t('Notes — analysis'), 'notes-chat': t('Notes — chat'),
+  'trackyread-ai': t('Trackyread AI'), audiobook: t('Audiobook (ElevenLabs)'), ai: t('AI'),
 };
 const fmtWhen = (ts) => fmtDateTime(ts);
 
@@ -25,33 +26,33 @@ export default function ApiUsageDialog({ onClose }) {
   async function clear() { await clearApiUsage(); setEntries([]); setConfirmClear(false); }
 
   return (
-    <Dialog title="API usage & spend" onClose={onClose} width={720} buttons={<button onClick={onClose}>Close</button>}>
-      {!s ? <p className="settings-note">Loading…</p> : s.calls === 0 ? (
-        <p className="settings-note">No API calls recorded yet. The optional Notes AI, Trackyread AI, and ElevenLabs audiobook features log their usage here once you use them with your own key.</p>
+    <Dialog title={t('API usage & spend')} onClose={onClose} width={720} buttons={<button onClick={onClose}>{t('Close')}</button>}>
+      {!s ? <p className="settings-note">{t('Loading…')}</p> : s.calls === 0 ? (
+        <p className="settings-note">{t('No API calls recorded yet. The optional Notes AI, Trackyread AI, and ElevenLabs audiobook features log their usage here once you use them with your own key.')}</p>
       ) : (
         <>
           <div className="au-cards">
             <div className="au-card">
-              <div className="au-card-h">Total (estimated)</div>
+              <div className="au-card-h">{t('Total (estimated)')}</div>
               <div className="au-card-big">{fmtUsd(s.total)}</div>
-              <div className="settings-note">{s.calls} call{s.calls === 1 ? '' : 's'}</div>
+              <div className="settings-note">{t.n('{n} call', '{n} calls', s.calls)}</div>
             </div>
             <div className="au-card">
               <div className="au-card-h">🤖 Anthropic</div>
               <div className="au-card-big">{fmtUsd(s.anthropic.cost)}</div>
-              <div className="settings-note">{fmtTokens(s.anthropic.inTokens)} in · {fmtTokens(s.anthropic.outTokens)} out · {s.anthropic.calls} call{s.anthropic.calls === 1 ? '' : 's'}</div>
+              <div className="settings-note">{t.n('{in} in · {out} out · {n} call', '{in} in · {out} out · {n} calls', s.anthropic.calls, { in: fmtTokens(s.anthropic.inTokens), out: fmtTokens(s.anthropic.outTokens) })}</div>
             </div>
             <div className="au-card">
               <div className="au-card-h">🔊 ElevenLabs</div>
               <div className="au-card-big">{fmtUsd(s.elevenlabs.cost)}</div>
-              <div className="settings-note">{fmtTokens(s.elevenlabs.chars)} chars · {s.elevenlabs.calls} call{s.elevenlabs.calls === 1 ? '' : 's'}</div>
+              <div className="settings-note">{t.n('{chars} chars · {n} call', '{chars} chars · {n} calls', s.elevenlabs.calls, { chars: fmtTokens(s.elevenlabs.chars) })}</div>
             </div>
           </div>
-          <p className="settings-note">Costs are rough estimates from public list prices — your actual billing depends on your plan/tier. Usage is logged locally only.</p>
+          <p className="settings-note">{t('Costs are rough estimates from public list prices — your actual billing depends on your plan/tier. Usage is logged locally only.')}</p>
 
           {days.length > 0 && (
             <>
-              <div className="field-section">By day (estimated spend)</div>
+              <div className="field-section">{t('By day (estimated spend)')}</div>
               <div className="au-days">
                 {days.map(([day, d]) => (
                   <div key={day} className="au-day">
@@ -64,29 +65,29 @@ export default function ApiUsageDialog({ onClose }) {
             </>
           )}
 
-          <div className="field-section">By model</div>
+          <div className="field-section">{t('By model')}</div>
           <table className="history-table au-table">
-            <thead><tr><th>Model</th><th>Calls</th><th>In</th><th>Out / chars</th><th style={{ textAlign: 'right' }}>Est.</th></tr></thead>
+            <thead><tr><th>{t('Model')}</th><th>{t('Calls')}</th><th>{t('In')}</th><th>{t('Out / chars')}</th><th style={{ textAlign: 'right' }}>{t('Est.')}</th></tr></thead>
             <tbody>
               {Object.entries(s.byModel).sort((a, b) => b[1].cost - a[1].cost).map(([model, m]) => (
                 <tr key={model}>
                   <td>{model}</td>
                   <td>{m.calls}</td>
                   <td>{m.provider === 'elevenlabs' ? '—' : fmtTokens(m.inTokens)}</td>
-                  <td>{m.provider === 'elevenlabs' ? fmtTokens(m.chars) + ' chars' : fmtTokens(m.outTokens)}</td>
+                  <td>{m.provider === 'elevenlabs' ? t('{chars} chars', { chars: fmtTokens(m.chars) }) : fmtTokens(m.outTokens)}</td>
                   <td style={{ textAlign: 'right' }}>{fmtUsd(m.cost)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          <div className="field-section">Recent calls ({recent.length})</div>
+          <div className="field-section">{t('Recent calls ({n})', { n: recent.length })}</div>
           <div className="au-log">
             {recent.map((e, i) => (
               <div key={i} className="au-log-row">
                 <span className="au-log-when">{fmtWhen(e.ts)}</span>
-                <span className="au-log-src">{SOURCE_LABEL[e.source] || e.source || (e.provider === 'elevenlabs' ? 'Audiobook' : 'AI')}</span>
-                <span className="au-log-detail">{e.provider === 'elevenlabs' ? `${fmtTokens(e.chars)} chars` : `${fmtTokens(e.inTokens)}→${fmtTokens(e.outTokens)} tok`}</span>
+                <span className="au-log-src">{SOURCE_LABEL[e.source] || e.source || (e.provider === 'elevenlabs' ? t('Audiobook') : t('AI'))}</span>
+                <span className="au-log-detail">{e.provider === 'elevenlabs' ? t('{chars} chars', { chars: fmtTokens(e.chars) }) : t('{in}→{out} tok', { in: fmtTokens(e.inTokens), out: fmtTokens(e.outTokens) })}</span>
                 <span className="au-log-cost">{fmtUsd(e.costUsd || 0)}</span>
               </div>
             ))}
@@ -94,8 +95,8 @@ export default function ApiUsageDialog({ onClose }) {
 
           <div className="data-row" style={{ marginTop: 10 }}>
             {confirmClear
-              ? <><button className="grab-trash" onClick={clear}>⚠ Confirm — clear spend history</button><button onClick={() => setConfirmClear(false)}>Cancel</button></>
-              : <button onClick={() => setConfirmClear(true)}>🗑 Clear history</button>}
+              ? <><button className="grab-trash" onClick={clear}>⚠ {t('Confirm — clear spend history')}</button><button onClick={() => setConfirmClear(false)}>{t('Cancel')}</button></>
+              : <button onClick={() => setConfirmClear(true)}>🗑 {t('Clear history')}</button>}
           </div>
         </>
       )}

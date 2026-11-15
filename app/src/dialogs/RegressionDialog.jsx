@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { t } from '../i18n.js';
 
 // Regression Report — surfaces this session's backward saccades (re-reads) over already-read text.
 // Regressions are a normal, comprehension-driven part of reading, so the goal is NOT zero: it is to
@@ -26,7 +27,7 @@ export default function RegressionDialog({ tab, onJumpWord, onClose }) {
 
   return (
     <Dialog
-      title="Regression Report"
+      title={t('Regression Report')}
       onClose={onClose}
       width={620}
       buttons={
@@ -38,33 +39,33 @@ export default function RegressionDialog({ tab, onJumpWord, onClose }) {
             }}
             disabled={!stats.count}
           >
-            Reset session
+            {t('Reset session')}
           </button>
-          <button onClick={onClose}>Close</button>
+          <button onClick={onClose}>{t('Close')}</button>
         </>
       }
     >
       <div className="reg-cards">
         <div className="reg-card">
           <b>{stats.count}</b>
-          <span>regressions</span>
+          <span>{t('regressions')}</span>
         </div>
         <div className="reg-card">
           <b>{stats.short}</b>
-          <span>short (≤2 words)</span>
+          <span>{t('short (≤2 words)')}</span>
         </div>
         <div className="reg-card">
           <b>{stats.long}</b>
-          <span>longer (re-analysis)</span>
+          <span>{t('longer (re-analysis)')}</span>
         </div>
         <div className="reg-card">
           <b>{stats.ratePer100.toFixed(1)}</b>
-          <span>per 100 words read</span>
+          <span>{t('per 100 words read')}</span>
         </div>
       </div>
 
       {stats.count > 0 && (
-        <div className="reg-bar" title={`${shortPct}% short`}>
+        <div className="reg-bar" title={t('{pct}% short', { pct: shortPct })}>
           <div className="reg-bar-short" style={{ width: `${shortPct}%` }} />
         </div>
       )}
@@ -72,29 +73,27 @@ export default function RegressionDialog({ tab, onJumpWord, onClose }) {
       <p className="settings-note" style={{ marginTop: 8 }}>
         {stats.count === 0 ? (
           <>
-            No regressions recorded this session. Read in the <strong>Lines</strong> pane and press{' '}
-            <strong>←</strong> to look back — your backward jumps show up here, split into short
-            (often habitual) and longer (usually genuine re-analysis).
+            {t('No regressions recorded this session.')}{' '}
+            {t('Read in the Lines pane and press ← to look back — your backward jumps show up here, split into short (often habitual) and longer (usually genuine re-analysis).')}
           </>
         ) : (
           <>
-            <strong>{shortPct}%</strong> of your regressions were short (≤2 words). Short regressions
-            are most often habitual; longer ones usually mean real re-analysis. Trimming the short
-            ones is typically the safest speed gain — they rarely add comprehension.
+            {t('{pct}% of your regressions were short (≤2 words).', { pct: shortPct })}{' '}
+            {t('Short regressions are most often habitual; longer ones usually mean real re-analysis. Trimming the short ones is typically the safest speed gain — they rarely add comprehension.')}
           </>
         )}
       </p>
 
       {stats.recent.length > 0 && doc && (
         <>
-          <div className="field-section">Recent regressions (newest first)</div>
+          <div className="field-section">{t('Recent regressions (newest first)')}</div>
           <div className="reg-list">
             {stats.recent.map((r, i) => (
               <div
                 key={i}
                 className="reg-item"
                 onClick={() => onJumpWord?.(r.at)}
-                title="Jump to this spot"
+                title={t('Jump to this spot')}
               >
                 <span className={`reg-badge ${r.back <= 2 ? 'short' : 'long'}`}>↩ {r.back}</span>
                 <span className="reg-snip">

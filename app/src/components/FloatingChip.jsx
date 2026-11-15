@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useIsCompact } from '../state/device.js';
+import { t } from '../i18n.js';
 
 // A generic draggable, transparency-adjustable floating chip — the shared shell behind the goal
 // chip (the face and stats chips predate this and keep their own copies). Position is passed in
@@ -62,19 +63,19 @@ export default function FloatingChip({ pos, onMove, onDrop, opacity = 0.92, clas
       onPointerMove={onPointerMove}
       onPointerUp={onUp}
       onPointerCancel={onUp}
-      title={title || 'Drag to move · transparency in Tab Settings'}
+      title={title || t('Drag to move · transparency in Tab Settings')}
     >
       {min ? (
         <>
           <span className="chip-stub-icon">{stub}</span>
-          <button className="chip-mini-btn" title="Expand" onClick={() => setMin(false)}>+</button>
+          <button className="chip-mini-btn" title={t('Expand')} onClick={() => setMin(false)}>+</button>
         </>
       ) : (
         <>
-          <button className="chip-mini-btn" title="Minimize" onClick={() => setMin(true)}>–</button>
+          <button className="chip-mini-btn" title={t('Minimize')} onClick={() => setMin(true)}>–</button>
           {children}
           {!isCompact && onScale && (
-            <span className="chip-resize" title="Drag to resize (double-click to reset)" onPointerDown={onResizeDown} onDoubleClick={() => { setLiveScale(null); onScale(1); }}>◢</span>
+            <span className="chip-resize" title={t('Drag to resize (double-click to reset)')} onPointerDown={onResizeDown} onDoubleClick={() => { setLiveScale(null); onScale(1); }}>◢</span>
           )}
         </>
       )}

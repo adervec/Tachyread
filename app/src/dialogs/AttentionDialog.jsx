@@ -3,6 +3,7 @@ import Dialog from './Dialog.jsx';
 import {
   attentionScore, attentionLabel, attentionBreakdown, attentionAdvice, DEFAULT_ATTENTION,
 } from '../engine/attention.js';
+import { t } from '../i18n.js';
 
 // Attention Check — a behavioral, on-device read on whether you are still locked in, computed from
 // regression bursts, recent comprehension answers, and pace instability. This is the license-clean,
@@ -16,42 +17,43 @@ export default function AttentionDialog({ tab, recentScores = [], onClose }) {
   const signals = { recentRegressions, recentScores, paceCv };
 
   const score = attentionScore(signals);
-  const label = attentionLabel(score);
+  const label = attentionLabel(score); // shown with t(label)
+  // i18n-keys: Focused | Wavering | Distracted
   const bd = attentionBreakdown(signals);
   const advice = attentionAdvice(score, tab?.settings.wpm || 0);
   const pct = Math.round(score * 100);
   const labelClass = label === 'Focused' ? 'good' : label === 'Wavering' ? 'warn' : 'bad';
 
   const rows = [
-    { key: 'Regression bursts', pen: bd.regression, detail: `${recentRegressions} in last ${Math.round(DEFAULT_ATTENTION.regWindowMs / 1000)}s` },
-    { key: 'Comprehension', pen: bd.comprehension, detail: recentScores.length >= 2 ? `${Math.round((1 - bd.comprehension) * 100)}% recent` : 'no recent checks' },
-    { key: 'Pace stability', pen: bd.pace, detail: paceCv > 0 ? `CV ${paceCv.toFixed(2)}` : 'no recent pace' },
+    { key: 'regression', name: t('Regression bursts'), pen: bd.regression, detail: t('{n} in last {secs}s', { n: recentRegressions, secs: Math.round(DEFAULT_ATTENTION.regWindowMs / 1000) }) },
+    { key: 'comprehension', name: t('Comprehension'), pen: bd.comprehension, detail: recentScores.length >= 2 ? t('{pct}% recent', { pct: Math.round((1 - bd.comprehension) * 100) }) : t('no recent checks') },
+    { key: 'pace', name: t('Pace stability'), pen: bd.pace, detail: paceCv > 0 ? `CV ${paceCv.toFixed(2)}` : t('no recent pace') },
   ];
 
   return (
     <Dialog
-      title="Attention Check"
+      title={t('Attention Check')}
       onClose={onClose}
       width={560}
       buttons={
         <>
-          <button onClick={() => force((n) => n + 1)}>Refresh</button>
-          <button onClick={onClose}>Close</button>
+          <button onClick={() => force((n) => n + 1)}>{t('Refresh')}</button>
+          <button onClick={onClose}>{t('Close')}</button>
         </>
       }
     >
       <div className="att-head">
         <div className={`att-score ${labelClass}`}>
           <b>{pct}%</b>
-          <span>focus</span>
+          <span>{t('focus')}</span>
         </div>
-        <div className={`att-label ${labelClass}`}>{label}</div>
+        <div className={`att-label ${labelClass}`}>{t(label)}</div>
       </div>
 
       <div className="att-rows">
         {rows.map((r) => (
           <div key={r.key} className="att-row">
-            <span className="att-name">{r.key}</span>
+            <span className="att-name">{r.name}</span>
             <span className="att-track">
               <span className="att-fill" style={{ width: `${Math.round(r.pen * 100)}%` }} />
             </span>
@@ -62,12 +64,11 @@ export default function AttentionDialog({ tab, recentScores = [], onClose }) {
 
       <p className="settings-note" style={{ marginTop: 10 }}>
         {advice.message
-          ? advice.message + ` (e.g. ease toward ${advice.slowTo} wpm).`
-          : 'You look engaged — keep going. Bars show what would pull focus down: a cluster of re-reads, missed comprehension checks, or jumpy pacing.'}
+          ? `${advice.message} ${t('(e.g. ease toward {wpm} wpm).', { wpm: advice.slowTo })}`
+          : t('You look engaged — keep going. Bars show what would pull focus down: a cluster of re-reads, missed comprehension checks, or jumpy pacing.')}
       </p>
       <p className="settings-note" style={{ marginTop: 4 }}>
-        Estimated on-device from your reading behavior — no camera, no upload. This is a soft signal,
-        not a verdict; the adaptive pacer still controls speed.
+        {t('Estimated on-device from your reading behavior — no camera, no upload. This is a soft signal, not a verdict; the adaptive pacer still controls speed.')}
       </p>
     </Dialog>
   );

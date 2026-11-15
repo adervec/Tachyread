@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { findTermIndex } from '../document/resourceWizard.js';
+import { t } from '../i18n.js';
 
 // Displays the book's index (built by the resource wizard from the printed index). Each term jumps
 // to its next occurrence in the body — page numbers can't be mapped to positions reliably, so we
@@ -24,27 +25,27 @@ export default function IndexPane({ tab, onJumpWord, onWizard }) {
   return (
     <div className="toc-pane index-pane">
       <div className="toc-toolbar">
-        <span className="toc-title-label">Index</span>
+        <span className="toc-title-label">{t('Index')}</span>
         <span style={{ flex: 1 }} />
-        {onWizard && <button title="Build the index from the book’s printed index (wizard)" onClick={onWizard}>🪄</button>}
+        {onWizard && <button title={t('Build the index from the book’s printed index (wizard)')} onClick={onWizard}>🪄</button>}
       </div>
       {entries.length === 0 ? (
         <div className="toc-empty">
-          No index yet. {onWizard && <button onClick={onWizard}>Build from the printed index…</button>}
+          {t('No index yet.')} {onWizard && <button onClick={onWizard}>{t('Build from the printed index…')}</button>}
         </div>
       ) : (
         <>
           <div className="toc-col-menu">
-            <input type="text" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter terms…" style={{ width: '100%' }} />
+            <input type="text" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('Filter terms…')} style={{ width: '100%' }} />
           </div>
           <div className="toc-table-scroll index-list">
             {shown.map((e, i) => (
-              <div key={i} className={`index-row lvl-${e.level || 0}`} onClick={() => jump(e.term)} title={`Jump to “${e.term}” in the text`}>
+              <div key={i} className={`index-row lvl-${e.level || 0}`} onClick={() => jump(e.term)} title={t('Jump to “{term}” in the text', { term: e.term })}>
                 <span className="index-term">{e.term}</span>
                 {e.pages && e.pages.length > 0 && <span className="index-pages">{e.pages.slice(0, 10).join(', ')}</span>}
               </div>
             ))}
-            {shown.length === 0 && <div className="toc-empty">No terms match “{filter}”.</div>}
+            {shown.length === 0 && <div className="toc-empty">{t('No terms match “{filter}”.', { filter })}</div>}
           </div>
         </>
       )}

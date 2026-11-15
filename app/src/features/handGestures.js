@@ -8,6 +8,7 @@
 // frames are analysed in the browser and never recorded or uploaded.
 
 import { GestureRecognizer, FilesetResolver } from '@mediapipe/tasks-vision';
+import { t } from '../i18n.js';
 
 const WASM_URL = `${import.meta.env?.BASE_URL ?? "/"}vendor/mediapipe`; // served from our own site (vite.config.js)
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task';
@@ -26,26 +27,26 @@ export const DEFAULT_GESTURES = {
   callMe: false, horns: false,
 };
 export const GESTURE_INFO = {
-  scroll: { icon: '✋', label: 'Palm joystick', desc: 'Open palm above/below your rest height scrolls up/down — farther is faster' },
-  wave: { icon: '👋', label: 'Wave', desc: 'Wave side-to-side (3+ direction changes)' },
-  thumbUp: { icon: '👍', label: 'Thumb up', desc: 'Hold to repeat' },
-  thumbDown: { icon: '👎', label: 'Thumb down', desc: 'Hold to repeat' },
-  fist: { icon: '✊', label: 'Fist', desc: 'Closed fist held for a moment' },
-  victory: { icon: '✌', label: 'Victory', desc: 'Two-finger V held for a moment' },
-  pointUp: { icon: '☝', label: 'Point up', desc: 'Index finger pointing up, held for a moment' },
-  iLoveYou: { icon: '🤟', label: 'Rock / ILY', desc: 'Thumb + index + pinky extended, held for a moment' },
-  pinch: { icon: '🤏', label: 'Pinch / OK', desc: 'Thumb and index tips together (other fingers open), held for a moment' },
-  swipeLeft: { icon: '👈', label: 'Swipe left', desc: 'One fast open-palm sweep toward your left' },
-  swipeRight: { icon: '👉', label: 'Swipe right', desc: 'One fast open-palm sweep toward your right' },
+  scroll: { icon: '✋', label: t('Palm joystick'), desc: t('Open palm above/below your rest height scrolls up/down — farther is faster') },
+  wave: { icon: '👋', label: t('Wave'), desc: t('Wave side-to-side (3+ direction changes)') },
+  thumbUp: { icon: '👍', label: t('Thumb up'), desc: t('Hold to repeat') },
+  thumbDown: { icon: '👎', label: t('Thumb down'), desc: t('Hold to repeat') },
+  fist: { icon: '✊', label: t('Fist'), desc: t('Closed fist held for a moment') },
+  victory: { icon: '✌', label: t('Victory'), desc: t('Two-finger V held for a moment') },
+  pointUp: { icon: '☝', label: t('Point up'), desc: t('Index finger pointing up, held for a moment') },
+  iLoveYou: { icon: '🤟', label: t('Rock / ILY'), desc: t('Thumb + index + pinky extended, held for a moment') },
+  pinch: { icon: '🤏', label: t('Pinch / OK'), desc: t('Thumb and index tips together (other fingers open), held for a moment') },
+  swipeLeft: { icon: '👈', label: t('Swipe left'), desc: t('One fast open-palm sweep toward your left') },
+  swipeRight: { icon: '👉', label: t('Swipe right'), desc: t('One fast open-palm sweep toward your right') },
   // Landmark-derived poses (no canned classifier class) — finger extension patterns + pointing
   // directions, all held poses like the ones above.
-  pointDown: { icon: '👇', label: 'Point down', desc: 'Index finger pointing down, held for a moment' },
-  pointLeft: { icon: '☜', label: 'Point left', desc: 'Index finger pointing to YOUR left, held for a moment' },
-  pointRight: { icon: '☞', label: 'Point right', desc: 'Index finger pointing to YOUR right, held for a moment' },
-  threeUp: { icon: '3️⃣', label: 'Three fingers', desc: 'Index + middle + ring up, pinky and thumb tucked, held for a moment' },
-  fourUp: { icon: '4️⃣', label: 'Four fingers', desc: 'Four fingers up with the thumb tucked, held for a moment' },
-  callMe: { icon: '🤙', label: 'Call me (shaka)', desc: 'Thumb + pinky out, middle fingers curled, held for a moment' },
-  horns: { icon: '🤘', label: 'Horns', desc: 'Index + pinky out, thumb tucked (unlike Rock/ILY), held for a moment' },
+  pointDown: { icon: '👇', label: t('Point down'), desc: t('Index finger pointing down, held for a moment') },
+  pointLeft: { icon: '☜', label: t('Point left'), desc: t('Index finger pointing to YOUR left, held for a moment') },
+  pointRight: { icon: '☞', label: t('Point right'), desc: t('Index finger pointing to YOUR right, held for a moment') },
+  threeUp: { icon: '3️⃣', label: t('Three fingers'), desc: t('Index + middle + ring up, pinky and thumb tucked, held for a moment') },
+  fourUp: { icon: '4️⃣', label: t('Four fingers'), desc: t('Four fingers up with the thumb tucked, held for a moment') },
+  callMe: { icon: '🤙', label: t('Call me (shaka)'), desc: t('Thumb + pinky out, middle fingers curled, held for a moment') },
+  horns: { icon: '🤘', label: t('Horns'), desc: t('Index + pinky out, thumb tucked (unlike Rock/ILY), held for a moment') },
 };
 const GESTURE_BY_LABEL = { Thumb_Up: 'thumbUp', Thumb_Down: 'thumbDown', Closed_Fist: 'fist', Victory: 'victory', Pointing_Up: 'pointUp', ILoveYou: 'iLoveYou' };
 
@@ -103,8 +104,8 @@ export function scrollVelocity(y, calib = DEFAULT_HAND_CALIB, deadFrac = 0.18) {
   const off = y - centerY;
   if (Math.abs(off) <= dead) return 0;
   const range = Math.max(0.05, off < 0 ? centerY - topY : bottomY - centerY);
-  const t = Math.min(1, (Math.abs(off) - dead) / Math.max(0.02, range - dead));
-  return Math.sign(off) * t * t;
+  const k = Math.min(1, (Math.abs(off) - dead) / Math.max(0.02, range - dead));
+  return Math.sign(off) * k * k;
 }
 
 // Wave = N direction reversals of sufficiently fast horizontal palm motion inside a short
@@ -123,7 +124,7 @@ export function createWaveDetector({ swing = 0.03, reversals = 3, windowMs = 120
       const dir = Math.sign(dx);
       if (lastDir !== 0 && dir !== lastDir) {
         events.push(now);
-        events = events.filter((t) => now - t <= windowMs);
+        events = events.filter((ts) => now - ts <= windowMs);
         if (events.length >= reversals && now - firedAt > cooldownMs) {
           firedAt = now;
           events = [];
@@ -285,7 +286,7 @@ export function createGestureMonitor({
       setState(e?.name === 'NotAllowedError' || e?.name === 'SecurityError' ? 'denied' : 'error');
       return;
     }
-    if (!running) { stream.getTracks().forEach((t) => t.stop()); return; }
+    if (!running) { stream.getTracks().forEach((tr) => tr.stop()); return; }
     onStream?.(stream);
     video = document.createElement('video');
     video.srcObject = stream;
@@ -373,7 +374,7 @@ export function createGestureMonitor({
   function stop() {
     running = false;
     if (timer) { clearInterval(timer); timer = null; }
-    if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+    if (stream) { stream.getTracks().forEach((tr) => tr.stop()); stream = null; }
     if (recognizer) { try { recognizer.close(); } catch { /* ignore */ } recognizer = null; }
     if (video) { video.srcObject = null; video = null; }
     onStream?.(null);

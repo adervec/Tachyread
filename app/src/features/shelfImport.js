@@ -3,6 +3,7 @@
 // ISBN, else title + author) only FILLS fields that book has empty — nothing you've recorded is
 // overwritten — and unmatched rows become new books. The caller shows the plan for review.
 import { deriveId, slug } from './journeyLibrary.js';
+import { t } from '../i18n.js';
 
 // RFC-4180-ish CSV: quoted fields, doubled quotes, newlines inside quotes, CRLF.
 export function parseCsv(text) {
@@ -55,7 +56,7 @@ export function rowToBook(r, source) {
     if (shelf === 'read') { b.completion = true; put('finishTime', ymd(r['Date Read'])); }
     else if (shelf === 'currently-reading') b.inProgress = true;
     else if (/did-?not-?finish|dnf|abandon/.test(shelf)) b.shelf = 'abandoned';
-    const tags = (r.Bookshelves || '').split(',').map((t) => t.trim()).filter((t) => t && !['read', 'to-read', 'currently-reading'].includes(t));
+    const tags = (r.Bookshelves || '').split(',').map((tag) => tag.trim()).filter((tag) => tag && !['read', 'to-read', 'currently-reading'].includes(tag));
     if (tags.length) b.tags = tags;
     put('notes', [r['My Review'], r['Private Notes']].filter(Boolean).join('\n\n'));
   } else {
@@ -70,7 +71,7 @@ export function rowToBook(r, source) {
     if (st === 'read') { b.completion = true; put('finishTime', ends.at(-1) || ymd(r['Last Date Read'])); if (ends.length > 1) b.finishHistory = ends.slice(0, -1); }
     else if (st === 'currently-reading') b.inProgress = true;
     else if (st === 'did-not-finish') b.shelf = 'abandoned';
-    const tags = (r.Tags || '').split(',').map((t) => t.trim()).filter(Boolean);
+    const tags = (r.Tags || '').split(',').map((tag) => tag.trim()).filter(Boolean);
     if (tags.length) b.tags = tags;
     put('notes', r.Review);
   }
@@ -79,6 +80,11 @@ export function rowToBook(r, source) {
 }
 
 const FILLABLE = ['author', 'isbn', 'rating', 'pages', 'pubYear', 'finishTime', 'notes', 'tags', 'finishHistory'];
+// How each filled field is named to the reader (the `fills` entries themselves stay data keys).
+export const FILL_LABELS = {
+  author: t('author'), isbn: t('ISBN'), rating: t('rating'), pages: t('pages'), pubYear: t('publication year'),
+  finishTime: t('finish date'), notes: t('notes'), tags: t('tags'), finishHistory: t('reading history'), status: t('status'),
+};
 const blank = (v) => v == null || v === '' || v === 0 || (Array.isArray(v) && !v.length);
 const key = (b) => `${slug(b.title)}|${slug(String(b.author || '').split(/\s+/).pop())}`; // title + author surname
 

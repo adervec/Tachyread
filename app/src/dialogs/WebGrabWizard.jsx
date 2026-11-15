@@ -3,6 +3,7 @@ import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { docFromWebContent, nameFromUrl } from '../document/parsers.js';
 import { normalizeUrl, proxyUrl, isHtmlContentType } from '../features/webGrab.js';
+import { t } from '../i18n.js';
 
 // Grab a web page's readable text into a reading tab. A browser can't read most cross-origin pages
 // directly (same-origin policy), so this offers three paths, cleanest-first: a direct fetch (works
@@ -28,64 +29,66 @@ export default function WebGrabWizard({ onClose, initialUrl = '' }) {
       return;
     }
     const doc = await docFromWebContent(content, opts);
-    if (!doc.words?.length) { setMsg('That page had no readable text to extract.'); setBusy(false); return; }
+    if (!doc.words?.length) { setMsg(t('That page had no readable text to extract.')); setBusy(false); return; }
     await openDoc(doc);
-    setStatus(`Opened “${doc.fileName}” from the web.`);
+    setStatus(t('Opened “{name}” from the web.', { name: doc.fileName }));
     onClose();
   }
 
   async function fetchDirect() {
     const u = normalizeUrl(url);
-    if (!u) { setMsg('Enter a full web address, e.g. https://example.com/article'); return; }
-    setBusy(true); setMsg('Fetching…'); setBlocked(false);
+    if (!u) { setMsg(t('Enter a full web address, e.g. {example}', { example: 'https://example.com/article' })); return; }
+    setBusy(true); setMsg(t('Fetching…')); setBlocked(false);
     try {
       const res = await fetch(u, { redirect: 'follow' });
-      if (!res.ok) throw new Error(`The site returned ${res.status}.`);
+      if (!res.ok) throw new Error(t('The site returned {status}.', { status: res.status }));
       const body = await res.text();
       await open(body, { url: u, asHtml: isHtmlContentType(res.headers.get('content-type')) || null });
     } catch (e) {
       setBusy(false);
       setBlocked(true);
-      setMsg(`Couldn’t read that page directly — your browser blocks reading most other sites (cross-site protection). ${/Failed to fetch/.test(e?.message || '') ? '' : e.message}`);
+      setMsg(/Failed to fetch/.test(e?.message || '')
+        ? t('Couldn’t read that page directly — your browser blocks reading most other sites (cross-site protection).')
+        : t('Couldn’t read that page directly — your browser blocks reading most other sites (cross-site protection). {error}', { error: e.message }));
     }
   }
 
   async function fetchViaReader() {
     const u = normalizeUrl(url);
-    if (!u) { setMsg('Enter a valid URL first.'); return; }
-    setBusy(true); setMsg('Fetching via reader service…');
+    if (!u) { setMsg(t('Enter a valid URL first.')); return; }
+    setBusy(true); setMsg(t('Fetching via reader service…'));
     try {
       const res = await fetch(proxyUrl(u));
-      if (!res.ok) throw new Error(`Reader service returned ${res.status}.`);
+      if (!res.ok) throw new Error(t('Reader service returned {status}.', { status: res.status }));
       const body = await res.text();
-      if (!body.trim()) throw new Error('The reader service returned an empty page.');
+      if (!body.trim()) throw new Error(t('The reader service returned an empty page.'));
       await open(body, { url: u, asHtml: true });
     } catch (e) {
       setBusy(false);
-      setMsg(`Reader service failed (${e.message}). Try the manual paste below — it always works.`);
+      setMsg(t('Reader service failed ({error}). Try the manual paste below — it always works.', { error: e.message }));
     }
   }
 
   async function openPasted() {
-    if (!paste.trim()) { setMsg('Paste the page’s text (or HTML) into the box first.'); return; }
-    setBusy(true); setMsg('Building document…');
+    if (!paste.trim()) { setMsg(t('Paste the page’s text (or HTML) into the box first.')); return; }
+    setBusy(true); setMsg(t('Building document…'));
     try {
       await open(paste, { url: normalizeUrl(url) });
     } catch (e) {
       setBusy(false);
-      setMsg('Could not build a document: ' + (e?.message || e));
+      setMsg(t('Could not build a document: {error}', { error: e?.message || e }));
     }
   }
 
   return (
     <Dialog
-      title="Grab text from a web page"
+      title={t('Grab text from a web page')}
       onClose={onClose}
       width={600}
-      buttons={<button onClick={onClose}>Close</button>}
+      buttons={<button onClick={onClose}>{t('Close')}</button>}
     >
       <div className="field-row">
-        <label>Page URL</label>
+        <label>{t('Page URL')}</label>
         <input
           type="url"
           autoFocus
@@ -97,40 +100,39 @@ export default function WebGrabWizard({ onClose, initialUrl = '' }) {
         />
       </div>
       <div className="data-row">
-        <button className="toggle-on" onClick={fetchDirect} disabled={busy || !url.trim()}>Fetch page ▸</button>
-        <label className="inline-check" title="After fetching/pasting, open an interactive picker to choose the content region — use this if the page has a messy layout and auto-extraction grabs the wrong part.">
-          <input type="checkbox" checked={pickRegion} onChange={(e) => setPickRegion(e.target.checked)} /> Let me pick the content region
+        <button className="toggle-on" onClick={fetchDirect} disabled={busy || !url.trim()}>{t('Fetch page')} ▸</button>
+        <label className="inline-check" title={t('After fetching/pasting, open an interactive picker to choose the content region — use this if the page has a messy layout and auto-extraction grabs the wrong part.')}>
+          <input type="checkbox" checked={pickRegion} onChange={(e) => setPickRegion(e.target.checked)} /> {t('Let me pick the content region')}
         </label>
-        {busy && <span className="settings-note" style={{ margin: 0 }}>Working…</span>}
+        {busy && <span className="settings-note" style={{ margin: 0 }}>{t('Working…')}</span>}
       </div>
       {msg && <p className="settings-note" style={{ marginTop: 4 }}>{msg}</p>}
 
       {blocked && (
         <div className="wg-fallback">
-          <div className="field-section">Site blocked the direct read — two ways around it</div>
+          <div className="field-section">{t('Site blocked the direct read — two ways around it')}</div>
           <div className="data-row">
-            <button onClick={fetchViaReader} disabled={busy}>Use reader service ▸</button>
+            <button onClick={fetchViaReader} disabled={busy}>{t('Use reader service')} ▸</button>
             <span className="settings-note" style={{ margin: 0 }}>
-              Relays the page via a third party (api.allorigins.win) — your URL is sent there.
+              {t('Relays the page via a third party ({host}) — your URL is sent there.', { host: 'api.allorigins.win' })}
             </span>
           </div>
         </div>
       )}
 
-      <div className="field-section">Or paste the page yourself (stays on this device)</div>
+      <div className="field-section">{t('Or paste the page yourself (stays on this device)')}</div>
       <p className="settings-note" style={{ marginTop: 0 }}>
-        Open the page in your browser, select all (Ctrl/⌘+A) and copy (Ctrl/⌘+C), then paste below.
-        Pasting the page’s HTML source works too and keeps the original layout in the Source view.
+        {t('Open the page in your browser, select all ({selectAll}) and copy ({copy}), then paste below. Pasting the page’s HTML source works too and keeps the original layout in the Source view.', { selectAll: 'Ctrl/⌘+A', copy: 'Ctrl/⌘+C' })}
       </p>
       <textarea
         className="data-json"
         rows={6}
-        placeholder="Paste the copied page text or HTML here…"
+        placeholder={t('Paste the copied page text or HTML here…')}
         value={paste}
         onChange={(e) => setPaste(e.target.value)}
       />
       <div className="data-row">
-        <button className="toggle-on" onClick={openPasted} disabled={busy || !paste.trim()}>Open pasted content ▸</button>
+        <button className="toggle-on" onClick={openPasted} disabled={busy || !paste.trim()}>{t('Open pasted content')} ▸</button>
       </div>
     </Dialog>
   );

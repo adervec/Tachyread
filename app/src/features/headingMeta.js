@@ -83,33 +83,33 @@ export function headingDetailChips(meta, ids, { wpm = 250, readerIdx = 0 } = {})
     if (!want.has(id)) continue;
     switch (id) {
       case 'words':
-        if (meta.words > 0) out.push({ id, text: `🔢 ${compact(meta.words)} words` });
+        if (meta.words > 0) out.push({ id, text: '🔢 ' + t('{count} words', { count: compact(meta.words) }) });
         break;
       case 'time':
         if (meta.words > 0 && wpm > 0) out.push({ id, text: `⏱ ${fmtMin(meta.words / wpm)}` });
         break;
       case 'pct':
-        if (meta.pctOfBook > 0) out.push({ id, text: `💯 ${meta.pctOfBook.toFixed(1)}% of book` });
+        if (meta.pctOfBook > 0) out.push({ id, text: '💯 ' + t('{pct}% of book', { pct: meta.pctOfBook.toFixed(1) }) });
         break;
       case 'progress': {
         if (meta.words <= 0) break;
         const done = Math.max(0, Math.min(meta.words, readerIdx - meta.start));
         const pct = Math.round((done / meta.words) * 100);
         // Only worth saying once you're in or past it — "0%" on every section ahead is noise.
-        if (readerIdx >= meta.start) out.push({ id, text: pct >= 100 ? '✅ read' : `✅ ${pct}% read` });
+        if (readerIdx >= meta.start) out.push({ id, text: '✅ ' + (pct >= 100 ? t('read') : t('{pct}% read', { pct })) });
         break;
       }
       case 'parent':
         if (meta.parentTitle) out.push({ id, text: `⬆️ ${meta.parentTitle}` });
         break;
       case 'children':
-        if (meta.childCount > 0) out.push({ id, text: `🌿 ${meta.childCount} sub-section${meta.childCount === 1 ? '' : 's'}` });
+        if (meta.childCount > 0) out.push({ id, text: '🌿 ' + t.n('{n} sub-section', '{n} sub-sections', meta.childCount) });
         break;
       case 'position':
-        if (meta.siblingCount > 1) out.push({ id, text: `📍 ${meta.siblingIndex} of ${meta.siblingCount}` });
+        if (meta.siblingCount > 1) out.push({ id, text: '📍 ' + t('{index} of {count}', { index: meta.siblingIndex, count: meta.siblingCount }) });
         break;
       case 'depth':
-        out.push({ id, text: `🪜 level ${meta.depth}` });
+        out.push({ id, text: '🪜 ' + t('level {depth}', { depth: meta.depth }) });
         break;
       default: break;
     }

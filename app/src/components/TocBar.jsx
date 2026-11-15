@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { getTocEntries, extractNumeral, formatNumeral } from '../document/toc.js';
 import { goalTargetIndex } from '../engine/goals.js';
+import { t } from '../i18n.js';
 
 // A minimap strip beneath the progress bar: one icon per TOC entry positioned by where it
 // starts in the document, plus markers for the current reading position and the active goal's
@@ -23,16 +24,16 @@ export default function TocBar({ tab, onIconClick }) {
   const goalPct = target ? (target.index / total) * 100 : null;
 
   return (
-    <div className="toc-bar" title="Table-of-contents minimap — click an icon to reveal it in the ToC">
+    <div className="toc-bar" title={t('Table-of-contents minimap — click an icon to reveal it in the ToC')}>
       <div className="toc-bar-track" />
       {goalPct != null && (
         <div
           className={`toc-bar-goal${target.projected ? ' projected' : ''}`}
           style={{ left: `${Math.max(0, Math.min(100, goalPct))}%` }}
-          title={target.projected ? 'Projected goal position (from your pace)' : 'Goal target position'}
+          title={target.projected ? t('Projected goal position (from your pace)') : t('Goal target position')}
         >🎯</div>
       )}
-      <div className="toc-bar-now" style={{ left: `${Math.max(0, Math.min(100, curPct))}%` }} title="Current position" />
+      <div className="toc-bar-now" style={{ left: `${Math.max(0, Math.min(100, curPct))}%` }} title={t('Current position')} />
       {entries.map((e, i) => {
         const level = e.level || 0;
         const icon = tierIcons[Math.min(level, tierIcons.length - 1)] || '•';

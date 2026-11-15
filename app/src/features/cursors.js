@@ -7,31 +7,33 @@
 // (not bitmaps) is what makes the "rich array of premades" cheap — every shape is a few lines of
 // markup and recolours/resizes for free. Pure; see cursors.test.mjs.
 
+import { t } from '../i18n.js';
+
 // hotspot: [fx, fy] as fractions of the size — where the actual click point sits (0,0 = top-left).
 // svg(color, size): the inner markup drawn in a size×size viewBox.
 const S = (id, label, svg, hotspot = [0.5, 0.5]) => ({ id, label, svg, hotspot });
 
 export const PREMADE_CURSORS = [
   // Native keywords — no image, just the OS pointer.
-  { id: 'default', label: 'System default', native: 'default' },
-  { id: 'pointerHand', label: 'Hand (link)', native: 'pointer' },
-  { id: 'crosshairNative', label: 'Crosshair (system)', native: 'crosshair' },
-  { id: 'text', label: 'Text I-beam', native: 'text' },
-  { id: 'none', label: 'Hidden', native: 'none' },
+  { id: 'default', label: t('System default'), native: 'default' },
+  { id: 'pointerHand', label: t('Hand (link)'), native: 'pointer' },
+  { id: 'crosshairNative', label: t('Crosshair (system)'), native: 'crosshair' },
+  { id: 'text', label: t('Text I-beam'), native: 'text' },
+  { id: 'none', label: t('Hidden'), native: 'none' },
   // SVG shapes — recolour + resize.
-  S('dot', 'Dot', (c, s) => `<circle cx="${s / 2}" cy="${s / 2}" r="${s * 0.22}" fill="${c}"/>`),
-  S('ring', 'Ring', (c, s) => `<circle cx="${s / 2}" cy="${s / 2}" r="${s * 0.34}" fill="none" stroke="${c}" stroke-width="${Math.max(1.5, s * 0.09)}"/>`),
-  S('target', 'Target', (c, s) => `<circle cx="${s / 2}" cy="${s / 2}" r="${s * 0.4}" fill="none" stroke="${c}" stroke-width="${s * 0.06}"/><circle cx="${s / 2}" cy="${s / 2}" r="${s * 0.09}" fill="${c}"/>`),
-  S('plus', 'Fine crosshair', (c, s) => `<g stroke="${c}" stroke-width="${Math.max(1.2, s * 0.07)}" stroke-linecap="round"><line x1="${s / 2}" y1="${s * 0.12}" x2="${s / 2}" y2="${s * 0.88}"/><line x1="${s * 0.12}" y1="${s / 2}" x2="${s * 0.88}" y2="${s / 2}"/></g>`),
-  S('arrow', 'Arrow', (c, s) => `<path d="M2 2 L2 ${s * 0.72} L${s * 0.28} ${s * 0.55} L${s * 0.44} ${s * 0.86} L${s * 0.56} ${s * 0.8} L${s * 0.4} ${s * 0.5} L${s * 0.72} ${s * 0.5} Z" fill="${c}" stroke="#0006" stroke-width="0.6"/>`, [0.06, 0.06]),
-  S('pen', 'Pen', (c, s) => `<g stroke="${c}" stroke-width="${s * 0.09}" stroke-linecap="round" fill="none"><line x1="${s * 0.14}" y1="${s * 0.86}" x2="${s * 0.78}" y2="${s * 0.22}"/></g><path d="M${s * 0.72} ${s * 0.12} L${s * 0.88} ${s * 0.28} L${s * 0.8} ${s * 0.36} L${s * 0.64} ${s * 0.2} Z" fill="${c}"/><circle cx="${s * 0.15}" cy="${s * 0.85}" r="${s * 0.05}" fill="${c}"/>`, [0.12, 0.88]),
-  S('caret', 'Caret bar', (c, s) => `<rect x="${s * 0.44}" y="${s * 0.1}" width="${Math.max(2, s * 0.12)}" height="${s * 0.8}" rx="${s * 0.05}" fill="${c}"/>`),
-  S('underline', 'Reading underscore', (c, s) => `<rect x="${s * 0.1}" y="${s * 0.72}" width="${s * 0.8}" height="${Math.max(2, s * 0.12)}" rx="${s * 0.06}" fill="${c}"/>`, [0.5, 0.78]),
-  S('star', 'Star', (c, s) => `<path d="${starPath(s)}" fill="${c}" stroke="#0006" stroke-width="0.5"/>`),
-  S('heart', 'Heart', (c, s) => `<path d="M${s / 2} ${s * 0.82} C${s * 0.1} ${s * 0.52} ${s * 0.16} ${s * 0.16} ${s / 2} ${s * 0.36} C${s * 0.84} ${s * 0.16} ${s * 0.9} ${s * 0.52} ${s / 2} ${s * 0.82} Z" fill="${c}"/>`),
-  S('diamond', 'Diamond', (c, s) => `<path d="M${s / 2} ${s * 0.12} L${s * 0.86} ${s / 2} L${s / 2} ${s * 0.88} L${s * 0.14} ${s / 2} Z" fill="${c}"/>`),
-  S('triangle', 'Triangle', (c, s) => `<path d="M${s / 2} ${s * 0.14} L${s * 0.86} ${s * 0.82} L${s * 0.14} ${s * 0.82} Z" fill="${c}"/>`),
-  S('sparkle', 'Sparkle', (c, s) => `<path d="M${s / 2} ${s * 0.1} L${s * 0.58} ${s * 0.42} L${s * 0.9} ${s / 2} L${s * 0.58} ${s * 0.58} L${s / 2} ${s * 0.9} L${s * 0.42} ${s * 0.58} L${s * 0.1} ${s / 2} L${s * 0.42} ${s * 0.42} Z" fill="${c}"/>`),
+  S('dot', t('Dot'), (c, s) => `<circle cx="${s / 2}" cy="${s / 2}" r="${s * 0.22}" fill="${c}"/>`),
+  S('ring', t('Ring'), (c, s) => `<circle cx="${s / 2}" cy="${s / 2}" r="${s * 0.34}" fill="none" stroke="${c}" stroke-width="${Math.max(1.5, s * 0.09)}"/>`),
+  S('target', t('Target'), (c, s) => `<circle cx="${s / 2}" cy="${s / 2}" r="${s * 0.4}" fill="none" stroke="${c}" stroke-width="${s * 0.06}"/><circle cx="${s / 2}" cy="${s / 2}" r="${s * 0.09}" fill="${c}"/>`),
+  S('plus', t('Fine crosshair'), (c, s) => `<g stroke="${c}" stroke-width="${Math.max(1.2, s * 0.07)}" stroke-linecap="round"><line x1="${s / 2}" y1="${s * 0.12}" x2="${s / 2}" y2="${s * 0.88}"/><line x1="${s * 0.12}" y1="${s / 2}" x2="${s * 0.88}" y2="${s / 2}"/></g>`),
+  S('arrow', t('Arrow'), (c, s) => `<path d="M2 2 L2 ${s * 0.72} L${s * 0.28} ${s * 0.55} L${s * 0.44} ${s * 0.86} L${s * 0.56} ${s * 0.8} L${s * 0.4} ${s * 0.5} L${s * 0.72} ${s * 0.5} Z" fill="${c}" stroke="#0006" stroke-width="0.6"/>`, [0.06, 0.06]),
+  S('pen', t('Pen'), (c, s) => `<g stroke="${c}" stroke-width="${s * 0.09}" stroke-linecap="round" fill="none"><line x1="${s * 0.14}" y1="${s * 0.86}" x2="${s * 0.78}" y2="${s * 0.22}"/></g><path d="M${s * 0.72} ${s * 0.12} L${s * 0.88} ${s * 0.28} L${s * 0.8} ${s * 0.36} L${s * 0.64} ${s * 0.2} Z" fill="${c}"/><circle cx="${s * 0.15}" cy="${s * 0.85}" r="${s * 0.05}" fill="${c}"/>`, [0.12, 0.88]),
+  S('caret', t('Caret bar'), (c, s) => `<rect x="${s * 0.44}" y="${s * 0.1}" width="${Math.max(2, s * 0.12)}" height="${s * 0.8}" rx="${s * 0.05}" fill="${c}"/>`),
+  S('underline', t('Reading underscore'), (c, s) => `<rect x="${s * 0.1}" y="${s * 0.72}" width="${s * 0.8}" height="${Math.max(2, s * 0.12)}" rx="${s * 0.06}" fill="${c}"/>`, [0.5, 0.78]),
+  S('star', t('Star'), (c, s) => `<path d="${starPath(s)}" fill="${c}" stroke="#0006" stroke-width="0.5"/>`),
+  S('heart', t('Heart'), (c, s) => `<path d="M${s / 2} ${s * 0.82} C${s * 0.1} ${s * 0.52} ${s * 0.16} ${s * 0.16} ${s / 2} ${s * 0.36} C${s * 0.84} ${s * 0.16} ${s * 0.9} ${s * 0.52} ${s / 2} ${s * 0.82} Z" fill="${c}"/>`),
+  S('diamond', t('Diamond'), (c, s) => `<path d="M${s / 2} ${s * 0.12} L${s * 0.86} ${s / 2} L${s / 2} ${s * 0.88} L${s * 0.14} ${s / 2} Z" fill="${c}"/>`),
+  S('triangle', t('Triangle'), (c, s) => `<path d="M${s / 2} ${s * 0.14} L${s * 0.86} ${s * 0.82} L${s * 0.14} ${s * 0.82} Z" fill="${c}"/>`),
+  S('sparkle', t('Sparkle'), (c, s) => `<path d="M${s / 2} ${s * 0.1} L${s * 0.58} ${s * 0.42} L${s * 0.9} ${s / 2} L${s * 0.58} ${s * 0.58} L${s / 2} ${s * 0.9} L${s * 0.42} ${s * 0.58} L${s * 0.1} ${s / 2} L${s * 0.42} ${s * 0.42} Z" fill="${c}"/>`),
 ];
 
 export const PREMADE_BY_ID = Object.fromEntries(PREMADE_CURSORS.map((c) => [c.id, c]));

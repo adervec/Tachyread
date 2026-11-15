@@ -26,6 +26,7 @@
 //   • Evening blue light — reducing short-wavelength output in the hours before sleep is the
 //     rationale for the warm overlay in the dim/night variants.
 import { deepEqual } from './deepEqual.js';
+import { t } from '../i18n.js';
 
 export const BUILTIN_DEVICES = [
   ['desktop', '🖥 Desktop'],
@@ -139,12 +140,16 @@ const APP_LIGHT = {
   dim: { nightShift: true, nightShiftStrength: 0.35 },
 };
 
+// `name` stays English (it is the <select> value and is compared); `label` is what the reader sees.
+const DEVICE_LABEL = { desktop: '🖥 ' + t('Desktop'), phone: '📱 ' + t('Phone'), tablet: '📲 ' + t('Tablet') };
+const LIGHT_LABEL = { bright: '☀️ ' + t('Bright / daylight'), normal: '💡 ' + t('Normal room'), dim: '🌙 ' + t('Dim / night') };
+
 export function builtinProfiles(kind) {
   const byDev = DATA[kind];
   if (!byDev) return [];
   const devices = BUILTIN_DEVICES.filter(([id]) => byDev[id]);
   if (!LIGHT_KINDS.has(kind) && kind !== 'app') {
-    return devices.map(([id, name]) => ({ name: `${name} (built-in)`, device: id, data: byDev[id], builtin: true }));
+    return devices.map(([id, name]) => ({ name: `${name} (built-in)`, label: t('{device} (built-in)', { device: DEVICE_LABEL[id] }), device: id, data: byDev[id], builtin: true }));
   }
   const lightLayer = kind === 'tab' ? TAB_LIGHT : APP_LIGHT;
   const out = [];
@@ -152,6 +157,7 @@ export function builtinProfiles(kind) {
     for (const [light, lightName] of BUILTIN_LIGHT) {
       out.push({
         name: `${name} · ${lightName} (built-in)`,
+        label: t('{device} · {light} (built-in)', { device: DEVICE_LABEL[id], light: LIGHT_LABEL[light] }),
         device: id,
         light,
         data: { ...byDev[id], ...lightLayer[light] },

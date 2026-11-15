@@ -2,6 +2,10 @@ import { useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { ambient, AMBIENT_TYPES, AMBIENT_MAX_VOLUME } from '../features/ambient.js';
+import { t } from '../i18n.js';
+
+// AMBIENT_TYPES are engine values (kept English); only their display is translated.
+// i18n-keys: White | Pink | Brown | Rain | Ocean | Wind | Stream | Fan | 40 Hz tone
 
 // Ambient background sound — a quiet bed to read or wind down to. No warnings/gating: these are
 // ordinary ambient tracks. The engine hard-caps its level below speech and ducks while read-aloud
@@ -13,10 +17,10 @@ export default function AmbientDialog({ onClose }) {
   const [volume, setVolume] = useState(saved.volume ?? 0.18);
   const [running, setRunning] = useState(ambient.isRunning());
 
-  function changeType(t) {
-    setType(t);
-    ambient.setType(t);
-    updateGlobal({ ambient: { type: t, volume } });
+  function changeType(next) {
+    setType(next);
+    ambient.setType(next);
+    updateGlobal({ ambient: { type: next, volume } });
   }
   function changeVolume(v) {
     setVolume(v);
@@ -28,27 +32,25 @@ export default function AmbientDialog({ onClose }) {
 
   return (
     <Dialog
-      title="Ambient Sound"
+      title={t('Ambient Sound')}
       onClose={onClose}
       width={460}
-      buttons={<button onClick={onClose}>Close</button>}
+      buttons={<button onClick={onClose}>{t('Close')}</button>}
     >
       <p className="settings-note">
-        A quiet background bed to read or wind down to — rain, ocean, wind, noise colours, or a 40&nbsp;Hz
-        focus tone. It stays below speech level and automatically ducks while read-aloud is talking, so it
-        never competes with the voice. Keeps playing after you close this.
+        {t('A quiet background bed to read or wind down to — rain, ocean, wind, noise colours, or a 40 Hz focus tone. It stays below speech level and automatically ducks while read-aloud is talking, so it never competes with the voice. Keeps playing after you close this.')}
       </p>
 
       <div className="ambient-grid">
-        {AMBIENT_TYPES.map((t) => (
-          <button key={t} className={`ambient-chip${type === t ? ' on' : ''}`} onClick={() => changeType(t)}>
-            {t}
+        {AMBIENT_TYPES.map((kind) => (
+          <button key={kind} className={`ambient-chip${type === kind ? ' on' : ''}`} onClick={() => changeType(kind)}>
+            {t(kind)}
           </button>
         ))}
       </div>
 
       <div className="field-row" style={{ marginTop: 12 }}>
-        <label>Volume</label>
+        <label>{t('Volume')}</label>
         <div>
           <input
             type="range"
@@ -59,15 +61,15 @@ export default function AmbientDialog({ onClose }) {
             onChange={(e) => changeVolume(Number(e.target.value))}
             style={{ width: 200 }}
           />
-          <span className="settings-note" style={{ marginLeft: 8 }}>capped low on purpose</span>
+          <span className="settings-note" style={{ marginLeft: 8 }}>{t('capped low on purpose')}</span>
         </div>
       </div>
 
       <div style={{ marginTop: 12 }}>
         {running ? (
-          <button className="dict-rec on" onClick={stopIt}>■ Stop</button>
+          <button className="dict-rec on" onClick={stopIt}>■ {t('Stop')}</button>
         ) : (
-          <button className="dict-rec" onClick={startIt}>● Play {type}</button>
+          <button className="dict-rec" onClick={startIt}>● {t('Play {sound}', { sound: t(type) })}</button>
         )}
       </div>
     </Dialog>

@@ -1,4 +1,5 @@
 import { Fragment, useRef } from 'react';
+import { t } from '../i18n.js';
 
 // Horizontal resizable pane container. Every pane except the last has an explicit pixel
 // width (stored by id); the last pane flexes to fill. Splitters drag to resize the pane to
@@ -40,7 +41,7 @@ export default function PaneLayout({ panes, widths, onResize, minWidth = 140 }) 
                 className="splitter"
                 role="separator"
                 aria-orientation="vertical"
-                title={`Drag to resize the ${p.label || p.id} pane`}
+                title={t('Drag to resize the {pane} pane', { pane: p.label || p.id })}
                 onPointerDown={(e) => onDown(e, p.id, w)}
                 onPointerMove={onMove}
                 onPointerUp={onUp}

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { detectProperNames } from '../document/readerDocument.js';
+import { t } from '../i18n.js';
 
 export default function ProperNamesDialog({ tab, onJumpWord, onWizard, onClose }) {
   const [sortBy, setSortBy] = useState('count');
@@ -44,45 +45,44 @@ export default function ProperNamesDialog({ tab, onJumpWord, onWizard, onClose }
   const empty = !tab?.doc?.properNames || tab.doc.properNames.size === 0;
 
   return (
-    <Dialog title="Proper Names Index" onClose={onClose} width={620}>
+    <Dialog title={t('Proper Names Index')} onClose={onClose} width={620}>
       {onWizard && (
         <p className="settings-note" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={onWizard}>🪄 Build from the cast list</button>
-          <span>Use the book’s Dramatis Personae for precise, false-positive-free names.</span>
+          <button onClick={onWizard}>🪄 {t('Build from the cast list')}</button>
+          <span>{t('Use the book’s Dramatis Personae for precise, false-positive-free names.')}</span>
         </p>
       )}
       {empty && (
         <div style={{ marginBottom: 10, padding: 8, background: 'var(--menu-bg)', border: '1px solid var(--divider)' }}>
-          Detection is off (or no names found). Heavy on large documents — enable in Tab Settings to keep it on,
-          or run once for this session:{' '}
+          {t('Detection is off (or no names found). Heavy on large documents — enable in Tab Settings to keep it on, or run once for this session:')}{' '}
           <button
             onClick={() => {
               detectProperNames(tab.doc);
               force((n) => n + 1);
             }}
           >
-            Detect now
+            {t('Detect now')}
           </button>
         </div>
       )}
       <div className="field-row">
-        <label>Filter</label>
-        <input type="text" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Type to filter…" />
+        <label>{t('Filter')}</label>
+        <input type="text" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('Type to filter…')} />
       </div>
       <div className="field-row">
-        <label>Sort by</label>
+        <label>{t('Sort by')}</label>
         <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-          <option value="count">Count (desc)</option>
-          <option value="name">Name (A→Z)</option>
-          <option value="first">First mention</option>
+          <option value="count">{t('Count (desc)')}</option>
+          <option value="name">{t('Name (A→Z)')}</option>
+          <option value="first">{t('First mention')}</option>
         </select>
       </div>
       <div style={{ margin: '6px 0', display: 'flex', gap: 6 }}>
-        <button onClick={exportCsv}>Export CSV</button>
+        <button onClick={exportCsv}>{t('Export CSV')}</button>
       </div>
       <table className="history-table">
         <thead>
-          <tr><th>Name</th><th>Count</th><th>First word</th><th></th></tr>
+          <tr><th>{t('Name')}</th><th>{t('Count')}</th><th>{t('First word')}</th><th></th></tr>
         </thead>
         <tbody>
           {items.map((it) => (
@@ -91,12 +91,12 @@ export default function ProperNamesDialog({ tab, onJumpWord, onWizard, onClose }
               <td>{it.count}</td>
               <td>{it.first}</td>
               <td>
-                <button onClick={() => { onJumpWord(it.first); onClose(); }}>Go</button>
+                <button onClick={() => { onJumpWord(it.first); onClose(); }}>{t('Go')}</button>
               </td>
             </tr>
           ))}
           {items.length === 0 && (
-            <tr><td colSpan={4} style={{ textAlign: 'center', padding: 12 }}>No proper names detected.</td></tr>
+            <tr><td colSpan={4} style={{ textAlign: 'center', padding: 12 }}>{t('No proper names detected.')}</td></tr>
           )}
         </tbody>
       </table>

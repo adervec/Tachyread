@@ -7,6 +7,7 @@ import { createReadingTracker, READ_SRC_INFO } from '../engine/readingTracker.js
 import { sectionChecksum } from '../document/sectionHash.js';
 import { readerDocFromText } from '../document/readerDocument.js';
 import { textSignature, signatureSimilarity, similarityTier } from '../features/textSimilarity.js';
+import { t } from '../i18n.js';
 
 // Detailed annotated progress popup. Pulls everything the reading tracker knows into one view:
 //   • WHAT was read   — the coverage strip (read this session / earlier / unread / excluded).
@@ -22,13 +23,13 @@ const COLS = 320;
 // narration runs ~155 wpm at 1×; the multiples scale from that. Silent-reading figures are the usual
 // adult ranges. (Rough by nature — the point is a believable time credit, not a precise measurement.)
 const PACE_PRESETS = [
-  { label: 'Average reading', wpm: 250 },
-  { label: 'Careful reading', wpm: 180 },
-  { label: 'Fast reading', wpm: 400 },
-  { label: 'Audiobook 1×', wpm: 155 },
-  { label: 'Audiobook 1.2×', wpm: 185 },
-  { label: 'Audiobook 1.5×', wpm: 230 },
-  { label: 'Audiobook 2×', wpm: 310 },
+  { label: t('Average reading'), wpm: 250 },
+  { label: t('Careful reading'), wpm: 180 },
+  { label: t('Fast reading'), wpm: 400 },
+  { label: t('Audiobook {speed}', { speed: '1×' }), wpm: 155 },
+  { label: t('Audiobook {speed}', { speed: '1.2×' }), wpm: 185 },
+  { label: t('Audiobook {speed}', { speed: '1.5×' }), wpm: 230 },
+  { label: t('Audiobook {speed}', { speed: '2×' }), wpm: 310 },
 ];
 
 function fmtDuration(ms) {
@@ -36,9 +37,9 @@ function fmtDuration(ms) {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  if (h) return `${h}h ${m}m`;
-  if (m) return `${m}m ${sec}s`;
-  return `${sec}s`;
+  if (h) return t('{h}h {m}m', { h, m });
+  if (m) return t('{m}m {s}s', { m, s: sec });
+  return t('{s}s', { s: sec });
 }
 
 function fmtWhen(ts) {
@@ -47,15 +48,15 @@ function fmtWhen(ts) {
 
 // Reading-pace heat: slow = blue, through green/yellow, fast = red.
 function paceColor(wpm, maxWpm) {
-  const t = Math.max(0, Math.min(1, maxWpm > 0 ? wpm / maxWpm : 0));
-  return `hsl(${(220 - 220 * t).toFixed(0)} 72% 52%)`;
+  const k = Math.max(0, Math.min(1, maxWpm > 0 ? wpm / maxWpm : 0));
+  return `hsl(${(220 - 220 * k).toFixed(0)} 72% 52%)`;
 }
 
 function steadiness(cv) {
   if (cv <= 0) return '—';
-  if (cv < 0.4) return 'steady';
-  if (cv < 0.8) return 'variable';
-  return 'erratic';
+  if (cv < 0.4) return t('steady');
+  if (cv < 0.8) return t('variable');
+  return t('erratic');
 }
 
 // Works from a LIVE tab (tab prop) or from STORED reading state (storedChecksum prop) — the latter
@@ -80,12 +81,12 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
     return () => { alive = false; };
   }, [storedChecksum]);
 
-  const t = storedChecksum ? (storedTab && !storedTab.missing ? storedTab : null) : tab;
-  const tracker = t?.tracker;
-  const doc = t?.doc;
+  const view = storedChecksum ? (storedTab && !storedTab.missing ? storedTab : null) : tab;
+  const tracker = view?.tracker;
+  const doc = view?.doc;
   const total = doc?.words.length || 0;
-  const idx = t?.settings?.wordIndex || 0;
-  const skipRanges = t?.settings?.skipRanges || [];
+  const idx = view?.settings?.wordIndex || 0;
+  const skipRanges = view?.settings?.skipRanges || [];
   const wrapRef = useRef(null);
   const [hover, setHover] = useState(null); // { col, px }
   const [pendingJump, setPendingJump] = useState(null); // { wi, label } — jumps need a confirm click
@@ -97,7 +98,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
   const [scanMatches, setScanMatches] = useState(null); // null = not scanned; Map(index → meta)
   const [readSel, setReadSel] = useState(() => new Set());
   const [readArm, setReadArm] = useState(false);
-  const scanAvailable = !storedChecksum && Array.isArray(t?.doc?.words); // needs the real word list
+  const scanAvailable = !storedChecksum && Array.isArray(view?.doc?.words); // needs the real word list
   // Detailed file-vs-file overlap (requires the OTHER file's stored text): section-level compare + a
   // word-accurate read-state carry-over.
   const [fileList, setFileList] = useState([]);
@@ -105,7 +106,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
   const [cmpBusy, setCmpBusy] = useState(false);
   const [carrySel, setCarrySel] = useState(() => new Set());
   const [carryArm, setCarryArm] = useState(false);
-  const curChecksum = t?.doc?.contentChecksum;
+  const curChecksum = view?.doc?.contentChecksum;
   useEffect(() => {
     if (!scanAvailable) return;
     allFiles().then((fs) => setFileList(
@@ -139,8 +140,8 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
 
   // Stored mode has no parsed doc, so only explicitly saved ToC entries are available (no auto-detect).
   const entries = useMemo(
-    () => (storedChecksum ? (t?.settings?.tocEntries || []) : (tab ? getTocEntries(tab) : [])),
-    [tab, t, storedChecksum, tick], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (storedChecksum ? (view?.settings?.tocEntries || []) : (tab ? getTocEntries(tab) : [])),
+    [tab, view, storedChecksum, tick], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const sections = useMemo(() => {
     if (!entries.length || !tracker) return [];
@@ -218,7 +219,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
     if (!rect || !total) return;
     const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const wi = Math.round(frac * (total - 1));
-    setPendingJump({ wi, label: `${((wi / total) * 100).toFixed(1)}% · word ${(wi + 1).toLocaleString()}` });
+    setPendingJump({ wi, label: t('{pct}% · word {n}', { pct: ((wi / total) * 100).toFixed(1), n: (wi + 1).toLocaleString() }) });
   }
   const stageJump = (wi, label) => { if (onJumpWord) setPendingJump({ wi, label }); };
 
@@ -285,7 +286,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
   // pre-selected; you choose the subset to mark read here.
   const readWordsToAdd = [...readSel].reduce((n, i) => n + Math.max(0, (sections[i]?.total || 0) - (sections[i]?.readWords || 0)), 0);
   async function scan() {
-    const words = t?.doc?.words;
+    const words = view?.doc?.words;
     if (!Array.isArray(words)) { setScanMatches(new Map()); return; }
     const reg = await getReadSections().catch(() => ({}));
     const found = new Map();
@@ -312,8 +313,8 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
   async function scanSimilar() {
     setSimBusy(true); setSimRes(null);
     try {
-      const mySig = textSignature(t.doc.words);
-      if (!mySig.length) { setSimRes({ error: 'This document is too short to fingerprint.' }); setSimBusy(false); return; }
+      const mySig = textSignature(view.doc.words);
+      if (!mySig.length) { setSimRes({ error: t('This document is too short to fingerprint.') }); setSimBusy(false); return; }
       const rows = [];
       let scanned = 0;
       let skipped = 0;
@@ -335,7 +336,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
       }
       rows.sort((a, b) => b.sim - a.sim);
       setSimRes({ rows, scanned, skipped });
-    } catch (e) { setSimRes({ error: 'Similarity scan failed: ' + (e?.message || e) }); }
+    } catch (e) { setSimRes({ error: t('Similarity scan failed: {error}', { error: e?.message || e }) }); }
     setSimBusy(false);
   }
 
@@ -350,8 +351,8 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
       const [payload, fsRec, rs] = await Promise.all([loadDocPayload(checksum), loadFile(checksum), loadReadState(checksum)]);
       const fullText = payload?.fullText;
       const oldEntries = fsRec?.tocEntries || [];
-      if (!fullText) { setCmp({ error: 'That file’s text isn’t stored here anymore — reopen it once, then compare.' }); return; }
-      if (!oldEntries.length) { setCmp({ error: 'That file has no Table of Contents to compare sections against.' }); return; }
+      if (!fullText) { setCmp({ error: t('That file’s text isn’t stored here anymore — reopen it once, then compare.') }); return; }
+      if (!oldEntries.length) { setCmp({ error: t('That file has no Table of Contents to compare sections against.') }); return; }
       const oldDoc = readerDocFromText(fullText, fsRec.fileName || '');
       const oldWords = oldDoc.words;
       const oldTotal = oldWords.length;
@@ -364,7 +365,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
         const st = oldTracker.rangeStats(span.start, span.end);
         oldByHash.set(hash, { title: e.title, start: span.start, end: span.end, readFrac: st.readFrac, runs: oldTracker.readRuns(span.start, span.end) });
       });
-      const words = t.doc.words;
+      const words = view.doc.words;
       const pairs = [];
       sections.forEach((s, idx) => {
         const hash = sectionChecksum(words, s.start, s.end);
@@ -372,9 +373,9 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
         const old = oldByHash.get(hash);
         if (old && old.readFrac > s.readFrac + 0.01) pairs.push({ idx, title: s.title, curFrac: s.readFrac, oldFrac: old.readFrac, old, cur: s });
       });
-      setCmp({ pairs, file: fsRec.fileName || 'that file' });
+      setCmp({ pairs, file: fsRec.fileName || t('that file') });
       setCarrySel(new Set(pairs.map((p) => p.idx)));
-    } catch (e) { setCmp({ error: 'Compare failed: ' + (e?.message || e) }); }
+    } catch (e) { setCmp({ error: t('Compare failed: {error}', { error: e?.message || e }) }); }
     setCmpBusy(false);
   }
   const carryWords = (cmp?.pairs || []).filter((p) => carrySel.has(p.idx)).reduce((n, p) => {
@@ -403,7 +404,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
     const sec = sectionAt(a);
     const pct = ((a / total) * 100).toFixed(1);
     const state = coverClass(hover.col);
-    const stateLabel = { 'pd-cv-session': 'read this session', 'pd-cv-history': 'read earlier', 'pd-cv-unread': 'not read', 'pd-cv-skip': 'excluded (won’t count)' }[state];
+    const stateLabel = { 'pd-cv-session': t('read this session'), 'pd-cv-history': t('read earlier'), 'pd-cv-unread': t('not read'), 'pd-cv-skip': t('excluded (won’t count)') }[state];
     tip = { a, b, li, sec, pct, rs, stateLabel };
   }
 
@@ -425,34 +426,34 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
   );
 
   return (
-    <Dialog title="Progress Detail" onClose={onClose} width={960} buttons={<button onClick={onClose}>Close</button>}>
+    <Dialog title={t('Progress Detail')} onClose={onClose} width={960} buttons={<button onClick={onClose}>{t('Close')}</button>}>
       {!tracker || !total ? (
         <p className="settings-note">
           {storedChecksum
-            ? (storedTab ? 'No synced reading data for this file on this device yet — read it somewhere, sync, and it will appear here.' : 'Loading stored reading data…')
-            : 'No reading data yet — open a document and start reading.'}
+            ? (storedTab ? t('No synced reading data for this file on this device yet — read it somewhere, sync, and it will appear here.') : t('Loading stored reading data…'))
+            : t('No reading data yet — open a document and start reading.')}
         </p>
       ) : (
         <>
           {pendingJump && (
             <div className="pd-confirm">
-              Jump to <b>{pendingJump.label}</b>?
-              <button className="toggle-on" onClick={() => { onJumpWord?.(pendingJump.wi); onClose?.(); }}>▶ Jump</button>
-              <button onClick={() => setPendingJump(null)}>Cancel</button>
+              {t('Jump to {place}?', { place: pendingJump.label })}
+              <button className="toggle-on" onClick={() => { onJumpWord?.(pendingJump.wi); onClose?.(); }}>▶ {t('Jump')}</button>
+              <button onClick={() => setPendingJump(null)}>{t('Cancel')}</button>
             </div>
           )}
           <div className="pd-cards">
-            {card(`${(coverage * 100).toFixed(1)}%`, 'book read', 'Coverage (flagged front/back matter excluded)')}
-            {card(readCount.toLocaleString(), `of ${total.toLocaleString()} words`, 'Unique words marked read across all sessions')}
-            {card(recentWpm || '—', 'reading now (wpm)', 'Eyes pace over the last 30s')}
-            {card(sessionWpm || '—', 'session wpm', 'New words read per active minute this session')}
-            {card(lifetimeWpm || '—', 'lifetime wpm', 'New words read per active minute, all sessions')}
-            {card(fmtDuration(sessionActiveMs), 'active this session', `Lifetime active: ${fmtDuration(lifetimeActiveMs)}`)}
-            {card(reg.count, `regressions · ${reg.ratePer100.toFixed(1)}/100`, 'Backward re-reads this session')}
-            {card(steadiness(cv), 'pace', `Pace variability (CV ${cv.toFixed(2)}) — lower is steadier`)}
+            {card(`${(coverage * 100).toFixed(1)}%`, t('book read'), t('Coverage (flagged front/back matter excluded)'))}
+            {card(readCount.toLocaleString(), t('of {total} words', { total: total.toLocaleString() }), t('Unique words marked read across all sessions'))}
+            {card(recentWpm || '—', t('reading now (wpm)'), t('Eyes pace over the last 30s'))}
+            {card(sessionWpm || '—', t('session wpm'), t('New words read per active minute this session'))}
+            {card(lifetimeWpm || '—', t('lifetime wpm'), t('New words read per active minute, all sessions'))}
+            {card(fmtDuration(sessionActiveMs), t('active this session'), t('Lifetime active: {time}', { time: fmtDuration(lifetimeActiveMs) }))}
+            {card(reg.count, t('regressions · {rate}/100', { rate: reg.ratePer100.toFixed(1) }), t('Backward re-reads this session'))}
+            {card(steadiness(cv), t('pace'), t('Pace variability (CV {cv}) — lower is steadier', { cv: cv.toFixed(2) }))}
           </div>
 
-          <div className="field-section">Annotated progress · height &amp; colour = pace · click to jump (asks to confirm)</div>
+          <div className="field-section">{t('Annotated progress · height & colour = pace · click to jump (asks to confirm)')}</div>
           <div className="pd-bar-wrap" ref={wrapRef} onPointerMove={onMove} onPointerLeave={() => setHover(null)} onClick={onClick}>
             <svg className="pd-bar" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
               {/* excluded bands */}
@@ -480,25 +481,25 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
             {hover && <div className="pd-cursor" style={{ left: hover.px }} />}
             {tip && (
               <div className="pd-tip" style={{ left: hover.tipX }}>
-                <div className="pd-tip-row"><b>{tip.pct}%</b> · words {tip.a + 1}–{tip.b} · line {tip.li}</div>
+                <div className="pd-tip-row"><b>{tip.pct}%</b> · {t('words {from}–{to} · line {line}', { from: tip.a + 1, to: tip.b, line: tip.li })}</div>
                 {tip.sec && <div className="pd-tip-sec">§ {tip.sec.title}</div>}
-                <div className="pd-tip-row">{tip.stateLabel}{tip.rs.readFrac > 0.05 ? ` · ${Math.round(tip.rs.readFrac * 100)}% read` : ''}</div>
-                <div className="pd-tip-row">{tip.rs.wpm ? `${tip.rs.wpm} wpm` : 'no recorded pace'}{srcCols[hover.col] ? ` · read by ${READ_SRC_INFO[srcCols[hover.col]]?.label}` : ''}</div>
+                <div className="pd-tip-row">{tip.stateLabel}{tip.rs.readFrac > 0.05 ? ` · ${t('{pct}% read', { pct: Math.round(tip.rs.readFrac * 100) })}` : ''}</div>
+                <div className="pd-tip-row">{tip.rs.wpm ? `${tip.rs.wpm} wpm` : t('no recorded pace')}{srcCols[hover.col] ? ` · ${t('read by {mode}', { mode: READ_SRC_INFO[srcCols[hover.col]]?.label })}` : ''}</div>
               </div>
             )}
           </div>
 
           <div className="pd-legend">
-            <span><i className="pd-sw pd-cv-session" /> read this session</span>
-            <span><i className="pd-sw pd-cv-history" /> read earlier</span>
-            <span><i className="pd-sw pd-cv-unread" /> unread</span>
-            <span><i className="pd-sw pd-cv-skip" /> excluded</span>
-            <span><i className="pd-sw pd-reg-sw" /> re-read</span>
-            <span className="pd-heat">slow <i className="pd-heatbar" /> fast</span>
+            <span><i className="pd-sw pd-cv-session" /> {t('read this session')}</span>
+            <span><i className="pd-sw pd-cv-history" /> {t('read earlier')}</span>
+            <span><i className="pd-sw pd-cv-unread" /> {t('unread')}</span>
+            <span><i className="pd-sw pd-cv-skip" /> {t('excluded')}</span>
+            <span><i className="pd-sw pd-reg-sw" /> {t('re-read')}</span>
+            <span className="pd-heat">{t('slow')} <i className="pd-heatbar" /> {t('fast')}</span>
           </div>
           {srcUsed.length > 0 && (
-            <div className="pd-legend pd-src-legend" title="The lower strip on the bar: how each part was first read">
-              <span className="pd-src-label">How it was read:</span>
+            <div className="pd-legend pd-src-legend" title={t('The lower strip on the bar: how each part was first read')}>
+              <span className="pd-src-label">{t('How it was read:')}</span>
               {srcUsed.map((code) => (
                 <span key={code}><i className="pd-sw" style={{ background: READ_SRC_INFO[code]?.color }} /> {READ_SRC_INFO[code]?.label}</span>
               ))}
@@ -507,23 +508,23 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
 
           {sections.length > 0 && (
             <>
-              <div className="field-section">By section — where, how much, how fast · tick sections, then mark read / skipped / unread below</div>
+              <div className="field-section">{t('By section — where, how much, how fast · tick sections, then mark read / skipped / unread below')}</div>
               <div className="pd-sections">
                 {sections.map((s, i) => {
                   const skipped = secSkipFrac(s) >= 0.5;
                   return (
                     <div key={i} className={`pd-sec-row${selSecs.has(i) ? ' pd-sec-sel' : ''}${skipped ? ' pd-sec-skipped' : ''}`} style={{ paddingLeft: 8 + (s.level || 0) * 14 }}
-                      title={onJumpWord ? 'Click to jump to this section (asks to confirm)' : s.title}
+                      title={onJumpWord ? t('Click to jump to this section (asks to confirm)') : s.title}
                       onClick={() => stageJump(s.start, s.title)}>
                       <input
                         type="checkbox"
                         className="pd-sec-check"
                         checked={selSecs.has(i)}
-                        title="Select this section for a batch action below"
+                        title={t('Select this section for a batch action below')}
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => { e.stopPropagation(); setSelSecs((prev) => { const n = new Set(prev); e.target.checked ? n.add(i) : n.delete(i); return n; }); setUnreadArm(false); }}
                       />
-                      <span className="pd-sec-title">{skipped && <span className="pd-sec-skipmark" title="Excluded from % read">⏭ </span>}{s.title}</span>
+                      <span className="pd-sec-title">{skipped && <span className="pd-sec-skipmark" title={t('Excluded from % read')}>⏭ </span>}{s.title}</span>
                       <span className="pd-sec-bar"><i style={{ width: `${Math.round(s.readFrac * 100)}%` }} /></span>
                       <span className="pd-sec-pct">{Math.round(s.readFrac * 100)}%</span>
                       <span className="pd-sec-wpm">{s.wpm ? `${s.wpm} wpm` : '—'}</span>
@@ -535,36 +536,35 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
               {selSecs.size > 0 && (
                 <div className="pd-secbar">
                   <div className="pd-secbar-row">
-                    <span className="pd-secbar-lbl">{selSecs.size} selected</span>
-                    <label className="pd-pace-pick">read remainder at
+                    <span className="pd-secbar-lbl">{t('{n} selected', { n: selSecs.size })}</span>
+                    <label className="pd-pace-pick">{t('read remainder at')}
                       <select value={paceSel} onChange={(e) => setPaceSel(e.target.value)}>
                         {PACE_PRESETS.map((p) => <option key={p.label} value={String(p.wpm)}>{p.label} · {p.wpm} wpm</option>)}
-                        <option value="custom">Custom…</option>
+                        <option value="custom">{t('Custom…')}</option>
                       </select>
                     </label>
-                    {paceSel === 'custom' && <input className="pd-pace-num" type="number" min="30" max="2000" value={customWpm} onChange={(e) => setCustomWpm(e.target.value)} title="Words per minute" />}
+                    {paceSel === 'custom' && <input className="pd-pace-num" type="number" min="30" max="2000" value={customWpm} onChange={(e) => setCustomWpm(e.target.value)} title={t('Words per minute')} />}
                     <button className="toggle-on" disabled={!remainderWords || !effWpm} onClick={markSelectedReadAtPace}
-                      title="Mark the unread words in these sections read, crediting the time at this pace">
-                      ✓ Mark read{remainderWords ? ` · +${remainderWords.toLocaleString()} words @ ${effWpm} wpm` : ''}
+                      title={t('Mark the unread words in these sections read, crediting the time at this pace')}>
+                      ✓ {t('Mark read')}{remainderWords ? ` · ${t('+{n} words @ {wpm} wpm', { n: remainderWords.toLocaleString(), wpm: effWpm })}` : ''}
                     </button>
                   </div>
                   <div className="pd-secbar-row">
                     {allSelSkipped
-                      ? <button onClick={() => toggleSkipSelected(false)} title="Count these sections toward % read again">↺ Un-skip {selSecs.size}</button>
-                      : <button onClick={() => toggleSkipSelected(true)} title="Exclude these sections from % read (front/back matter, an appendix you won't read, …)">⏭ Skip {selSecs.size}</button>}
+                      ? <button onClick={() => toggleSkipSelected(false)} title={t('Count these sections toward % read again')}>↺ {t('Un-skip {n}', { n: selSecs.size })}</button>
+                      : <button onClick={() => toggleSkipSelected(true)} title={t("Exclude these sections from % read (front/back matter, an appendix you won't read, …)")}>⏭ {t('Skip {n}', { n: selSecs.size })}</button>}
                     {selWords > 0 && (!unreadArm
-                      ? <button onClick={() => setUnreadArm(true)} title="Clear the read coverage of these sections">↩ Mark unread…</button>
+                      ? <button onClick={() => setUnreadArm(true)} title={t('Clear the read coverage of these sections')}>↩ {t('Mark unread…')}</button>
                       : (
                         <>
-                          <button className="grab-trash" onClick={markSelectedUnread}>⚠ Confirm — clear {selWords.toLocaleString()} read word{selWords === 1 ? '' : 's'}</button>
-                          <button onClick={() => setUnreadArm(false)}>Cancel</button>
+                          <button className="grab-trash" onClick={markSelectedUnread}>⚠ {t.n('Confirm — clear {count} read word', 'Confirm — clear {count} read words', selWords, { count: selWords.toLocaleString() })}</button>
+                          <button onClick={() => setUnreadArm(false)}>{t('Cancel')}</button>
                         </>
                       ))}
-                    <button onClick={() => { setSelSecs(new Set()); setUnreadArm(false); }}>Clear selection</button>
+                    <button onClick={() => { setSelSecs(new Set()); setUnreadArm(false); }}>{t('Clear selection')}</button>
                   </div>
                   <span className="settings-note" style={{ margin: 0 }}>
-                    <b>Mark read</b> credits the unread remainder at the chosen pace (its time counts toward WPM) — for a section you finished on audiobook or paper.
-                    <b> Skip</b> excludes a section from % read. <b>Mark unread</b> clears coverage.
+                    {t('Mark read credits the unread remainder at the chosen pace (its time counts toward WPM) — for a section you finished on audiobook or paper. Skip excludes a section from % read. Mark unread clears coverage.')}
                   </span>
                 </div>
               )}
@@ -573,33 +573,33 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
               {scanAvailable && (
                 <div className="pd-scan">
                   {scanMatches === null ? (
-                    <button onClick={scan} title="Compare each section's content to sections you've finished in other files — useful for a new edition of a book you've already read">🔎 Scan for sections already read elsewhere</button>
+                    <button onClick={scan} title={t("Compare each section's content to sections you've finished in other files — useful for a new edition of a book you've already read")}>🔎 {t('Scan for sections already read elsewhere')}</button>
                   ) : scanMatches.size === 0 ? (
                     <>
-                      <span className="settings-note" style={{ margin: 0 }}>No unread sections here match content you’ve finished in another file.</span>
-                      <button onClick={() => setScanMatches(null)}>Done</button>
+                      <span className="settings-note" style={{ margin: 0 }}>{t('No unread sections here match content you’ve finished in another file.')}</span>
+                      <button onClick={() => setScanMatches(null)}>{t('Done')}</button>
                     </>
                   ) : (
                     <>
-                      <div className="field-section" style={{ marginTop: 0 }}>Read elsewhere ({scanMatches.size}) — tick to mark as read here</div>
+                      <div className="field-section" style={{ marginTop: 0 }}>{t('Read elsewhere ({n}) — tick to mark as read here', { n: scanMatches.size })}</div>
                       {[...scanMatches.entries()].map(([i, m]) => (
                         <label key={i} className="pd-scan-row">
                           <input type="checkbox" checked={readSel.has(i)} onChange={(e) => setReadSel((prev) => { const n = new Set(prev); if (e.target.checked) n.add(i); else n.delete(i); return n; })} />
                           <span className="pd-scan-title">{sections[i].title}</span>
-                          <span className="settings-note" style={{ margin: 0 }}>{sections[i].readWords}/{sections[i].total} here · read {m.file ? `in “${m.file}”` : 'earlier'}{m.at ? ` · ${fmtDate(m.at)}` : ''}</span>
+                          <span className="settings-note" style={{ margin: 0 }}>{m.file ? t('{read}/{total} here · read in “{file}”', { read: sections[i].readWords, total: sections[i].total, file: m.file }) : t('{read}/{total} here · read earlier', { read: sections[i].readWords, total: sections[i].total })}{m.at ? ` · ${fmtDate(m.at)}` : ''}</span>
                         </label>
                       ))}
                       <div className="pd-unread-bar">
                         {!readArm ? (
-                          <button className="toggle-on" disabled={!readSel.size} onClick={() => setReadArm(true)}>✓ Mark {readSel.size} as read here…</button>
+                          <button className="toggle-on" disabled={!readSel.size} onClick={() => setReadArm(true)}>✓ {t('Mark {n} as read here…', { n: readSel.size })}</button>
                         ) : (
                           <>
-                            <button className="grab-trash" onClick={markSelectedRead}>⚠ Confirm — mark {readWordsToAdd.toLocaleString()} word{readWordsToAdd === 1 ? '' : 's'} read</button>
-                            <button onClick={() => setReadArm(false)}>Cancel</button>
+                            <button className="grab-trash" onClick={markSelectedRead}>⚠ {t.n('Confirm — mark {count} word read', 'Confirm — mark {count} words read', readWordsToAdd, { count: readWordsToAdd.toLocaleString() })}</button>
+                            <button onClick={() => setReadArm(false)}>{t('Cancel')}</button>
                           </>
                         )}
-                        <button onClick={() => { setScanMatches(null); setReadSel(new Set()); setReadArm(false); }}>Cancel scan</button>
-                        <span className="settings-note" style={{ margin: 0 }}>Content-matched to sections finished in other files. Coverage rises; use for a successive edition.</span>
+                        <button onClick={() => { setScanMatches(null); setReadSel(new Set()); setReadArm(false); }}>{t('Cancel scan')}</button>
+                        <span className="settings-note" style={{ margin: 0 }}>{t('Content-matched to sections finished in other files. Coverage rises; use for a successive edition.')}</span>
                       </div>
                     </>
                   )}
@@ -611,35 +611,35 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
               {scanAvailable && fileList.length > 0 && (
                 <div className="pd-scan">
                   <label className="pd-cmp-pick">
-                    <span>Compare overlap with a previously-read file:</span>
+                    <span>{t('Compare overlap with a previously-read file:')}</span>
                     <select value="" disabled={cmpBusy} onChange={(e) => compareWith(e.target.value)}>
-                      <option value="">{cmpBusy ? 'Comparing…' : 'Pick a file…'}</option>
+                      <option value="">{cmpBusy ? t('Comparing…') : t('Pick a file…')}</option>
                       {fileList.map((f) => <option key={f.checksum || f.contentChecksum} value={f.checksum || f.contentChecksum}>{f.fileName || (f.checksum || '').slice(0, 8)}</option>)}
                     </select>
                   </label>
                   {cmp?.error && <p className="settings-note" style={{ margin: '4px 0 0' }}>{cmp.error}</p>}
-                  {cmp?.pairs && cmp.pairs.length === 0 && <p className="settings-note" style={{ margin: '4px 0 0' }}>No sections here were read more in “{cmp.file}”.</p>}
+                  {cmp?.pairs && cmp.pairs.length === 0 && <p className="settings-note" style={{ margin: '4px 0 0' }}>{t('No sections here were read more in “{file}”.', { file: cmp.file })}</p>}
                   {cmp?.pairs && cmp.pairs.length > 0 && (
                     <>
-                      <div className="field-section" style={{ marginTop: 6 }}>Read more in “{cmp.file}” ({cmp.pairs.length}) — tick to carry that read state here</div>
+                      <div className="field-section" style={{ marginTop: 6 }}>{t('Read more in “{file}” ({n}) — tick to carry that read state here', { file: cmp.file, n: cmp.pairs.length })}</div>
                       {cmp.pairs.map((p) => (
                         <label key={p.idx} className="pd-scan-row">
                           <input type="checkbox" checked={carrySel.has(p.idx)} onChange={(e) => setCarrySel((prev) => { const n = new Set(prev); if (e.target.checked) n.add(p.idx); else n.delete(p.idx); return n; })} />
                           <span className="pd-scan-title">{p.title}</span>
-                          <span className="settings-note" style={{ margin: 0 }}>here {Math.round(p.curFrac * 100)}% → there {Math.round(p.oldFrac * 100)}%</span>
+                          <span className="settings-note" style={{ margin: 0 }}>{t('here {here}% → there {there}%', { here: Math.round(p.curFrac * 100), there: Math.round(p.oldFrac * 100) })}</span>
                         </label>
                       ))}
                       <div className="pd-unread-bar">
                         {!carryArm ? (
-                          <button className="toggle-on" disabled={!carrySel.size} onClick={() => setCarryArm(true)}>⇄ Carry over {carrySel.size} section{carrySel.size === 1 ? '' : 's'}…</button>
+                          <button className="toggle-on" disabled={!carrySel.size} onClick={() => setCarryArm(true)}>⇄ {t.n('Carry over {n} section…', 'Carry over {n} sections…', carrySel.size)}</button>
                         ) : (
                           <>
-                            <button className="grab-trash" onClick={carryOver}>⚠ Confirm — mark {carryWords.toLocaleString()} word{carryWords === 1 ? '' : 's'} read</button>
-                            <button onClick={() => setCarryArm(false)}>Cancel</button>
+                            <button className="grab-trash" onClick={carryOver}>⚠ {t.n('Confirm — mark {count} word read', 'Confirm — mark {count} words read', carryWords, { count: carryWords.toLocaleString() })}</button>
+                            <button onClick={() => setCarryArm(false)}>{t('Cancel')}</button>
                           </>
                         )}
-                        <button onClick={() => { setCmp(null); setCarrySel(new Set()); setCarryArm(false); }}>Clear</button>
-                        <span className="settings-note" style={{ margin: 0 }}>Transfers the other file’s exact per-word read state onto the content-identical sections here.</span>
+                        <button onClick={() => { setCmp(null); setCarrySel(new Set()); setCarryArm(false); }}>{t('Clear')}</button>
+                        <span className="settings-note" style={{ margin: 0 }}>{t('Transfers the other file’s exact per-word read state onto the content-identical sections here.')}</span>
                       </div>
                     </>
                   )}
@@ -653,43 +653,46 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
           {scanAvailable && fileList.length > 0 && (
             <div className="pd-scan">
               {simRes === null && !simBusy && (
-                <button onClick={scanSimilar} title="Fingerprint this document and score every previously-read file against it — catches new editions, retitled copies, and heavily overlapping texts even when no section matches exactly">🧬 Scan library for similar files</button>
+                <button onClick={scanSimilar} title={t('Fingerprint this document and score every previously-read file against it — catches new editions, retitled copies, and heavily overlapping texts even when no section matches exactly')}>🧬 {t('Scan library for similar files')}</button>
               )}
-              {simBusy && <span className="settings-note" style={{ margin: 0 }}>Scanning {fileList.length} previously-read file{fileList.length === 1 ? '' : 's'}…</span>}
+              {simBusy && <span className="settings-note" style={{ margin: 0 }}>{t.n('Scanning {n} previously-read file…', 'Scanning {n} previously-read files…', fileList.length)}</span>}
               {simRes?.error && (
                 <>
                   <span className="settings-note" style={{ margin: 0 }}>{simRes.error}</span>
-                  <button onClick={() => setSimRes(null)}>Done</button>
+                  <button onClick={() => setSimRes(null)}>{t('Done')}</button>
                 </>
               )}
               {simRes?.rows && simRes.rows.length === 0 && (
                 <>
                   <span className="settings-note" style={{ margin: 0 }}>
-                    No meaningful overlap with the {simRes.scanned} previously-read file{simRes.scanned === 1 ? '' : 's'} scanned{simRes.skipped ? ` (${simRes.skipped} skipped — text not stored on this device)` : ''}. This looks new. ✨
+                    {simRes.skipped
+                      ? t.n('No meaningful overlap with the {n} previously-read file scanned ({skipped} skipped — text not stored on this device).', 'No meaningful overlap with the {n} previously-read files scanned ({skipped} skipped — text not stored on this device).', simRes.scanned, { skipped: simRes.skipped })
+                      : t.n('No meaningful overlap with the {n} previously-read file scanned.', 'No meaningful overlap with the {n} previously-read files scanned.', simRes.scanned)}
+                    {' '}{t('This looks new.')} ✨
                   </span>
-                  <button onClick={() => setSimRes(null)}>Done</button>
+                  <button onClick={() => setSimRes(null)}>{t('Done')}</button>
                 </>
               )}
               {simRes?.rows && simRes.rows.length > 0 && (
                 <>
-                  <div className="field-section" style={{ marginTop: 0 }}>Similar to {simRes.rows.length} previously-read file{simRes.rows.length === 1 ? '' : 's'}</div>
+                  <div className="field-section" style={{ marginTop: 0 }}>{t.n('Similar to {n} previously-read file', 'Similar to {n} previously-read files', simRes.rows.length)}</div>
                   {simRes.rows.map((r) => {
                     const tier = similarityTier(r.sim);
                     return (
                       <div key={r.checksum} className="pd-scan-row pd-sim-row">
                         <span className={`pd-sim-badge pd-sim-${tier.key}`}>{Math.round(r.sim * 100)}%</span>
                         <span className="pd-scan-title">{r.fileName}</span>
-                        <span className="settings-note" style={{ margin: 0 }}>{tier.label} · {r.readPct}% read there</span>
+                        <span className="settings-note" style={{ margin: 0 }}>{tier.label} · {t('{pct}% read there', { pct: r.readPct })}</span>
                         {sections.length > 0 && (
-                          <button className="link-btn" disabled={cmpBusy} title="Run the detailed section-by-section compare against this file (carry read state over)" onClick={() => compareWith(r.checksum)}>⇄ Compare sections</button>
+                          <button className="link-btn" disabled={cmpBusy} title={t('Run the detailed section-by-section compare against this file (carry read state over)')} onClick={() => compareWith(r.checksum)}>⇄ {t('Compare sections')}</button>
                         )}
                       </div>
                     );
                   })}
                   <div className="pd-unread-bar">
-                    <button onClick={() => setSimRes(null)}>Done</button>
+                    <button onClick={() => setSimRes(null)}>{t('Done')}</button>
                     <span className="settings-note" style={{ margin: 0 }}>
-                      Fuzzy content fingerprint (5-word shingles) — survives edition changes and re-split chapters{simRes.skipped ? ` · ${simRes.skipped} file(s) skipped (text not stored here)` : ''}{sections.length === 0 ? ' · run the ToC wizard here to enable the section-level compare/carry-over' : ''}.
+                      {t('Fuzzy content fingerprint (5-word shingles) — survives edition changes and re-split chapters')}{simRes.skipped ? ` · ${t.n('{n} file skipped (text not stored here)', '{n} files skipped (text not stored here)', simRes.skipped)}` : ''}{sections.length === 0 ? ` · ${t('run the ToC wizard here to enable the section-level compare/carry-over')}` : ''}.
                     </span>
                   </div>
                 </>
@@ -697,14 +700,14 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
             </div>
           )}
 
-          <div className="field-section">Reading sessions — when &amp; where (by paragraph)</div>
+          <div className="field-section">{t('Reading sessions — when & where (by paragraph)')}</div>
           {sessions.length === 0 ? (
-            <p className="settings-note">No sessions recorded yet — keep reading and they'll appear here, tracked at paragraph resolution.</p>
+            <p className="settings-note">{t("No sessions recorded yet — keep reading and they'll appear here, tracked at paragraph resolution.")}</p>
           ) : (
             <div className="pd-days">
               {sessions.map((s, i) => (
-                <div key={i} className="pd-day-row pd-sess-row" title={onJumpWord ? 'Click to jump to where this session started (asks to confirm)' : ''}
-                  onClick={() => stageJump(s.minW, `session start (${fmtWhen(s.startTs)})`)}>
+                <div key={i} className="pd-day-row pd-sess-row" title={onJumpWord ? t('Click to jump to where this session started (asks to confirm)') : ''}
+                  onClick={() => stageJump(s.minW, t('session start ({when})', { when: fmtWhen(s.startTs) }))}>
                   <span className="pd-day-date">{fmtWhen(s.startTs)}</span>
                   <span className="pd-sess-range">{((s.minW / total) * 100).toFixed(0)}–{((s.maxW / total) * 100).toFixed(0)}%</span>
                   <span className="pd-sess-paras">{s.paras} ¶</span>
@@ -714,16 +717,16 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
             </div>
           )}
 
-          <div className="field-section">When you read — daily totals</div>
+          <div className="field-section">{t('When you read — daily totals')}</div>
           {daily.length === 0 ? (
-            <p className="settings-note">No daily history recorded yet.</p>
+            <p className="settings-note">{t('No daily history recorded yet.')}</p>
           ) : (
             <div className="pd-days">
               {daily.map((d) => (
                 <div key={d.date} className="pd-day-row">
                   <span className="pd-day-date">{d.date}</span>
                   <span className="pd-day-bar"><i style={{ width: `${Math.round((d.words / maxDayWords) * 100)}%` }} /></span>
-                  <span className="pd-day-words">{d.words.toLocaleString()} words</span>
+                  <span className="pd-day-words">{t('{words} words', { words: d.words.toLocaleString() })}</span>
                   <span className="pd-day-time">{fmtDuration(d.ms)}</span>
                 </div>
               ))}

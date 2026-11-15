@@ -7,6 +7,7 @@
 // preserved on settings reset like custom cursors); WHICH designs are placed — and where — is a
 // PER-TAB setting (settings.linesCrosshairs: [{ id, x, y, size }], fractional coords). Placed
 // crosshairs are dragged directly on the pane. Pure helpers — see crosshairs.test.mjs.
+import { t } from '../i18n.js';
 
 export const XH_SHAPES = ['cross', 'x', 'circle', 'ring', 'dot', 'square', 'triangle', 'brackets', 'chevron', 'hline', 'vline'];
 
@@ -18,16 +19,16 @@ export const XH_DEFAULT_FX = { blur: 0, invert: 0, grayscale: 0, hueRotate: 0, c
 // take at the auto-mode pace, even when auto play is off.
 export const XH_ANIMS = ['none', 'breathe', 'pulse', 'spin', 'rock', 'orbit', 'scan', 'bounce', 'fractal', 'kaleido'];
 export const XH_ANIM_LABELS = {
-  none: 'none',
-  breathe: 'breathe (swell)',
-  pulse: 'pulse (glow throb)',
-  spin: 'spin (rotate)',
-  rock: 'rock (sway)',
-  orbit: 'cycling dots (orbit)',
-  scan: 'scanning dot (left ↔ right)',
-  bounce: 'oscillating dot (up ↕ down)',
-  fractal: 'trippy fractal (nested spin)',
-  kaleido: 'kaleidoscope (moiré spokes)',
+  none: t('none'),
+  breathe: t('breathe (swell)'),
+  pulse: t('pulse (glow throb)'),
+  spin: t('spin (rotate)'),
+  rock: t('rock (sway)'),
+  orbit: t('cycling dots (orbit)'),
+  scan: t('scanning dot (left ↔ right)'),
+  bounce: t('oscillating dot (up ↕ down)'),
+  fractal: t('trippy fractal (nested spin)'),
+  kaleido: t('kaleidoscope (moiré spokes)'),
 };
 export const XH_DEFAULT_ANIM = { style: 'none', periodMode: 'fixed', secs: 3 };
 

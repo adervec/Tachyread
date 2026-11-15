@@ -2,6 +2,7 @@
 // Terse and factual by design — numbers and a direction, no cheering and no guilt. Aggregates the
 // same per-file dailyHistory the Statistics dialog uses ({ date: 'YYYY-MM-DD' local, wordsRead }).
 import { fmtDate } from './dateFmt.js';
+import { t } from '../i18n.js';
 
 // Words per LOCAL day over the trailing `days`, index 0 = today. Missing days are zero.
 export function dailyWords(files, days = 14, now = Date.now()) {
@@ -29,17 +30,17 @@ export function activitySummary(files, now = Date.now()) {
 
   const days = week.filter((v) => v > 0).length;
   let head;
-  if (wWords === 0) head = 'No reading in the past 7 days';
-  else head = `Past 7 days: ${compact(wWords)} words over ${days} day${days === 1 ? '' : 's'}`;
+  if (wWords === 0) head = t('No reading in the past 7 days');
+  else head = t.n('Past 7 days: {words} words over {n} day', 'Past 7 days: {words} words over {n} days', days, { words: compact(wWords) });
 
   // Trajectory vs the 7 days before — a percentage, not a verdict. ±15% reads as noise, not news.
   let tail;
-  if (pWords === 0) tail = wWords > 0 ? 'none the week before' : '';
+  if (pWords === 0) tail = wWords > 0 ? t('none the week before') : '';
   else {
     const delta = Math.round(((wWords - pWords) / pWords) * 100);
-    tail = Math.abs(delta) <= 15 ? 'about level with the week before'
-      : delta > 0 ? `up ${delta}% on the week before`
-        : `down ${Math.abs(delta)}% on the week before`;
+    tail = Math.abs(delta) <= 15 ? t('about level with the week before')
+      : delta > 0 ? t('up {pct}% on the week before', { pct: delta })
+        : t('down {pct}% on the week before', { pct: Math.abs(delta) });
   }
   return tail ? `${head} · ${tail}.` : `${head}.`;
 }

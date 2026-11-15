@@ -4,15 +4,16 @@
 // Anthropic's servers and spends your own API credits.
 import { recordApiUsage } from '../state/storage.js';
 import { anthropicCost } from './apiPricing.js';
+import { t } from '../i18n.js';
 
 const BASE = 'https://api.anthropic.com/v1/messages';
 
 export function anthropicConfigured(key) { return !!(key && key.trim()); }
 
 export const ANTHROPIC_MODELS = [
-  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5 — balanced' },
-  { id: 'claude-opus-4-8', label: 'Claude Opus 4.8 — most capable' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 — fastest / cheapest' },
+  { id: 'claude-sonnet-5', label: t('Claude Sonnet 5 — balanced') },
+  { id: 'claude-opus-4-8', label: t('Claude Opus 4.8 — most capable') },
+  { id: 'claude-haiku-4-5-20251001', label: t('Claude Haiku 4.5 — fastest / cheapest') },
 ];
 
 // messages: [{ role: 'user'|'assistant', content: string }]. Returns the assistant's reply text.
@@ -29,9 +30,9 @@ export async function askClaude(messages, { key, model = 'claude-sonnet-5', syst
     body: JSON.stringify({ model, max_tokens: maxTokens, system: system || undefined, messages }),
   });
   if (!r.ok) {
-    let detail = `Anthropic error ${r.status}`;
-    if (r.status === 401) detail = 'Invalid Anthropic API key.';
-    else if (r.status === 429) detail = 'Anthropic rate limit / quota reached.';
+    let detail = t('Anthropic error {status}', { status: r.status });
+    if (r.status === 401) detail = t('Invalid Anthropic API key.');
+    else if (r.status === 429) detail = t('Anthropic rate limit / quota reached.');
     else { try { const e = await r.json(); detail = e?.error?.message || detail; } catch { /* non-JSON */ } }
     throw new Error(detail);
   }

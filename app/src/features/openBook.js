@@ -3,6 +3,7 @@
 // queue's ▶ and the book-finished popup's "open next".
 import { loadDocPayload } from '../state/storage.js';
 import { findFile, forgetPath, foundPaths, handleAt, rememberPath } from './fileLocator.js';
+import { t } from '../i18n.js';
 
 // Where a linked file can be opened from: 'open' | 'local' | 'folder' | 'missing' | 'unlinked'.
 // The folder crawl is the only slow step, so it runs only when `search` is true — and only when the
@@ -21,10 +22,10 @@ export async function fileWhere(cs, name, { openChecksums = [], dirs = [], searc
 
 // Opens it. Returns { ok, msg } — msg explains a failure in plain words.
 export async function openBookFile({ cs, name, openChecksums = [], dirs = [], openRecent, openFiles }) {
-  if (!cs) return { ok: false, msg: `“${name}” isn’t linked to a document yet.` };
+  if (!cs) return { ok: false, msg: t('“{name}” isn’t linked to a document yet.', { name }) };
   const at = await fileWhere(cs, name, { openChecksums, dirs, search: true });
   if ((at.where === 'open' || at.where === 'local') && await openRecent(cs)) return { ok: true };
   if (at.where === 'folder') { openFiles([await at.hit.handle.getFile()]); return { ok: true }; }
-  if (!dirs.length) return { ok: false, msg: `“${name}” isn’t saved on this device. Add the folder your documents live in and it can be opened from there.` };
-  return { ok: false, msg: `“${name}” isn’t on this device and isn’t in ${dirs.map((d) => d.name).join(', ')}. Add another folder, or open it once with File → Open.` };
+  if (!dirs.length) return { ok: false, msg: t('“{name}” isn’t saved on this device. Add the folder your documents live in and it can be opened from there.', { name }) };
+  return { ok: false, msg: t('“{name}” isn’t on this device and isn’t in {folders}. Add another folder, or open it once with File → Open.', { name, folders: dirs.map((d) => d.name).join(', ') }) };
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Dialog from './Dialog.jsx';
 import ProfilesBar from '../components/ProfilesBar.jsx';
 import { DEFAULT_COMFORT } from '../engine/comfort.js';
+import { t } from '../i18n.js';
 
 // Eye-comfort settings: 20-20-20 microbreaks and fatigue-aware speed easing. Split out of
 // Application Settings so that dialog stays a short "general" page.
@@ -24,7 +25,7 @@ export default function ComfortSettingsDialog({ global, onPatch, onClose }) {
   }
 
   return (
-    <Dialog title="Comfort & Breaks" onClose={onClose} width={520} buttons={<button onClick={onClose}>Close</button>}>
+    <Dialog title={t('Comfort & Breaks')} onClose={onClose} width={520} buttons={<button onClick={onClose}>{t('Close')}</button>}>
       <ProfilesBar
         kind="comfort"
         profiles={g.settingsProfiles}
@@ -32,17 +33,17 @@ export default function ComfortSettingsDialog({ global, onPatch, onClose }) {
         capture={() => ({ comfort })}
         apply={(data) => patchComfort(data.comfort || {})}
       />
-      <Field label="Eye-rest microbreaks">
+      <Field label={t('Eye-rest microbreaks')}>
         <label className="inline-check">
           <input
             type="checkbox"
             checked={!!comfort.enabled}
             onChange={(e) => patchComfort({ enabled: e.target.checked })}
           />
-          Prompt a 20-20-20 break while reading
+          {t('Prompt a 20-20-20 break while reading')}
         </label>
       </Field>
-      <Field label="Break every (minutes of reading)">
+      <Field label={t('Break every (minutes of reading)')}>
         <input
           type="number"
           min={1}
@@ -53,7 +54,7 @@ export default function ComfortSettingsDialog({ global, onPatch, onClose }) {
           style={{ width: 70 }}
         />
       </Field>
-      <Field label="Rest length (seconds)">
+      <Field label={t('Rest length (seconds)')}>
         <input
           type="number"
           min={1}
@@ -64,22 +65,18 @@ export default function ComfortSettingsDialog({ global, onPatch, onClose }) {
           style={{ width: 70 }}
         />
       </Field>
-      <Field label="Ease speed when tired">
+      <Field label={t('Ease speed when tired')}>
         <label className="inline-check">
           <input
             type="checkbox"
             checked={!!comfort.autoBackoff}
             onChange={(e) => patchComfort({ autoBackoff: e.target.checked })}
           />
-          Lower WPM after a break if fatigue is high
+          {t('Lower WPM after a break if fatigue is high')}
         </label>
       </Field>
       <p className="settings-note">
-        Speed-reading removes the natural pauses paged reading gives you, so eye strain builds up
-        quietly. Breaks follow the 20-20-20 guideline (every ~20 min, look ~20&nbsp;ft / 6&nbsp;m
-        away for ~20&nbsp;s) and speed-easing nudges WPM down only when comprehension checks and
-        time-on-task both suggest you are tiring. This is a comfort aid, not medical advice. Take a
-        break any time from <strong>Train → Take a Break Now</strong>.
+        {t('Speed-reading removes the natural pauses paged reading gives you, so eye strain builds up quietly. Breaks follow the 20-20-20 guideline (every ~20 min, look ~20 ft / 6 m away for ~20 s) and speed-easing nudges WPM down only when comprehension checks and time-on-task both suggest you are tiring. This is a comfort aid, not medical advice. Take a break any time from Train → Take a Break Now.')}
       </p>
     </Dialog>
   );

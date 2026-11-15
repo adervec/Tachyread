@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { makeClozeProbe } from '../engine/clozeProbe.js';
 import { adaptWpm } from '../engine/adaptivePacer.js';
+import { t } from '../i18n.js';
 
 // Comprehension-gated adaptive pacing. While "Adaptive" is on and the reader is playing forward, this
 // fires a quick auto-generated cloze check every ~PROBE_EVERY words: it pauses, asks the reader to fill a
@@ -56,11 +57,11 @@ export default function AdaptiveProbe({ tab, playing, onPause, onResume, onSetWp
   return (
     <div className="adapt-probe-overlay">
       <div className="adapt-probe">
-        <div className="ap-head">Quick check — which word fits the blank?</div>
+        <div className="ap-head">{t('Quick check — which word fits the blank?')}</div>
         <p className="ap-sentence">
-          {probe.words.map((t, k) => (t.blank
+          {probe.words.map((pw, k) => (pw.blank
             ? <span key={k} className="ap-blank">_____</span>
-            : <span key={k}>{t.w} </span>))}
+            : <span key={k}>{pw.w} </span>))}
         </p>
         <div className="ap-choices">
           {probe.choices.map((c, i) => (
@@ -73,8 +74,8 @@ export default function AdaptiveProbe({ tab, playing, onPause, onResume, onSetWp
           ))}
         </div>
         <div className="ap-foot">
-          <button className="ap-skip" onClick={finish} disabled={picked != null}>Skip</button>
-          <span className="settings-note" style={{ margin: 0 }}>Speed adapts to your comprehension.</span>
+          <button className="ap-skip" onClick={finish} disabled={picked != null}>{t('Skip')}</button>
+          <span className="settings-note" style={{ margin: 0 }}>{t('Speed adapts to your comprehension.')}</span>
         </div>
       </div>
     </div>

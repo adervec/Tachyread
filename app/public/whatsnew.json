@@ -2,6 +2,7 @@
   {
     "date": "2026-11-14",
     "items": [
+      "More of Tachyread now speaks your language: the reading screen, the status bar, the contents, index and companion panes, and the Find, History, Statistics, Notes, Proper Names, HTML tools, OPDS, web-grab and other reader windows. A book keeps its own reading direction whatever language the menus are in.",
       "Tachyread is starting to speak your language: menus, tabs, the controls and the Settings, Application settings, Data and Font manager windows now come in French, Spanish, Portuguese, Italian, Croatian, German, Chinese, Ukrainian, Esperanto, Swahili, Hindi, Bengali, Indonesian, Urdu, Persian and Arabic (pick it under Settings → Application → App font). They are machine translated from English and unchecked; the rest of the app follows."
     ]
   },

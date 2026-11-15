@@ -3,6 +3,7 @@
 // and the overlap of two sketches estimates the Jaccard similarity of the full shingle sets. Unlike
 // the exact section hashes (sectionHash.js), this survives edition differences, small edits, and
 // different chapter splits. Pure — see textSimilarity.test.mjs.
+import { t } from '../i18n.js';
 // ponytail: bottom-k Jaccard is a coarse estimator (±a few % at k=256); MinHash-per-permutation
 // would tighten it if ranking quality ever matters.
 
@@ -40,8 +41,8 @@ export function signatureSimilarity(a, b) {
 
 // Human tier for a similarity score (UI labels).
 export function similarityTier(sim) {
-  if (sim >= 0.8) return { key: 'dup', label: 'near-duplicate' };
-  if (sim >= 0.4) return { key: 'strong', label: 'strong overlap' };
-  if (sim >= 0.12) return { key: 'some', label: 'some overlap' };
-  return { key: 'none', label: 'no meaningful overlap' };
+  if (sim >= 0.8) return { key: 'dup', label: t('near-duplicate') };
+  if (sim >= 0.4) return { key: 'strong', label: t('strong overlap') };
+  if (sim >= 0.12) return { key: 'some', label: t('some overlap') };
+  return { key: 'none', label: t('no meaningful overlap') };
 }

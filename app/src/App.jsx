@@ -144,14 +144,15 @@ import { createSequenceMatcher } from './features/triggerSequences.js';
 import HandCalibrationDialog from './dialogs/HandCalibrationDialog.jsx';
 import WebcamCalibrationDialog from './dialogs/WebcamCalibrationDialog.jsx';
 import { createAlarm } from './features/alarm.js';
+import { t } from './i18n.js';
 
 const WEBCAM_LABEL = {
-  starting: 'starting camera…', watching: 'watching', away: 'looked away — paused', drowsy: 'drowsy',
-  unsupported: 'face detection not supported here', denied: 'camera blocked', error: 'camera error', off: '',
+  starting: t('starting camera…'), watching: t('watching'), away: t('looked away — paused'), drowsy: t('drowsy'),
+  unsupported: t('face detection not supported here'), denied: t('camera blocked'), error: t('camera error'), off: '',
 };
 const HAND_LABEL = {
-  starting: 'starting camera…', watching: 'show a hand', hand: 'hand ✋', 'scroll-up': 'scroll ↑', 'scroll-down': 'scroll ↓',
-  unsupported: 'hand tracking not supported here', denied: 'camera blocked', error: 'camera error', off: '',
+  starting: t('starting camera…'), watching: t('show a hand'), hand: `${t('hand')} ✋`, 'scroll-up': t('scroll ↑'), 'scroll-down': t('scroll ↓'),
+  unsupported: t('hand tracking not supported here'), denied: t('camera blocked'), error: t('camera error'), off: '',
 };
 import { getSyncProvider, getDriveProfile } from './features/sync/syncProviders.js';
 import { backupToProvider, syncWithProvider } from './features/sync/syncManager.js';
@@ -198,8 +199,8 @@ function StatusText({ text, seq }) {
     const d = new Date();
     setStamp(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
     setFaded(false);
-    const t = setTimeout(() => setFaded(true), STATUS_HOLD_MS);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setFaded(true), STATUS_HOLD_MS);
+    return () => clearTimeout(timer);
   }, [text, seq]);
   return (
     <span className={`app-status-text${faded ? ' faded' : ''}`}>
@@ -279,7 +280,7 @@ function AppInner() {
       kbdRef.current.jumpToCurrent?.();
       t2.current = setTimeout(() => {
         setScrollArmed(true);
-        setStatus('📜 Scroll-to-read re-armed — view aligned to your current word.');
+        setStatus(`📜 ${t('Scroll-to-read re-armed — view aligned to your current word.')}`);
       }, 700); // the jump's own scroll must not be credited either
     }, 2500);
     return () => { clearTimeout(t1); clearTimeout(t2.current); };
@@ -321,8 +322,8 @@ function AppInner() {
     if (prevIncog.current === state.incognito) return;
     prevIncog.current = state.incognito;
     setStatus(state.incognito
-      ? '🕶 Incognito on — nothing is being recorded; your reading history is untouched.'
-      : 'Incognito off — your place was rewound and tracking resumed. Nothing was saved.');
+      ? `🕶 ${t('Incognito on — nothing is being recorded; your reading history is untouched.')}`
+      : t('Incognito off — your place was rewound and tracking resumed. Nothing was saved.'));
   }, [state.incognito, setStatus]);
   const [dragOver, setDragOver] = useState(false);
   const [closing, setClosing] = useState(null); // null | 'disconnect' | 'shutdown'
@@ -337,6 +338,7 @@ function AppInner() {
   const onSaveTypingRun = useCallback((run) => {
     setTypingRuns((r) => [...r, run]);
     saveTypingRun(run).then(sessionEnded).catch(() => {});
+    window.appFont?.logSession?.({ kind: 'practice', minutes: (run.durationMs || 0) / 60000, id: `typing:${run.ts}`, at: run.ts }); // hub ledger
   }, []);
   const [planState, setPlanState] = useState(null); // running typing plan: { plan, step, set } | null
   const planStateRef = useRef(null);
@@ -368,8 +370,8 @@ function AppInner() {
   async function resolveSyncConflict(c, useOther) {
     const pos = useOther ? c.other.pos : c.applied.pos;
     await applySyncedPosition(c.checksum, pos, state.global.deviceName || '');
-    const t = state.tabs.find((tt) => (tt.lazy ? tt.settings?.contentChecksum : tt.doc?.contentChecksum) === c.checksum);
-    if (t && !t.lazy) patchSettings(t.id, { wordIndex: pos });
+    const tab = state.tabs.find((tt) => (tt.lazy ? tt.settings?.contentChecksum : tt.doc?.contentChecksum) === c.checksum);
+    if (tab && !tab.lazy) patchSettings(tab.id, { wordIndex: pos });
     setSyncConflicts((list) => {
       const n = (list || []).filter((x) => x !== c);
       if (!n.length) clearPendingSyncConflicts().catch(() => {});
@@ -504,8 +506,8 @@ function AppInner() {
       if (!parked && ghostResetReason({ readerIdx: wi, ghostIdx: idx }) === 'jump') resetGhost();
     };
     step();
-    const t = setInterval(step, 250);
-    return () => clearInterval(t);
+    const timer = setInterval(step, 250);
+    return () => clearInterval(timer);
   }, [ghostOn, leadGhost, ghostRun, ghostWpm, ghostTotal, resetGhost]);
   // A guide isn't a race — no ahead/behind readout while the lead ghost is on.
   const ghostRace = ghostOn && !leadGhost && ghostIdx != null ? raceState(activeTab?.settings.wordIndex ?? 0, ghostIdx) : null;
@@ -668,8 +670,9 @@ function AppInner() {
           const hash = sectionChecksum(tab.doc.words, span.start, span.end);
           if (hash) {
             addReadSection(hash, { title: e.title, words: span.end - span.start, file: tab.doc.fileName });
-            // maker-portal character sheet: one 'read' per finished section (same-origin localStorage, stays local)
-            try { const k = 'portal-activity', a = JSON.parse(localStorage.getItem(k) || '[]'); a.push([Math.round(Date.now() / 1000), 'Tachyread', 'read', Math.max(1, Math.round((span.end - span.start) / 2500))]); localStorage.setItem(k, JSON.stringify(a.slice(-2000))); } catch { /* quota — ignore */ }
+            // Hub session ledger (house standard 25): one 'read' per finished section; the section's
+            // fingerprint is the id, so re-reading it never counts twice. Amount: 1 per ~2,500 words.
+            window.appFont?.logSession?.({ kind: 'read', amount: Math.max(1, Math.round((span.end - span.start) / 2500)), id: `section:${hash}` });
           }
         }
       });
@@ -778,12 +781,13 @@ function AppInner() {
       await finishBoundBook(cs).catch(() => {});
     }
     const n = await nextListenBook(stateGlobalRef.current.listenQueue, cs, [], { dir }).catch(() => null);
-    if (!n) { setStatus(finish ? '🎧 Queue finished — nothing more to listen to on this device.' : '🎧 No other book of this queue is on this device.'); return false; }
+    if (!n) { setStatus(`🎧 ${finish ? t('Queue finished — nothing more to listen to on this device.') : t('No other book of this queue is on this device.')}`); return false; }
     pendingListenRef.current = true;
     const r = await openBookFile({ cs: n.cs, name: n.book.title, dirs: n.dirs, openRecent, openFiles }).catch((e) => ({ ok: false, msg: e?.message || String(e) }));
     if (!r.ok) { pendingListenRef.current = false; setStatus(r.msg); return false; }
     closeTab(tab.id);
-    setStatus(`🎧 ${finish ? 'Up next' : dir > 0 ? 'Skipped ahead to' : 'Back to'}: ${n.book.title}`);
+    const title = n.book.title;
+    setStatus(`🎧 ${finish ? t('Up next: {title}', { title }) : dir > 0 ? t('Skipped ahead to: {title}', { title }) : t('Back to: {title}', { title })}`);
     return true;
   };
   // Lock-screen skips while listening through a queue: next/previous CHUNK (the narration unit);
@@ -864,7 +868,7 @@ function AppInner() {
   }, [playing, activeTab?.settings?.readAloud, activeTab?.id, state.global.offlineVoice]);
 
   useEffect(() => {
-    if (state.global.offlineVoice && ttsStatus === 'error') setStatus('Offline voice unavailable — download its model in Audio → Audio Settings.');
+    if (state.global.offlineVoice && ttsStatus === 'error') setStatus(t('Offline voice unavailable — download its model in Audio → Audio Settings.'));
   }, [ttsStatus, state.global.offlineVoice]);
 
   // Audiobook coverage of the active doc while read-aloud is on — for the status badge (nudges you to
@@ -1078,9 +1082,9 @@ function AppInner() {
       // Optional: make the buttons/biometrics scroll by uniform ticks (like the keyboard's plain
       // scroll) instead of the semantic per-kind amount, so all three inputs feel identical.
       if (state.global.scrollNavTicks) {
-        const t = { prevWord: [-1, 0.5], nextWord: [1, 0.5], prevLine: [-1, 1], nextLine: [1, 1], prevPara: [-1, 3], nextPara: [1, 3] }[kind];
+        const tick = { prevWord: [-1, 0.5], nextWord: [1, 0.5], prevLine: [-1, 1], nextLine: [1, 1], prevPara: [-1, 3], nextPara: [1, 3] }[kind];
         if (kind === 'restart') { scrollReaderTicks(-1, 100000); return; }
-        if (t) { scrollReaderTicks(t[0], t[1]); return; }
+        if (tick) { scrollReaderTicks(tick[0], tick[1]); return; }
       }
       setScrollCmd((c) => ({ token: (c?.token || 0) + 1, kind }));
       return;
@@ -1317,20 +1321,20 @@ function AppInner() {
           // Only narrate look-aways for the guards the user actually switched on. Eye gestures keep
           // the camera running without them, and a feed full of "Looked away" from a guard you never
           // enabled is noise.
-          if (f.attentive !== attentive && (webcamAttentionRef.current || focusStatsRef.current)) pushBioLog(attentive ? { source: 'camera', icon: '👀', text: 'Back — watching', tone: 'ok' } : { source: 'camera', icon: '🙈', text: 'Looked away', tone: 'warn' });
+          if (f.attentive !== attentive && (webcamAttentionRef.current || focusStatsRef.current)) pushBioLog(attentive ? { source: 'camera', icon: '👀', text: t('Back — watching'), tone: 'ok' } : { source: 'camera', icon: '🙈', text: t('Looked away'), tone: 'warn' });
           f.attentive = attentive;
         }
       },
       onDoze: (dozing) => {
         // doze → stop read-aloud (it's otherwise exempt from the guards). No auto-resume: if you
         // nodded off, it just stops, like the wind-down timer.
-        if (dozing && webcamDozeRef.current) pushBioLog({ source: 'camera', icon: '💤', text: 'Drowsy — eyes shut', tone: 'warn' });
+        if (dozing && webcamDozeRef.current) pushBioLog({ source: 'camera', icon: '💤', text: t('Drowsy — eyes shut'), tone: 'warn' });
         if (dozing && webcamDozeRef.current && playingRef.current && activeTabRef.current?.settings.readAloud) {
           engineRef.current.pause();
           setPlaying(false);
           cancelSpeech();
           if (activeTabRef.current) flushReadState(activeTabRef.current);
-          setStatus('Read-aloud stopped — you seemed to nod off.');
+          setStatus(t('Read-aloud stopped — you seemed to nod off.'));
         }
       },
       onAway: (awayMs) => {
@@ -1348,7 +1352,7 @@ function AppInner() {
       },
       onProximity: (close) => {
         setTooClose(distanceNudgeRef.current ? close : false);
-        if (close && distanceNudgeRef.current) pushBioLog({ source: 'camera', icon: '↔', text: 'Too close to the screen', tone: 'warn' });
+        if (close && distanceNudgeRef.current) pushBioLog({ source: 'camera', icon: '↔', text: t('Too close to the screen'), tone: 'warn' });
       },
     });
     webcamRef.current = mon;
@@ -1410,7 +1414,7 @@ function AppInner() {
       onIgnored: ({ kind, ms, why }) => {
         setEyeHold(null);
         // Telling you the hold you DID make is how you learn the windows; silence just feels broken.
-        if (why === 'no window') setStatus(`👁 ${ALL_KINDS.find((k) => k.id === kind)?.label || kind} held ${Math.round(ms)}ms — no action mapped to that length.`);
+        if (why === 'no window') setStatus(`👁 ${t('{gesture} held {ms}ms — no action mapped to that length.', { gesture: ALL_KINDS.find((k) => k.id === kind)?.label || kind, ms: Math.round(ms) })}`);
       },
     });
     return () => { eyeDetectorRef.current = null; };
@@ -1423,7 +1427,7 @@ function AppInner() {
     // (the play button is disabled too); pausing an already-running player still works. Read from a
     // ref: the document keydown (Space) handler holds a stale closure that predates the mode flip.
     if (scrollAdvancesRef.current && !playing) {
-      setStatus('📜 Scroll-to-read is on — scroll the Lines pane to read (auto-play is off).');
+      setStatus(`📜 ${t('Scroll-to-read is on — scroll the Lines pane to read (auto-play is off).')}`);
       return;
     }
     autoPausedRef.current = false; // manual control overrides any auto-pause memory
@@ -1455,8 +1459,8 @@ function AppInner() {
   // being read (so the phone's media controls show where you are).
   function mediaMeta() {
     const tab = activeTabRef.current;
-    if (!tab) return { title: 'Reading', artist: '', album: 'Tachyread', pct: 0 };
-    const book = tab.doc?.fileName || 'Reading';
+    if (!tab) return { title: t('Reading'), artist: '', album: 'Tachyread', pct: 0 };
+    const book = tab.doc?.fileName || t('Reading');
     const total = tab.doc?.words?.length || 1;
     const pct = Math.min(100, Math.round((tab.settings.wordIndex / total) * 100));
     let chapter = '';
@@ -1466,7 +1470,7 @@ function AppInner() {
       if (ch?.title) chapter = ch.title;
     } catch { /* no toc */ }
     // The track name (title) leads with progress so the lock screen shows where you are.
-    return { title: `${pct}% · ${chapter || book}`, artist: book, album: 'Tachyread — read-aloud', pct };
+    return { title: `${pct}% · ${chapter || book}`, artist: book, album: t('Tachyread — read-aloud'), pct };
   }
 
   // Typing practice pauses ALL biometric control: gestures/wave, the scroll joystick and
@@ -1489,12 +1493,12 @@ function AppInner() {
     toggleReadAloud: () => toggleReadAloud(),
     toggleScroll: () => toggleScrollRead(),
     toggleFocus: () => toggleFocusMode(),
-    toggleFaces: () => { const t = activeTabRef.current; if (t) patchSettings(t.id, { showEyes: !t.settings.showEyes }); },
+    toggleFaces: () => { const tab = activeTabRef.current; if (tab) patchSettings(tab.id, { showEyes: !tab.settings.showEyes }); },
     toggleStats: () => dispatch({ type: 'TOGGLE_STATS' }),
     switchTab: (d) => cycleTabs(d),
     sourcePage: (d) => jumpSourcePage(d),
     scrollTicks: (dir, ticks) => scrollReaderTicks(dir, ticks),
-    setWpmValue: (wpm) => { const t = activeTabRef.current; if (t) patchSettings(t.id, { wpm: Math.max(50, Math.min(2000, Math.round(wpm))) }); },
+    setWpmValue: (wpm) => { const tab = activeTabRef.current; if (tab) patchSettings(tab.id, { wpm: Math.max(50, Math.min(2000, Math.round(wpm))) }); },
   });
   // Latest voice-command phrase list, read live by the recognizer's matcher (so edits in Biometric
   // Controls take effect without toggling voice off/on).
@@ -1516,7 +1520,7 @@ function AppInner() {
     if (cmdId) {
       runCommand(cmdId, cmdCtx());
       setStatus(`⛓ ${actionLabel(cmdId)}`);
-      pushBioLog({ source: 'voice', icon: '⛓', text: 'Sequence complete', action: actionLabel(cmdId), tone: 'valid' });
+      pushBioLog({ source: 'voice', icon: '⛓', text: t('Sequence complete'), action: actionLabel(cmdId), tone: 'valid' });
     }
   };
 
@@ -1530,7 +1534,7 @@ function AppInner() {
     // must not fire mid-hold, or every hold would also run the mapped command. The profile
     // checker on the Biometric Controls page flags this ownership on the mapping.
     if (holdScrollOwns(state.global.holdScroll, kind)) {
-      pushBioLog({ source: 'camera', icon: GESTURE_INFO[kind]?.icon || '🖐', text: `${GESTURE_INFO[kind]?.label || kind} — hold to scroll`, tone: 'gesture' });
+      pushBioLog({ source: 'camera', icon: GESTURE_INFO[kind]?.icon || '🖐', text: t('{gesture} — hold to scroll', { gesture: GESTURE_INFO[kind]?.label || kind }), tone: 'gesture' });
       return;
     }
     const gmap = { ...DEFAULT_GESTURE_MAP, ...(state.global.gestureMap || {}) };
@@ -1541,7 +1545,7 @@ function AppInner() {
       runCommand(cmdId, cmdCtx());
       setStatus(`${info?.icon || '🖐'} ${actionLabel(cmdId)}`);
     }
-    pushBioLog({ source: 'camera', icon: info?.icon || '🖐', text: `${info?.label || kind}${hand ? ` (${hand === 'L' ? 'left' : 'right'})` : ''}`, action: cmdId ? actionLabel(cmdId) : null, tone: 'gesture' });
+    pushBioLog({ source: 'camera', icon: info?.icon || '🖐', text: hand ? (hand === 'L' ? t('{gesture} (left)', { gesture: info?.label || kind }) : t('{gesture} (right)', { gesture: info?.label || kind })) : (info?.label || kind), action: cmdId ? actionLabel(cmdId) : null, tone: 'gesture' });
     seqFeedRef.current?.(`g:${kind}${hand ? `:${hand}` : ''}`);
   };
 
@@ -1561,11 +1565,11 @@ function AppInner() {
       setPlaying(false);
       cancelSpeech();
       if (activeTabRef.current) flushReadState(activeTabRef.current);
-      setStatus('✋ Holding — paused');
+      setStatus(`✋ ${t('Holding — paused')}`);
     } else if (action === 'resume' && !scrollAdvancesRef.current && activeTabRef.current) {
       engineRef.current.start();
       setPlaying(true);
-      setStatus('▶ Released — resumed');
+      setStatus(`▶ ${t('Released — resumed')}`);
     }
   };
 
@@ -1677,7 +1681,7 @@ function AppInner() {
       cancelSpeech();
       setAutoStopAt(0);
       if (activeTabRef.current) flushReadState(activeTabRef.current);
-      setStatus(`Auto-stopped after ${mins} min.`);
+      setStatus(t('Auto-stopped after {mins} min.', { mins }));
     }, mins * 60000);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1694,14 +1698,14 @@ function AppInner() {
   // = prev/next paragraph. Off by default (vertical scroll/selection are left untouched either way).
   const gestureHandlers = state.global.gestureControls
     ? {
-        onTouchStart: (e) => { const t = e.touches[0]; touchRef.current = { x: t.clientX, y: t.clientY }; },
+        onTouchStart: (e) => { const touch = e.touches[0]; touchRef.current = { x: touch.clientX, y: touch.clientY }; },
         onTouchEnd: (e) => {
           const s = touchRef.current;
           touchRef.current = null;
           if (!s) return;
-          const t = e.changedTouches[0];
-          const dx = t.clientX - s.x;
-          const dy = t.clientY - s.y;
+          const touch = e.changedTouches[0];
+          const dx = touch.clientX - s.x;
+          const dy = touch.clientY - s.y;
           if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.3) return; // need a clear horizontal swipe
           const far = Math.abs(dx) > 170;
           if (dx < 0) nav(far ? 'nextPara' : 'nextLine');
@@ -1738,11 +1742,11 @@ function AppInner() {
     setCovers(res.covers);
     updateGlobal({ focusMode: true });
     const msg = {
-      unsupported: 'Focus on. Multi-monitor blackout needs Chrome or Edge — app is fullscreen only.',
-      denied: 'Focus on. Allow “window management” to black out other monitors.',
-      single: 'Focus on. Only one monitor detected.',
-      blocked: 'Focus on. Allow pop-ups to black out other monitors.',
-      ok: `Focus on. Blacked out ${res.covers.length} other monitor${res.covers.length === 1 ? '' : 's'}.`,
+      unsupported: t('Focus on. Multi-monitor blackout needs Chrome or Edge — app is fullscreen only.'),
+      denied: t('Focus on. Allow “window management” to black out other monitors.'),
+      single: t('Focus on. Only one monitor detected.'),
+      blocked: t('Focus on. Allow pop-ups to black out other monitors.'),
+      ok: t.n('Focus on. Blacked out {n} other monitor.', 'Focus on. Blacked out {n} other monitors.', res.covers.length),
     }[res.reason];
     if (msg) setStatus(msg);
   }
@@ -1824,7 +1828,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     if (!c) return;
     if (window.location.hash.includes('challenge=')) window.history.replaceState(null, '', window.location.pathname + window.location.search);
     if (!activeTab) {
-      if (!state.tabs.length) openFiles([new File(['Typing challenge. The drill is generated from the link, so this page only hosts it.'], 'Typing challenge.txt', { type: 'text/plain' })]);
+      if (!state.tabs.length) openFiles([new File([t('Typing challenge. The drill is generated from the link, so this page only hosts it.')], 'Typing challenge.txt', { type: 'text/plain' })]);
       return; // re-runs once the tab is active
     }
     patchSettings(activeTab.id, {
@@ -1834,7 +1838,11 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     });
     setChallenge(c);
     setPendingChallenge(null);
-    setStatus(`🔗 Typing challenge: ${c.limit} ${c.runMode === 'words' ? 'words' : 's'} of ${c.mode}${c.wpm ? ` — beat ${c.wpm} wpm` : ''}.`);
+    const cp = { limit: c.limit, mode: c.mode, wpm: c.wpm };
+    const challengeMsg = c.runMode === 'words'
+      ? (c.wpm ? t('Typing challenge: {limit} words of {mode} — beat {wpm} wpm.', cp) : t('Typing challenge: {limit} words of {mode}.', cp))
+      : (c.wpm ? t('Typing challenge: {limit} s of {mode} — beat {wpm} wpm.', cp) : t('Typing challenge: {limit} s of {mode}.', cp));
+    setStatus(`🔗 ${challengeMsg}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChallenge, activeTab?.id]);
   // Closing typing ends the challenge (only on a real on → off, not while a tab is still arriving).
@@ -1864,7 +1872,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     configureTypingForStep(step0);
     setPlan({ plan, step: 0, set: 0 });
     closeDialog();
-    setStatus(`▶ Plan “${plan.name}” — step 1/${plan.steps.length}.`);
+    setStatus(`▶ ${t('Plan “{name}” — step {step}/{total}.', { name: plan.name, step: 1, total: plan.steps.length })}`);
     if (step0.description) setTimeout(() => speak(step0.description, {}), 250); // first set of step 0
   }
   function advancePlan() {
@@ -1881,14 +1889,14 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       const next = plan.steps[step + 1];
       configureTypingForStep(next);
       setPlan({ plan, step: step + 1, set: 0 });
-      setStatus(`Plan “${plan.name}” — step ${step + 2}/${plan.steps.length}.`);
+      setStatus(t('Plan “{name}” — step {step}/{total}.', { name: plan.name, step: step + 2, total: plan.steps.length }));
       if (next.description) setTimeout(() => speak(next.description, {}), 200); // first set of the new step
       return;
     }
     // plan complete
     patchSettings(tab.id, { typing: { ...tab.settings.typing, enabled: false } });
     setPlan(null);
-    setStatus(`🏁 Plan “${plan.name}” complete.`);
+    setStatus(`🏁 ${t('Plan “{name}” complete.', { name: plan.name })}`);
   }
   function exitPlan() {
     const tab = activeTabRef.current;
@@ -1902,12 +1910,12 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
   // (only when no dialog tab is focused and focus isn't on a control). See the Help → Keyboard guide.
   useEffect(() => {
     function onKey(e) {
-      const t = e.target;
+      const target = e.target;
       const k = kbdRef.current;
       const ctrl = e.ctrlKey || e.metaKey;
       const shift = e.shiftKey;
       const key = (e.key || '').toLowerCase();
-      const inField = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable;
+      const inField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
       const inDialog = !!(k.state.modal || k.state.panels.some((p) => p.id === k.state.activePanelId));
 
       // Escape works from anywhere: leave full-screen reading, close a footnote, else the dialog tab.
@@ -1916,7 +1924,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
         if (k.showFootnote) { k.setShowFootnote(false); return; }
         // In a dialog's text box / filter, the first Escape just leaves the field — closing the whole
         // panel (and losing what you'd typed) from a filter box was too easy. A second Escape closes.
-        if (inDialog && inField && t.type !== 'checkbox' && t.type !== 'radio') { t.blur(); return; }
+        if (inDialog && inField && target.type !== 'checkbox' && target.type !== 'radio') { target.blur(); return; }
         if (inDialog) { k.closeDialog(); }
         return;
       }
@@ -1955,7 +1963,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       }
       if (inDialog) return;
       if (typingOnRef.current) return; // typing overlay owns the keys — no reading nav underneath
-      const onControl = !!(t.closest && t.closest('button, a[href], [role="button"]'));
+      const onControl = !!(target.closest && target.closest('button, a[href], [role="button"]'));
       if (e.key === ' ' || e.code === 'Space') { if (onControl) return; e.preventDefault(); k.playPause(); return; }
       if (onControl) return; // let a focused control keep its own keys
       if (e.key === 'ArrowLeft') { k.nav('prevWord'); return; }
@@ -1989,7 +1997,8 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     let skipIf = null;
     if (only) {
       const infoFor = await openFilterContext(state.global.readingList?.shelves || {});
-      skipIf = async (doc) => skipOpen(only, await infoFor(doc.contentChecksum));
+      // A reason CODE ('tracked' / 'finished'); AppContext words the status sentence for it.
+      skipIf = async (doc) => (skipOpen(only, await infoFor(doc.contentChecksum)) ? (only === 'unfinished' ? 'finished' : 'tracked') : null);
     }
     // Prefer the File System Access picker: it hands back handles, which is what lets
     // File → Show File Location reopen the OS dialog in that document's folder later.
@@ -2000,7 +2009,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           multiple: true, id: 'tachyread-open',
           // The picker validates these keys as real MIME types, so the extension list hangs off a
           // generic one rather than a wildcard.
-          ...(exts.length ? { types: [{ description: 'Documents', accept: { 'application/octet-stream': exts } }] } : {}),
+          ...(exts.length ? { types: [{ description: t('Documents'), accept: { 'application/octet-stream': exts } }] } : {}),
         });
         for (const h of picked) await rememberFile(h);
         openFiles(await Promise.all(picked.map((h) => h.getFile())), { skipIf });
@@ -2088,7 +2097,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
   useEffect(() => {
     if (!speakingOn || !activeTab) return undefined;
     if (!speechRecognitionSupported()) {
-      setStatus('Reading aloud to advance needs Chrome or Edge (Web Speech Recognition).');
+      setStatus(t('Reading aloud to advance needs Chrome or Edge (Web Speech Recognition).'));
       patchSettings(activeTab.id, { speaking: { ...activeTab.settings.speaking, enabled: false } });
       return undefined;
     }
@@ -2130,8 +2139,10 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           const qs = moveQuality(hit.pairs, wi, hit.to);
           playWordFx(qs, cfg.wordFx || 'glow');
           sess.move(qs, hit.to);
-          move = `+${hit.to - wi} word${hit.to - wi === 1 ? '' : 's'}${hit.resync ? ' (found your place)' : ''}`;
-        } else if (isFinal) { move = 'no match near your place'; sess.miss(); }
+          move = hit.resync
+            ? t.n('+{n} word (found your place)', '+{n} words (found your place)', hit.to - wi)
+            : t.n('+{n} word', '+{n} words', hit.to - wi);
+        } else if (isFinal) { move = t('no match near your place'); sess.miss(); }
         // Filler words (um, uh, you know…) that aren't in the text around your place.
         const nf = isFinal ? countFillers(transcript, tab.doc.words.slice(Math.max(0, wi - 12), wi + 60).join(' ')) : 0;
         if (nf) sess.fillers(nf);
@@ -2180,11 +2191,17 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       const fs = face?.summary();
       if (fs) {
         rec.face = fs;
-        setStatus(`🎥 Presenting (0–100): eye contact ${fs.eyeContact}, head steadiness ${fs.headSteadiness}${fs.expressiveness != null ? `, expressiveness ${fs.expressiveness}` : ''}${fs.articulation != null ? `, articulation ${fs.articulation}` : ''}.`);
+        const scores = [t('eye contact {n}', { n: fs.eyeContact }), t('head steadiness {n}', { n: fs.headSteadiness })];
+        if (fs.expressiveness != null) scores.push(t('expressiveness {n}', { n: fs.expressiveness }));
+        if (fs.articulation != null) scores.push(t('articulation {n}', { n: fs.articulation }));
+        setStatus(`🎥 ${t('Presenting (0–100): {scores}.', { scores: scores.join(', ') })}`);
       }
       // Kept on this device (Data → Speech log) and, when the Tachyread folder is set up, written to
       // its speech/ subfolder for SpeechImprover.
-      if (keepSession(rec)) { appendSpeechLog(rec); writeSpeakingLog(rec).catch(() => {}); sessionEnded(); }
+      if (keepSession(rec)) {
+        appendSpeechLog(rec); writeSpeakingLog(rec).catch(() => {}); sessionEnded();
+        window.appFont?.logSession?.({ kind: 'speak', minutes: ((rec.end || rec.at) - rec.at) / 60000, id: `speech:${rec.at}`, at: rec.end || rec.at }); // hub ledger
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab?.id, speakingOn, docLang.bcp]);
@@ -2247,10 +2264,10 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
         // Match against the user's editable phrase list (read live via the ref so edits apply without
         // toggling voice off/on). Returns a commandId the registry runs. A matched phrase ALWAYS
         // feeds trigger sequences — even a disabled row (its direct command just doesn't fire).
-        match: (t) => {
-          const row = matchVoiceRow(t, voiceCommandsRef.current);
+        match: (heard) => {
+          const row = matchVoiceRow(heard, voiceCommandsRef.current);
           if (row) seqFeedRef.current?.(`v:${row.phrase}`);
-          return matchVoice(t, voiceCommandsRef.current);
+          return matchVoice(heard, voiceCommandsRef.current);
         },
         onHeard: ({ transcript, isFinal, command }) => {
           if (!isFinal) return;
@@ -2363,7 +2380,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
   // Publish THIS device's open-file checksums for cross-device presence (a tab shows a badge if the
   // same file is open elsewhere). Written to IDB; it rides the next progress-sync push. Not in
   // incognito — that session leaves no trace. Keyed on the checksum list so tab-switches don't refire.
-  const openCsKey = state.tabs.map((t) => (t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum) || '').filter(Boolean).sort().join('|');
+  const openCsKey = state.tabs.map((tab) => (tab.lazy ? tab.settings?.contentChecksum : tab.doc?.contentChecksum) || '').filter(Boolean).sort().join('|');
   useEffect(() => {
     if (state.incognito) return;
     setSelfPresence(openCsKey ? openCsKey.split('|') : []).catch(() => {});
@@ -2377,9 +2394,9 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     try {
       await saveLibraryBook(book);
       await setBinding(n.checksum, book.id); // fires tachyread-bindings-changed → tab dot + tiles refresh
-      setStatus(`Added “${book.title}” to Trackyread.`);
+      setStatus(t('Added “{title}” to Trackyread.', { title: book.title }));
       if (open) openDialog({ kind: 'literary-journey', tab: 'library', focusBookId: book.id });
-    } catch (err) { setStatus('Could not add to Trackyread: ' + (err?.message || err)); }
+    } catch (err) { setStatus(t('Could not add to Trackyread: {error}', { error: err?.message || err })); }
   }
 
   // Tab Settings → Profiles → "Load in all tabs". A lazy (not yet loaded) tab's settings live in its
@@ -2387,15 +2404,15 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
   // records are written directly; loaded tabs go through the normal patch + persist path.
   async function applyProfileToAllTabs(data) {
     let n = 0;
-    for (const t of state.tabs) {
-      patchSettings(t.id, data);
-      if (t.lazy && t.checksum) {
-        const rec = await loadFile(t.checksum).catch(() => null);
-        if (rec) await saveFile({ ...rec, ...data, contentChecksum: rec.contentChecksum || t.checksum, updatedAt: Date.now() }).catch(() => {});
+    for (const tab of state.tabs) {
+      patchSettings(tab.id, data);
+      if (tab.lazy && tab.checksum) {
+        const rec = await loadFile(tab.checksum).catch(() => null);
+        if (rec) await saveFile({ ...rec, ...data, contentChecksum: rec.contentChecksum || tab.checksum, updatedAt: Date.now() }).catch(() => {});
       }
       n++;
     }
-    setStatus(`Applied the profile to all ${n} open tab${n === 1 ? '' : 's'}.`);
+    setStatus(t.n('Applied the profile to all {n} open tab.', 'Applied the profile to all {n} open tabs.', n));
   }
 
   // The bar's ☁ when no Google account is on this device yet: sign in only — no upload, no download.
@@ -2405,13 +2422,13 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     const p = cfg && getSyncProvider(cfg.provider);
     if (!p || p.id !== 'googleDrive') return openDialog({ kind: 'data' });
     const gate = p.available(cfg);
-    if (gate !== true) return setStatus(gate?.reason || 'Google Drive sync isn’t available here.');
-    setStatus('Opening Google sign-in…');
+    if (gate !== true) return setStatus(gate?.reason || t('Google Drive sync isn’t available here.'));
+    setStatus(t('Opening Google sign-in…'));
     try {
       await p.connect(cfg);
       updateGlobal({ sync: { ...cfg, profile: getDriveProfile() } });
-      setStatus('Signed in to Google — ☁ now syncs this device.');
-    } catch (e) { setStatus('Google sign-in failed: ' + (e?.message || e)); }
+      setStatus(t('Signed in to Google — ☁ now syncs this device.'));
+    } catch (e) { setStatus(t('Google sign-in failed: {error}', { error: e?.message || e })); }
   }
 
   // One-click backup to the configured sync target (menu-bar ☁ Sync). Routes the user to setup when
@@ -2419,16 +2436,16 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
   async function doSyncNow() {
     const cfg = state.global.sync;
     const p = cfg && getSyncProvider(cfg.provider);
-    if (!p || !p.supported()) { setStatus('This browser can’t use that sync target — see File → Backup & Data.'); return; }
+    if (!p || !p.supported()) { setStatus(t('This browser can’t use that sync target — see File → Backup & Data.')); return; }
     const avail = p.available(cfg);
-    if (avail !== true) { setStatus(avail.reason || 'Sync isn’t configured yet.'); openDialog({ kind: 'data' }); return; }
-    setStatus('☁ Backing up…');
+    if (avail !== true) { setStatus(avail.reason || t('Sync isn’t configured yet.')); openDialog({ kind: 'data' }); return; }
+    setStatus(`☁ ${t('Backing up…')}`);
     try {
       const r = await backupToProvider(cfg.provider, cfg);
       updateGlobal({ sync: { ...cfg, lastSync: r.at } });
-      setStatus(`☁ Backed up to ${p.label} (${Math.round(r.bytes / 1024)} KB).`);
+      setStatus(`☁ ${t('Backed up to {target} ({kb} KB).', { target: p.label, kb: Math.round(r.bytes / 1024) })}`);
     } catch (e) {
-      setStatus('Sync failed: ' + (e?.message || e));
+      setStatus(t('Sync failed: {error}', { error: e?.message || e }));
     }
   }
 
@@ -2489,7 +2506,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
   globalSnapRef.current = state.global;
   useEffect(() => startCoworkScheduler({
     getGlobal: () => globalSnapRef.current,
-    onRan: (ids) => setStatus(`🗓 Cowork schedule ran: ${ids.join(', ')}`),
+    onRan: (ids) => setStatus(`🗓 ${t('Cowork schedule ran: {ids}', { ids: ids.join(', ') })}`),
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
   // Pocket listening: render-ahead on the sync machine, pull on the others (Audio → Audio Settings).
@@ -2515,9 +2532,9 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       } else {
         res = await saveTextToFile(doc.fullText || '', `${base}.txt`);
       }
-      if (!res.canceled) setStatus(`Saved ${res.name}${res.method === 'download' ? ' to your downloads' : ''}.`);
+      if (!res.canceled) setStatus(res.method === 'download' ? t('Saved {name} to your downloads.', { name: res.name }) : t('Saved {name}.', { name: res.name }));
     } catch (e) {
-      setStatus(`Save failed: ${e?.message || e}`);
+      setStatus(t('Save failed: {error}', { error: e?.message || e }));
     }
   }
 
@@ -2528,19 +2545,19 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       activeTab.doc.properNames = payload.map;
       patchSettings(activeTab.id, { enableProperNames: true, properNameSeed: payload.seed || [] });
       patchTab(activeTab.id, { _propNamesGen: (activeTab._propNamesGen || 0) + 1 });
-      setStatus(`Proper names: ${payload.map.size} name(s) highlighted.`);
+      setStatus(t.n('Proper names: {n} name highlighted.', 'Proper names: {n} names highlighted.', payload.map.size));
       openDialog({ kind: 'proper-names' });
     } else if (payload.kind === 'index') {
       const patch = { indexEntries: payload.entries };
       if (payload.skip) patch.skipRanges = mergeSkipRanges(activeTab.settings.skipRanges, [payload.skip]);
       patchSettings(activeTab.id, patch);
       if (!state.showIndex) dispatch({ type: 'TOGGLE_INDEX' });
-      setStatus(`Index: ${payload.entries.length} term(s).`);
+      setStatus(t.n('Index: {n} term.', 'Index: {n} terms.', payload.entries.length));
     } else if (payload.kind === 'notes') {
       activeTab.doc.footnotes = payload.map;
       if (payload.skip) patchSettings(activeTab.id, { skipRanges: mergeSkipRanges(activeTab.settings.skipRanges, [payload.skip]) });
       patchTab(activeTab.id, { _footnotesGen: (activeTab._footnotesGen || 0) + 1 });
-      setStatus(`Footnotes: ${payload.map.size} found.`);
+      setStatus(t('Footnotes: {n} found.', { n: payload.map.size }));
     }
   }
 
@@ -2552,17 +2569,17 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     if (action === 'open-clip') return openClipboard();
     if (action === 'grab') return openDialog({ kind: 'grab' });
     if (action === 'export-bionic') {
-      if (!activeTab?.doc) return setStatus('Open a document first, then export it as a bionic EPUB.');
+      if (!activeTab?.doc) return setStatus(t('Open a document first, then export it as a bionic EPUB.'));
       const base = (activeTab.doc.fileName || activeTab.fileName || 'Document').replace(/\.[a-z0-9]+$/i, '');
       const chapters = docChapters(activeTab.doc, getTocEntries(activeTab) || []);
       const bytes = buildEpub({ title: base, chapters, lang: (state.global.language || 'en').slice(0, 2) });
       return saveBlobToFile(new Blob([bytes], { type: 'application/epub+zip' }), `${base} (bionic).epub`, [{ description: 'EPUB', accept: { 'application/epub+zip': ['.epub'] } }])
-        .then(() => setStatus(`📗 Saved “${base} (bionic).epub” — ${chapters.length} chapter(s). Send it to your Kindle / Kobo.`)).catch(() => {});
+        .then(() => setStatus(`📗 ${t.n('Saved “{file}” — {n} chapter. Send it to your Kindle / Kobo.', 'Saved “{file}” — {n} chapters. Send it to your Kindle / Kobo.', chapters.length, { file: `${base} (bionic).epub` })}`)).catch(() => {});
     }
     if (action === 'web-grab') return openDialog({ kind: 'web-grab' });
     if (action === 'opds') return openDialog({ kind: 'opds' });
-    if (action === 'pronounce') return activeTab?.doc ? openDialog({ kind: 'pronounce' }) : setStatus('Open a document first — the check uses the sentence at your place.');
-    if (action === 'audio-sync') return activeTab?.doc ? openDialog({ kind: 'audio-sync' }) : setStatus('Open the book first, then sync its audiobook.');
+    if (action === 'pronounce') return activeTab?.doc ? openDialog({ kind: 'pronounce' }) : setStatus(t('Open a document first — the check uses the sentence at your place.'));
+    if (action === 'audio-sync') return activeTab?.doc ? openDialog({ kind: 'audio-sync' }) : setStatus(t('Open the book first, then sync its audiobook.'));
     if (action === 'html-tools') return openDialog({ kind: 'html-tools' });
     if (action === 'api-usage') return openDialog({ kind: 'api-usage' });
     if (action === 'open-html-pick') {
@@ -2573,7 +2590,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
         const f = input.files?.[0];
         if (!f) return;
         try { openDialog({ kind: 'html-structure', html: await f.text(), fileName: f.name.replace(/\.[^.]+$/, '') }); }
-        catch (e) { setStatus('Could not read that file: ' + (e?.message || e)); }
+        catch (e) { setStatus(t('Could not read that file: {error}', { error: e?.message || e })); }
       };
       input.click();
       return;
@@ -2590,8 +2607,8 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       // Keep the saved session so reopening reconnects to these same files. Lazy (restored, not-yet-
       // hydrated) tabs have doc===null — read their checksum/name from the placeholder fields, or this
       // throws before saving (and skips the final backup below).
-      const csOf = (t) => (t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum);
-      const open = state.tabs.map((t) => ({ checksum: csOf(t), fileName: t.lazy ? t.fileName : t.doc?.fileName })).filter((o) => o.checksum);
+      const csOf = (tab) => (tab.lazy ? tab.settings?.contentChecksum : tab.doc?.contentChecksum);
+      const open = state.tabs.map((tab) => ({ checksum: csOf(tab), fileName: tab.lazy ? tab.fileName : tab.doc?.fileName })).filter((o) => o.checksum);
       saveSession({ open, active: (activeTab ? csOf(activeTab) : null) || null }).catch(() => {});
       const finish = () => { setClosing('disconnect'); setTimeout(() => { try { window.close(); } catch { /* tab not script-opened */ } }, 50); };
       // Best-effort final backup if auto-sync is on and the target is silently usable.
@@ -2660,12 +2677,12 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       if (state.showLines === false) dispatch({ type: 'TOGGLE_LINES' });
       setImmersive('lines');
       setPrompter(action === 'teleprompter-mirror' ? 'mirror' : 'plain');
-      setStatus(activeTab.settings.speaking?.enabled ? '🎬 Teleprompter — the text follows your voice. Esc exits.' : '🎬 Teleprompter — turn on Advance by reading aloud (Biometric) so the text follows your voice; 📹 Video on its card keeps your take. Esc exits.');
+      setStatus(`🎬 ${activeTab.settings.speaking?.enabled ? t('Teleprompter — the text follows your voice. Esc exits.') : t('Teleprompter — turn on Advance by reading aloud (Biometric) so the text follows your voice; 📹 Video on its card keeps your take. Esc exits.')}`);
       return;
     }
     if (action === 'fullscreen-source') {
       // Same, for the Source pane. Only meaningful when the tab actually has a source view.
-      if (!activeTab?.doc?.source) { setStatus('This tab has no source view to full-screen.'); return; }
+      if (!activeTab?.doc?.source) { setStatus(t('This tab has no source view to full-screen.')); return; }
       if (!state.showSource) dispatch({ type: 'TOGGLE_SOURCE' });
       setImmersive('source');
       return;
@@ -2677,14 +2694,14 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     }
     if (action === 'apply-defaults-all') {
       const tabs = state.tabs;
-      if (!tabs.length) { setStatus('No open tabs to apply settings to.'); return; }
+      if (!tabs.length) { setStatus(t('No open tabs to apply settings to.')); return; }
       // tabDefaultsFrom strips the per-document/progress fields (reading position, history, word
       // swaps, proper names…) so this overwrites only the reusable display / reading settings and
       // never touches any tab's document data.
       const shared = tabDefaultsFrom(state.global.fileDefaults || defaultFileSettings());
-      if (!window.confirm(`Apply your Default Tab Settings to all ${tabs.length} open tab${tabs.length === 1 ? '' : 's'}? Display and reading settings are overwritten; each tab keeps its own reading position, history and per-document data.`)) return;
-      for (const t of tabs) patchSettings(t.id, shared);
-      setStatus(`Applied default settings to ${tabs.length} tab${tabs.length === 1 ? '' : 's'}.`);
+      if (!window.confirm(t.n('Apply your Default Tab Settings to {n} open tab? Display and reading settings are overwritten; each tab keeps its own reading position, history and per-document data.', 'Apply your Default Tab Settings to all {n} open tabs? Display and reading settings are overwritten; each tab keeps its own reading position, history and per-document data.', tabs.length))) return;
+      for (const tab of tabs) patchSettings(tab.id, shared);
+      setStatus(t.n('Applied default settings to {n} tab.', 'Applied default settings to {n} tabs.', tabs.length));
       return;
     }
     if (action === 'stats') return openDialog({ kind: 'stats' });
@@ -2717,10 +2734,10 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     if (action === 'install-pwa') {
       // The browser owns installability; this just surfaces its prompt (and explains when there
       // isn't one — already installed, or a browser that doesn't offer it).
-      if (runningStandalone()) return setStatus('✅ Tachyread is already running as an installed app.');
-      if (installState() !== 'ready') setStatus('Checking with your browser…'); // promptInstall re-asks Chrome
+      if (runningStandalone()) return setStatus(`✅ ${t('Tachyread is already running as an installed app.')}`);
+      if (installState() !== 'ready') setStatus(t('Checking with your browser…')); // promptInstall re-asks Chrome
       promptInstall().then((r) => setStatus(
-        r === 'accepted' ? '✅ Installing Tachyread…' : r === 'dismissed' ? 'Install cancelled.' : `ℹ ${installHelp()}`
+        r === 'accepted' ? `✅ ${t('Installing Tachyread…')}` : r === 'dismissed' ? t('Install cancelled.') : `ℹ ${installHelp()}`
       ));
       return undefined;
     }
@@ -2762,7 +2779,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       const mag = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
       if (Math.abs(mag - 9.81) < 12) return; // ponytail: fixed threshold; expose a sensitivity slider if it misfires
       const now = Date.now();
-      peaks = peaks.filter((t) => now - t < 1000);
+      peaks = peaks.filter((ts) => now - ts < 1000);
       peaks.push(now);
       if (peaks.length >= 3 && now - lastToggle > 1500) {
         lastToggle = now;
@@ -2824,9 +2841,9 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
   // Jump to the FIRST unread gap (skipped sections excluded); clicking again from that boundary hops
   // to the next read/unread boundary — a backfill cycle over the patchy sections.
   const jumpToGap = () => {
-    const t = activeTabRef.current;
-    if (!t?.tracker) return;
-    const wi = t.tracker.nextUnreadBoundary(t.settings.wordIndex, t.settings.skipRanges || []);
+    const tab = activeTabRef.current;
+    if (!tab?.tracker) return;
+    const wi = tab.tracker.nextUnreadBoundary(tab.settings.wordIndex, tab.settings.skipRanges || []);
     if (wi >= 0) { jumpWord(wi, { nav: true, src: 'jump' }); jumpToCurrent(); }
   };
   // Skip to the previous/next SOURCE page (a PDF page / EPUB·HTML section / grabbed image) — moves
@@ -2874,7 +2891,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       speaking: { ...activeTab.settings.speaking, enabled: on },
       ...(on ? { audioCtrl: false, readAloud: false, typing: { ...activeTab.settings.typing, enabled: false } } : {}),
     });
-    if (on) { if (playingRef.current) playPauseRef.current?.(); setStatus('🗣 Read aloud — the text follows your voice.'); }
+    if (on) { if (playingRef.current) playPauseRef.current?.(); setStatus(`🗣 ${t('Read aloud — the text follows your voice.')}`); }
   }
   function toggleScrollRead() {
     const on = !state.global.scrollAdvances;
@@ -2888,7 +2905,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
   }
   // Cycle focus across the whole tab strip (dialog tabs first, then document tabs) — Ctrl+PageUp/Down.
   function cycleTabs(dir) {
-    const all = [...state.panels.map((p) => ({ kind: 'panel', id: p.id })), ...state.tabs.map((t) => ({ kind: 'doc', id: t.id }))];
+    const all = [...state.panels.map((p) => ({ kind: 'panel', id: p.id })), ...state.tabs.map((tab) => ({ kind: 'doc', id: tab.id }))];
     if (all.length < 2) return;
     let i = state.activePanelId != null
       ? all.findIndex((x) => x.kind === 'panel' && x.id === state.activePanelId)
@@ -2971,7 +2988,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     if (state.showToc)
       arr.push({
         id: 'toc',
-        label: 'ToC',
+        label: t('ToC'),
         node: (
           <TocPane
             tab={activeTab}
@@ -2996,15 +3013,15 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       else if (mobileView === 'rsvp') { showRsvpPane = true; showLinesPane = false; }
       else { showRsvpPane = false; showLinesPane = true; }
     }
-    if (showRsvpPane) arr.push({ id: 'rsvp', label: 'Fast Reader', node: <RsvpPane tab={activeTab} onVisible={onRsvpVisible} playing={playing} /> });
+    if (showRsvpPane) arr.push({ id: 'rsvp', label: t('Fast Reader'), node: <RsvpPane tab={activeTab} onVisible={onRsvpVisible} playing={playing} /> });
     if (state.showSource && activeTab.doc.source)
-      arr.push({ id: 'source', label: 'Source', node: <SourcePane tab={activeTab} onPatch={(p) => patchSettings(activeTab.id, p)} onSourcePage={jumpSourcePage} /> });
+      arr.push({ id: 'source', label: t('Source'), node: <SourcePane tab={activeTab} onPatch={(p) => patchSettings(activeTab.id, p)} onSourcePage={jumpSourcePage} /> });
     if (state.showIndex)
-      arr.push({ id: 'index', label: 'Index', node: <IndexPane tab={activeTab} onJumpWord={jumpWord} onWizard={() => openDialog({ kind: 'resource-wizard', resourceKind: 'index' })} /> });
-    if (activeTab.settings.companion && !isCompact) arr.push({ id: 'companion', label: 'Side by side', node: <CompanionPane tab={activeTab} tabs={state.tabs} onSet={(c) => patchSettings(activeTab.id, { companion: c })} hydrate={hydrateTab} /> });
+      arr.push({ id: 'index', label: t('Index'), node: <IndexPane tab={activeTab} onJumpWord={jumpWord} onWizard={() => openDialog({ kind: 'resource-wizard', resourceKind: 'index' })} /> });
+    if (activeTab.settings.companion && !isCompact) arr.push({ id: 'companion', label: t('Side by side'), node: <CompanionPane tab={activeTab} tabs={state.tabs} onSet={(c) => patchSettings(activeTab.id, { companion: c })} hydrate={hydrateTab} /> });
     if (showLinesPane) arr.push({
       id: 'lines',
-      label: 'Lines',
+      label: t('Lines'),
       node: (
         <LinePane
           tab={{ ...activeTab, patchSettings: (p) => patchSettings(activeTab.id, p) }}
@@ -3035,7 +3052,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
   // not whatever tab is active now — so peeking another book can't retarget an open Audiobook/Notes
   // tab. Unscoped dialogs keep following the active tab.
   const dlgTab = dialog?.docTabId != null
-    ? (() => { const t = state.tabs.find((tt) => tt.id === dialog.docTabId); return t && !t.lazy ? t : null; })()
+    ? (() => { const tab = state.tabs.find((tt) => tt.id === dialog.docTabId); return tab && !tab.lazy ? tab : null; })()
     : activeTab;
 
   return (
@@ -3048,7 +3065,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           click that wakes you so a stray tap can't hit a button behind the blur. */}
       {idleBlurred && (
         <div className="idle-veil" role="status">
-          <span>💤 Paused — this time isn’t counting. Press any key or click to carry on.</span>
+          <span>💤 {t('Paused — this time isn’t counting. Press any key or click to carry on.')}</span>
         </div>
       )}
       {immersive && (
@@ -3057,11 +3074,11 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
               the rest of the desktop), so it stays reachable once every other control is hidden. */}
           <button
             className={`immersive-btn${state.global.focusMode ? ' toggle-on' : ''}`}
-            title={state.global.focusMode ? 'Focus mode on — click to turn off (F)' : 'Focus mode: block distractions (F)'}
-            aria-label="Toggle focus mode" aria-pressed={!!state.global.focusMode}
+            title={state.global.focusMode ? t('Focus mode on — click to turn off (F)') : t('Focus mode: block distractions (F)')}
+            aria-label={t('Toggle focus mode')} aria-pressed={!!state.global.focusMode}
             onClick={toggleFocusMode}
           >🎯</button>
-          <button className="immersive-btn immersive-exit" title="Exit full-screen reading (Esc)" aria-label="Exit full-screen reading" onClick={() => setImmersive(false)}>⛶</button>
+          <button className="immersive-btn immersive-exit" title={t('Exit full-screen reading (Esc)')} aria-label={t('Exit full-screen reading')} onClick={() => setImmersive(false)}>⛶</button>
         </div>
       )}
       {/* Bedtime blue-light filter: a warm multiply overlay over the whole app. pointer-events:none
@@ -3078,11 +3095,11 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           <button
             className="chrome-handle"
             onClick={() => setChromeHidden((h) => !h)}
-            title={chromeHidden ? 'Show menu & tabs' : 'Hide menu & tabs — more room for text'}
-            aria-label={chromeHidden ? 'Show menu and tabs' : 'Hide menu and tabs'}
+            title={chromeHidden ? t('Show menu & tabs') : t('Hide menu & tabs — more room for text')}
+            aria-label={chromeHidden ? t('Show menu and tabs') : t('Hide menu and tabs')}
           >
             <span className="dock-grip" />
-            <span className="dock-handle-label">{chromeHidden ? '⌄ menu & tabs' : '⌃'}</span>
+            <span className="dock-handle-label">{chromeHidden ? `⌄ ${t('menu & tabs')}` : '⌃'}</span>
           </button>
         )}
       </header>
@@ -3090,29 +3107,29 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       {state.incognito && (
         <div className="incognito-banner" role="status">
           <span className="incog-eyes">🕶</span>
-          <span className="incog-text"><b>Incognito reading</b> — tracking is off. Nothing is recorded, and your place rewinds when you turn this off.</span>
-          <button className="incog-off" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}>Turn off</button>
+          <span className="incog-text"><b>{t('Incognito reading')}</b> — {t('Tracking is off. Nothing is recorded, and your place rewinds when you turn this off.')}</span>
+          <button className="incog-off" onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}>{t('Turn off')}</button>
         </div>
       )}
       {warmupNudge && (
         <div className="ew-nudge" role="status">
-          <span>👁️ First read of the day — warm up your eyes first?</span>
+          <span>👁️ {t('First read of the day — warm up your eyes first?')}</span>
           <span className="grow" />
-          <button className="toggle-on" onClick={() => { dismissWarmupNudge(); openDialog({ kind: 'eye-warmup' }); }}>Warm up ▸</button>
-          <button onClick={dismissWarmupNudge}>Not today</button>
-          <button onClick={() => { dismissWarmupNudge(); updateGlobal({ eyeWarmup: { ...(state.global.eyeWarmup || {}), prompt: false } }); }}>Don’t ask</button>
-          <button className="ew-nudge-x" title="Dismiss" onClick={dismissWarmupNudge}>×</button>
+          <button className="toggle-on" onClick={() => { dismissWarmupNudge(); openDialog({ kind: 'eye-warmup' }); }}>{t('Warm up')} ▸</button>
+          <button onClick={dismissWarmupNudge}>{t('Not today')}</button>
+          <button onClick={() => { dismissWarmupNudge(); updateGlobal({ eyeWarmup: { ...(state.global.eyeWarmup || {}), prompt: false } }); }}>{t('Don’t ask')}</button>
+          <button className="ew-nudge-x" title={t('Dismiss')} onClick={dismissWarmupNudge}>×</button>
         </div>
       )}
       {trackNudge && (
         <div className="ew-nudge track-nudge" role="status">
-          <span>📚 Add <b>{trackNudge.fileName}</b> to Trackyread?</span>
+          <span>📚 {t('Add {name} to Trackyread?', { name: trackNudge.fileName })}</span>
           <span className="grow" />
-          <button className="toggle-on" onClick={() => addToTrackyread(false)} title="Add this document to your reading tracker (status: reading)">Add ▸</button>
-          <button onClick={() => addToTrackyread(true)} title="Add it and open Trackyread to fill in details">Add &amp; edit…</button>
-          <button onClick={dismissTrackNudge}>Not now</button>
-          <button onClick={() => { dismissTrackNudge(); updateGlobal({ trackyreadNudge: false }); }}>Don’t ask</button>
-          <button className="ew-nudge-x" title="Dismiss" onClick={dismissTrackNudge}>×</button>
+          <button className="toggle-on" onClick={() => addToTrackyread(false)} title={t('Add this document to your reading tracker (status: reading)')}>{t('Add')} ▸</button>
+          <button onClick={() => addToTrackyread(true)} title={t('Add it and open Trackyread to fill in details')}>{t('Add & edit…')}</button>
+          <button onClick={dismissTrackNudge}>{t('Not now')}</button>
+          <button onClick={() => { dismissTrackNudge(); updateGlobal({ trackyreadNudge: false }); }}>{t('Don’t ask')}</button>
+          <button className="ew-nudge-x" title={t('Dismiss')} onClick={dismissTrackNudge}>×</button>
         </div>
       )}
       {/* The reading view stays MOUNTED (just hidden) while a dialog tab is focused, so closing the
@@ -3127,54 +3144,54 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
             cycleSecs={state.global.sectionBarCycleSecs || 6}
           />
           {isCompact && (
-            <div className="reading-view-switch" role="tablist" aria-label="Reading view">
+            <div className="reading-view-switch" role="tablist" aria-label={t('Reading view')}>
               {!hideWord && (
                 <button
                   role="tab"
                   aria-selected={!auxOpen && mobileView === 'rsvp'}
-                  aria-label="Fast Reader view" title="Fast Reader (RSVP) view"
+                  aria-label={t('Fast Reader view')} title={t('Fast Reader (RSVP) view')}
                   className={!auxOpen && mobileView === 'rsvp' ? 'on' : ''}
                   onClick={() => { showAuxOnly(null); setMobileView('rsvp'); }}
                 >
-                  <span className="rvs-ico">⚡</span><span className="rvs-lbl">Fast</span>
+                  <span className="rvs-ico">⚡</span><span className="rvs-lbl">{t('Fast')}</span>
                 </button>
               )}
               <button
                 role="tab"
                 aria-selected={!auxOpen && mobileView === 'lines'}
-                aria-label="Lines view" title="Lines view"
+                aria-label={t('Lines view')} title={t('Lines view')}
                 className={!auxOpen && mobileView === 'lines' ? 'on' : ''}
                 onClick={() => { showAuxOnly(null); setMobileView('lines'); }}
               >
-                <span className="rvs-ico">📃</span><span className="rvs-lbl">Lines</span>
+                <span className="rvs-ico">📃</span><span className="rvs-lbl">{t('Lines')}</span>
               </button>
               <button
                 role="tab"
                 aria-selected={state.showToc}
-                aria-label="Table of contents" title="Table of contents"
+                aria-label={t('Table of contents')} title={t('Table of contents')}
                 className={state.showToc ? 'on' : ''}
                 onClick={() => showAuxOnly(state.showToc ? null : 'toc')}
               >
-                <span className="rvs-ico">📖</span><span className="rvs-lbl">ToC</span>
+                <span className="rvs-ico">📖</span><span className="rvs-lbl">{t('ToC')}</span>
               </button>
               <button
                 role="tab"
                 aria-selected={state.showIndex}
-                aria-label="Index" title="Index"
+                aria-label={t('Index')} title={t('Index')}
                 className={state.showIndex ? 'on' : ''}
                 onClick={() => showAuxOnly(state.showIndex ? null : 'index')}
               >
-                <span className="rvs-ico">🔎</span><span className="rvs-lbl">Index</span>
+                <span className="rvs-ico">🔎</span><span className="rvs-lbl">{t('Index')}</span>
               </button>
               {activeTab?.doc?.source && (
                 <button
                   role="tab"
                   aria-selected={state.showSource}
-                  aria-label="Source pages" title="Original source pages"
+                  aria-label={t('Source pages')} title={t('Original source pages')}
                   className={state.showSource ? 'on' : ''}
                   onClick={() => showAuxOnly(state.showSource ? null : 'source')}
                 >
-                  <span className="rvs-ico">📄</span><span className="rvs-lbl">Source</span>
+                  <span className="rvs-ico">📄</span><span className="rvs-lbl">{t('Source')}</span>
                 </button>
               )}
               {/* Full-screen reading: hide ALL chrome (menus, tabs, controls, status) — a tiny
@@ -3182,8 +3199,8 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
                   full-screens whatever view is up — Lines, Fast, or the Source/ToC/Index panes. */}
               <button
                 className="rv-rotate"
-                title="Full-screen the current view — hides all menus and controls (tap the small ⛶ overlay to exit)"
-                aria-label="Full-screen the current view"
+                title={t('Full-screen the current view — hides all menus and controls (tap the small ⛶ overlay to exit)')}
+                aria-label={t('Full-screen the current view')}
                 onClick={() => setImmersive(true)}
               >
                 ⛶
@@ -3194,7 +3211,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
                       bar with the rotate/lock buttons — not buried in the menu drawer. */}
                   <button
                     className={`rv-rotate${activeTab?.settings?.showEyes ? ' on' : ''}`}
-                    title="Toggle the animated reader avatars"
+                    title={t('Toggle the animated reader avatars')}
                     aria-pressed={!!activeTab?.settings?.showEyes}
                     onClick={() => activeTab && patchSettings(activeTab.id, { showEyes: !activeTab.settings.showEyes })}
                   >
@@ -3202,7 +3219,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
                   </button>
                   <button
                     className={`rv-rotate${state.showStats ? ' on' : ''}`}
-                    title="Toggle the reading stats"
+                    title={t('Toggle the reading stats')}
                     aria-pressed={state.showStats}
                     onClick={() => dispatch({ type: 'TOGGLE_STATS' })}
                   >
@@ -3210,7 +3227,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
                   </button>
                   <button
                     className={`rv-rotate${state.incognito ? ' on' : ''}`}
-                    title="Incognito reading — pause all tracking and persistence"
+                    title={t('Incognito reading — pause all tracking and persistence')}
                     aria-pressed={state.incognito}
                     onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}
                   >
@@ -3219,8 +3236,8 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
                   {/* Rotate JUST the reader box (not the menus/controls) by a quarter-turn. */}
                   <button
                     className={`rv-rotate rv-rot${readerRotation ? ' on' : ''}`}
-                    title="Rotate the reader 90° (mobile only)"
-                    aria-label={`Rotate reader (currently ${readerRotation}°)`}
+                    title={t('Rotate the reader 90° (mobile only)')}
+                    aria-label={t('Rotate reader (currently {deg}°)', { deg: readerRotation })}
                     onClick={() => updateGlobal({ readerRotation: ((state.global.readerRotation || 0) + 90) % 360 })}
                   >
                     🔄{readerRotation ? ` ${readerRotation}°` : ''}
@@ -3228,8 +3245,8 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
                   {/* Lock the whole app to portrait — ignore the phone's physical auto-rotate. */}
                   <button
                     className={`rv-rotate${lockPortrait ? ' on' : ''}`}
-                    title={lockPortrait ? 'Portrait locked — the app ignores the phone’s auto-rotate. Tap to allow landscape.' : 'Tap to lock portrait (ignore the phone’s auto-rotate)'}
-                    aria-label="Lock portrait orientation"
+                    title={lockPortrait ? t('Portrait locked — the app ignores the phone’s auto-rotate. Tap to allow landscape.') : t('Tap to lock portrait (ignore the phone’s auto-rotate)')}
+                    aria-label={t('Lock portrait orientation')}
                     aria-pressed={lockPortrait}
                     onClick={() => updateGlobal({ lockPortrait: !lockPortrait })}
                   >
@@ -3320,18 +3337,18 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       ) : rawActiveTab?.lazy ? (
         <div className="empty-state">
           <div className="loading-spin" aria-hidden="true" />
-          <h1>Opening {rawActiveTab.fileName}…</h1>
-          <p>Loading this document for the first time this session.</p>
+          <h1>{t('Opening {name}…', { name: rawActiveTab.fileName })}</h1>
+          <p>{t('Loading this document for the first time this session.')}</p>
         </div>
       ) : (
         <div className="empty-state">
-          <img className="empty-logo" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="Tachyread — the astral gavage goose" width="132" height="132" />
+          <img className="empty-logo" src={`${import.meta.env.BASE_URL}favicon.svg`} alt={t('Tachyread — the astral gavage goose')} width="132" height="132" />
           <h1>Tachyread</h1>
-          <p>Open a file (File → Open TXT, Ctrl+O), open a document (Ctrl+D), or drop a file here.</p>
-          <p>Supports .txt, .md, .html, .docx, .pdf, .epub.</p>
-          {state.tabs.length > 0 && <p>Or pick one of your {state.tabs.length} open tab(s) above.</p>}
+          <p>{t('Open a file (File → Open TXT, Ctrl+O), open a document (Ctrl+D), or drop a file here.')}</p>
+          <p>{t('Supports {formats}.', { formats: '.txt, .md, .html, .docx, .pdf, .epub' })}</p>
+          {state.tabs.length > 0 && <p>{t.n('Or pick your {n} open tab above.', 'Or pick one of your {n} open tabs above.', state.tabs.length)}</p>}
           <SplashActivity />
-          <p className="hint">Shortcuts: Space play, ←→ word, ↑↓ line, Ctrl+↑↓ paragraph, Home restart, Ctrl+F find</p>
+          <p className="hint">{t('Shortcuts: Space play, ←→ word, ↑↓ line, Ctrl+↑↓ paragraph, Home restart, Ctrl+F find')}</p>
         </div>
       ))}
       {/* A docked dialog tab portals its content in here, filling the tab's page (controls stay below). */}
@@ -3344,11 +3361,11 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           <button
             className="dock-handle"
             onClick={() => setControlsCollapsed((c) => !c)}
-            title={controlsCollapsed ? 'Show controls' : 'Minimize controls — more room for text'}
-            aria-label={controlsCollapsed ? 'Show controls' : 'Minimize controls'}
+            title={controlsCollapsed ? t('Show controls') : t('Minimize controls — more room for text')}
+            aria-label={controlsCollapsed ? t('Show controls') : t('Minimize controls')}
           >
             <span className="dock-grip" />
-            <span className="dock-handle-label">{controlsCollapsed ? '⌃ controls' : '⌄'}</span>
+            <span className="dock-handle-label">{controlsCollapsed ? `⌃ ${t('controls')}` : '⌄'}</span>
           </button>
         </div>
         {controlsCollapsed ? (
@@ -3391,32 +3408,32 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
                       title={title} aria-label={label} aria-pressed={on} onClick={fn}>{glyph}</button>
                   );
                   switch (id) {
-                    case 'pageUp': return nb('Page up (PgUp)', 'Page up', '⏫', () => pageLines(-1));
-                    case 'prevLine': return nb('Previous line (↑)', 'Previous line', '⬆️', () => nav('prevLine'));
-                    case 'nextLine': return nb('Next line (↓)', 'Next line', '⬇️', () => nav('nextLine'));
-                    case 'pageDown': return nb('Page down (PgDn)', 'Page down', '⏬', () => pageLines(1));
-                    case 'prevWord': return nb('Previous word (←)', 'Previous word', '⬅️', () => nav('prevWord'));
-                    case 'nextWord': return nb('Next word (→)', 'Next word', '➡️', () => nav('nextWord'));
-                    case 'prevPara': return nb('Previous paragraph (Ctrl+↑)', 'Previous paragraph', '🔼', () => nav('prevPara'));
-                    case 'nextPara': return nb('Next paragraph (Ctrl+↓)', 'Next paragraph', '🔽', () => nav('nextPara'));
-                    case 'restart': return nb('Restart (Home)', 'Restart', '⏮️', () => nav('restart'));
-                    case 'jump': return nb('Jump to the current word', 'Jump to current word', '📍', jumpToCurrent, 'dock-mini-jump');
+                    case 'pageUp': return nb(t('Page up (PgUp)'), t('Page up'), '⏫', () => pageLines(-1));
+                    case 'prevLine': return nb(t('Previous line (↑)'), t('Previous line'), '⬆️', () => nav('prevLine'));
+                    case 'nextLine': return nb(t('Next line (↓)'), t('Next line'), '⬇️', () => nav('nextLine'));
+                    case 'pageDown': return nb(t('Page down (PgDn)'), t('Page down'), '⏬', () => pageLines(1));
+                    case 'prevWord': return nb(t('Previous word (←)'), t('Previous word'), '⬅️', () => nav('prevWord'));
+                    case 'nextWord': return nb(t('Next word (→)'), t('Next word'), '➡️', () => nav('nextWord'));
+                    case 'prevPara': return nb(t('Previous paragraph (Ctrl+↑)'), t('Previous paragraph'), '🔼', () => nav('prevPara'));
+                    case 'nextPara': return nb(t('Next paragraph (Ctrl+↓)'), t('Next paragraph'), '🔽', () => nav('nextPara'));
+                    case 'restart': return nb(t('Restart (Home)'), t('Restart'), '⏮️', () => nav('restart'));
+                    case 'jump': return nb(t('Jump to the current word'), t('Jump to current word'), '📍', jumpToCurrent, 'dock-mini-jump');
                     case 'sourcePage': return (
                       <Fragment key={id}>
-                        <button className="dock-mini-nav src" title="Previous source page" aria-label="Previous source page" onClick={() => jumpSourcePage(-1)}>⬅️📄</button>
-                        <button className="dock-mini-nav src" title="Next source page" aria-label="Next source page" onClick={() => jumpSourcePage(1)}>📄➡️</button>
+                        <button className="dock-mini-nav src" title={t('Previous source page')} aria-label={t('Previous source page')} onClick={() => jumpSourcePage(-1)}>⬅️📄</button>
+                        <button className="dock-mini-nav src" title={t('Next source page')} aria-label={t('Next source page')} onClick={() => jumpSourcePage(1)}>📄➡️</button>
                       </Fragment>
                     );
-                    case 'scroll': return tb('Scroll-to-read (S)', 'Scroll to read', '📜', toggleScrollRead, !!state.global.scrollAdvances);
-                    case 'readAloud': return tb('Read aloud (A)', 'Read aloud', '🔊', toggleReadAloud, !!activeTab.settings.readAloud);
-                    case 'focus': return tb('Focus mode (F)', 'Focus mode', '🖥️', toggleFocusMode, !!state.global.focusMode);
-                    case 'toc': return tb('Contents pane (3)', 'Contents pane', '📑', () => togglePane(3), !!state.showToc);
-                    case 'find': return nb('Find (Ctrl+F)', 'Find', '🔍', () => openDialog({ kind: 'find' }));
+                    case 'scroll': return tb(t('Scroll-to-read (S)'), t('Scroll to read'), '📜', toggleScrollRead, !!state.global.scrollAdvances);
+                    case 'readAloud': return tb(t('Read aloud (A)'), t('Read aloud'), '🔊', toggleReadAloud, !!activeTab.settings.readAloud);
+                    case 'focus': return tb(t('Focus mode (F)'), t('Focus mode'), '🖥️', toggleFocusMode, !!state.global.focusMode);
+                    case 'toc': return tb(t('Contents pane (3)'), t('Contents pane'), '📑', () => togglePane(3), !!state.showToc);
+                    case 'find': return nb(t('Find (Ctrl+F)'), t('Find'), '🔍', () => openDialog({ kind: 'find' }));
                     case 'wpm': return (
                       <Fragment key={id}>
-                        <button className="dock-mini-nav" title="Slower (−25 wpm)" aria-label="Slower" onClick={() => adjustWpm(-25)}>🐢</button>
+                        <button className="dock-mini-nav" title={t('Slower (−25 wpm)')} aria-label={t('Slower')} onClick={() => adjustWpm(-25)}>🐢</button>
                         <span className="dock-mini-wpm">{activeTab.settings.wpm}</span>
-                        <button className="dock-mini-nav" title="Faster (+25 wpm)" aria-label="Faster" onClick={() => adjustWpm(25)}>🐇</button>
+                        <button className="dock-mini-nav" title={t('Faster (+25 wpm)')} aria-label={t('Faster')} onClick={() => adjustWpm(25)}>🐇</button>
                       </Fragment>
                     );
                     case 'counter': return <span key={id} className="dock-mini-meta">{activeTab.settings.wordIndex + 1} / {activeTab.doc.words.length}</span>;
@@ -3426,7 +3443,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
                       // arithmetic the full bar shows, not a pace model.
                       const left = Math.max(0, activeTab.doc.words.length - activeTab.settings.wordIndex);
                       const min = Math.round(left / Math.max(1, activeTab.settings.wpm || 300));
-                      return <span key={id} className="dock-mini-meta">{min >= 60 ? `${Math.floor(min / 60)}h ${min % 60}m` : `${min}m`}</span>;
+                      return <span key={id} className="dock-mini-meta">{min >= 60 ? t('{h}h {m}m', { h: Math.floor(min / 60), m: min % 60 }) : t('{m}m', { m: min })}</span>;
                     }
                     default: return null;
                   }
@@ -3446,7 +3463,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           // Typing practice owns the tab: the reading controls hide and every biometric input
           // (gestures, joystick, voice, claps) is paused until the overlay closes.
           <div className="controls-bar typing-paused-bar">
-            ⌨ Typing practice — reading controls and biometric inputs are paused for this tab
+            ⌨ {t('Typing practice — reading controls and biometric inputs are paused for this tab')}
           </div>
         ) : activeTab ? (
           <ControlsBar
@@ -3517,10 +3534,10 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
         {state.global.showPerfMeter && <PerfMonitor />}
         <StatusText text={state.appStatus} seq={state.appStatusSeq} />
         {playing && !!activeTab?.settings?.readAloud && (
-          <span className="webcam-badge wb-watching" title="Read-aloud voice + how much of this book is pre-generated as an audiobook. Pre-generate more in Audio → Audiobook Manager for lock-screen playback (ungenerated parts use the light native voice).">
-            🗣 {state.global.offlineVoice ? voiceLabel(state.global.offlineVoiceId || defaultVoiceForLang(state.global.language || 'en')).split(' · ')[0] : (activeTab.settings.annunciateVoice || 'browser voice')}{state.global.offlineVoice && state.global.kokoroLive ? ' + Kokoro gaps' : ''}
+          <span className="webcam-badge wb-watching" title={t('Read-aloud voice + how much of this book is pre-generated as an audiobook. Pre-generate more in Audio → Audiobook Manager for lock-screen playback (ungenerated parts use the light native voice).')}>
+            🗣 {state.global.offlineVoice ? voiceLabel(state.global.offlineVoiceId || defaultVoiceForLang(state.global.language || 'en')).split(' · ')[0] : (activeTab.settings.annunciateVoice || t('browser voice'))}{state.global.offlineVoice && state.global.kokoroLive ? ` + ${t('Kokoro gaps')}` : ''}
             {abCoverage ? ` · 📚 ${abCoverage.pct}%` : ''}
-            {ttsStatus === 'native' ? ' · native' : ttsStatus === 'synth' ? ' · Kokoro…' : ''}
+            {ttsStatus === 'native' ? ` · ${t('native')}` : ttsStatus === 'synth' ? ' · Kokoro…' : ''}
           </span>
         )}
         {/* ONE unified biometric badge (was three separate 📷 / 🖐 / 🎤 buttons): every active
@@ -3529,13 +3546,13 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           const parts = [];
           if (camOn && webcamState !== 'off') parts.push(`📷 ${WEBCAM_LABEL[webcamShownState(webcamState)] || webcamShownState(webcamState)}`);
           if (handGesturesOn && handState !== 'off') parts.push(`🖐 ${HAND_LABEL[handState] || handState}`);
-          if (audioCtrlOn) parts.push('🎤 listening');
+          if (audioCtrlOn) parts.push(`🎤 ${t('listening')}`);
           if (!parts.length) return null;
           const tone = camOn && webcamState !== 'off' ? webcamShownState(webcamState)
             : handGesturesOn && handState !== 'off' ? (handState.startsWith('scroll') || handState === 'hand' ? 'watching' : handState)
             : 'watching';
           return (
-            <button className={`webcam-badge wb-${tone}`} title="Biometric controls active — camera & audio are analysed on your device and never leave it. Click to show the Biometric Control Feed." onClick={() => updateGlobal({ webcamPreview: true })}>
+            <button className={`webcam-badge wb-${tone}`} title={t('Biometric controls active — camera & audio are analysed on your device and never leave it. Click to show the Biometric Control Feed.')} onClick={() => updateGlobal({ webcamPreview: true })}>
               {parts.join(' · ')}
             </button>
           );
@@ -3566,9 +3583,9 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           settings={dlgTab.settings}
           onPatch={(p) => patchSettings(dlgTab.id, p)}
           onClose={closeDialog}
-          title="Tab Settings"
+          title={t('Tab Settings')}
           onOpenFontManager={() => openDialog({ kind: 'font-manager' })}
-          diffAgainst={{ other: state.global.fileDefaults || {}, label: 'Differs from your defaults:', resettable: true }}
+          diffAgainst={{ other: state.global.fileDefaults || {}, label: t('Differs from your defaults:'), resettable: true }}
           profiles={state.global.settingsProfiles}
           onProfilesChange={(p) => updateGlobal({ settingsProfiles: p })}
           tabCount={state.tabs.length}
@@ -3608,8 +3625,8 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           settings={state.global.fileDefaults}
           onPatch={(p) => updateGlobal({ fileDefaults: { ...state.global.fileDefaults, ...p } })}
           onClose={closeDialog}
-          title="Default Tab Settings"
-          diffAgainst={activeTab ? { other: activeTab.settings, label: 'The open tab differs on:', resettable: false } : null}
+          title={t('Default Tab Settings')}
+          diffAgainst={activeTab ? { other: activeTab.settings, label: t('The open tab differs on:'), resettable: false } : null}
           matchCurrent={activeTab ? () => tabDefaultsFrom(activeTab.settings) : null}
           onResetFactory={() => { const d = defaultFileSettings(); updateGlobal({ fileDefaults: d }); return d; }}
         />
@@ -3645,7 +3662,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
         <StatisticsDialog tabs={state.tabs} activeTabId={state.activeTabId} onClose={closeDialog} />
       )}
       {dialog?.kind === 'literary-journey' && (
-        <LiteraryJourneyDialog global={state.global} onPatch={(p) => updateGlobal(p)} initialTab={dialog.tab} focusBookId={dialog.focusBookId} focusQueueId={dialog.focusQueueId} linkChecksum={dialog.linkChecksum} linkFileName={dialog.linkFileName} openChecksums={state.tabs.filter((t) => !t.lazy && t.settings?.contentChecksum).map((t) => t.settings.contentChecksum)} onClose={closeDialog} />
+        <LiteraryJourneyDialog global={state.global} onPatch={(p) => updateGlobal(p)} initialTab={dialog.tab} focusBookId={dialog.focusBookId} focusQueueId={dialog.focusQueueId} linkChecksum={dialog.linkChecksum} linkFileName={dialog.linkFileName} openChecksums={state.tabs.filter((tab) => !tab.lazy && tab.settings?.contentChecksum).map((tab) => tab.settings.contentChecksum)} onClose={closeDialog} />
       )}
       {dialog?.kind === 'proper-names' && dlgTab && (
         <ProperNamesDialog
@@ -3783,36 +3800,35 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       {syncConflicts && syncConflicts.length > 0 && (
         <div className="dialog-backdrop" style={{ zIndex: 6000 }}>
           <div className="dialog" style={{ width: 'min(600px, 96vw)' }}>
-            <div className="dialog-title"><span>Sync — whose progress wins?</span><button className="close-x" onClick={dismissSyncConflicts}>×</button></div>
+            <div className="dialog-title"><span>{t('Sync — whose progress wins?')}</span><button className="close-x" onClick={dismissSyncConflicts}>×</button></div>
             <div className="dialog-body">
               <p className="settings-note" style={{ marginTop: 0 }}>
-                These books were moved on two devices in different directions. The most recent position
-                is applied — keep it, or take the other device’s.
+                {t('These books were moved on two devices in different directions. The most recent position is applied — keep it, or take the other device’s.')}
               </p>
               {syncConflicts.map((c, i) => {
-                const pct = (p) => (c.total ? `${Math.round((p / c.total) * 100)}%` : `word ${p + 1}`);
-                const when = (t) => (t ? fmtDateTime(t) : '—');
+                const pct = (p) => (c.total ? `${Math.round((p / c.total) * 100)}%` : t('word {n}', { n: p + 1 }));
+                const when = (ts) => (ts ? fmtDateTime(ts) : '—');
                 return (
                   <div key={i} className="sync-conflict">
-                    <div className="sync-conflict-name">{c.name || 'Untitled book'}</div>
+                    <div className="sync-conflict-name">{c.name || t('Untitled book')}</div>
                     <div className="sync-conflict-opts">
                       <button className="toggle-on" onClick={() => resolveSyncConflict(c, false)}>
-                        Keep {pct(c.applied.pos)} <em>{c.applied.device || 'newest'} · {when(c.applied.at)}</em>
+                        {t('Keep {pct}', { pct: pct(c.applied.pos) })} <em>{c.applied.device || t('newest')} · {when(c.applied.at)}</em>
                       </button>
                       <button onClick={() => resolveSyncConflict(c, true)}>
-                        Take {pct(c.other.pos)} <em>{c.other.device || 'other device'} · {when(c.other.at)}</em>
+                        {t('Take {pct}', { pct: pct(c.other.pos) })} <em>{c.other.device || t('other device')} · {when(c.other.at)}</em>
                       </button>
                     </div>
                   </div>
                 );
               })}
             </div>
-            <div className="dialog-buttons"><button onClick={dismissSyncConflicts}>Dismiss (keep newest)</button></div>
+            <div className="dialog-buttons"><button onClick={dismissSyncConflicts}>{t('Dismiss (keep newest)')}</button></div>
           </div>
         </div>
       )}
 
-      {dragOver && <div className="drop-overlay">Drop file to open</div>}
+      {dragOver && <div className="drop-overlay">{t('Drop file to open')}</div>}
 
       {activeTab && (
         <AdaptiveProbe
@@ -3843,13 +3859,13 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
 
       {closing && (
         <div className="closing-overlay">
-          <h1>{closing === 'shutdown' ? 'Shut down' : 'Disconnected'}</h1>
+          <h1>{closing === 'shutdown' ? t('Shut down') : t('Disconnected')}</h1>
           <p>
             {closing === 'shutdown'
-              ? 'All files closed — your next session starts clean.'
-              : 'Your session is saved — it will reconnect next time you open the app.'}
+              ? t('All files closed — your next session starts clean.')
+              : t('Your session is saved — it will reconnect next time you open the app.')}
           </p>
-          <p className="hint">You can close this browser tab now. (Browsers may block a page from closing its own tab automatically.)</p>
+          <p className="hint">{t('You can close this browser tab now. (Browsers may block a page from closing its own tab automatically.)')}</p>
         </div>
       )}
 
@@ -3894,16 +3910,16 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
 
       {/* Posture nudge — gentle reminder when you're sitting too close to the screen. */}
       {camOn && tooClose && (
-        <div className="distance-nudge" role="status">↔ Ease back a little — you’re close to the screen.</div>
+        <div className="distance-nudge" role="status">↔ {t('Ease back a little — you’re close to the screen.')}</div>
       )}
 
       {/* Looking-away alarm — flashing alert + beeper until you return or dismiss. */}
       {awayAlarmActive && (
         <div className="away-alarm" role="alertdialog" onClick={dismissAwayAlarm}>
           <div className="away-alarm-box">
-            <div className="away-alarm-title">👀 Eyes on the page!</div>
-            <p>You’ve been looking away. Look back to silence it, or tap to dismiss.</p>
-            <button onClick={(e) => { e.stopPropagation(); dismissAwayAlarm(); }}>Dismiss</button>
+            <div className="away-alarm-title">👀 {t('Eyes on the page!')}</div>
+            <p>{t('You’ve been looking away. Look back to silence it, or tap to dismiss.')}</p>
+            <button onClick={(e) => { e.stopPropagation(); dismissAwayAlarm(); }}>{t('Dismiss')}</button>
           </div>
         </div>
       )}
@@ -3978,10 +3994,10 @@ export default function App() {
     return (
       <div className="closing-overlay">
         <h1>Tachyread</h1>
-        {forwarded && <p><b>Sent to your open Tachyread tab</b> — switch to it to read what you shared.</p>}
-        <p>Already open in another browser tab.</p>
-        <p className="hint">This app runs in a single tab so your files and progress stay in sync. Switch to that tab, or close it and reload here.</p>
-        <button onClick={() => window.location.reload()}>Reload</button>
+        {forwarded && <p>{t('Sent to your open Tachyread tab — switch to it to read what you shared.')}</p>}
+        <p>{t('Already open in another browser tab.')}</p>
+        <p className="hint">{t('This app runs in a single tab so your files and progress stay in sync. Switch to that tab, or close it and reload here.')}</p>
+        <button onClick={() => window.location.reload()}>{t('Reload')}</button>
       </div>
     );
   }

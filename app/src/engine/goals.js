@@ -5,6 +5,19 @@
 //   AbsoluteWords/…    reach an absolute word / line / percent position.
 //   RelativeWords/…    advance N words / lines / percent from where the goal was set.
 //   ActiveTime         spend N active minutes reading (no fixed document position).
+import { t } from '../i18n.js';
+
+// The goal type as the reader sees it (the type values themselves stay as stored).
+export const GOAL_TYPE_LABELS = {
+  Section: t('Section'),
+  AbsoluteWords: t('Absolute words'),
+  AbsoluteLines: t('Absolute lines'),
+  AbsolutePercent: t('Absolute percent'),
+  RelativeWords: t('Relative words'),
+  RelativeLines: t('Relative lines'),
+  RelativePercent: t('Relative percent'),
+  ActiveTime: t('Active time'),
+};
 
 function effWpm(tab) {
   const tr = tab.tracker;
@@ -68,39 +81,39 @@ export function goalTargetIndex(tab, goal) {
 }
 
 export function computeGoalStatus(tab, goal) {
-  if (!goal || goal.type === 'None') return 'No active goal';
+  if (!goal || goal.type === 'None') return t('No active goal');
   const idx = tab.settings.wordIndex;
   // Guard against a 0-word doc (empty/unparsed) — matches goalFraction/goalTargetIndex, and keeps the
   // percent goals from rendering "NaN%"/"Infinity%" (the focus-panel goal widget shows this string).
   const total = tab.doc.words.length || 1;
   if (goal.type === 'Section') {
-    if (!(goal.end > goal.start)) return 'Set a section goal from the TOC';
+    if (!(goal.end > goal.start)) return t('Set a section goal from the TOC');
     const pct = Math.max(0, Math.min(100, ((idx - goal.start) / (goal.end - goal.start)) * 100));
-    return `${goal.label || 'Section'} — ${pct.toFixed(1)}% (finish)`;
+    return t('{section} — {pct}% (finish)', { section: goal.label || t('Section'), pct: pct.toFixed(1) });
   }
   const value = Number(goal.value);
-  if (!isFinite(value) || value <= 0) return 'Set a value to begin';
+  if (!isFinite(value) || value <= 0) return t('Set a value to begin');
   switch (goal.type) {
     case 'AbsoluteWords':
-      return `${idx} / ${value} words (${((idx / value) * 100).toFixed(1)}%)`;
+      return t('{done} / {value} words ({pct}%)', { done: idx, value, pct: ((idx / value) * 100).toFixed(1) });
     case 'AbsoluteLines': {
       const cl = tab.doc.wordToLine[idx] + 1 || 0;
-      return `${cl} / ${value} lines`;
+      return t('{done} / {value} lines', { done: cl, value });
     }
     case 'AbsolutePercent':
-      return `${((idx / total) * 100).toFixed(1)}% / ${value}%`;
+      return t('{pct}% / {value}%', { pct: ((idx / total) * 100).toFixed(1), value });
     case 'RelativeWords':
-      return `${idx - (goal.baseline || 0)} / ${value} words (from start)`;
+      return t('{done} / {value} words (from start)', { done: idx - (goal.baseline || 0), value });
     case 'RelativeLines': {
       const cl = (tab.doc.wordToLine[idx] || 0) - (tab.doc.wordToLine[goal.baseline || 0] || 0);
-      return `${cl} / ${value} lines (from start)`;
+      return t('{done} / {value} lines (from start)', { done: cl, value });
     }
     case 'RelativePercent': {
       const delta = ((idx - (goal.baseline || 0)) / total) * 100;
-      return `${delta.toFixed(1)}% / ${value}%`;
+      return t('{pct}% / {value}%', { pct: delta.toFixed(1), value });
     }
     case 'ActiveTime':
-      return `${Math.round((tab.tracker?.sessionActiveMs || 0) / 60000)} / ${value} min`;
+      return t('{done} / {value} min', { done: Math.round((tab.tracker?.sessionActiveMs || 0) / 60000), value });
     default:
       return '';
   }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { orpIndex } from '../document/readerDocument.js';
+import { t } from '../i18n.js';
 
 export default function FootnoteOverlay({ tab, onClose }) {
   const fn = useMemo(() => findFootnoteAtCurrent(tab), [tab]);
@@ -11,7 +12,7 @@ export default function FootnoteOverlay({ tab, onClose }) {
     if (!playing || !words.length) return;
     const wpm = tab.settings.wpm || 250;
     const ms = 60000 / wpm;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       setIdx((i) => {
         if (i + 1 >= words.length) {
           setPlaying(false);
@@ -20,17 +21,17 @@ export default function FootnoteOverlay({ tab, onClose }) {
         return i + 1;
       });
     }, ms);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [playing, idx, words.length, tab.settings.wpm]);
 
   if (!fn) {
     return (
       <div className="footnote-overlay">
         <div className="ftnh">
-          <span>Footnote</span>
-          <button onClick={onClose}>Close</button>
+          <span>{t('Footnote')}</span>
+          <button onClick={onClose}>{t('Close')}</button>
         </div>
-        <div className="ftnb">No footnote found at the current word.</div>
+        <div className="ftnb">{t('No footnote found at the current word.')}</div>
       </div>
     );
   }
@@ -38,10 +39,10 @@ export default function FootnoteOverlay({ tab, onClose }) {
   return (
     <div className="footnote-overlay">
       <div className="ftnh">
-        <span>Footnote [{fn.number}]</span>
+        <span>{t('Footnote [{number}]', { number: fn.number })}</span>
         <span>
-          <button onClick={() => setPlaying((p) => !p)}>{playing ? 'Pause' : 'Play'}</button>{' '}
-          <button onClick={onClose}>Close (Esc)</button>
+          <button onClick={() => setPlaying((p) => !p)}>{playing ? t('Pause') : t('Play')}</button>{' '}
+          <button onClick={onClose}>{t('Close')} (Esc)</button>
         </span>
       </div>
       {playing && words[idx] ? (
@@ -59,7 +60,7 @@ export default function FootnoteOverlay({ tab, onClose }) {
           })()}
         </div>
       ) : (
-        <div className="ftnb">{fn.body || '(no body text — only the marker was located)'}</div>
+        <div className="ftnb">{fn.body || t('(no body text — only the marker was located)')}</div>
       )}
     </div>
   );

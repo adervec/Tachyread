@@ -8,6 +8,7 @@
 import { libraryStats, readStatus, finishMs, sortBooks } from './journeyLibrary.js';
 import { MAX_REAL_WPM } from '../engine/readingTracker.js';
 import { localDay, parseDay, mondayOf } from './localDay.js';
+import { t } from '../i18n.js';
 
 export const LIGHT_INSTRUCTION =
   'LIGHT update. Refresh recScore only for books you can confidently judge; produce a short "read next" ' +
@@ -31,17 +32,17 @@ export const KNOWLEDGE_GRAPH_INSTRUCTION =
 // Categorized AI note types the cowork/API output may attach to books. Summaries are spoiler-
 // protected in the UI until the book (or section) is actually read.
 export const AI_NOTE_TYPES = {
-  summary: 'Book summary',
-  'section-summary': 'Section summary',
-  insight: 'Insight',
-  critique: 'Critique',
-  parallel: 'Parallels to other works',
-  comparison: 'Comparison across books',
-  reception: 'Critical reception',
-  guide: 'Reader’s guide',
-  context: 'Background & context',
-  author: 'About the author',
-  other: 'Note',
+  summary: t('Book summary'),
+  'section-summary': t('Section summary'),
+  insight: t('Insight'),
+  critique: t('Critique'),
+  parallel: t('Parallels to other works'),
+  comparison: t('Comparison across books'),
+  reception: t('Critical reception'),
+  guide: t('Reader’s guide'),
+  context: t('Background & context'),
+  author: t('About the author'),
+  other: t('Note'),
 };
 
 // Dedicated heavy task: audit every book's content-type classification.

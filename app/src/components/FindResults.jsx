@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react';
 import { contextLines } from '../document/findText.js';
+import { t } from '../i18n.js';
 
 // Highlight every case-insensitive occurrence of `q` in `text`.
 function highlight(text, q) {
@@ -28,14 +29,14 @@ export default function FindResults({ doc, results, query, showSection = true, s
       <table className="find-table">
         <thead>
           <tr>
-            <th title="Result number">#</th>
-            <th title="Line number">Ln</th>
-            <th title="Word number in the document">Wd</th>
-            <th title="Percent through the document">@%</th>
-            {seqRange && <th title="In sequence: after the entries above it and before those below">Seq</th>}
-            {showSection && <th title="Containing table-of-contents section">Section</th>}
-            {showRead && <th title="Already read (before your current position)">✓</th>}
-            <th className="find-th-text">Match — click for context</th>
+            <th title={t('Result number')}>#</th>
+            <th title={t('Line number')}>{t('Ln')}</th>
+            <th title={t('Word number in the document')}>{t('Wd')}</th>
+            <th title={t('Percent through the document')}>@%</th>
+            {seqRange && <th title={t('In sequence: after the entries above it and before those below')}>{t('Seq')}</th>}
+            {showSection && <th title={t('Containing table-of-contents section')}>{t('Section')}</th>}
+            {showRead && <th title={t('Already read (before your current position)')}>✓</th>}
+            <th className="find-th-text">{t('Match — click for context')}</th>
             {actions && <th />}
           </tr>
         </thead>
@@ -47,10 +48,10 @@ export default function FindResults({ doc, results, query, showSection = true, s
                 <td className="find-num">{r.lineIndex + 1}</td>
                 <td className="find-num">{r.wordIndex >= 0 ? r.wordIndex + 1 : '—'}</td>
                 <td className="find-num">{r.pct.toFixed(1)}%</td>
-                {seqRange && <td className="find-seq" title={inSeq(r) ? 'In sequence' : 'Out of sequence — would break the entry order'}>{inSeq(r) ? '✓' : '⚠'}</td>}
+                {seqRange && <td className="find-seq" title={inSeq(r) ? t('In sequence') : t('Out of sequence — would break the entry order')}>{inSeq(r) ? '✓' : '⚠'}</td>}
                 {showSection && <td className="find-sec" title={r.section}>{r.section || '—'}</td>}
-                {showRead && <td className="find-read" title={r.read ? 'Already read' : 'Not yet read'}>{r.read ? '✓' : ''}</td>}
-                <td className="find-text" title="Click to show the surrounding lines" onClick={() => setOpen((o) => (o === r.seq ? null : r.seq))}>
+                {showRead && <td className="find-read" title={r.read ? t('Already read') : t('Not yet read')}>{r.read ? '✓' : ''}</td>}
+                <td className="find-text" title={t('Click to show the surrounding lines')} onClick={() => setOpen((o) => (o === r.seq ? null : r.seq))}>
                   {highlight(r.text, query)}
                 </td>
                 {actions && (

@@ -7,6 +7,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { allFiles, allDocMeta, allFocusSessions, getBinding, setBinding, getLibraryBooks } from '../state/storage.js';
 import { fmtDate } from '../features/dateFmt.js';
 import { MAX_REAL_WPM } from '../engine/readingTracker.js';
+import { t } from '../i18n.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────────────────────
 function fmtInt(n) { return (Math.round(n) || 0).toLocaleString(); }
@@ -14,9 +15,9 @@ function fmtDur(secs) {
   const s = Math.max(0, Math.round(secs || 0));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
-  if (h) return `${h}h ${m}m`;
-  if (m) return `${m}m ${s % 60}s`;
-  return `${s}s`;
+  if (h) return t('{h}h {m}m', { h, m });
+  if (m) return t('{m}m {s}s', { m, s: s % 60 });
+  return t('{s}s', { s });
 }
 // LOCAL day key — the streak cursor anchors on local midnight, so the key must be local too, or the
 // streak drops "today" for anyone off UTC (the confirmed bug).
@@ -24,18 +25,18 @@ function dayKey(d) { return fmtDate(d); }
 function wpmOf(words, secs) { return secs > 0 ? Math.min(MAX_REAL_WPM, Math.round((words / secs) * 60)) : 0; }
 // "pages 1–42 of 300" (PDF/grabbed images) or "sections …" (EPUB/HTML), from the source-page summary.
 function sourcePageLabel(b) {
-  const noun = b.sourceKind === 'epub' || b.sourceKind === 'html' ? 'section' : 'page';
+  const sections = b.sourceKind === 'epub' || b.sourceKind === 'html';
   const reached = Math.min(b.sourcePages, (b.sourceMaxSeg || 0) + 1);
-  return reached >= b.sourcePages
-    ? `all ${b.sourcePages} ${noun}s`
-    : `${noun}s 1–${reached} of ${b.sourcePages}`;
+  const total = b.sourcePages;
+  if (reached >= total) return sections ? t.n('all {n} section', 'all {n} sections', total) : t.n('all {n} page', 'all {n} pages', total);
+  return sections ? t('sections 1–{reached} of {total}', { reached, total }) : t('pages 1–{reached} of {total}', { reached, total });
 }
 
 const SHELVES = [
-  { id: 'reading', label: 'Reading', icon: '📖' },
-  { id: 'finished', label: 'Finished', icon: '✅' },
-  { id: 'toread', label: 'To read', icon: '🔖' },
-  { id: 'paused', label: 'Paused', icon: '⏸' },
+  { id: 'reading', label: t('Reading'), icon: '📖' },
+  { id: 'finished', label: t('Finished'), icon: '✅' },
+  { id: 'toread', label: t('To read'), icon: '🔖' },
+  { id: 'paused', label: t('Paused'), icon: '⏸' },
 ];
 const SHELF_BY_ID = Object.fromEntries(SHELVES.map((s) => [s.id, s]));
 
@@ -124,7 +125,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
     Promise.all([getBinding().catch(() => ({})), getLibraryBooks().catch(() => [])]).then(([bind, lib]) => {
       const byId = Object.fromEntries(lib.map((b) => [b.id, b]));
       const map = {};
-      for (const [cs, id] of Object.entries(bind || {})) if (byId[id]) map[cs] = { id, title: byId[id].title || 'Tracked book' };
+      for (const [cs, id] of Object.entries(bind || {})) if (byId[id]) map[cs] = { id, title: byId[id].title || t('Tracked book') };
       setLinkMap(map);
     }).catch(() => {});
   }, []);
@@ -173,7 +174,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
         const cur = byDay.get(e.date) || { words: 0, secs: 0, books: [] };
         cur.words += e.wordsRead || 0;
         cur.secs += e.activeTimeSecs || 0;
-        if (e.wordsRead || e.activeTimeSecs) cur.books.push({ checksum, name: recentName[checksum] || f.fileName || f.name || 'Untitled', words: e.wordsRead || 0, secs: e.activeTimeSecs || 0 });
+        if (e.wordsRead || e.activeTimeSecs) cur.books.push({ checksum, name: recentName[checksum] || f.fileName || f.name || t('Untitled'), words: e.wordsRead || 0, secs: e.activeTimeSecs || 0 });
         byDay.set(e.date, cur);
       }
       const totalWords = f.totalWords || 0;
@@ -187,7 +188,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
       const tocVals = Object.values(tocStats);
       const b = {
         checksum,
-        name: f.fileName || nameMap[checksum] || recentName[checksum] || `Book ${checksum.slice(0, 6)}`,
+        name: f.fileName || nameMap[checksum] || recentName[checksum] || t('Book {id}', { id: checksum.slice(0, 6) }),
         posDevice: f.posDevice || '', // which device last moved the reading position
         totalWords,
         wordIndex: f.wordIndex || 0,
@@ -203,8 +204,8 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
         daysRead: dDates.length,
         firstRead: dDates[0]?.date || null,
         lastRead: dDates.length ? dDates[dDates.length - 1].date : null,
-        tocStarted: tocVals.filter((t) => t?.started).length,
-        tocCompleted: tocVals.filter((t) => t?.completed).length,
+        tocStarted: tocVals.filter((ts) => ts?.started).length,
+        tocCompleted: tocVals.filter((ts) => ts?.completed).length,
         tocTotal: tocVals.length,
         // Source pages read (where the doc has a page/section source): total + furthest reached.
         sourcePages: f.sourcePages || 0,
@@ -271,16 +272,16 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
     const { agg, streaks: st } = model;
     const hours = agg.totalSecs / 3600;
     const defs = [
-      { label: '10k words', ok: agg.totalWordsRead >= 10000, icon: '📚' },
-      { label: '100k words', ok: agg.totalWordsRead >= 100000, icon: '📚' },
-      { label: '1M words', ok: agg.totalWordsRead >= 1000000, icon: '🏆' },
-      { label: '1 hour read', ok: hours >= 1, icon: '⏱' },
-      { label: '10 hours', ok: hours >= 10, icon: '⏱' },
-      { label: '100 hours', ok: hours >= 100, icon: '🏆' },
-      { label: 'First book', ok: agg.booksFinished >= 1, icon: '🎉' },
-      { label: '5 books', ok: agg.booksFinished >= 5, icon: '🎉' },
-      { label: '7-day streak', ok: st.longest >= 7, icon: '🔥' },
-      { label: '30-day streak', ok: st.longest >= 30, icon: '🔥' },
+      { label: t('10k words'), ok: agg.totalWordsRead >= 10000, icon: '📚' },
+      { label: t('100k words'), ok: agg.totalWordsRead >= 100000, icon: '📚' },
+      { label: t('1M words'), ok: agg.totalWordsRead >= 1000000, icon: '🏆' },
+      { label: t('1 hour read'), ok: hours >= 1, icon: '⏱' },
+      { label: t('10 hours'), ok: hours >= 10, icon: '⏱' },
+      { label: t('100 hours'), ok: hours >= 100, icon: '🏆' },
+      { label: t('First book'), ok: agg.booksFinished >= 1, icon: '🎉' },
+      { label: t('5 books'), ok: agg.booksFinished >= 5, icon: '🎉' },
+      { label: t('7-day streak'), ok: st.longest >= 7, icon: '🔥' },
+      { label: t('30-day streak'), ok: st.longest >= 30, icon: '🔥' },
     ];
     return defs;
   }, [model]);
@@ -314,47 +315,47 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
   const selBook = useMemo(() => model?.books.find((b) => b.checksum === selected) || null, [model, selected]);
 
   const TABS = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'calendar', label: 'Calendar' },
-    { id: 'library', label: `Files${model ? ` (${model.books.length})` : ''}` },
+    { id: 'overview', label: t('Overview') },
+    { id: 'calendar', label: t('Calendar') },
+    { id: 'library', label: model ? t('Files ({n})', { n: model.books.length }) : t('Files') },
   ];
 
   return (
     <div className="history-view">
-      {!files && <p>Loading…</p>}
+      {!files && <p>{t('Loading…')}</p>}
       {files && model && model.books.length === 0 && (
-        <p className="settings-note">No reading recorded yet — open a document and start reading to build your history.</p>
+        <p className="settings-note">{t('No reading recorded yet — open a document and start reading to build your history.')}</p>
       )}
       {model && model.books.length > 0 && (
         <>
           <div className="rh-tabs">
-            {TABS.map((t) => (
-              <button key={t.id} className={`rh-tab${tab === t.id ? ' on' : ''}`} onClick={() => { setTab(t.id); setSelected(null); }}>{t.label}</button>
+            {TABS.map((tb) => (
+              <button key={tb.id} className={`rh-tab${tab === tb.id ? ' on' : ''}`} onClick={() => { setTab(tb.id); setSelected(null); }}>{tb.label}</button>
             ))}
           </div>
 
           {tab === 'overview' && (
             <div className="rh-overview">
               <div className="rh-stat-grid">
-                <Stat v={fmtInt(model.agg.totalWordsRead)} l="words read" />
-                <Stat v={fmtDur(model.agg.totalSecs)} l="time reading" />
-                <Stat v={model.agg.avgWpm} l="avg WPM" />
-                <Stat v={model.agg.booksFinished} l="books finished" sub={`of ${model.agg.booksOpened} opened`} />
-                <Stat v={`${model.streaks.current}🔥`} l="day streak" sub={`best ${model.streaks.longest}`} />
-                <Stat v={model.agg.daysRead} l="days read" />
+                <Stat v={fmtInt(model.agg.totalWordsRead)} l={t('words read')} />
+                <Stat v={fmtDur(model.agg.totalSecs)} l={t('time reading')} />
+                <Stat v={model.agg.avgWpm} l={t('avg WPM')} />
+                <Stat v={model.agg.booksFinished} l={t('books finished')} sub={t('of {n} opened', { n: model.agg.booksOpened })} />
+                <Stat v={`${model.streaks.current}🔥`} l={t('day streak')} sub={t('best {n}', { n: model.streaks.longest })} />
+                <Stat v={model.agg.daysRead} l={t('days read')} />
               </div>
 
-              <div className="rh-section-h">Highlights</div>
+              <div className="rh-section-h">{t('Highlights')}</div>
               <div className="rh-highlights">
-                {model.agg.fastest && <div className="rh-hl"><b>{model.agg.fastest.avgWpm} WPM</b><span>fastest: {model.agg.fastest.name}</span></div>}
-                {model.agg.mostRead && <div className="rh-hl"><b>{fmtInt(model.agg.mostRead.wordsRead)}</b><span>most read: {model.agg.mostRead.name}</span></div>}
-                {model.agg.bestDay && <div className="rh-hl"><b>{fmtInt(model.agg.bestDay.words)}</b><span>best day: {model.agg.bestDay.date}</span></div>}
+                {model.agg.fastest && <div className="rh-hl"><b>{model.agg.fastest.avgWpm} WPM</b><span>{t('fastest: {name}', { name: model.agg.fastest.name })}</span></div>}
+                {model.agg.mostRead && <div className="rh-hl"><b>{fmtInt(model.agg.mostRead.wordsRead)}</b><span>{t('most read: {name}', { name: model.agg.mostRead.name })}</span></div>}
+                {model.agg.bestDay && <div className="rh-hl"><b>{fmtInt(model.agg.bestDay.words)}</b><span>{t('best day: {date}', { date: model.agg.bestDay.date })}</span></div>}
               </div>
 
-              <div className="rh-section-h">Milestones</div>
+              <div className="rh-section-h">{t('Milestones')}</div>
               <div className="rh-badges">
                 {milestones.map((m) => (
-                  <span key={m.label} className={`rh-badge${m.ok ? ' on' : ''}`} title={m.ok ? 'Unlocked' : 'Locked'}>
+                  <span key={m.label} className={`rh-badge${m.ok ? ' on' : ''}`} title={m.ok ? t('Unlocked') : t('Locked')}>
                     <span className="rh-badge-i">{m.icon}</span>{m.label}
                   </span>
                 ))}
@@ -362,12 +363,12 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
 
               {focusAgg && (
                 <>
-                  <div className="rh-section-h">Focus &amp; attention</div>
+                  <div className="rh-section-h">{t('Focus & attention')}</div>
                   <div className="rh-stat-grid">
-                    <Stat v={`${focusAgg.focusPct.toFixed(0)}%`} l="focus" sub="eyes on the page" />
-                    <Stat v={fmtInt(focusAgg.distractions)} l="distractions" />
-                    <Stat v={fmtDur(focusAgg.watchedSecs)} l="watched" />
-                    <Stat v={focusAgg.sessions} l="tracked sessions" />
+                    <Stat v={`${focusAgg.focusPct.toFixed(0)}%`} l={t('focus')} sub={t('eyes on the page')} />
+                    <Stat v={fmtInt(focusAgg.distractions)} l={t('distractions')} />
+                    <Stat v={fmtDur(focusAgg.watchedSecs)} l={t('watched')} />
+                    <Stat v={focusAgg.sessions} l={t('tracked sessions')} />
                   </div>
                 </>
               )}
@@ -377,11 +378,11 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
           {tab === 'calendar' && heatmap && (
             <div className="rh-calendar">
               <div className="rh-cal-meta">
-                <Stat v={`${model.streaks.current}🔥`} l="current streak" />
-                <Stat v={model.streaks.longest} l="longest streak" />
-                <Stat v={model.agg.daysRead} l="days read" />
+                <Stat v={`${model.streaks.current}🔥`} l={t('current streak')} />
+                <Stat v={model.streaks.longest} l={t('longest streak')} />
+                <Stat v={model.agg.daysRead} l={t('days read')} />
               </div>
-              <div className="rh-heatmap" role="img" aria-label="Reading activity over the last 26 weeks">
+              <div className="rh-heatmap" role="img" aria-label={t('Reading activity over the last 26 weeks')}>
                 {heatmap.weeks.map((week, wi) => (
                   <div key={wi} className="rh-hm-col">
                     {week.map((day, di) => (
@@ -390,37 +391,37 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
                         key={di}
                         disabled={!day}
                         className={`rh-hm-cell lvl-${day ? heatmap.level(day.words) : 0}${day && calDay === day.key ? ' sel' : ''}`}
-                        title={day ? `${day.key}: ${fmtInt(day.words)} words — click for the books` : ''}
-                        aria-label={day ? `${day.key}: ${fmtInt(day.words)} words` : undefined}
+                        title={day ? t('{date}: {words} words — click for the books', { date: day.key, words: fmtInt(day.words) }) : ''}
+                        aria-label={day ? t('{date}: {words} words', { date: day.key, words: fmtInt(day.words) }) : undefined}
                         onClick={() => day && setCalDay(calDay === day.key ? null : day.key)}
                       />
                     ))}
                   </div>
                 ))}
               </div>
-              <div className="rh-hm-legend"><span>Less</span><i className="lvl-0" /><i className="lvl-1" /><i className="lvl-2" /><i className="lvl-3" /><i className="lvl-4" /><span>More</span></div>
+              <div className="rh-hm-legend"><span>{t('Less')}</span><i className="lvl-0" /><i className="lvl-1" /><i className="lvl-2" /><i className="lvl-3" /><i className="lvl-4" /><span>{t('More')}</span></div>
 
               {calDay && (
                 <>
-                  <div className="rh-section-h">{calDay} — what you read <button className="link-btn" onClick={() => setCalDay(null)}>✕</button></div>
+                  <div className="rh-section-h">{t('{date} — what you read', { date: calDay })} <button className="link-btn" onClick={() => setCalDay(null)}>✕</button></div>
                   {(model.byDay.get(calDay)?.books || []).length ? (
                     <table className="history-table">
-                      <thead><tr><th>Book</th><th>Words</th><th>Active</th><th>WPM</th></tr></thead>
+                      <thead><tr><th>{t('Book')}</th><th>{t('Words')}</th><th>{t('Active')}</th><th>WPM</th></tr></thead>
                       <tbody>
                         {[...model.byDay.get(calDay).books].sort((a, b) => b.secs - a.secs || b.words - a.words).map((bk) => (
                           <tr key={bk.checksum}><td>{bk.name}</td><td>{fmtInt(bk.words)}</td><td>{fmtDur(bk.secs)}</td><td>{wpmOf(bk.words, bk.secs)}</td></tr>
                         ))}
                       </tbody>
                     </table>
-                  ) : <p className="settings-note">No reading recorded that day.</p>}
+                  ) : <p className="settings-note">{t('No reading recorded that day.')}</p>}
                 </>
               )}
-              <div className="rh-section-h">Recent days</div>
+              <div className="rh-section-h">{t('Recent days')}</div>
               <table className="history-table">
-                <thead><tr><th>Date</th><th>Words</th><th>Active</th><th>WPM</th></tr></thead>
+                <thead><tr><th>{t('Date')}</th><th>{t('Words')}</th><th>{t('Active')}</th><th>WPM</th></tr></thead>
                 <tbody>
                   {[...model.byDay.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 30).map(([date, d]) => (
-                    <tr key={date} className={calDay === date ? 'sel' : ''}><td><button className="link-btn" onClick={() => setCalDay(calDay === date ? null : date)} title="Show the books read that day">{date}</button></td><td>{fmtInt(d.words)}</td><td>{fmtDur(d.secs)}</td><td>{wpmOf(d.words, d.secs)}</td></tr>
+                    <tr key={date} className={calDay === date ? 'sel' : ''}><td><button className="link-btn" onClick={() => setCalDay(calDay === date ? null : date)} title={t('Show the books read that day')}>{date}</button></td><td>{fmtInt(d.words)}</td><td>{fmtDur(d.secs)}</td><td>{wpmOf(d.words, d.secs)}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -430,67 +431,67 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
           {tab === 'library' && !selBook && (
             <div className="rh-library">
               <div className="rh-lib-controls">
-                <span className="settings-note" style={{ margin: 0 }}>{libraryBooks.length} of {model?.books.length || 0} file{libraryBooks.length === 1 ? '' : 's'} — every column has a filter under its header (text: regex · numbers: min/max · dates: from/to)</span>
-                {(anySet(ff) || shelfFilter.size > 0 || linkFilter !== 'all') && <button onClick={() => { setFf(NO_FF); setShelfFilter(new Set()); setLinkFilter('all'); }}>Clear filters</button>}
+                <span className="settings-note" style={{ margin: 0 }}>{t.n('{n} of {total} file — every column has a filter under its header (text: regex · numbers: min/max · dates: from/to)', '{n} of {total} files — every column has a filter under its header (text: regex · numbers: min/max · dates: from/to)', libraryBooks.length, { total: model?.books.length || 0 })}</span>
+                {(anySet(ff) || shelfFilter.size > 0 || linkFilter !== 'all') && <button onClick={() => { setFf(NO_FF); setShelfFilter(new Set()); setLinkFilter('all'); }}>{t('Clear filters')}</button>}
               </div>
               <div className="lj-tablewrap">
                 <table className="lj-table rh-files-table">
                   <thead>
                     <tr>
-                      {[['shelf', ''], ['title', 'File'], ['link', 'Trackyread'], ['progress', '%'], ['words', 'Words'], ['time', 'Time'], ['wpm', 'WPM'], ['rating', '★'], ['recent', 'Last read']].map(([k, l]) => (
-                        <th key={k} className={fsort.key === k ? 'on' : ''} onClick={() => fsortBy(k)} title="Click to sort (click again to flip)">{l}{fsortMark(k)}</th>
+                      {[['shelf', ''], ['title', t('File')], ['link', 'Trackyread'], ['progress', '%'], ['words', t('Words')], ['time', t('Time')], ['wpm', 'WPM'], ['rating', '★'], ['recent', t('Last read')]].map(([k, l]) => (
+                        <th key={k} className={fsort.key === k ? 'on' : ''} onClick={() => fsortBy(k)} title={t('Click to sort (click again to flip)')}>{l}{fsortMark(k)}</th>
                       ))}
-                      <th aria-label="Actions" />
+                      <th aria-label={t('Actions')} />
                     </tr>
                     <tr className="lj-filter-row">
                       <th>
-                        <span className="rh-shelf-filter" title="Filter by shelf — tick as many as you like; none ticked shows every shelf">
+                        <span className="rh-shelf-filter" title={t('Filter by shelf — tick as many as you like; none ticked shows every shelf')}>
                           {SHELVES.map((s) => (
                             <button
                               key={s.id} type="button" aria-pressed={shelfFilter.has(s.id)}
                               className={shelfFilter.has(s.id) ? 'on' : ''}
-                              title={`${s.label} — ${shelfFilter.has(s.id) ? 'showing, click to drop' : 'click to add to the filter'}`}
+                              title={shelfFilter.has(s.id) ? t('{shelf} — showing, click to drop', { shelf: s.label }) : t('{shelf} — click to add to the filter', { shelf: s.label })}
                               onClick={() => toggleShelf(s.id)}
                             >{s.icon}</button>
                           ))}
                         </span>
                       </th>
-                      <th><TextF value={ff.file} onChange={setF('file')} label="file name" /></th>
+                      <th><TextF value={ff.file} onChange={setF('file')} label={t('file name')} /></th>
                       <th>
-                        <select value={linkFilter} onChange={(e) => setLinkFilter(e.target.value)} title="Filter by Trackyread link">
-                          <option value="all">all</option><option value="linked">🔗 linked</option><option value="unlinked">○ not</option>
+                        <select value={linkFilter} onChange={(e) => setLinkFilter(e.target.value)} title={t('Filter by Trackyread link')}>
+                          <option value="all">{t('all')}</option><option value="linked">🔗 {t('linked')}</option><option value="unlinked">○ {t('not')}</option>
                         </select>
-                        <TextF value={ff.link} onChange={setF('link')} label="linked book title" />
+                        <TextF value={ff.link} onChange={setF('link')} label={t('linked book title')} />
                       </th>
-                      <th><RangeF value={ff.pct} onChange={setF('pct')} label="% through" /></th>
-                      <th><RangeF value={ff.words} onChange={setF('words')} label="words read" unit="k" /></th>
-                      <th><RangeF value={ff.time} onChange={setF('time')} label="active time" unit="h" /></th>
+                      <th><RangeF value={ff.pct} onChange={setF('pct')} label={t('% through')} /></th>
+                      <th><RangeF value={ff.words} onChange={setF('words')} label={t('words read')} unit="k" /></th>
+                      <th><RangeF value={ff.time} onChange={setF('time')} label={t('active time')} unit="h" /></th>
                       <th><RangeF value={ff.wpm} onChange={setF('wpm')} label="WPM" /></th>
-                      <th><RangeF value={ff.rating} onChange={setF('rating')} label="rating" /></th>
-                      <th><DateF value={ff.last} onChange={setF('last')} label="Last read" /></th>
+                      <th><RangeF value={ff.rating} onChange={setF('rating')} label={t('rating')} /></th>
+                      <th><DateF value={ff.last} onChange={setF('last')} label={t('Last read')} /></th>
                       <th />
                     </tr>
                   </thead>
                   <tbody>
                     {libraryBooks.slice(0, fLimit).map((b) => (
-                      <tr key={b.checksum} onClick={() => setSelected(b.checksum)} title="Open this file's reading detail">
+                      <tr key={b.checksum} onClick={() => setSelected(b.checksum)} title={t("Open this file's reading detail")}>
                         <td><span className="rh-shelf-dot" title={SHELF_BY_ID[b.shelf]?.label}>{SHELF_BY_ID[b.shelf]?.icon}</span></td>
                         <td className="lj-td-title">
                           <b>{b.name}</b>
-                          {b.sourcePages > 0 && <em title="Source pages reached in the original document"> 📄 {sourcePageLabel(b)}</em>}
+                          {b.sourcePages > 0 && <em title={t('Source pages reached in the original document')}> 📄 {sourcePageLabel(b)}</em>}
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
                           {linkMap[b.checksum]
                             ? (
                               <span className="rh-link-cell">
-                                <button className="rh-link-chip on" title={`Open “${linkMap[b.checksum].title}” in the Trackyread library`} onClick={() => openBook(linkMap[b.checksum].id)}>🔗 {linkMap[b.checksum].title}</button>
-                                <button className="rh-unlink" aria-label={`Unlink ${b.name} from ${linkMap[b.checksum].title}`} title={`Unlink this file from “${linkMap[b.checksum].title}” — the book and its reading history both stay, only the link goes`} onClick={() => unlink(b.checksum)}>✕</button>
+                                <button className="rh-link-chip on" title={t('Open “{title}” in the Trackyread library', { title: linkMap[b.checksum].title })} onClick={() => openBook(linkMap[b.checksum].id)}>🔗 {linkMap[b.checksum].title}</button>
+                                <button className="rh-unlink" aria-label={t('Unlink {file} from {title}', { file: b.name, title: linkMap[b.checksum].title })} title={t('Unlink this file from “{title}” — the book and its reading history both stay, only the link goes', { title: linkMap[b.checksum].title })} onClick={() => unlink(b.checksum)}>✕</button>
                               </span>
                             )
-                            : <button className="rh-link-chip" title="Link this file to a Trackyread book" onClick={() => linkFile(b.checksum, b.name)}>○ link…</button>}
+                            : <button className="rh-link-chip" title={t('Link this file to a Trackyread book')} onClick={() => linkFile(b.checksum, b.name)}>○ {t('link…')}</button>}
                         </td>
                         <td>
-                          <div className="rh-td-prog" title={`${Math.round(b.posFrac * 100)}% through`}>
+                          <div className="rh-td-prog" title={t('{pct}% through', { pct: Math.round(b.posFrac * 100) })}>
                             <span>{Math.round(b.posFrac * 100)}%</span>
                             <div className="rh-progress"><div className="rh-progress-fill" style={{ width: `${b.posFrac * 100}%` }} /></div>
                           </div>
@@ -503,21 +504,21 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
                         <td onClick={(e) => e.stopPropagation()}>
                           <button
                             className="rh-open-file"
-                            title="Open this document in the reader — uses the copy saved on this device (or focuses it if it's already open)"
+                            title={t("Open this document in the reader — uses the copy saved on this device (or focuses it if it's already open)")}
                             onClick={async () => { if (await openRecent(b.checksum)) closeDialog?.(); }}
                           >▶</button>
                         </td>
                       </tr>
                     ))}
-                    {libraryBooks.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', padding: 12 }}>No files match.</td></tr>}
+                    {libraryBooks.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', padding: 12 }}>{t('No files match.')}</td></tr>}
                   </tbody>
                 </table>
               </div>
               {libraryBooks.length > fLimit && (
                 <div className="lj-inline">
-                  <span className="settings-note" style={{ margin: 0 }}>Showing {fLimit} of {libraryBooks.length} — filter to narrow, or</span>
-                  <button className="lj-more" onClick={() => setFLimit(fLimit + 200)}>Show 200 more</button>
-                  <button className="lj-more" onClick={() => setFLimit(libraryBooks.length)}>Show all {libraryBooks.length}</button>
+                  <span className="settings-note" style={{ margin: 0 }}>{t('Showing {n} of {total} — filter to narrow, or', { n: fLimit, total: libraryBooks.length })}</span>
+                  <button className="lj-more" onClick={() => setFLimit(fLimit + 200)}>{t('Show {n} more', { n: 200 })}</button>
+                  <button className="lj-more" onClick={() => setFLimit(libraryBooks.length)}>{t('Show all {n}', { n: libraryBooks.length })}</button>
                 </div>
               )}
             </div>
@@ -525,24 +526,24 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
 
           {tab === 'library' && selBook && (
             <div className="rh-detail">
-              <button className="rh-back" onClick={() => setSelected(null)}>← Files</button>
+              <button className="rh-back" onClick={() => setSelected(null)}>← {t('Files')}</button>
               <h3 className="rh-detail-title">
                 {selBook.name}
                 <button
                   className="rh-open-file"
-                  title="Open this document in the reader — uses the copy saved on this device (or focuses it if it's already open)"
+                  title={t("Open this document in the reader — uses the copy saved on this device (or focuses it if it's already open)")}
                   onClick={async () => { if (await openRecent(selBook.checksum)) closeDialog?.(); }}
-                >▶ Open file</button>
+                >▶ {t('Open file')}</button>
               </h3>
               <p className="rh-detail-link">
                 {linkMap[selBook.checksum]
                   ? (
                     <span className="rh-link-cell">
-                      <span className="rh-link-chip on" title="This file is linked to a book in your Trackyread tracker">🔗 Linked to Trackyread: <b>{linkMap[selBook.checksum].title}</b></span>
-                      <button className="rh-unlink" aria-label={`Unlink this file from ${linkMap[selBook.checksum].title}`} title={`Unlink this file from “${linkMap[selBook.checksum].title}” — the book and its reading history both stay, only the link goes`} onClick={() => unlink(selBook.checksum)}>✕</button>
+                      <span className="rh-link-chip on" title={t('This file is linked to a book in your Trackyread tracker')}>🔗 {t('Linked to Trackyread: {title}', { title: linkMap[selBook.checksum].title })}</span>
+                      <button className="rh-unlink" aria-label={t('Unlink this file from {title}', { title: linkMap[selBook.checksum].title })} title={t('Unlink this file from “{title}” — the book and its reading history both stay, only the link goes', { title: linkMap[selBook.checksum].title })} onClick={() => unlink(selBook.checksum)}>✕</button>
                     </span>
                   )
-                  : <span className="rh-link-chip" title="Link this file from the Trackyread Library (open a book → Linked document)">○ Not linked to Trackyread</span>}
+                  : <span className="rh-link-chip" title={t('Link this file from the Trackyread Library (open a book → Linked document)')}>○ {t('Not linked to Trackyread')}</span>}
               </p>
 
               <div className="rh-shelf-pick">
@@ -551,46 +552,46 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
                     {s.icon} {s.label}
                   </button>
                 ))}
-                {selBook.shelfExplicit && <button className="rh-shelf-btn rh-shelf-auto" onClick={() => setShelf(selBook.checksum, null)} title="Use the shelf inferred from progress">↺ Auto</button>}
+                {selBook.shelfExplicit && <button className="rh-shelf-btn rh-shelf-auto" onClick={() => setShelf(selBook.checksum, null)} title={t('Use the shelf inferred from progress')}>↺ {t('Auto')}</button>}
               </div>
 
               <div className="rh-stat-grid">
-                <Stat v={`${Math.round(selBook.posFrac * 100)}%`} l="position" sub={`${fmtInt(selBook.wordIndex)} / ${fmtInt(selBook.totalWords)}`} />
-                <Stat v={`${Math.round(selBook.readFrac * 100)}%`} l="actually read" sub={`${fmtInt(selBook.wordsRead)} words`} />
-                <Stat v={fmtDur(selBook.activeSecs)} l="time" />
-                <Stat v={selBook.avgWpm} l="avg WPM" />
-                <Stat v={selBook.daysRead} l="days read" />
-                <Stat v={selBook.completions} l="times finished" />
+                <Stat v={`${Math.round(selBook.posFrac * 100)}%`} l={t('position')} sub={`${fmtInt(selBook.wordIndex)} / ${fmtInt(selBook.totalWords)}`} />
+                <Stat v={`${Math.round(selBook.readFrac * 100)}%`} l={t('actually read')} sub={t('{words} words', { words: fmtInt(selBook.wordsRead) })} />
+                <Stat v={fmtDur(selBook.activeSecs)} l={t('time')} />
+                <Stat v={selBook.avgWpm} l={t('avg WPM')} />
+                <Stat v={selBook.daysRead} l={t('days read')} />
+                <Stat v={selBook.completions} l={t('times finished')} />
               </div>
 
               <div className="rh-detail-2col">
                 <div>
-                  <div className="rh-section-h">Daily words</div>
+                  <div className="rh-section-h">{t('Daily words')}</div>
                   <Spark daily={selBook.daily} />
                   <div className="rh-detail-meta">
-                    {selBook.firstRead && <span>First: {selBook.firstRead}</span>}
-                    {selBook.lastRead && <span>Last: {selBook.lastRead}</span>}
-                    {selBook.rating > 0 && <span>Rating: {'★'.repeat(selBook.rating)}</span>}
+                    {selBook.firstRead && <span>{t('First: {date}', { date: selBook.firstRead })}</span>}
+                    {selBook.lastRead && <span>{t('Last: {date}', { date: selBook.lastRead })}</span>}
+                    {selBook.rating > 0 && <span>{t('Rating: {stars}', { stars: '★'.repeat(selBook.rating) })}</span>}
                   </div>
                 </div>
                 <div>
-                  <div className="rh-section-h">Chapters</div>
+                  <div className="rh-section-h">{t('Chapters')}</div>
                   {selBook.tocTotal > 0 ? (
-                    <p className="rh-toc-prog">{selBook.tocCompleted} completed · {selBook.tocStarted} started · of {selBook.tocTotal} tracked sections</p>
+                    <p className="rh-toc-prog">{t('{completed} completed · {started} started · of {total} tracked sections', { completed: selBook.tocCompleted, started: selBook.tocStarted, total: selBook.tocTotal })}</p>
                   ) : (
-                    <p className="settings-note">No chapter-level reading recorded for this book yet.</p>
+                    <p className="settings-note">{t('No chapter-level reading recorded for this book yet.')}</p>
                   )}
                 </div>
               </div>
 
-              <div className="rh-section-h">Sessions</div>
+              <div className="rh-section-h">{t('Sessions')}</div>
               <table className="history-table">
-                <thead><tr><th>Date</th><th>Words</th><th>Active</th><th>WPM</th></tr></thead>
+                <thead><tr><th>{t('Date')}</th><th>{t('Words')}</th><th>{t('Active')}</th><th>WPM</th></tr></thead>
                 <tbody>
                   {selBook.daily.slice().reverse().slice(0, 40).map((d) => (
                     <tr key={d.date}><td>{d.date}</td><td>{fmtInt(d.wordsRead)}</td><td>{fmtDur(d.activeTimeSecs)}</td><td>{wpmOf(d.wordsRead, d.activeTimeSecs)}</td></tr>
                   ))}
-                  {selBook.daily.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', padding: 10 }}>No dated sessions recorded.</td></tr>}
+                  {selBook.daily.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', padding: 10 }}>{t('No dated sessions recorded.')}</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -603,7 +604,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
 
 export default function HistoryDialog({ onClose }) {
   return (
-    <Dialog title="Reading History" onClose={onClose} width={840} buttons={<button onClick={onClose}>Close</button>}>
+    <Dialog title={t('Reading History')} onClose={onClose} width={840} buttons={<button onClick={onClose}>{t('Close')}</button>}>
       <HistoryView />
     </Dialog>
   );

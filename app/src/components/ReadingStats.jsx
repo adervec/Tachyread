@@ -38,6 +38,9 @@ export function statsChipShow(settings) {
 
 // When the (resizable) stats chip is too small to fit everything, blocks are sacrificed LEAST
 // important first — the hero "reading now" number survives longest.
+// Shown names of the speed units (the stored value stays English: it is compared in the engine).
+const SPEED_UNIT_LABELS = { Words: t('Words'), Letters: t('Letters'), Syllables: t('Syllables') };
+
 export const STATS_SACRIFICE_ORDER = ['pct', 'steadiness', 'regressions', 'today', 'lifetime', 'set', 'spark', 'autostop', 'eta', 'position', 'coverage', 'session'];
 
 // Normalized WPM sparkline: 15s-averaged WPM over the trailing 8 minutes on a fixed 0–1400 scale
@@ -67,7 +70,7 @@ export function WpmSparkline({ tabId }) {
   const grid = [];
   if (step) for (let v = step; v < SPARK_MAX_WPM; v += step) grid.push(v);
   return (
-    <div className="chip-spark" title={`15s-averaged WPM over the last 8 minutes (scale 0–${SPARK_MAX_WPM})`}>
+    <div className="chip-spark" title={t('15s-averaged WPM over the last 8 minutes (scale 0–{max})', { max: SPARK_MAX_WPM })}>
       <div className="chip-spark-plot" ref={plotRef}>
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
           {grid.length
@@ -79,16 +82,16 @@ export function WpmSparkline({ tabId }) {
           <span key={v} className="chip-spark-gl" style={{ top: `${(1 - v / SPARK_MAX_WPM) * 100}%` }}>{v}</span>
         ))}
       </div>
-      <div className="chip-spark-axis"><span>8m</span><span>0–{SPARK_MAX_WPM}</span><span>now</span></div>
+      <div className="chip-spark-axis"><span>{t('8m')}</span><span>0–{SPARK_MAX_WPM}</span><span>{t('now')}</span></div>
     </div>
   );
 }
 
 function steadiness(cv) {
-  if (cv <= 0) return '—';
-  if (cv < 0.4) return 'steady';
-  if (cv < 0.8) return 'variable';
-  return 'erratic';
+  if (cv <= 0) return t('— pace');
+  if (cv < 0.4) return t('steady pace');
+  if (cv < 0.8) return t('variable pace');
+  return t('erratic pace');
 }
 
 // The live, measured reading-stats block — shared by the desktop dock (DashboardPane) and the
@@ -139,22 +142,24 @@ export default function ReadingStats({ tab, autoStopAt = 0, omit = null }) {
       {show.recent && (
         <div
           className="dash-stat dash-stat-hero"
-          title={recentDetail ? `Words ÷ attentive time over the last ${recentDetail.windowSecs}s${recentDetail.scrolling ? ' (scroll mode uses the longer window — gestures are bursty)' : ''}. The current pause counts as reading time up to the idle grace, so pausing visibly drags this down.` : undefined}
+          title={recentDetail ? (recentDetail.scrolling
+            ? t('Words ÷ attentive time over the last {secs}s (scroll mode uses the longer window — gestures are bursty). The current pause counts as reading time up to the idle grace, so pausing visibly drags this down.', { secs: recentDetail.windowSecs })
+            : t('Words ÷ attentive time over the last {secs}s. The current pause counts as reading time up to the idle grace, so pausing visibly drags this down.', { secs: recentDetail.windowSecs })) : undefined}
         >
           <span className="dash-num">{recent || '—'}</span>
-          <span className="dash-label">Reading now (WPM · {recentDetail ? `last ${recentDetail.windowSecs}s` : 'recent'})</span>
+          <span className="dash-label">{recentDetail ? t('Reading now (WPM · last {secs}s)', { secs: recentDetail.windowSecs }) : t('Reading now (WPM · recent)')}</span>
         </div>
       )}
       {show.session && (
         <div className="dash-stat">
           <span className="dash-num">{sessionWpm || '—'}</span>
-          <span className="dash-label">Session efficiency (WPM)</span>
+          <span className="dash-label">{t('Session efficiency (WPM)')}</span>
         </div>
       )}
       {show.lifetime && (
         <div className="dash-stat">
           <span className="dash-num">{lifetime || '—'}</span>
-          <span className="dash-label">Lifetime WPM</span>
+          <span className="dash-label">{t('Lifetime WPM')}</span>
         </div>
       )}
       {show.coverage && (
@@ -162,38 +167,38 @@ export default function ReadingStats({ tab, autoStopAt = 0, omit = null }) {
           <span className="dash-num">
             {(coverage * 100).toFixed(1)}<span className="dash-of">%</span>
           </span>
-          <span className="dash-label">Book read · {fmtDuration(activeMs)} active</span>
+          <span className="dash-label">{t('Book read · {time} active', { time: fmtDuration(activeMs) })}</span>
         </div>
       )}
       {show.eta && (
         <div className="dash-stat">
           <span className="dash-num">{eta != null ? fmtDuration(eta) : '—'}</span>
-          <span className="dash-label">To finish (measured pace)</span>
+          <span className="dash-label">{t('To finish (measured pace)')}</span>
         </div>
       )}
       {show.autostop && autoStopAt > 0 && autoStopAt > Date.now() && (
         <div className="dash-stat dash-stat-row">
-          <span className="dash-mini">⏳ {fmtDuration(autoStopAt - Date.now())} → auto-stop</span>
+          <span className="dash-mini">⏳ {t('{time} → auto-stop', { time: fmtDuration(autoStopAt - Date.now()) })}</span>
         </div>
       )}
       {show.position && (
         <div className="dash-stat dash-stat-row">
-          <span className="dash-mini">Word {idx + 1}/{total}</span>
-          <span className="dash-mini">Line {(doc.wordToLine[idx] || 0) + 1}/{doc.lines.length}</span>
-          <span className="dash-mini">+{newWords} this session</span>
+          <span className="dash-mini">{t('Word {n}/{total}', { n: idx + 1, total })}</span>
+          <span className="dash-mini">{t('Line {n}/{total}', { n: (doc.wordToLine[idx] || 0) + 1, total: doc.lines.length })}</span>
+          <span className="dash-mini">{t('+{n} this session', { n: newWords })}</span>
         </div>
       )}
       {(show.pct || show.today || show.regressions || show.steadiness) && (
         <div className="dash-stat dash-stat-row">
-          {show.pct && <span className="dash-mini">{total ? ((idx / total) * 100).toFixed(1) : '0.0'}% through</span>}
-          {show.today && <span className="dash-mini">{today.toLocaleString()} today</span>}
-          {show.regressions && reg && <span className="dash-mini" title="Backward re-reads this session">↩ {reg.count} ({reg.ratePer100.toFixed(1)}/100)</span>}
-          {show.steadiness && <span className="dash-mini" title="Pace variability — lower is steadier">{steadiness(cv)} pace</span>}
+          {show.pct && <span className="dash-mini">{t('{pct}% through', { pct: total ? ((idx / total) * 100).toFixed(1) : '0.0' })}</span>}
+          {show.today && <span className="dash-mini">{t('{n} today', { n: today.toLocaleString() })}</span>}
+          {show.regressions && reg && <span className="dash-mini" title={t('Backward re-reads this session')}>↩ {reg.count} ({reg.ratePer100.toFixed(1)}/100)</span>}
+          {show.steadiness && <span className="dash-mini" title={t('Pace variability — lower is steadier')}>{steadiness(cv)}</span>}
         </div>
       )}
       {show.set && (
         <div className="dash-stat dash-stat-row">
-          <span className="dash-mini">Set {settings.wpm} {settings.speedUnit || 'Words'}/min</span>
+          <span className="dash-mini">{t('Set {wpm} {unit}/min', { wpm: settings.wpm, unit: SPEED_UNIT_LABELS[settings.speedUnit || 'Words'] || settings.speedUnit })}</span>
         </div>
       )}
       {show.spark && <WpmSparkline tabId={tab.id} />}

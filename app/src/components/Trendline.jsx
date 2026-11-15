@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useIsCompact } from '../state/device.js';
 import { fmtDateTime } from '../features/dateFmt.js';
+import { t } from '../i18n.js';
 
 // Mountain-graph progress bar: an area chart of recorded reading pace across the whole book.
 // Filled columns are colored by state — read this session, read in a prior session, or
@@ -112,7 +113,7 @@ export default function Trendline({ tab, onPeek, peekIdx = -1 }) {
         className="trendline"
         viewBox={`0 0 1000 ${H}`}
         preserveAspectRatio="none"
-        title="Reading-pace trendline — click/drag to peek (resume reading to return)"
+        title={t('Reading-pace trendline — click/drag to peek (resume reading to return)')}
         onPointerDown={(e) => {
           dragging.current = true;
           peekFromEvent(e);
@@ -151,7 +152,7 @@ export default function Trendline({ tab, onPeek, peekIdx = -1 }) {
       </svg>
       {tip && (
         <div className="tl-tip" style={{ left: tip.x }}>
-          <b>{tip.pct}%</b>{tip.wpm != null ? ` · ${tip.wpm} wpm` : tip.read ? '' : ' · unread'}
+          <b>{tip.pct}%</b>{tip.wpm != null ? ` · ${t('{wpm} wpm', { wpm: tip.wpm })}` : tip.read ? '' : ` · ${t('unread')}`}
           {tip.when && <span className="tl-tip-when">{tip.when}</span>}
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { lookupIsbn, validIsbn } from '../features/openLibrary.js';
+import { t } from '../i18n.js';
 
 // Library → "＋ Add by ISBN": type an ISBN or scan the barcode on the back of the book — the
 // browser's own BarcodeDetector where it has one (Android, ChromeOS, macOS), else the zxing-wasm
@@ -16,7 +17,7 @@ function Scanner({ onIsbn, onClose }) {
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        if (dead) { stream.getTracks().forEach((t) => t.stop()); return; }
+        if (dead) { stream.getTracks().forEach((tr) => tr.stop()); return; }
         const v = videoRef.current;
         v.srcObject = stream;
         await v.play().catch(() => {});
@@ -31,14 +32,14 @@ function Scanner({ onIsbn, onClose }) {
             }
           } catch { /* frame not ready */ }
         }, 300);
-      } catch (e) { setErr(e?.name === 'NotAllowedError' ? 'Camera blocked — allow it, or type the ISBN.' : `No camera: ${e?.message || e}`); }
+      } catch (e) { setErr(e?.name === 'NotAllowedError' ? t('Camera blocked — allow it, or type the ISBN.') : t('No camera: {error}', { error: e?.message || e })); }
     })();
-    return () => { dead = true; clearInterval(timer); stream?.getTracks().forEach((t) => t.stop()); };
+    return () => { dead = true; clearInterval(timer); stream?.getTracks().forEach((tr) => tr.stop()); };
   }, [onIsbn]);
   return (
     <div className="isbn-scan">
-      {err ? <p className="settings-note">{err}</p> : <video ref={videoRef} muted playsInline aria-label="Camera — point it at the barcode" />}
-      <button onClick={onClose}>Stop scanning</button>
+      {err ? <p className="settings-note">{err}</p> : <video ref={videoRef} muted playsInline aria-label={t('Camera — point it at the barcode')} />}
+      <button onClick={onClose}>{t('Stop scanning')}</button>
     </div>
   );
 }
@@ -51,25 +52,25 @@ export default function IsbnAdd({ books = [], onFound, onOpenExisting }) {
   const [busy, setBusy] = useState(false);
   async function find(raw) {
     const clean = validIsbn(raw);
-    if (!clean) { setMsg('That isn’t a valid ISBN — check the digits.'); return; }
+    if (!clean) { setMsg(t('That isn’t a valid ISBN — check the digits.')); return; }
     const have = books.find((b) => !b.deleted && String(b.isbn || '').replace(/[^0-9Xx]/g, '') === clean);
-    if (have) { setMsg(`Already in your library: “${have.title}”.`); onOpenExisting?.(have.id); return; }
-    setBusy(true); setMsg('Looking it up on Open Library…');
+    if (have) { setMsg(t('Already in your library: “{title}”.', { title: have.title })); onOpenExisting?.(have.id); return; }
+    setBusy(true); setMsg(t('Looking it up on Open Library…'));
     try {
       const b = await lookupIsbn(clean);
-      if (!b) { setMsg('Open Library doesn’t know that ISBN — opening a blank book with it filled in.'); onFound({ title: '', author: '', isbn: clean, fnf: 'F', type: 'long', genre: '' }); }
+      if (!b) { setMsg(t('Open Library doesn’t know that ISBN — opening a blank book with it filled in.')); onFound({ title: '', author: '', isbn: clean, fnf: 'F', type: 'long', genre: '' }); }
       else { setMsg(''); onFound(b); setOpen(false); setIsbn(''); }
     } catch (e) { setMsg(String(e?.message || e)); }
     setBusy(false);
   }
-  if (!open) return <button onClick={() => setOpen(true)} title="Add a book from its ISBN — typed, or scanned from the barcode where your browser supports it">＋ Add by ISBN</button>;
+  if (!open) return <button onClick={() => setOpen(true)} title={t('Add a book from its ISBN — typed, or scanned from the barcode where your browser supports it')}>＋ {t('Add by ISBN')}</button>;
   return (
     <span className="isbn-add">
       <form className="lj-inline" onSubmit={(e) => { e.preventDefault(); find(isbn); }}>
-        <input value={isbn} onChange={(e) => setIsbn(e.target.value)} placeholder="ISBN (10 or 13 digits)" aria-label="ISBN" autoFocus inputMode="numeric" />
-        <button type="submit" className="toggle-on" disabled={busy || !isbn.trim()}>Look up</button>
-        {canScan && <button type="button" onClick={() => setScan(true)} title="Scan the barcode on the back cover">📷 Scan</button>}
-        <button type="button" onClick={() => { setOpen(false); setScan(false); setMsg(''); }}>Cancel</button>
+        <input value={isbn} onChange={(e) => setIsbn(e.target.value)} placeholder={t('ISBN (10 or 13 digits)')} aria-label={t('ISBN')} autoFocus inputMode="numeric" />
+        <button type="submit" className="toggle-on" disabled={busy || !isbn.trim()}>{t('Look up')}</button>
+        {canScan && <button type="button" onClick={() => setScan(true)} title={t('Scan the barcode on the back cover')}>📷 {t('Scan')}</button>}
+        <button type="button" onClick={() => { setOpen(false); setScan(false); setMsg(''); }}>{t('Cancel')}</button>
       </form>
       {scan && <Scanner onIsbn={(v) => { setScan(false); setIsbn(v); find(v); }} onClose={() => setScan(false)} />}
       {msg && <span className="settings-note" role="status">{msg}</span>}
