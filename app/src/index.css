@@ -87,6 +87,8 @@
 }
 
 * { box-sizing: border-box; }
+/* The focus ring takes the theme's accent (font.js keeps --t-* in step with the active tab). */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline-color: var(--t-accent, #4c9ffe); }
 
 html, body, #root {
   margin: 0;

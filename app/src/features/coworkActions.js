@@ -10,6 +10,7 @@
 
 import { COWORK_OPS, OP_GROUPS, opsInstruction } from './coworkOps.js';
 import { localDay } from './localDay.js';
+import { t } from '../i18n.js';
 
 // ── The action tree ─────────────────────────────────────────────────────────
 // Three groups = the three transports. `needsKey` gates the whole group on an Anthropic key —
@@ -17,28 +18,28 @@ import { localDay } from './localDay.js';
 // instruction a cowork/API action contributes; cloud actions have neither.
 export const SYNC_ACTION_GROUPS = [
   {
-    id: 'cowork', icon: '🤝', label: 'Cowork folder', kind: 'cowork',
+    id: 'cowork', icon: '🤝', label: t('Cowork folder'), kind: 'cowork',
     // The well-defined operations (coworkOps.js — each with its own enforced write permission and a
     // full explanation), plus the read-only activity snapshot. The old free-text custom instruction
     // is gone: a reply could ask for anything; now the app only accepts what the ticked ops allow.
     actions: [
-      { id: 'cw-snapshot', icon: '📸', label: 'Write activity snapshot', desc: 'Read-only files for observing agents — changes nothing in Tachyread' },
+      { id: 'cw-snapshot', icon: '📸', label: t('Write activity snapshot'), desc: t('Read-only files for observing agents — changes nothing in Tachyread') },
       ...Object.entries(COWORK_OPS)
         .sort((x, y) => OP_GROUPS.findIndex((g) => g.id === x[1].group) - OP_GROUPS.findIndex((g) => g.id === y[1].group)) // stable: group order, catalog order within
         .map(([id, op]) => ({ id, icon: op.icon, label: op.label, desc: op.explain.changes, op: true })),
     ],
   },
   {
-    id: 'api', icon: '🤖', label: 'Direct API (Anthropic)', kind: 'api', needsKey: true,
+    id: 'api', icon: '🤖', label: t('Direct API (Anthropic)'), kind: 'api', needsKey: true,
     actions: [
-      { id: 'api-light', icon: '⚡', label: 'Analysis + read-next via API', desc: 'Asks Claude directly (same operation as "Reading-profile analysis") — report only, no book changes' },
+      { id: 'api-light', icon: '⚡', label: t('Analysis + read-next via API'), desc: t('Asks Claude directly (same operation as "Reading-profile analysis") — report only, no book changes') },
     ],
   },
   {
-    id: 'cloud', icon: '☁️', label: 'Cloud sync', kind: 'cloud',
+    id: 'cloud', icon: '☁️', label: t('Cloud sync'), kind: 'cloud',
     actions: [
-      { id: 'cloud-progress', icon: '📈', label: 'Reading progress (two-way)', desc: 'Read-merge-write of reading history, positions and markers' },
-      { id: 'cloud-library', icon: '📚', label: 'Tracker library (two-way)', desc: 'Diff-aware sync of the whole Trackyread library' },
+      { id: 'cloud-progress', icon: '📈', label: t('Reading progress (two-way)'), desc: t('Read-merge-write of reading history, positions and markers') },
+      { id: 'cloud-library', icon: '📚', label: t('Tracker library (two-way)'), desc: t('Diff-aware sync of the whole Trackyread library') },
     ],
   },
 ];
@@ -55,12 +56,12 @@ export function combineCoworkInstruction(ids, extras = {}) {
 
 // ── Schedules ───────────────────────────────────────────────────────────────
 export const SCHEDULE_OPTS = [
-  { id: 'off', label: 'manual', ms: 0 },
-  { id: '30m', label: 'every 30 min', ms: 30 * 60e3 },
-  { id: 'hourly', label: 'hourly', ms: 3600e3 },
-  { id: '6h', label: 'every 6 h', ms: 6 * 3600e3 },
-  { id: 'daily', label: 'daily', ms: 24 * 3600e3 },
-  { id: 'weekly', label: 'weekly', ms: 7 * 24 * 3600e3 },
+  { id: 'off', label: t('manual'), ms: 0 },
+  { id: '30m', label: t('every 30 min'), ms: 30 * 60e3 },
+  { id: 'hourly', label: t('hourly'), ms: 3600e3 },
+  { id: '6h', label: t('every 6 h'), ms: 6 * 3600e3 },
+  { id: 'daily', label: t('daily'), ms: 24 * 3600e3 },
+  { id: 'weekly', label: t('weekly'), ms: 7 * 24 * 3600e3 },
 ];
 const SCHED_MS = Object.fromEntries(SCHEDULE_OPTS.map((o) => [o.id, o.ms]));
 
@@ -138,14 +139,14 @@ export function calendarCells(year, month /* 0-based */, history = []) {
 
 // Compact "3h ago" formatting for the per-action last-run captions.
 export function fmtAgo(ts, now = Date.now()) {
-  if (!ts) return 'never';
+  if (!ts) return t('never');
   const s = Math.max(0, Math.round((now - ts) / 1000));
-  if (s < 60) return 'just now';
+  if (s < 60) return t('just now');
   const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return t('{n}m ago', { n: m });
   const h = Math.round(m / 60);
-  if (h < 48) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
+  if (h < 48) return t('{n}h ago', { n: h });
+  return t('{n}d ago', { n: Math.round(h / 24) });
 }
 
 // A session just ended: if the AI session review is on a schedule, make it due now (the sync

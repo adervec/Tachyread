@@ -6,10 +6,11 @@
 // All functions here are pure.
 import { readStatus, contentType, CONTENT_TYPES, STATUS_LABEL } from './journeyLibrary.js';
 import { localDay, shiftDay, daysBetween } from './localDay.js';
+import { t } from '../i18n.js';
 
 const bookWords = (b) => Number(b?.words) || (Number(b?.pages) ? Number(b.pages) * 275 : 0);
 
-export const newQueue = (name, now = Date.now()) => ({ id: 'q' + now.toString(36), name: String(name || 'Queue').trim() || 'Queue', ids: [] });
+export const newQueue = (name, now = Date.now()) => ({ id: 'q' + now.toString(36), name: String(name || t('Queue')).trim() || t('Queue'), ids: [] });
 
 const edit = (queues, qid, fn) => (queues || []).map((q) => (q.id === qid ? { ...q, ids: fn(q.ids || []) } : q));
 // Adding moves the book here from any other queue — never in two places.
@@ -87,14 +88,14 @@ export const setQueueIds = (queues, qid, ids) => edit(queues, qid, () => ids);
 // Whole-queue reorders. `info(book)` → { pct (0–1), lastRead } for the progress-based keys.
 // Stable, so ties keep their current order.
 export const QUEUE_SORTS = {
-  shortest: ['Shortest left first', (a, b) => a.left - b.left],
-  longest: ['Longest left first', (a, b) => b.left - a.left],
-  progress: ['Most read first', (a, b) => b.pct - a.pct],
-  recent: ['Recently read first', (a, b) => String(b.lastRead || '').localeCompare(String(a.lastRead || ''))],
-  title: ['Title A–Z', (a, b) => a.book.title.localeCompare(b.book.title)],
-  author: ['Author A–Z', (a, b) => String(a.book.author || '').localeCompare(String(b.book.author || ''))],
-  rec: ['Rec score', (a, b) => (Number(b.book.recScore) || 0) - (Number(a.book.recScore) || 0)],
-  reverse: ['Reverse', null],
+  shortest: [t('Shortest left first'), (a, b) => a.left - b.left],
+  longest: [t('Longest left first'), (a, b) => b.left - a.left],
+  progress: [t('Most read first'), (a, b) => b.pct - a.pct],
+  recent: [t('Recently read first'), (a, b) => String(b.lastRead || '').localeCompare(String(a.lastRead || ''))],
+  title: [t('Title A–Z'), (a, b) => a.book.title.localeCompare(b.book.title)],
+  author: [t('Author A–Z'), (a, b) => String(a.book.author || '').localeCompare(String(b.book.author || ''))],
+  rec: [t('Rec score'), (a, b) => (Number(b.book.recScore) || 0) - (Number(a.book.recScore) || 0)],
+  reverse: [t('Reverse'), null],
 };
 export function sortQueueIds(qBooks, key, info = () => ({})) {
   if (key === 'reverse') return qBooks.map((b) => b.id).reverse();
@@ -114,7 +115,7 @@ export function deckMigration(queues, books, now = Date.now()) {
   const deck = (books || []).filter((b) => !b.deleted && readStatus(b) === 'queue' && !queueOf(queues, b.id))
     .sort((a, b) => (Number(b.recScore) || 0) - (Number(a.recScore) || 0));
   if (!deck.length) return null;
-  return [...(queues || []), { ...newQueue('On deck', now), ids: deck.map((b) => b.id), fromDeck: true }];
+  return [...(queues || []), { ...newQueue(t('On deck'), now), ids: deck.map((b) => b.id), fromDeck: true }];
 }
 
 // Shelving a book "On deck" elsewhere adds it to that queue (making it, with the rest of the old
@@ -160,7 +161,7 @@ export function recentPace(days, { now = Date.now(), halfLife = 10, windowDays =
 // Candidate rows for the "add books" table: one per library book in no queue at all, with the
 // text of each filterable column. `info(book)` → { pct, file, open, lastRead }; `file` may be a path
 // ('Books/SF/dune.epub'), split here into Folder ('Books/SF') and File ('dune.epub').
-export const CAND_COLS = { title: 'Title', author: 'Author', genre: 'Genre', type: 'Type', status: 'Status', folder: 'Folder', file: 'File' };
+export const CAND_COLS = { title: t('Title'), author: t('Author'), genre: t('Genre'), type: t('Type'), status: t('Status'), folder: t('Folder'), file: t('File') };
 export function candidateRows(books, queues, info = () => ({})) {
   const inQ = new Set(liveQueues(queues).flatMap((q) => q.ids || []));
   return (books || []).filter((b) => !b.deleted && !inQ.has(b.id)).map((book) => bookRow(book, info(book)));
@@ -181,7 +182,7 @@ export function bookRow(book, info) {
 }
 
 // Completion filter values. Default 'unfinished' — finished books stay out of the way.
-export const CAND_STATES = { unfinished: 'Not finished', unstarted: 'Not started', started: 'In progress', finished: 'Finished', all: 'Any' };
+export const CAND_STATES = { unfinished: t('Not finished'), unstarted: t('Not started'), started: t('In progress'), finished: t('Finished'), all: t('Any') };
 const stateOk = (r, s) => s === 'all' || (s === 'finished' ? r.fin : s === 'unfinished' ? !r.fin : s === 'unstarted' ? !r.fin && r.pct < 0.02 : !r.fin && r.pct >= 0.02);
 
 // Per-column filter text → case-insensitive regex. Text that isn't a valid regex is matched
@@ -190,9 +191,9 @@ const stateOk = (r, s) => s === 'all' || (s === 'finished' ? r.fin : s === 'unfi
 // queue's own table keeps queue order).
 export function filterCandidates(rows, { cols = {}, state = 'unfinished', minWords = null, maxWords = null, keepOrder = false } = {}) {
   const bad = [];
-  const tests = Object.entries(cols).filter(([, t]) => t && t.trim()).map(([k, t]) => {
-    try { const re = new RegExp(t.trim(), 'i'); return [k, (v) => re.test(v)]; }
-    catch { bad.push(k); const lc = t.trim().toLowerCase(); return [k, (v) => v.toLowerCase().includes(lc)]; }
+  const tests = Object.entries(cols).filter(([, txt]) => txt && txt.trim()).map(([k, txt]) => {
+    try { const re = new RegExp(txt.trim(), 'i'); return [k, (v) => re.test(v)]; }
+    catch { bad.push(k); const lc = txt.trim().toLowerCase(); return [k, (v) => v.toLowerCase().includes(lc)]; }
   });
   const lenOk = (r) => (minWords == null || r.words >= minWords) && (maxWords == null || r.words <= maxWords);
   const out = rows.filter((r) => stateOk(r, state) && lenOk(r) && tests.every(([k, f]) => f(r.cols[k] || '')));
@@ -296,7 +297,7 @@ export function mergeQueues(queues, ids, name = '') {
 // Split one queue. how: 'at' (the first `at` books stay, the rest move to a new queue), or by a
 // property — 'finished', 'genre', 'author', 'type'. The first group keeps the queue (and its name);
 // every other group becomes a new queue right after it, named "<queue> · <group>". Order is kept.
-export const QUEUE_SPLITS = { at: 'At a position', finished: 'Finished / not finished', genre: 'By genre', author: 'By author', type: 'By content type' };
+export const QUEUE_SPLITS = { at: t('At a position'), finished: t('Finished / not finished'), genre: t('By genre'), author: t('By author'), type: t('By content type') };
 export function splitQueue(queues, qid, books, how, at = 0, now = Date.now()) {
   const q = (queues || []).find((x) => x.id === qid && !x.deleted);
   if (!q) return queues;
@@ -304,9 +305,9 @@ export function splitQueue(queues, qid, books, how, at = 0, now = Date.now()) {
   const groups = new Map();
   const put = (label, id) => { if (!groups.has(label)) groups.set(label, []); groups.get(label).push(id); };
   const keyOf = {
-    finished: (b) => (readStatus(b) === 'finished' ? 'finished' : 'not finished'),
-    genre: (b) => String(b.genre || '').trim() || 'no genre',
-    author: (b) => String(b.author || '').trim() || 'no author',
+    finished: (b) => (readStatus(b) === 'finished' ? t('finished') : t('not finished')),
+    genre: (b) => String(b.genre || '').trim() || t('no genre'),
+    author: (b) => String(b.author || '').trim() || t('no author'),
     type: (b) => CONTENT_TYPES[contentType(b)],
   }[how];
   (q.ids || []).forEach((id, i) => {
@@ -315,7 +316,7 @@ export function splitQueue(queues, qid, books, how, at = 0, now = Date.now()) {
   });
   if (groups.size < 2) return queues;
   const [[, firstIds], ...rest] = [...groups.entries()];
-  const made = rest.map(([label, ids], k) => ({ ...newQueue(`${q.name} · ${label === '2' ? 'part 2' : label}`, now + k), ids }));
+  const made = rest.map(([label, ids], k) => ({ ...newQueue(`${q.name} · ${label === '2' ? t('part 2') : label}`, now + k), ids }));
   const out = [];
   for (const x of queues) { out.push(x.id === qid ? { ...x, ids: firstIds } : x); if (x.id === qid) out.push(...made); }
   return out;
@@ -325,10 +326,10 @@ export function splitQueue(queues, qid, books, how, at = 0, now = Date.now()) {
 // one's place, or — when both were queued — keeps whichever place came first. Returns { queues, note }.
 export function swapQueueId(queues, dropId, keepId) {
   const dq = queueOf(queues, dropId), kq = queueOf(queues, keepId);
-  if (!dq) return { queues, note: kq ? `stays in “${kq.name}” #${kq.ids.indexOf(keepId) + 1}` : 'not queued' };
+  if (!dq) return { queues, note: kq ? t('stays in “{queue}” #{n}', { queue: kq.name, n: kq.ids.indexOf(keepId) + 1 }) : t('not queued') };
   const replaced = queues.map((q) => (q.deleted ? q : { ...q, ids: (q.ids || []).map((id) => (id === dropId ? keepId : id)) }));
   const next = dedupeQueues(replaced) || replaced;
   const at = queueOf(next, keepId);
-  const where = `“${at.name}” #${at.ids.indexOf(keepId) + 1}`;
-  return { queues: next, note: kq ? `both were queued — one entry left, at the earlier place: ${where}` : `takes the quick entry’s place: ${where}` };
+  const where = t('“{queue}” #{n}', { queue: at.name, n: at.ids.indexOf(keepId) + 1 });
+  return { queues: next, note: kq ? t('both were queued — one entry left, at the earlier place: {where}', { where }) : t('takes the quick entry’s place: {where}', { where }) };
 }

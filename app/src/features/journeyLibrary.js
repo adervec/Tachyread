@@ -3,6 +3,7 @@
 // and Dashboard views (ported from the standalone index.html tracker). No storage/React imports here
 // so it stays trivially testable — see journeyLibrary.demo.mjs.
 import { localDay, parseDay } from './localDay.js';
+import { t } from '../i18n.js';
 
 export function slug(s) {
   return String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -13,8 +14,8 @@ export function slug(s) {
 export function deriveId(b) {
   const isbn = String(b.isbn || '').replace(/[^0-9xX]/g, '');
   if (isbn.length >= 10) return `isbn:${isbn.toLowerCase()}`;
-  const t = slug(b.title);
-  if (t) return `bk:${slug(b.author)}|${t}`;
+  const ts = slug(b.title);
+  if (ts) return `bk:${slug(b.author)}|${ts}`;
   return `bk:anon|${slug(JSON.stringify(b)).slice(0, 24)}`;
 }
 
@@ -38,8 +39,8 @@ export function finishMs(b) {
   const v = b?.finishTime;
   if (v == null || v === '') return null;
   if (typeof v === 'number') return v;
-  const t = parseDay(v); // a bare 'YYYY-MM-DD' is that LOCAL day
-  return Number.isNaN(t) ? null : t;
+  const ms = parseDay(v); // a bare 'YYYY-MM-DD' is that LOCAL day
+  return Number.isNaN(ms) ? null : ms;
 }
 
 // Reading lifecycle. `completion`/`inProgress` are the original sources of truth (finished/reading);
@@ -62,20 +63,22 @@ export const READ_STATUSES = ['reading', 'queue', 'toread', 'finished', 'abandon
 
 // Content categories — each gets its own queue. `type` historically held 'long'/'short' (from the
 // library.json longForm/shortForm split); the vocabulary now covers more shapes of reading.
+// The keys are the stored ids; the values are display labels only (translated).
 export const CONTENT_TYPES = {
-  long: 'Long-form',
-  short: 'Short-form',
-  article: 'Articles',
-  'ai-gen': 'AI-generated',
-  poetry: 'Poetry',
-  reference: 'Reference',
-  other: 'Other',
+  long: t('Long-form'),
+  short: t('Short-form'),
+  article: t('Articles'),
+  'ai-gen': t('AI-generated'),
+  poetry: t('Poetry'),
+  reference: t('Reference'),
+  other: t('Other'),
 };
 // A book's content category (untyped legacy records read as long-form books).
 export function contentType(b) {
   return CONTENT_TYPES[b?.type] ? b.type : 'long';
 }
-export const STATUS_LABEL = { finished: '✅ Finished', reading: '📖 Reading', queue: '📋 On deck', toread: '· To read', abandoned: '✕ Abandoned' };
+// Display labels (emoji first, then a space: callers split it off). Translated.
+export const STATUS_LABEL = { finished: `✅ ${t('Finished')}`, reading: `📖 ${t('Reading')}`, queue: `📋 ${t('On deck')}`, toread: `· ${t('To read')}`, abandoned: `✕ ${t('Abandoned')}` };
 
 // Pure status setter — clears the fields a status doesn't own so transitions never leave a book in two
 // states at once (e.g. abandoning something you were reading clears inProgress). `today` is injected
@@ -127,7 +130,7 @@ export function distinctValues(books, field) {
 export function bookTags(b) {
   const raw = b?.tags;
   const arr = Array.isArray(raw) ? raw : String(raw || '').split(',');
-  return [...new Set(arr.map((t) => String(t).trim()).filter(Boolean))];
+  return [...new Set(arr.map((x) => String(x).trim()).filter(Boolean))];
 }
 export function allTags(books) {
   return [...new Set((books || []).flatMap(bookTags))].sort((a, b) => a.localeCompare(b));
@@ -235,8 +238,8 @@ export function withRereads(books) {
   if (!books?.some((b) => b.finishHistory?.length)) return books;
   const out = [...books];
   for (const b of books) {
-    (b.finishHistory || []).forEach((t, i) => {
-      if (t) out.push({ ...b, id: `${b.id}#r${i + 1}`, finishHistory: undefined, completion: true, inProgress: false, shelf: undefined, finishTime: t, reread: true });
+    (b.finishHistory || []).forEach((ft, i) => {
+      if (ft) out.push({ ...b, id: `${b.id}#r${i + 1}`, finishHistory: undefined, completion: true, inProgress: false, shelf: undefined, finishTime: ft, reread: true });
     });
   }
   return out;

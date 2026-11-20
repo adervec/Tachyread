@@ -4,15 +4,16 @@
 // cowork operation sends the sessions not yet reviewed, each with its raw detail and the app's own
 // score, plus recent history for trend; the reply's reviews are stored BESIDE the app's score
 // (ai.sessionReviews), never replacing it. Pure; see sessionReview.test.mjs.
+import { t } from '../i18n.js';
 
-export const sessionIdOf = (kind, t) => `${kind === 'typing' ? 'typing' : 'speech'}:${t}`;
+export const sessionIdOf = (kind, ts) => `${kind === 'typing' ? 'typing' : 'speech'}:${ts}`;
 export const SESSION_ID = /^(typing|speech):\d+$/;
 
 // "Typing run 13 Nov, 14:05" from an id, for review rows and lists.
 export function sessionLabel(id) {
-  const [kind, t] = String(id).split(':');
-  const when = new Date(Number(t)).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  return `${kind === 'typing' ? 'Typing run' : 'Reading aloud'} ${when}`;
+  const [kind, ts] = String(id).split(':');
+  const when = new Date(Number(ts)).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return kind === 'typing' ? t('Typing run {when}', { when }) : t('Reading aloud {when}', { when });
 }
 
 const topKeys = (m, n = 8) => Object.entries(m || {}).sort((a, b) => b[1] - a[1]).slice(0, n);
@@ -57,8 +58,11 @@ export function sessionsForReview(typingRuns = [], speechLog = [], reviews = {},
 // The app's own score per session, for the review table's "Now" column (beside the AI grade).
 export function appScores(typingRuns = [], speechLog = []) {
   const out = {};
-  for (const r of typingRuns || []) if (r?.ts) out[sessionIdOf('typing', r.ts)] = `${r.grade || '?'} · ${r.netWpm} WPM · ${r.accuracy}%`;
-  for (const s of speechLog || []) if (s?.at) out[sessionIdOf('speech', s.at)] = `match ${s.q ?? '?'}${s.voice?.overall != null ? ` · voice ${s.voice.overall}` : ''}${s.face?.overall != null ? ` · presenting ${s.face.overall}` : ''}`;
+  for (const r of typingRuns || []) if (r?.ts) out[sessionIdOf('typing', r.ts)] = t('{grade} · {wpm} WPM · {acc}%', { grade: r.grade || '?', wpm: r.netWpm, acc: r.accuracy });
+  for (const s of speechLog || []) {
+    if (!s?.at) continue;
+    out[sessionIdOf('speech', s.at)] = [t('match {n}', { n: s.q ?? '?' }), s.voice?.overall != null && t('voice {n}', { n: s.voice.overall }), s.face?.overall != null && t('presenting {n}', { n: s.face.overall })].filter(Boolean).join(' · ');
+  }
   return out;
 }
 
@@ -71,5 +75,5 @@ export const allSessionIds = (typingRuns = [], speechLog = []) => new Set([
 // One review as plain text (tooltips, the Cowork outputs table).
 export function reviewText(r) {
   const list = (h, xs) => (xs?.length ? `\n${h}:\n${xs.map((x) => `- ${x}`).join('\n')}` : '');
-  return `${r.summary || ''}${list('Strengths', r.strengths)}${list('Fix', r.fixes)}${r.next ? `\nNext: ${r.next}` : ''}`;
+  return `${r.summary || ''}${list(t('Strengths'), r.strengths)}${list(t('Fix'), r.fixes)}${r.next ? `\n${t('Next: {step}', { step: r.next })}` : ''}`;
 }

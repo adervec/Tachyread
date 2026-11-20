@@ -1313,7 +1313,9 @@ const VAR_MAP = {
 };
 
 export function getPalette(name) {
-  return THEMES[name] || THEMES['Light'];
+  const n = themeKey(name);
+  const house = baseHouseTheme(n);
+  return house ? paletteFromHouse(house) : (THEMES[n] || THEMES['Light']);
 }
 
 // Apply a theme by writing CSS custom properties onto the given element (default :root).
@@ -1361,7 +1363,7 @@ const THEME_HEADING_PACK = {
 // a saved choice (themeName, or the legacy darkMode toggle) always wins. See themes.test.mjs.
 export const systemPrefersDark = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-color-scheme: dark)').matches;
 export function tabThemeName(s, sysDark = systemPrefersDark()) {
-  if (s?.themeName) return s.themeName;
+  if (s?.themeName) return themeKey(s.themeName);
   if (s?.darkMode === true) return 'Dark';
   if (s?.darkMode === false) return 'Light';
   return sysDark ? 'Dark' : 'Light';
@@ -1430,10 +1432,77 @@ Object.assign(THEME_HEADING_PACK, {
 });
 
 // Grouped theme list for the pickers (every theme appears once). New names just get added to a group.
+// The house base theme list (standard 24): font.js names, offered first. See the block at the end.
+export const BASE_THEME_NAMES = ['Light', 'Dark', 'Midnight', 'Slate', 'Ocean', 'Forest', 'Ember', 'Gold', 'Synthwave', 'Terminal', 'Paper', 'Pastel', 'Mono', 'High contrast'];
 export const THEME_CATEGORIES = [
-  { label: 'Basic', themes: ['Light', 'Dark', 'Blue', 'Warm Paper', 'Sepia', 'High Contrast', 'Slate'] },
-  { label: 'Editor & code', themes: ['Solarized Light', 'Solarized Dark', 'Nord', 'Monokai', 'Zenburn', 'Dracula', 'Gruvbox', 'One Dark', 'Tokyo Night', 'Catppuccin', 'Rosé Pine', 'Terminal Green', 'Terminal Amber', 'Midnight'] },
-  { label: 'Nature', themes: ['Forest', 'Oceanic', 'Coffee', 'Sakura', 'Rose'] },
+  { label: 'Shared themes', themes: BASE_THEME_NAMES }, // the house base list, first (standard 24)
+  { label: 'Basic', themes: ['Blue', 'Warm Paper', 'Sepia'] },
+  { label: 'Editor & code', themes: ['Solarized Light', 'Solarized Dark', 'Nord', 'Monokai', 'Zenburn', 'Dracula', 'Gruvbox', 'One Dark', 'Tokyo Night', 'Catppuccin', 'Rosé Pine', 'Terminal Green', 'Terminal Amber'] },
+  { label: 'Nature', themes: ['Oceanic', 'Coffee', 'Sakura', 'Rose'] },
   { label: 'Historical & cultural', themes: ['Japan', 'Norse', 'Steampunk', 'Art Deco', 'Victorian', 'Medieval', 'Rome', 'Greece', 'Egypt'] },
   { label: 'Decades', themes: ['60s', '70s', '80s', '90s', '2000s'] },
 ];
+
+// ── Shared base themes (house standard 24) ─────────────────────────────────────────────────────────
+// Every app offers font.js's base list under its names, first in the picker, and a base theme keeps
+// its shared colours: its Tachyread palette is built from font.js's eleven colours (the base palettes
+// live in font.js and nowhere else). Light, Dark, Midnight, Slate and Forest are base names, so they
+// take the shared colours too. Tachyread's other themes stay as extras, registered with font.js so
+// its own notices and the --t-* palette follow the active tab. See themes.test.mjs.
+// i18n-keys: System | Shared themes | Light | Dark | Midnight | Slate | Ocean | Forest | Ember | Gold | Synthwave | Terminal | Paper | Pastel | Mono | High contrast
+const LEGACY_NAMES = { 'High Contrast': 'High contrast' }; // an old saved name that is now a base theme
+export const themeKey = (name) => LEGACY_NAMES[name] || name;
+for (const n of BASE_THEME_NAMES) if (!THEME_NAMES.includes(n)) THEME_NAMES.push(n);
+THEME_NAMES.splice(THEME_NAMES.indexOf('High Contrast'), THEME_NAMES.includes('High Contrast') ? 1 : 0);
+Object.assign(THEME_HEADING_PACK, { 'High contrast': 'rule', Terminal: 'terminal', Synthwave: 'neon', Paper: 'ornate', Ocean: 'rule', Ember: 'retro', Gold: 'deco', Mono: 'rule', Pastel: 'classic' });
+
+const houseApi = () => (typeof window !== 'undefined' ? window.appFont : null);
+// The base theme behind a Tachyread name ({ id, label, dark, colors }), or null (an extra, or no font.js).
+export function baseHouseTheme(name, themes = houseApi()?.themes) {
+  if (!BASE_THEME_NAMES.includes(name) || !Array.isArray(themes)) return null;
+  return themes.find((th) => !th.extra && th.label === name) || null;
+}
+
+// Eleven house colours → the full Tachyread palette (hex, like the other themes).
+export function paletteFromHouse({ dark, colors: c }) {
+  return {
+    isDark: !!dark, windowBg: c.bg, panelBg: c.surface, panelBorder: c.line, menuBg: c.surface, menuFg: c.text,
+    menuHover: c.surface2, menuHoverFg: c.text, textViewBg: c.bg, leftPaneBg: c.surface,
+    lineNumberFg: c.dim, lineUnreadFg: c.text, lineReadFg: mix(c.bg, c.dim, 0.85),
+    sessionReadFg: c.accent, navSessionReadFg: c.good,
+    currentLineBg: mix(c.bg, c.accent, 0.16), currentLineFg: c.text, currentParaBg: mix(c.bg, c.accent, 0.07),
+    statsFg: c.dim, emptyFg: c.dim, metaFg: c.dim, wpmFg: c.text,
+    statusBarBg: c.surface2, statusBarBorder: c.line, statusBarFg: c.dim,
+    buttonBg: c.surface, buttonFg: c.text, buttonBorder: c.line, buttonHoverBg: c.surface2, buttonPressedBg: mix(c.surface2, c.text, 0.12),
+    toggleActiveBg: c.accent, toggleActiveFg: c['on-accent'],
+    inputBg: c.surface, inputFg: c.text, inputBorder: c.line, trackBg: c.surface2, thumbBg: c.dim,
+    gridSplitterBg: c.line, fontOverride: null,
+  };
+}
+
+// A Tachyread palette → the eleven house colours (for registering an extra with font.js).
+export function houseColorsFrom(p) {
+  return {
+    bg: p.windowBg, surface: p.panelBg, surface2: p.menuHover, line: p.panelBorder, text: p.menuFg, dim: p.metaFg,
+    accent: p.toggleActiveBg, 'on-accent': p.toggleActiveFg, good: p.navSessionReadFg,
+    warn: p.isDark ? '#fbbf24' : '#a16207', bad: p.isDark ? '#f87171' : '#b91c1c',
+  };
+}
+const slug = (name) => name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
+
+// The font.js theme id for a Tachyread theme name: a base id, or the extra's slug ('system' for none).
+export function houseThemeId(name) {
+  if (!name) return 'system';
+  return baseHouseTheme(themeKey(name))?.id || slug(name);
+}
+
+// Register Tachyread's own themes with font.js as extras (once, at start-up). Hex colours only.
+export function registerExtraThemes(api = houseApi()) {
+  if (!api?.addThemes) return 0;
+  const hex = /^#[0-9a-f]{6}$/i;
+  return api.addThemes(THEME_NAMES.filter((n) => !BASE_THEME_NAMES.includes(n) && THEMES[n]).map((n) => {
+    const colors = houseColorsFrom(THEMES[n]);
+    for (const k of Object.keys(colors)) if (!hex.test(colors[k] || '')) colors[k] = THEMES[n].isDark ? '#888888' : '#555555';
+    return { id: slug(n), label: n, dark: !!THEMES[n].isDark, colors };
+  }));
+}

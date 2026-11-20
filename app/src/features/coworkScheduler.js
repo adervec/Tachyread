@@ -22,6 +22,9 @@ import { syncWithProvider, syncLibraryWithProvider } from './sync/syncManager.js
 import { getSyncProvider } from './sync/syncProviders.js';
 import { dueActions, syncRole, recordRun, combineCoworkInstruction } from './coworkActions.js';
 import { sessionsForReview } from './sessionReview.js';
+import { t } from '../i18n.js';
+// The run notes below are shown in the sync history, so they are translated.
+const NOT_CONNECTED = () => t('skipped — Tachyread folder not connected (open the Cowork page once to re-grant)');
 
 const TICK_MS = 60_000;
 
@@ -49,16 +52,16 @@ async function datasetWithProgress(light, books, ops = []) {
 // (analysis, read-next, briefs, weeklies) committed automatically — logged and undoable.
 async function applyReportOnly(ai, reply, ops, books, source = 'scheduled API') {
   const hash = contentHash(reply);
-  if ((ai?.ledger || []).includes(hash)) return { ai, note: 'reply already applied' };
-  if (reviewFirst(ai, ops)) return { ai: parkReply(ai, { text: reply, ops, source, hash }), note: 'reply waiting for your review on the Cowork page' };
+  if ((ai?.ledger || []).includes(hash)) return { ai, note: t('reply already applied') };
+  if (reviewFirst(ai, ops)) return { ai: parkReply(ai, { text: reply, ops, source, hash }), note: t('reply waiting for your review on the Cowork page') };
   const [bindMap, queues] = await Promise.all([getBinding().catch(() => ({})), getLibraryRef('queues').catch(() => [])]);
   const booksById = Object.fromEntries(books.map((b) => [b.id, b]));
   const queuedIds = new Set(liveQueues(queues || []).flatMap((q) => q.ids || []));
   const { output, dropped } = sanitizeOutput(parseAiOutput(reply), ops, { booksById, bindMap, queuedIds, queues: queues || [] });
   const rows = planRows(output, { booksById }).filter((r) => ['analysis', 'recommendations', 'brief', 'weekly'].includes(r.kind));
-  if (!rows.length) return { ai, note: `nothing applicable${dropped.length ? ` (${dropped.length} item(s) outside the operation dropped)` : ''}` };
+  if (!rows.length) return { ai, note: dropped.length ? t.n('nothing applicable ({n} item outside the operation dropped)', 'nothing applicable ({n} items outside the operation dropped)', dropped.length) : t('nothing applicable') };
   const r = await commitRows(rows, { books, ai: { ...ai, ledger: [...(ai?.ledger || []), hash].slice(-50) }, ops, source: 'scheduled API', auto: true });
-  return { ai: r.ai, note: `applied ${r.summary}${dropped.length ? ` · dropped ${dropped.length} out-of-scope item(s)` : ''}` };
+  return { ai: r.ai, note: dropped.length ? t.n('applied {summary} · dropped {n} out-of-scope item', 'applied {summary} · dropped {n} out-of-scope items', dropped.length, { summary: r.summary }) : t('applied {summary}', { summary: r.summary }) };
 }
 
 // One scheduler pass. Exported for direct invocation; startCoworkScheduler wires the timer.
@@ -76,14 +79,14 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
     let note; let ok = true; let target = ai?.coworkDirPath || '';
     try {
       const dir = await subDir('cowork'); // silent: null when not chosen or permission lapsed
-      if (!dir) { ok = false; note = 'skipped — Tachyread folder not connected (open the Cowork page once to re-grant)'; }
+      if (!dir) { ok = false; note = NOT_CONNECTED(); }
       else {
         target = target || (await subDirLabel('cowork'));
         // One request file: if the last request hasn't been answered yet, fold its operations in
         // rather than overwriting it (the agent would never see the earlier, often bigger, request).
         const pending = ai?.requestLog?.[0] && ai.requestLog[0].at > (ai?.lastReplyAt || 0) ? ai.requestLog[0].ops : [];
         const instr = combineCoworkInstruction([...new Set([...pending, ...coworkIds])], { question: ai?.question || '' });
-        if (!instr) throw new Error('nothing to send ("Ask a question" needs a question)');
+        if (!instr) throw new Error(t('nothing to send ("Ask a question" needs a question)'));
         const books = await getLibraryBooks();
         const dataset = await datasetWithProgress(instr.mode === 'light', books, instr.ops);
         await writeSnapshot(dir, now); // the request's agent reads snapshot/ too
@@ -91,9 +94,9 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
         await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(req, null, 2));
         await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, instr));
         ai = logRequest({ ...ai, instruction: { ...instr, updatedAt: now } }, { hash: req.requestHash, ops: instr.ops, at: now, auto: true }); // replies are matched back by hash
-        note = `auto-wrote cowork request (${instr.mode})`;
+        note = t('auto-wrote cowork request ({mode})', { mode: instr.mode });
       }
-    } catch (e) { ok = false; note = `auto cowork write failed: ${e?.message || e}`; }
+    } catch (e) { ok = false; note = t('auto cowork write failed: {error}', { error: e?.message || e }); }
     ai = recordRun(ai, coworkIds, { at: now, kind: 'cowork', target, ok, note, auto: true });
   }
 
@@ -102,17 +105,17 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
     let ok = true; let note;
     try {
       const dir = await subDir('cowork');
-      if (!dir) { ok = false; note = 'skipped — Tachyread folder not connected (open the Cowork page once to re-grant)'; }
-      else note = `auto snapshot (${await writeSnapshot(dir, now)} files)`;
-    } catch (e) { ok = false; note = `snapshot failed: ${e?.message || e}`; }
-    ai = recordRun(ai, ['cw-snapshot'], { at: now, kind: 'cowork', target: ai?.coworkDirPath || 'cowork folder', ok, note, auto: true });
+      if (!dir) { ok = false; note = NOT_CONNECTED(); }
+      else note = t('auto snapshot ({n} files)', { n: await writeSnapshot(dir, now) });
+    } catch (e) { ok = false; note = t('snapshot failed: {error}', { error: e?.message || e }); }
+    ai = recordRun(ai, ['cw-snapshot'], { at: now, kind: 'cowork', target: ai?.coworkDirPath || t('cowork folder'), ok, note, auto: true });
   }
 
   // ── Direct API action ──
   if (due.includes('api-light')) {
     let note; let ok = true;
     try {
-      if (!anthropicConfigured(g?.anthropicKey)) { ok = false; note = 'skipped — no Anthropic API key'; }
+      if (!anthropicConfigured(g?.anthropicKey)) { ok = false; note = t('skipped — no Anthropic API key'); }
       else {
         const books = await getLibraryBooks();
         const dataset = await datasetWithProgress(true, books);
@@ -121,11 +124,11 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
         const reply = await askClaude(messages, {
           key: g.anthropicKey, model: g.anthropicModel || 'claude-sonnet-5', system, maxTokens: 2048, source: 'trackyread-auto',
         });
-        if (!isReportOnly(instr.ops)) throw new Error('scheduled API runs are report-only');
+        if (!isReportOnly(instr.ops)) throw new Error(t('scheduled API runs are report-only'));
         const r = await applyReportOnly(ai, reply, instr.ops, books);
-        ai = r.ai; note = `auto API refresh — ${r.note}`;
+        ai = r.ai; note = t('auto API refresh — {note}', { note: r.note });
       }
-    } catch (e) { ok = false; note = `auto API refresh failed: ${e?.message || e}`; }
+    } catch (e) { ok = false; note = t('auto API refresh failed: {error}', { error: e?.message || e }); }
     ai = recordRun(ai, ['api-light'], { at: now, kind: 'api', target: g?.anthropicModel || 'claude-sonnet-5', ok, note, auto: true });
   }
 
@@ -134,12 +137,12 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
     let note; let ok = true;
     const cfg = g?.sync || {};
     const p = getSyncProvider(cfg.provider);
-    const target = p?.label || cfg.provider || 'no provider';
+    const target = p?.label || cfg.provider || t('no provider');
     try {
-      if (!p || !p.supported() || p.available(cfg) !== true) { ok = false; note = 'skipped — sync provider not connected on this device'; }
-      else if (id === 'cloud-progress') { const r = await syncWithProvider(cfg.provider, cfg, { silent: true }); note = `auto progress sync (${Math.round((r.bytes || 0) / 1024)} KB)`; }
-      else { const r = await syncLibraryWithProvider(cfg.provider, cfg, { silent: true }); note = r.skipped ? 'auto library sync — already in sync' : `auto library sync (${r.books ?? '?'} books)`; }
-    } catch (e) { ok = false; note = `auto ${id === 'cloud-progress' ? 'progress' : 'library'} sync failed: ${e?.message || e}`; }
+      if (!p || !p.supported() || p.available(cfg) !== true) { ok = false; note = t('skipped — sync provider not connected on this device'); }
+      else if (id === 'cloud-progress') { const r = await syncWithProvider(cfg.provider, cfg, { silent: true }); note = t('auto progress sync ({n} KB)', { n: Math.round((r.bytes || 0) / 1024) }); }
+      else { const r = await syncLibraryWithProvider(cfg.provider, cfg, { silent: true }); note = r.skipped ? t('auto library sync — already in sync') : t('auto library sync ({n} books)', { n: r.books ?? '?' }); }
+    } catch (e) { ok = false; note = id === 'cloud-progress' ? t('auto progress sync failed: {error}', { error: e?.message || e }) : t('auto library sync failed: {error}', { error: e?.message || e }); }
     ai = recordRun(ai, [id], { at: now, kind: 'cloud', target, ok, note, auto: true });
   }
 

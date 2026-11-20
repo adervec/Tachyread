@@ -6,16 +6,17 @@
 //      re-import). We propose a merge that keeps the richer record and folds in the other's fields.
 // No storage/React here so it's trivially testable — see journeyCleanup.demo.mjs.
 import { finishMs } from './journeyLibrary.js';
+import { t } from '../i18n.js';
 
 const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
 
 // Group key for near-duplicates: normalized title + the author's last token (tolerates "J.R.R.
 // Tolkien" vs "Tolkien"). Same-ISBN dups can't occur here — deriveId already merges those on import.
 export function dupKey(b) {
-  const t = norm(b?.title);
-  if (!t) return null; // untitled — never auto-group
+  const nt = norm(b?.title);
+  if (!nt) return null; // untitled — never auto-group
   const author = norm(b?.author).split(' ').filter(Boolean);
-  return `${t}@@${author[author.length - 1] || ''}`;
+  return `${nt}@@${author[author.length - 1] || ''}`;
 }
 
 // How "authoritative" a record is when picking which of a duplicate pair to keep. Higher wins.
@@ -59,7 +60,7 @@ export function findDuplicates(books) {
     const drop = sorted.slice(1);
     let merged = keep;
     for (const d of drop) merged = mergeBooks(merged, d);
-    out.push({ key, keepId: keep.id, dropIds: drop.map((d) => d.id), merged, titles: arr.map((b) => b.title || '(untitled)') });
+    out.push({ key, keepId: keep.id, dropIds: drop.map((d) => d.id), merged, titles: arr.map((b) => b.title || t('(untitled)')) });
   }
   return out;
 }

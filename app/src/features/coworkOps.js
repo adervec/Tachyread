@@ -36,349 +36,352 @@ import { liveQueues, queueBooks, queueOf } from './readingQueues.js';
 import { AI_NOTE_TYPES } from './journeyAi.js';
 import { localDay } from './localDay.js';
 import { SESSION_ID, sessionLabel } from './sessionReview.js';
+import { t } from '../i18n.js';
+// Reader-facing text (labels, explanations, review rows, discard reasons) goes through t(); the
+// `instruction` texts and the reply schema are for the agent and stay English.
 
-const NEVER = 'Titles, authors, ids, reading/finished status and dates, ratings, your own notes, queues, reading progress and history, file links that already exist — and anything about a book you have locked (🔒).';
+const NEVER = t('Titles, authors, ids, reading/finished status and dates, ratings, your own notes, queues, reading progress and history, file links that already exist — and anything about a book you have locked (🔒).');
 
 // id → { icon, group, label, heavy, instruction, allow, explain: { sends, changes, review } }
 export const COWORK_OPS = {
   'cw-brief': {
-    icon: '☀️', group: 'report', label: 'Morning brief', heavy: false,
+    icon: '☀️', group: 'report', label: t('Morning brief'), heavy: false,
     instruction: 'MORNING BRIEF. Using the dataset AND the read-only activity files in the snapshot/ folder (see snapshot/README.md), write a short morning brief in Markdown: yesterday and the last 7 days across reading (words, time, speed, books moved forward or finished), typing practice, reading aloud and narration; progress on goals and queues (with finish estimates); one or two concrete, encouraging suggestions for today. Ground every number in the data. Return it as `brief`.',
     allow: { brief: true },
     explain: {
-      sends: 'The compact dataset (library summary, recent finishes, unread candidates, 9 weeks of reading progress). The agent also reads the snapshot/ files in the folder.',
-      changes: 'Adds one dated brief (Markdown text) to the AI record — shown on the Cowork page. Writes nothing to any book.',
-      review: 'Report only: safe to apply automatically. Replacing a brief for the same date keeps the old one in undo.',
+      sends: t('The compact dataset (library summary, recent finishes, unread candidates, 9 weeks of reading progress). The agent also reads the snapshot/ files in the folder.'),
+      changes: t('Adds one dated brief (Markdown text) to the AI record — shown on the Cowork page. Writes nothing to any book.'),
+      review: t('Report only: safe to apply automatically. Replacing a brief for the same date keeps the old one in undo.'),
     },
   },
   'cw-weeklies': {
-    icon: '🗓', group: 'report', label: 'Weekly summaries', heavy: false,
+    icon: '🗓', group: 'report', label: t('Weekly summaries'), heavy: false,
     instruction: 'WEEKLY SUMMARIES. For each completed week in progress.weeklySummaries, return `weeklies` [{week, text}] with a better-written short paragraph grounded ONLY in that week\'s numbers.',
     allow: { weeklies: true },
     explain: {
-      sends: 'The compact dataset including progress.weeklySummaries (the app\'s own algorithmic summary of each completed week).',
-      changes: 'Replaces the summary TEXT shown for completed weeks in Analytics → weekly summaries. No book changes.',
-      review: 'Report only. Each week is its own row; undo restores the previous text.',
+      sends: t('The compact dataset including progress.weeklySummaries (the app\'s own algorithmic summary of each completed week).'),
+      changes: t('Replaces the summary TEXT shown for completed weeks in Analytics → weekly summaries. No book changes.'),
+      review: t('Report only. Each week is its own row; undo restores the previous text.'),
     },
   },
   'cw-light': {
-    icon: '🔄', group: 'report', label: 'Reading-profile analysis + read-next list', heavy: false,
+    icon: '🔄', group: 'report', label: t('Reading-profile analysis + read-next list'), heavy: false,
     instruction: 'ANALYSIS + READ NEXT. Write a 1–2 paragraph `analysis` of the reading profile from recent finishes and progress, and a `recommendations` list of 5–10 books to read next drawn from the unread candidates (title, author, why).',
     allow: { analysis: true, recommendations: true },
     explain: {
-      sends: 'The compact dataset (library summary, last 20 finishes, top 40 unread candidates, reading progress).',
-      changes: 'Replaces the Dashboard\'s analysis paragraph (the old one is archived under "Previous AI analyses") and the read-next list. No book changes — rec scores are a separate operation now.',
-      review: 'Report only — applied automatically when scheduled via the API.',
+      sends: t('The compact dataset (library summary, last 20 finishes, top 40 unread candidates, reading progress).'),
+      changes: t('Replaces the Dashboard\'s analysis paragraph (the old one is archived under "Previous AI analyses") and the read-next list. No book changes — rec scores are a separate operation now.'),
+      review: t('Report only — applied automatically when scheduled via the API.'),
     },
   },
   'cw-retro': {
-    icon: '📆', group: 'report', label: 'Weekly review / monthly retrospective', heavy: false,
+    icon: '📆', group: 'report', label: t('Weekly review / monthly retrospective'), heavy: false,
     instruction: 'RETROSPECTIVE. From the snapshot/ files (activity-log.md, reading-days.json, goals.json, queues.json, typing.json, speaking.json) write a review of the last 7 days and the last 30 days: totals against the previous period, trends in speed and consistency, best and weakest days, goal pace, queue movement, what slipped — then 3 specific suggestions. Ground every number in the data. Return it as `reports` [{kind: "retro", title, text (Markdown)}].',
     allow: { reports: 'retro' },
     explain: {
-      sends: 'The compact dataset; the agent reads the snapshot/ files for the detail.',
-      changes: 'Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.',
-      review: 'Report only. Undo removes it.',
+      sends: t('The compact dataset; the agent reads the snapshot/ files for the detail.'),
+      changes: t('Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.'),
+      review: t('Report only. Undo removes it.'),
     },
   },
   'cw-typing-coach': {
-    icon: '⌨️', group: 'report', label: 'Typing coach', heavy: false,
+    icon: '⌨️', group: 'report', label: t('Typing coach'), heavy: false,
     instruction: 'TYPING COACH. From snapshot/typing.json analyse typing practice: net/gross WPM and accuracy trends, consistency, the most-missed keys and what they suggest (fingers, rows, symbols), whether recent runs are improving, and give 3–5 concrete drills or settings to try next. Return it as `reports` [{kind: "typing", title, text (Markdown)}].',
     allow: { reports: 'typing' },
     explain: {
-      sends: 'The compact dataset; the agent reads snapshot/typing.json (runs, weekly aggregates, most-missed keys).',
-      changes: 'Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.',
-      review: 'Report only. Undo removes it.',
+      sends: t('The compact dataset; the agent reads snapshot/typing.json (runs, weekly aggregates, most-missed keys).'),
+      changes: t('Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.'),
+      review: t('Report only. Undo removes it.'),
     },
   },
   'cw-session-review': {
-    icon: '🎓', group: 'report', label: 'AI review of typing runs & reading-aloud sessions', heavy: false,
+    icon: '🎓', group: 'report', label: t('AI review of typing runs & reading-aloud sessions'), heavy: false,
     instruction: 'SESSION REVIEW. dataset.sessions.due lists the typing runs and reading-aloud sessions not yet reviewed (newest first), each with its raw detail and the app\'s own score (appScore); dataset.sessions.recent is the history for trend. For EVERY due session return `reviews` [{sessionId (the due id, verbatim), grade (A+ to F), summary (2–4 sentences), strengths (0–4 short items), fixes (0–4 short items), next (one concrete next step)}]. Rubric — typing: net speed against this person\'s recent runs, accuracy (97%+ is good), consistency, the most-missed keys and problem words, perfect versus corrected words, the mode and text; reading aloud: match quality, exact versus near versus skipped words, misses, filler words, the voice and presenting scores and how the per-minute trend held up. Use only numbers in the data, never invent one. Your grade sits BESIDE the app\'s own score, never replacing it. With nothing due, return "reviews": [].',
     allow: { sessionReviews: true },
     explain: {
-      sends: 'The compact dataset plus dataset.sessions: every typing run and reading-aloud session not yet reviewed (raw detail and the app\'s own score) and the recent history.',
-      changes: 'Stores one AI review per session beside the app\'s own score: shown in Typing Progress (AI column) and on this page. Changes no book, queue or link.',
-      review: 'Report only: one row per session. Undo removes the reviews.',
+      sends: t('The compact dataset plus dataset.sessions: every typing run and reading-aloud session not yet reviewed (raw detail and the app\'s own score) and the recent history.'),
+      changes: t('Stores one AI review per session beside the app\'s own score: shown in Typing Progress (AI column) and on this page. Changes no book, queue or link.'),
+      review: t('Report only: one row per session. Undo removes the reviews.'),
     },
   },
   'cw-speak-coach': {
-    icon: '🗣', group: 'report', label: 'Reading-aloud coach', heavy: false,
+    icon: '🗣', group: 'report', label: t('Reading-aloud coach'), heavy: false,
     instruction: 'READING-ALOUD COACH. From snapshot/speaking.json (reading-aloud sessions: match quality, exact/near/skipped words, voice scores and per-minute trends) and snapshot/narration.json (self-recorded narration quality), describe how reading aloud is going and trending, the weakest voice attributes, and give 3–5 concrete practice cues. Return it as `reports` [{kind: "speaking", title, text (Markdown)}].',
     allow: { reports: 'speaking' },
     explain: {
-      sends: 'The compact dataset; the agent reads snapshot/speaking.json and snapshot/narration.json.',
-      changes: 'Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.',
-      review: 'Report only. Undo removes it.',
+      sends: t('The compact dataset; the agent reads snapshot/speaking.json and snapshot/narration.json.'),
+      changes: t('Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.'),
+      review: t('Report only. Undo removes it.'),
     },
   },
   'cw-narration-qa': {
-    icon: '🎙', group: 'report', label: 'Narration QA', heavy: false,
+    icon: '🎙', group: 'report', label: t('Narration QA'), heavy: false,
     instruction: 'NARRATION QA. From snapshot/narration.json list the self-recorded audiobook chunks worth re-recording (low score, accuracy or completeness), grouped by book with the line number and why, plus overall patterns in the recordings. Return it as `reports` [{kind: "narration", title, text (Markdown)}].',
     allow: { reports: 'narration' },
     explain: {
-      sends: 'The compact dataset; the agent reads snapshot/narration.json (per-take quality only — no audio).',
-      changes: 'Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.',
-      review: 'Report only. Undo removes it.',
+      sends: t('The compact dataset; the agent reads snapshot/narration.json (per-take quality only — no audio).'),
+      changes: t('Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.'),
+      review: t('Report only. Undo removes it.'),
     },
   },
   'cw-health': {
-    icon: '🩺', group: 'report', label: 'Data-health report', heavy: false,
+    icon: '🩺', group: 'report', label: t('Data-health report'), heavy: false,
     instruction: 'DATA HEALTH. Using allBooks and snapshot/books.json, list inconsistencies worth fixing by hand: finished books without a rating or finish date, implausible page or word counts, genre or author name variants that look like the same thing, books stuck as reading for months, files read past 99% but not marked finished. A list only — suggest the fix for each. Return it as `reports` [{kind: "health", title, text (Markdown)}].',
     allow: { reports: 'health' },
     explain: {
-      sends: 'The full library list; the agent reads snapshot/books.json.',
-      changes: 'Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.',
-      review: 'Report only. Undo removes it.',
+      sends: t('The full library list; the agent reads snapshot/books.json.'),
+      changes: t('Stores one titled report on the Cowork page (Reports, newest first). Writes nothing to any book, queue or link.'),
+      review: t('Report only. Undo removes it.'),
     },
   },
   'cw-ask': {
-    icon: '❓', group: 'report', label: 'Ask a question', heavy: false, needsQuestion: true,
+    icon: '❓', group: 'report', label: t('Ask a question'), heavy: false, needsQuestion: true,
     instruction: 'QUESTION. Answer this question about the reader\'s reading, typing, speaking or library, using the dataset and the snapshot/ files; be concrete and cite the numbers you use: «{question}». Return the answer as `answer` (Markdown).',
     allow: { answer: true },
     explain: {
-      sends: 'Your question (typed below when this is ticked) and the compact dataset; the agent can also read the snapshot/ files.',
-      changes: 'Stores the answer text on the Cowork page (newest first). Writes nothing to any book, queue or link — even if the reply tries to.',
-      review: 'Report only. Undo removes the answer.',
+      sends: t('Your question (typed below when this is ticked) and the compact dataset; the agent can also read the snapshot/ files.'),
+      changes: t('Stores the answer text on the Cowork page (newest first). Writes nothing to any book, queue or link — even if the reply tries to.'),
+      review: t('Report only. Undo removes the answer.'),
     },
   },
   'cw-fill-genre': {
-    icon: '🏷', group: 'fill', label: 'Fill missing genre / subgenre', heavy: true,
+    icon: '🏷', group: 'fill', label: t('Fill missing genre / subgenre'), heavy: true,
     instruction: 'FILL MISSING GENRE. For books in allBooks whose `missing` list includes "genre" and/or "subgenre", return bookPatches with ONLY those missing fields. Do not patch any book that already has the field.',
     allow: { fields: { genre: { blanks: true }, subgenre: { blanks: true } } },
     explain: {
-      sends: 'The full library list (id, title, author, genre, type, status, dates, and which fields are missing).',
-      changes: 'Sets genre / subgenre ONLY on books where that field is empty. A value you already have is never overwritten — any reply that tries is dropped.',
-      review: 'Every proposed value is a row (book, field, — → new value) you can untick before applying. Undo restores the books exactly.',
+      sends: t('The full library list (id, title, author, genre, type, status, dates, and which fields are missing).'),
+      changes: t('Sets genre / subgenre ONLY on books where that field is empty. A value you already have is never overwritten — any reply that tries is dropped.'),
+      review: t('Every proposed value is a row (book, field, — → new value) you can untick before applying. Undo restores the books exactly.'),
     },
   },
   'cw-fill-desc': {
-    icon: '📝', group: 'fill', label: 'Fill missing descriptions / synopses', heavy: true,
+    icon: '📝', group: 'fill', label: t('Fill missing descriptions / synopses'), heavy: true,
     instruction: 'FILL MISSING DESCRIPTIONS. For books whose `missing` list includes "description" and/or "synopsis", return bookPatches with ONLY those fields: description = one neutral sentence on what the book is; synopsis = 2–4 spoiler-free sentences. Skip books you do not know.',
     allow: { fields: { description: { blanks: true }, synopsis: { blanks: true } } },
     explain: {
-      sends: 'The full library list (as above).',
-      changes: 'Sets description / synopsis ONLY where empty. Existing text is never replaced.',
-      review: 'Row per field; untick any you don\'t like. Undo restores.',
+      sends: t('The full library list (as above).'),
+      changes: t('Sets description / synopsis ONLY where empty. Existing text is never replaced.'),
+      review: t('Row per field; untick any you don\'t like. Undo restores.'),
     },
   },
   'cw-fill-type': {
-    icon: '🗂', group: 'fill', label: 'Fill missing content types', heavy: true,
+    icon: '🗂', group: 'fill', label: t('Fill missing content types'), heavy: true,
     instruction: 'FILL MISSING CONTENT TYPES. For books whose `missing` list includes "type", return bookPatches with `type` ∈ "long" | "short" | "article" | "ai-gen" | "poetry" | "reference".',
     allow: { fields: { type: { blanks: true } } },
     explain: {
-      sends: 'The full library list.',
-      changes: 'Sets the content type (long-form, short-form, article, AI-generated, poetry, reference) ONLY on books that have none.',
-      review: 'Row per book. Undo restores.',
+      sends: t('The full library list.'),
+      changes: t('Sets the content type (long-form, short-form, article, AI-generated, poetry, reference) ONLY on books that have none.'),
+      review: t('Row per book. Undo restores.'),
     },
   },
   'cw-fill-diff': {
-    icon: '🎚', group: 'fill', label: 'Estimate missing difficulty', heavy: true,
+    icon: '🎚', group: 'fill', label: t('Estimate missing difficulty'), heavy: true,
     instruction: 'FILL MISSING DIFFICULTY. For books whose `missing` list includes "difficultyLevel", return bookPatches with ONLY difficultyLevel as an integer 1 (easy) – 5 (very demanding). Skip books you do not know.',
     allow: { fields: { difficultyLevel: { blanks: true, range: [1, 5] } } },
     explain: {
-      sends: 'The full library list.',
-      changes: 'Sets the difficulty (1–5) ONLY on books that have none. Out-of-range or non-numeric values are dropped.',
-      review: 'Row per book. Undo restores.',
+      sends: t('The full library list.'),
+      changes: t('Sets the difficulty (1–5) ONLY on books that have none. Out-of-range or non-numeric values are dropped.'),
+      review: t('Row per book. Undo restores.'),
     },
   },
   'cw-rescore': {
-    icon: '★', group: 'targeted', label: 'Rescore recommendations (unread only)', heavy: true,
+    icon: '★', group: 'targeted', label: t('Rescore recommendations (unread only)'), heavy: true,
     instruction: 'RESCORE. Recompute recScore (0–10) for to-read books you can judge, from the reading profile. Return bookPatches with ONLY recScore.',
     allow: { fields: { recScore: { unreadOnly: true } } },
     explain: {
-      sends: 'The full library list with current rec scores.',
-      changes: 'Changes the rec score (★) of TO-READ books that are in no queue. Finished, reading, abandoned and queued books are never touched — those patches are dropped.',
-      review: 'Row per book showing old → new score; untick any. Undo restores.',
+      sends: t('The full library list with current rec scores.'),
+      changes: t('Changes the rec score (★) of TO-READ books that are in no queue. Finished, reading, abandoned and queued books are never touched — those patches are dropped.'),
+      review: t('Row per book showing old → new score; untick any. Undo restores.'),
     },
   },
   'cw-links': {
-    icon: '📎', group: 'targeted', label: 'Suggest links for unlinked files', heavy: false,
+    icon: '📎', group: 'targeted', label: t('Suggest links for unlinked files'), heavy: false,
     instruction: 'LINK FILES. progress.files lists every opened file with its current link (bookId may be null). For files with NO link only, return `bindings` [{checksum, bookId}] pairing the file with the library book it clearly is. Skip anything uncertain.',
     allow: { bindings: 'unlinked' },
     explain: {
-      sends: 'The compact dataset with progress.files (file names, checksums, current links).',
-      changes: 'Links a file to a tracker book ONLY when the file has no link yet. An existing link is never replaced — such suggestions are dropped.',
-      review: 'Row per file → book; untick any. Undo removes the new links.',
+      sends: t('The compact dataset with progress.files (file names, checksums, current links).'),
+      changes: t('Links a file to a tracker book ONLY when the file has no link yet. An existing link is never replaced — such suggestions are dropped.'),
+      review: t('Row per file → book; untick any. Undo removes the new links.'),
     },
   },
   'cw-notes': {
-    icon: '💡', group: 'targeted', label: 'Book notes (summaries, insights, parallels)', heavy: true,
+    icon: '💡', group: 'targeted', label: t('Book notes (summaries, insights, parallels)'), heavy: true,
     instruction: 'BOOK NOTES. For books that have been read or are being read, return `aiNotes` [{bookId, type, sectionTitle?, text}] (types: summary | section-summary | insight | critique | parallel | comparison | other) and optional `crossNotes` spanning several bookIds or a series. Keep each note short and specific.',
     allow: { aiNotes: true, crossNotes: true },
     explain: {
-      sends: 'The full library list.',
-      changes: 'Adds AI notes to books (a separate AI-notes list, spoiler-protected until read) and shared notes across books. Your own notes field is never written. Notes are only added, never edited or removed.',
-      review: 'Row per note. Undo removes the added notes.',
+      sends: t('The full library list.'),
+      changes: t('Adds AI notes to books (a separate AI-notes list, spoiler-protected until read) and shared notes across books. Your own notes field is never written. Notes are only added, never edited or removed.'),
+      review: t('Row per note. Undo removes the added notes.'),
     },
   },
   'cw-classify': {
-    icon: '🔍', group: 'targeted', label: 'Audit content types', heavy: true,
+    icon: '🔍', group: 'targeted', label: t('Audit content types'), heavy: true,
     instruction: 'AUDIT CONTENT TYPES. Return bookPatches with `type` ONLY for books whose current type is clearly wrong or missing ("long" | "short" | "article" | "ai-gen" | "poetry" | "reference").',
     allow: { fields: { type: {} } },
     explain: {
-      sends: 'The full library list with current types.',
-      changes: 'May change a book\'s content type even when one is set (that is the point of an audit). Nothing else.',
-      review: 'Row per book, old → new type. Untick anything you disagree with; types you set by hand are worth a look. Undo restores.',
+      sends: t('The full library list with current types.'),
+      changes: t('May change a book\'s content type even when one is set (that is the point of an audit). Nothing else.'),
+      review: t('Row per book, old → new type. Untick anything you disagree with; types you set by hand are worth a look. Undo restores.'),
     },
   },
   'cw-add-recs': {
-    icon: '➕', group: 'add', label: 'Add recommendations as to-read books', heavy: true,
+    icon: '➕', group: 'add', label: t('Add recommendations as to-read books'), heavy: true,
     instruction: 'ADD RECOMMENDATIONS. Suggest up to 15 books NOT already in allBooks that fit the reading profile. Return `newBooks` [{title, author, genre?, pages?, why}]. Never repeat a book that is in the library.',
     allow: { newBooks: true },
-    never: 'Every book already in your library — this only creates new ones.',
+    never: t('Every book already in your library — this only creates new ones.'),
     explain: {
-      sends: 'The full library list (so it can avoid what you already have).',
-      changes: 'Creates NEW to-read books (recommended by "Cowork agent", with the reason as a note in their description field). Anything matching a book you already have (same title + author surname) is dropped.',
-      review: 'Row per new book; untick any. Undo removes the books it created.',
+      sends: t('The full library list (so it can avoid what you already have).'),
+      changes: t('Creates NEW to-read books (recommended by "Cowork agent", with the reason as a note in their description field). Anything matching a book you already have (same title + author surname) is dropped.'),
+      review: t('Row per new book; untick any. Undo removes the books it created.'),
     },
   },
   'cw-series-gaps': {
-    icon: '📚', group: 'add', label: 'Fill series gaps', heavy: true,
+    icon: '📚', group: 'add', label: t('Fill series gaps'), heavy: true,
     instruction: 'SERIES GAPS. For series in allBooks that the reader has started or finished, return `newBooks` [{title, author, genre?, pages?, why}] for the volumes NOT already in the library (why = "Series #n of <series>"). Never repeat a book that is in the library.',
     allow: { newBooks: true },
-    never: 'Every book already in your library — this only creates new ones.',
+    never: t('Every book already in your library — this only creates new ones.'),
     explain: {
-      sends: 'The full library list (series names and numbers included).',
-      changes: 'Creates NEW to-read books for missing series volumes (recommended by "Cowork agent"). Anything matching a book you already have is dropped.',
-      review: 'Row per new book. Undo removes the books it created.',
+      sends: t('The full library list (series names and numbers included).'),
+      changes: t('Creates NEW to-read books for missing series volumes (recommended by "Cowork agent"). Anything matching a book you already have is dropped.'),
+      review: t('Row per new book. Undo removes the books it created.'),
     },
   },
   'cw-tags': {
-    icon: '🏷', group: 'add', label: 'Tag suggestions (add only)', heavy: true,
+    icon: '🏷', group: 'add', label: t('Tag suggestions (add only)'), heavy: true,
     instruction: 'TAGS. Suggest up to 5 short, reusable tags per book that would help find it (themes, setting, form). Prefer tags already used elsewhere in the library. Return `addTags` [{id, tags: [..]}].',
     allow: { addTags: true },
     explain: {
-      sends: 'The full library list with current tags.',
-      changes: 'ADDS tags to books (at most 5 new per book). Existing tags are never removed or renamed; tags a book already has are skipped.',
-      review: 'Row per book showing current → added tags. Undo restores the books.',
+      sends: t('The full library list with current tags.'),
+      changes: t('ADDS tags to books (at most 5 new per book). Existing tags are never removed or renamed; tags a book already has are skipped.'),
+      review: t('Row per book showing current → added tags. Undo restores the books.'),
     },
   },
   'cw-vocab': {
-    icon: '🔤', group: 'add', label: 'Vocabulary cards', heavy: true,
+    icon: '🔤', group: 'add', label: t('Vocabulary cards'), heavy: true,
     instruction: 'VOCABULARY. From the books read or being read (allBooks), propose up to 25 challenging but useful words the reader has likely met, each with a short definition or context. Skip anything in dataset.vocabWords (already in the deck). Return `vocabCards` [{word, context}].',
     allow: { vocab: true },
-    never: 'Existing vocabulary cards and their review progress; all books.',
+    never: t('Existing vocabulary cards and their review progress; all books.'),
     explain: {
-      sends: 'The full library list and the words already in your vocabulary deck.',
-      changes: 'Adds NEW cards to Train → Vocabulary. Words already in the deck are skipped; existing cards are never edited.',
-      review: 'Row per word. Undo removes the added cards you haven\'t started reviewing.',
+      sends: t('The full library list and the words already in your vocabulary deck.'),
+      changes: t('Adds NEW cards to Train → Vocabulary. Words already in the deck are skipped; existing cards are never edited.'),
+      review: t('Row per word. Undo removes the added cards you haven\'t started reviewing.'),
     },
   },
   'cw-typing-plan': {
-    icon: '🏋️', group: 'add', label: 'Suggest a typing plan', heavy: false,
+    icon: '🏋️', group: 'add', label: t('Suggest a typing plan'), heavy: false,
     instruction: `TYPING PLAN. From snapshot/typing.json design ONE practice plan of 3–8 steps aimed at the weak spots. Each step: mode ∈ ${TYPING_MODE_IDS.join(' | ')}; runMode "seconds" | "words"; runLimit 10–600; sets 1–10; description = a short spoken cue. Return \`typingPlan\` {name, steps: [...]}.`,
     allow: { typingPlan: true },
-    never: 'Your existing typing plans and runs.',
+    never: t('Your existing typing plans and runs.'),
     explain: {
-      sends: 'The compact dataset; the agent reads snapshot/typing.json.',
-      changes: 'Adds ONE new plan to Typing → Plans. Steps with an unknown drill or out-of-range numbers are dropped; your existing plans are untouched.',
-      review: 'One row with the plan\'s steps. Undo removes the plan.',
+      sends: t('The compact dataset; the agent reads snapshot/typing.json.'),
+      changes: t('Adds ONE new plan to Typing → Plans. Steps with an unknown drill or out-of-range numbers are dropped; your existing plans are untouched.'),
+      review: t('One row with the plan\'s steps. Undo removes the plan.'),
     },
   },
   'cw-genre-merge': {
-    icon: '🔀', group: 'targeted', label: 'Merge genre-name variants', heavy: true,
+    icon: '🔀', group: 'targeted', label: t('Merge genre-name variants'), heavy: true,
     instruction: 'GENRE VARIANTS. Find genre / subgenre values in allBooks that are the same thing spelled differently (e.g. "Sci-Fi", "SF", "Science fiction"). Return `renames` [{field: "genre" | "subgenre", from, to}] where `to` is the clearest existing spelling. Only clear cases.',
     allow: { renames: ['genre', 'subgenre'] },
     explain: {
-      sends: 'The full library list.',
-      changes: 'Renames a genre / subgenre value on every book that uses it (e.g. all "Sci-Fi" → "Science fiction"). Only those two fields. Locked books are skipped.',
-      review: 'One row PER BOOK affected, so you can keep any book as it was. Undo restores the books.',
+      sends: t('The full library list.'),
+      changes: t('Renames a genre / subgenre value on every book that uses it (e.g. all "Sci-Fi" → "Science fiction"). Only those two fields. Locked books are skipped.'),
+      review: t('One row PER BOOK affected, so you can keep any book as it was. Undo restores the books.'),
     },
   },
   'cw-author-tidy': {
-    icon: '✍️', group: 'targeted', label: 'Tidy author names', heavy: true,
+    icon: '✍️', group: 'targeted', label: t('Tidy author names'), heavy: true,
     instruction: 'AUTHOR NAMES. Find author values in allBooks that are the same person written differently (initials, punctuation, "Last, First"). Return `renames` [{field: "author", from, to}] where `to` is the fullest common form. Only clear cases.',
     allow: { renames: ['author'] },
-    never: 'Titles, ids (a book keeps its id even when its author spelling changes), status, dates, ratings, notes, queues, links — and locked books.',
+    never: t('Titles, ids (a book keeps its id even when its author spelling changes), status, dates, ratings, notes, queues, links — and locked books.'),
     explain: {
-      sends: 'The full library list.',
-      changes: 'Changes the author spelling on every book using the old one. Nothing else.',
-      review: 'One row per book affected. Undo restores the books.',
+      sends: t('The full library list.'),
+      changes: t('Changes the author spelling on every book using the old one. Nothing else.'),
+      review: t('One row per book affected. Undo restores the books.'),
     },
   },
   'cw-goal-advice': {
-    icon: '🎯', group: 'targeted', label: 'Goal advice', heavy: false,
+    icon: '🎯', group: 'targeted', label: t('Goal advice'), heavy: false,
     instruction: 'GOALS. From snapshot/goals.json (current goals, pace, streak) and the reading history, suggest realistic but stretching goals for this year. Return `goalAdvice` {books?: integer, words?: integer, why}.',
     allow: { goalAdvice: true },
-    never: 'Any book, queue or link — only the yearly goal numbers.',
+    never: t('Any book, queue or link — only the yearly goal numbers.'),
     explain: {
-      sends: 'The compact dataset; the agent reads snapshot/goals.json.',
-      changes: 'Sets this year\'s books goal and/or words goal (Dashboard). Implausible numbers are dropped.',
-      review: 'Row per goal: current → proposed, with the reason. Undo restores the previous goals.',
+      sends: t('The compact dataset; the agent reads snapshot/goals.json.'),
+      changes: t('Sets this year\'s books goal and/or words goal (Dashboard). Implausible numbers are dropped.'),
+      review: t('Row per goal: current → proposed, with the reason. Undo restores the previous goals.'),
     },
   },
   'cw-queue-advice': {
-    icon: '🧭', group: 'targeted', label: 'Queue-order advice', heavy: false,
+    icon: '🧭', group: 'targeted', label: t('Queue-order advice'), heavy: false,
     instruction: 'QUEUE ADVICE. dataset.queues lists each queue in its current order with each book\'s status, length and progress. Suggest a better reading order for any queue that would benefit (variety, momentum, series order, finishing what is nearly done). Return `queueOrder` [{queueId, ids: [EVERY book id of that queue, in the new order], why}].',
     allow: { queueOrder: true },
-    never: 'Which books are in a queue (nothing is added, removed or moved between queues), and everything about the books themselves.',
+    never: t('Which books are in a queue (nothing is added, removed or moved between queues), and everything about the books themselves.'),
     explain: {
-      sends: 'The compact dataset plus your queues (book ids, titles, status, length, progress) in their current order.',
-      changes: 'Proposes a new ORDER for a queue — the same books, rearranged. A suggestion that adds, drops or duplicates a book is discarded. Finished books still show at the top of the queue view regardless.',
-      review: 'One row per queue with the reason; the queue is only reordered if you tick it and apply. Undo restores the previous order.',
+      sends: t('The compact dataset plus your queues (book ids, titles, status, length, progress) in their current order.'),
+      changes: t('Proposes a new ORDER for a queue — the same books, rearranged. A suggestion that adds, drops or duplicates a book is discarded. Finished books still show at the top of the queue view regardless.'),
+      review: t('One row per queue with the reason; the queue is only reordered if you tick it and apply. Undo restores the previous order.'),
     },
   },
   'cw-queue-fill': {
-    icon: '🧲', group: 'add', label: 'Fill dynamic queues', heavy: true,
+    icon: '🧲', group: 'add', label: t('Fill dynamic queues'), heavy: true,
     instruction: 'FILL DYNAMIC QUEUES. dataset.queues marks queues with `dynamic` = a description of what belongs in them (e.g. "American literature", "Philosophical works"). From allBooks, pick to-read books that are in NO queue (dataset.queues lists every queued id) and clearly fit a dynamic queue\'s description. Return `queueAdds` [{queueId, ids: [book ids], why}]. Skip queues without a description and anything uncertain.',
     allow: { queueAdds: true },
-    never: 'Books already in any queue, books that are not to-read, and everything about the books themselves.',
+    never: t('Books already in any queue, books that are not to-read, and everything about the books themselves.'),
     explain: {
-      sends: 'The full library list plus your queues with their descriptions and current books.',
-      changes: 'ADDS unqueued to-read books to the queues you marked dynamic (queue header → Cowork). Nothing is removed or reordered; a book already in a queue is never moved by this.',
-      review: 'One row per book → queue; untick any. Undo restores the queues.',
+      sends: t('The full library list plus your queues with their descriptions and current books.'),
+      changes: t('ADDS unqueued to-read books to the queues you marked dynamic (queue header → Cowork). Nothing is removed or reordered; a book already in a queue is never moved by this.'),
+      review: t('One row per book → queue; untick any. Undo restores the queues.'),
     },
   },
   'cw-requeue': {
-    icon: '↔️', group: 'targeted', label: 'Suggest re-queuing mis-queued books', heavy: false,
+    icon: '↔️', group: 'targeted', label: t('Suggest re-queuing mis-queued books'), heavy: false,
     instruction: 'MIS-QUEUED BOOKS. dataset.queues lists each queue with its description (`dynamic`, when set) and books. For to-read books that clearly belong in a DIFFERENT existing queue — by that queue\'s description or the pattern of its other books — return `queueMoves` [{bookId, toQueueId, why}]. Never suggest a pair listed in dataset.requeueSkip (already declined). Only clear cases; an empty list is fine.',
     allow: { queueMoves: true },
-    never: 'Finished, reading and abandoned books; books in no queue; and everything about the books themselves.',
+    never: t('Finished, reading and abandoned books; books in no queue; and everything about the books themselves.'),
     explain: {
-      sends: 'The compact dataset plus your queues (descriptions, books) and the pairs you declined before.',
-      changes: 'MOVES a to-read book from its queue to another existing queue. Every pair you review — ticked or not — is remembered, so the same suggestion is not made again.',
-      review: 'One row per book: current queue → suggested queue, with the reason. Undo restores the queues.',
+      sends: t('The compact dataset plus your queues (descriptions, books) and the pairs you declined before.'),
+      changes: t('MOVES a to-read book from its queue to another existing queue. Every pair you review — ticked or not — is remembered, so the same suggestion is not made again.'),
+      review: t('One row per book: current queue → suggested queue, with the reason. Undo restores the queues.'),
     },
   },
   'cw-queue-prep': {
-    icon: '📖', group: 'add', label: 'Prep notes for queued books', heavy: false,
+    icon: '📖', group: 'add', label: t('Prep notes for queued books'), heavy: false,
     instruction: 'QUEUE PREP NOTES. dataset.queues lists queues with `prep` = the note types wanted for their unread books, and each book\'s existing note types (`notes`). For every to-read book in such a queue missing one of those types, return `aiNotes` [{bookId, type, text}] with type ∈ reception (critical reception and reputation) | guide (a reader\'s guide: what to look for, how to approach it) | context (historical and intellectual background) | author (about the author). SPOILER-FREE — these are read before the book. 3–6 sentences each; skip books you do not know.',
     allow: { aiNotes: 'prep' },
     explain: {
-      sends: 'The compact dataset plus your queues: which note types each asks for and which each book already has.',
-      changes: 'Adds notes of the requested types to to-read books in queues that ask for them (queue header → Cowork). Other note types, books outside those queues and books that already have the note are dropped. Your own notes are never written.',
-      review: 'Row per note. Undo removes the added notes.',
+      sends: t('The compact dataset plus your queues: which note types each asks for and which each book already has.'),
+      changes: t('Adds notes of the requested types to to-read books in queues that ask for them (queue header → Cowork). Other note types, books outside those queues and books that already have the note are dropped. Your own notes are never written.'),
+      review: t('Row per note. Undo removes the added notes.'),
     },
   },
   'cw-dupes': {
-    icon: '👯', group: 'targeted', label: 'Spot likely duplicates', heavy: true,
+    icon: '👯', group: 'targeted', label: t('Spot likely duplicates'), heavy: true,
     instruction: 'DUPLICATES. Find pairs of entries in allBooks that are the same work (e.g. a recommendation and a file-titled entry, different editions, typos). Return `duplicates` [{keepId (the entry with better metadata), foldId, why}]. Only clear cases.',
     allow: { duplicates: true },
-    never: 'Any book — nothing is merged here.',
+    never: t('Any book — nothing is merged here.'),
     explain: {
-      sends: 'The full library list.',
-      changes: 'Nothing directly. Suggested pairs are saved for Import / Export → Reconcile quick-added copies, where they appear (marked 🤖) next to the scan\'s own pairs with the full preview — and only merge if you tick them there.',
-      review: 'Row per pair here; applying only stores the suggestion. Undo removes the suggestions.',
+      sends: t('The full library list.'),
+      changes: t('Nothing directly. Suggested pairs are saved for Import / Export → Reconcile quick-added copies, where they appear (marked 🤖) next to the scan\'s own pairs with the full preview — and only merge if you tick them there.'),
+      review: t('Row per pair here; applying only stores the suggestion. Undo removes the suggestions.'),
     },
   },
   'cw-tree': {
-    icon: '🌳', group: 'targeted', label: 'Rebuild tech-tree links', heavy: true,
+    icon: '🌳', group: 'targeted', label: t('Rebuild tech-tree links'), heavy: true,
     instruction: 'TECH TREE LINKS. Return treeMeta.edges as [idA, idB, kind] meaning "read A before B": kind "prereq" (B builds on A), "influence" (A shaped B), or "responds" (B answers A). Only real, specific relationships between books in the library — cover as much of the library as you can. (No positions needed: the app lays the map out itself. Series order is added automatically from series numbers.)',
     allow: { treeMeta: true },
     explain: {
-      sends: 'The full library list.',
-      changes: 'Replaces the AI links behind the Tech tree and Neighbourhood views (read-before chains). The map places books itself, so only links matter. No book changes.',
-      review: 'One row. Undo restores the previous layout.',
+      sends: t('The full library list.'),
+      changes: t('Replaces the AI links behind the Tech tree and Neighbourhood views (read-before chains). The map places books itself, so only links matter. No book changes.'),
+      review: t('One row. Undo restores the previous layout.'),
     },
   },
   'cw-graph': {
-    icon: '🕸', group: 'targeted', label: 'Rebuild knowledge graph', heavy: true,
+    icon: '🕸', group: 'targeted', label: t('Rebuild knowledge graph'), heavy: true,
     instruction: 'KNOWLEDGE GRAPH. Return treeMeta.edges as [idA, idB, kind] (no positions — the app lays books out itself), kind ∈ "influence" | "prereq" | "series" | "same-author" | "theme" | "contrast" | "responds" | "similarity" | "opposed" | "same-universe". 1–4 real edges per book.',
     allow: { treeMeta: true },
     explain: {
-      sends: 'The full library list.',
-      changes: 'Replaces the AI links (typed: influence, theme, similar work…) shown in the Neighbourhood, Tech tree and on the map. The map places books itself. No book changes.',
-      review: 'One row. Undo restores the previous layout.',
+      sends: t('The full library list.'),
+      changes: t('Replaces the AI links (typed: influence, theme, similar work…) shown in the Neighbourhood, Tech tree and on the map. The map places books itself. No book changes.'),
+      review: t('One row. Undo restores the previous layout.'),
     },
   },
 };
@@ -392,10 +395,10 @@ export const isUnread = (b) => ['toread', 'queue'].includes(readStatus(b));
 export const PREP_NOTE_TYPES = ['reception', 'guide', 'context', 'author'];
 
 export const OP_GROUPS = [
-  { id: 'report', label: 'Reports — change no books' },
-  { id: 'fill', label: 'Fill blanks — never overwrite' },
-  { id: 'add', label: 'Add-only — never edit what you have' },
-  { id: 'targeted', label: 'Targeted changes — always reviewed' },
+  { id: 'report', label: t('Reports — change no books') },
+  { id: 'fill', label: t('Fill blanks — never overwrite') },
+  { id: 'add', label: t('Add-only — never edit what you have') },
+  { id: 'targeted', label: t('Targeted changes — always reviewed') },
 ];
 export const NEVER_CHANGED = NEVER;
 export const isReportOnly = (ids) => ids.every((id) => COWORK_OPS[id]?.group === 'report');
@@ -492,6 +495,8 @@ export function opsInstruction(ids, { question = '' } = {}) {
 }
 
 const blank = (v) => v === undefined || v === null || String(v).trim() === '';
+const NOT_REQUESTED = () => t('not part of the requested operations');
+const LOCKED = () => t('book is locked 🔒');
 const short = (v) => (typeof v === 'string' && v.length > 120 ? `${v.slice(0, 120)}…` : v);
 
 // Keep only what the requested operations may change. ctx: { booksById, bindMap, queuedIds:Set }.
@@ -502,22 +507,22 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
   const drop = (what, why) => dropped.push({ what, why });
   for (const k of ['analysis', 'recommendations', 'weeklies', 'treeMeta', 'brief']) {
     if (raw?.[k] == null) continue;
-    if (a[k]) out[k] = raw[k]; else drop(k, 'not part of the requested operations');
+    if (a[k]) out[k] = raw[k]; else drop(k, NOT_REQUESTED());
   }
-  for (const k of ['archetypeMeta']) if (raw?.[k] != null) drop(k, 'not part of any operation');
+  for (const k of ['archetypeMeta']) if (raw?.[k] != null) drop(k, t('not part of any operation'));
   const patches = [];
   for (const p of raw?.bookPatches || []) {
     const book = booksById[p?.id];
-    if (!book) { drop(`patch for unknown book ${p?.id}`, 'no such book'); continue; }
-    if (book.locked) { drop(`${book.title}: ${Object.keys(p).filter((k) => k !== 'id').join(', ')}`, 'book is locked 🔒'); continue; }
+    if (!book) { drop(t('patch for unknown book {id}', { id: p?.id }), t('no such book')); continue; }
+    if (book.locked) { drop(`${book.title}: ${Object.keys(p).filter((k) => k !== 'id').join(', ')}`, LOCKED()); continue; }
     const keep = { id: p.id };
     for (const [f, v] of Object.entries(p)) {
       if (f === 'id') continue;
       const rule = a.fields[f];
-      if (!rule) { drop(`${book.title}: ${f}`, 'field not allowed by the requested operations'); continue; }
-      if (rule.blanks && !blank(book[f])) { drop(`${book.title}: ${f}`, 'already has a value (fill-blanks only)'); continue; }
-      if (rule.unreadOnly && (readStatus(book) !== 'toread' || queuedIds.has(book.id))) { drop(`${book.title}: ${f}`, 'not an unqueued to-read book'); continue; }
-      if (rule.range && !(Number.isInteger(Number(v)) && Number(v) >= rule.range[0] && Number(v) <= rule.range[1])) { drop(`${book.title}: ${f} = ${v}`, `must be a whole number ${rule.range[0]}–${rule.range[1]}`); continue; }
+      if (!rule) { drop(`${book.title}: ${f}`, t('field not allowed by the requested operations')); continue; }
+      if (rule.blanks && !blank(book[f])) { drop(`${book.title}: ${f}`, t('already has a value (fill-blanks only)')); continue; }
+      if (rule.unreadOnly && (readStatus(book) !== 'toread' || queuedIds.has(book.id))) { drop(`${book.title}: ${f}`, t('not an unqueued to-read book')); continue; }
+      if (rule.range && !(Number.isInteger(Number(v)) && Number(v) >= rule.range[0] && Number(v) <= rule.range[1])) { drop(`${book.title}: ${f} = ${v}`, t('must be a whole number {min}–{max}', { min: rule.range[0], max: rule.range[1] })); continue; }
       if (JSON.stringify(book[f]) === JSON.stringify(v)) continue; // no actual change
       keep[f] = v;
     }
@@ -526,26 +531,26 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
   if (patches.length) out.bookPatches = patches;
   for (const k of ['aiNotes', 'crossNotes']) {
     if (!raw?.[k]?.length) continue;
-    if (!a[k]) { drop(`${raw[k].length} ${k}`, 'not part of the requested operations'); continue; }
+    if (!a[k]) { drop(`${raw[k].length} ${k}`, NOT_REQUESTED()); continue; }
     out[k] = raw[k].filter((n) => {
       const ids = k === 'aiNotes' ? [n?.bookId] : (n?.bookIds || []);
       const locked = ids.map((id) => booksById[id]).find((b) => b?.locked);
-      if (locked) { drop(`note on ${locked.title}`, 'book is locked 🔒'); return false; }
+      if (locked) { drop(t('note on {title}', { title: locked.title }), LOCKED()); return false; }
       if (k === 'aiNotes' && a.aiNotes === 'prep') { // only what a queue asked for, on its unread books, once
         const b = booksById[n.bookId], q = queueOf(queues, n.bookId);
-        const why = !b ? 'no such book' : !q?.prep?.includes(n.type) ? `“${b.title}” is in no queue asking for ${n.type || '?'} notes`
-          : !isUnread(b) ? 'already started' : (b.aiNotes || []).some((x) => x.type === n.type) ? `already has a ${n.type} note` : null;
-        if (why) { drop(`${n.type || 'note'} on ${b?.title || n.bookId}`, why); return false; }
+        const why = !b ? t('no such book') : !q?.prep?.includes(n.type) ? t('“{title}” is in no queue asking for {type} notes', { title: b.title, type: n.type || '?' })
+          : !isUnread(b) ? t('already started') : (b.aiNotes || []).some((x) => x.type === n.type) ? t('already has a {type} note', { type: n.type }) : null;
+        if (why) { drop(t('{type} on {title}', { type: n.type || t('note'), title: b?.title || n.bookId }), why); return false; }
       }
       return true;
     });
   }
   if (raw?.bindings?.length) {
-    if (!a.bindings) drop(`${raw.bindings.length} file link(s)`, 'not part of the requested operations');
+    if (!a.bindings) drop(t.n('{n} file link', '{n} file links', raw.bindings.length), NOT_REQUESTED());
     else {
       out.bindings = raw.bindings.filter((b) => {
-        if (!b?.checksum || !booksById[b.bookId]) { drop(`link ${b?.checksum || '?'}`, 'unknown file or book'); return false; }
-        if (bindMap[b.checksum]) { drop(`link ${b.checksum.slice(0, 8)}…`, 'file is already linked — links are never replaced'); return false; }
+        if (!b?.checksum || !booksById[b.bookId]) { drop(t('link {file}', { file: b?.checksum || '?' }), t('unknown file or book')); return false; }
+        if (bindMap[b.checksum]) { drop(t('link {file}', { file: `${b.checksum.slice(0, 8)}…` }), t('file is already linked — links are never replaced')); return false; }
         return true;
       });
     }
@@ -556,12 +561,12 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
     const seen = new Set();
     out.sessionReviews = raw.reviews.filter((r) => {
       const id = String(r?.sessionId || '');
-      const why = !a.sessionReviews ? 'not part of the requested operations'
-        : !SESSION_ID.test(id) || (sessionIds && !sessionIds.has(id)) ? 'no such session'
-        : !/^[A-F][+-]?$/.test(String(r?.grade || '')) ? 'grade must be A+ to F'
-        : !String(r?.summary || '').trim() ? 'empty summary'
-        : seen.has(id) ? 'session reviewed twice in one reply' : null;
-      if (why) { drop(`review of ${id || '?'}`, why); return false; }
+      const why = !a.sessionReviews ? NOT_REQUESTED()
+        : !SESSION_ID.test(id) || (sessionIds && !sessionIds.has(id)) ? t('no such session')
+        : !/^[A-F][+-]?$/.test(String(r?.grade || '')) ? t('grade must be A+ to F')
+        : !String(r?.summary || '').trim() ? t('empty summary')
+        : seen.has(id) ? t('session reviewed twice in one reply') : null;
+      if (why) { drop(t('review of {id}', { id: id || '?' }), why); return false; }
       seen.add(id); return true;
     }).map((r) => {
       const list = (xs) => (Array.isArray(xs) ? xs : []).map((x) => String(x).slice(0, 300)).filter(Boolean).slice(0, 4);
@@ -571,134 +576,134 @@ export function sanitizeOutput(raw, ids, { booksById = {}, bindMap = {}, queuedI
   }
   if (raw?.reports?.length) {
     out.reports = raw.reports.filter((r) => {
-      if (!(a.reports || []).includes(r?.kind) || !String(r?.text || '').trim()) { drop(`report ${r?.kind || '?'}`, 'not part of the requested operations'); return false; }
+      if (!(a.reports || []).includes(r?.kind) || !String(r?.text || '').trim()) { drop(t('report {kind}', { kind: r?.kind || '?' }), NOT_REQUESTED()); return false; }
       return true;
     });
   }
   if (raw?.newBooks?.length) {
-    if (!a.newBooks) drop(`${raw.newBooks.length} new book(s)`, 'not part of the requested operations');
+    if (!a.newBooks) drop(t.n('{n} new book', '{n} new books', raw.newBooks.length), NOT_REQUESTED());
     else {
       const have = new Set(Object.values(booksById).filter((b) => !b.deleted).map(dupKey).filter(Boolean));
       out.newBooks = raw.newBooks.slice(0, 30).filter((nb) => {
         const k = dupKey(nb || {});
-        if (!k || !String(nb.author || '').trim()) { drop(`new book ${nb?.title || '?'}`, 'needs a title and an author'); return false; }
-        if (have.has(k)) { drop(`new book ${nb.title}`, 'already in your library'); return false; }
+        if (!k || !String(nb.author || '').trim()) { drop(t('new book {title}', { title: nb?.title || '?' }), t('needs a title and an author')); return false; }
+        if (have.has(k)) { drop(t('new book {title}', { title: nb.title }), t('already in your library')); return false; }
         have.add(k);
         return true;
       });
     }
   }
   if (raw?.addTags?.length) {
-    if (!a.addTags) drop(`${raw.addTags.length} tag suggestion(s)`, 'not part of the requested operations');
+    if (!a.addTags) drop(t.n('{n} tag suggestion', '{n} tag suggestions', raw.addTags.length), NOT_REQUESTED());
     else {
-      out.addTags = raw.addTags.map((t) => {
-        const book = booksById[t?.id];
-        if (!book) { drop(`tags for ${t?.id}`, 'no such book'); return null; }
-        if (book.locked) { drop(`tags for ${book.title}`, 'book is locked 🔒'); return null; }
+      out.addTags = raw.addTags.map((tg) => {
+        const book = booksById[tg?.id];
+        if (!book) { drop(t('tags for {title}', { title: tg?.id }), t('no such book')); return null; }
+        if (book.locked) { drop(t('tags for {title}', { title: book.title }), LOCKED()); return null; }
         const have = new Set(bookTags(book).map((x) => x.toLowerCase()));
-        const add = [...new Set((Array.isArray(t.tags) ? t.tags : []).map((x) => String(x).trim()).filter((x) => x && x.length <= 40 && !have.has(x.toLowerCase())))].slice(0, 5);
-        return add.length ? { id: t.id, tags: add } : null;
+        const add = [...new Set((Array.isArray(tg.tags) ? tg.tags : []).map((x) => String(x).trim()).filter((x) => x && x.length <= 40 && !have.has(x.toLowerCase())))].slice(0, 5);
+        return add.length ? { id: tg.id, tags: add } : null;
       }).filter(Boolean);
     }
   }
   if (raw?.vocabCards?.length) {
-    if (!a.vocab) drop(`${raw.vocabCards.length} vocabulary card(s)`, 'not part of the requested operations');
+    if (!a.vocab) drop(t.n('{n} vocabulary card', '{n} vocabulary cards', raw.vocabCards.length), NOT_REQUESTED());
     else {
       const have = new Set(vocabWords.map((w) => String(w).toLowerCase()));
       out.vocabCards = raw.vocabCards.slice(0, 50).filter((c) => {
         const w = String(c?.word || '').trim();
-        if (!/^[\p{L}'’-]{2,40}$/u.test(w)) { drop(`card “${w}”`, 'not a single word'); return false; }
-        if (have.has(w.toLowerCase())) { drop(`card “${w}”`, 'already in the deck'); return false; }
+        if (!/^[\p{L}'’-]{2,40}$/u.test(w)) { drop(t('card “{word}”', { word: w }), t('not a single word')); return false; }
+        if (have.has(w.toLowerCase())) { drop(t('card “{word}”', { word: w }), t('already in the deck')); return false; }
         have.add(w.toLowerCase());
         return true;
       }).map((c) => ({ word: String(c.word).trim(), context: String(c.context || '').slice(0, 300) }));
     }
   }
   if (raw?.typingPlan) {
-    if (!a.typingPlan) drop('typing plan', 'not part of the requested operations');
+    if (!a.typingPlan) drop(t('typing plan'), NOT_REQUESTED());
     else {
       const steps = (raw.typingPlan.steps || []).slice(0, 12).filter((st) => {
         const ok = TYPING_MODE_IDS.includes(st?.mode) && ['seconds', 'words'].includes(st?.runMode)
           && Number(st.runLimit) >= 10 && Number(st.runLimit) <= 600 && Number(st.sets || 1) >= 1 && Number(st.sets || 1) <= 10;
-        if (!ok) drop(`plan step ${st?.mode || '?'}`, 'unknown drill or out-of-range numbers');
+        if (!ok) drop(t('plan step {mode}', { mode: st?.mode || '?' }), t('unknown drill or out-of-range numbers'));
         return ok;
       }).map((st) => ({ mode: st.mode, runMode: st.runMode, runLimit: Math.round(Number(st.runLimit)), sets: Math.round(Number(st.sets || 1)), description: String(st.description || '').slice(0, 200) }));
       if (steps.length) out.typingPlan = { name: String(raw.typingPlan.name || 'Coach plan').slice(0, 60), steps };
-      else drop('typing plan', 'no usable steps');
+      else drop(t('typing plan'), t('no usable steps'));
     }
   }
   if (raw?.renames?.length) {
-    if (!a.renames) drop(`${raw.renames.length} rename(s)`, 'not part of the requested operations');
+    if (!a.renames) drop(t.n('{n} rename', '{n} renames', raw.renames.length), NOT_REQUESTED());
     else {
       out.renames = raw.renames.filter((r) => {
         const from = String(r?.from || '').trim(), to = String(r?.to || '').trim();
-        if (!a.renames.includes(r?.field)) { drop(`rename ${r?.field}: ${from}`, 'field not allowed by the requested operations'); return false; }
-        if (!from || !to || from === to) { drop(`rename ${r.field}: ${from}`, 'empty or unchanged'); return false; }
-        if (!Object.values(booksById).some((b) => !b.deleted && String(b[r.field] || '').trim() === from)) { drop(`rename ${r.field}: ${from}`, 'no book uses that value'); return false; }
+        if (!a.renames.includes(r?.field)) { drop(t('rename {field}: {from}', { field: r?.field, from }), t('field not allowed by the requested operations')); return false; }
+        if (!from || !to || from === to) { drop(t('rename {field}: {from}', { field: r.field, from }), t('empty or unchanged')); return false; }
+        if (!Object.values(booksById).some((b) => !b.deleted && String(b[r.field] || '').trim() === from)) { drop(t('rename {field}: {from}', { field: r.field, from }), t('no book uses that value')); return false; }
         return true;
       }).map((r) => ({ field: r.field, from: String(r.from).trim(), to: String(r.to).trim() }));
     }
   }
   if (raw?.goalAdvice) {
-    if (!a.goalAdvice) drop('goal advice', 'not part of the requested operations');
+    if (!a.goalAdvice) drop(t('goal advice'), NOT_REQUESTED());
     else {
       const g = raw.goalAdvice, o = {};
-      if (g.books != null) { if (Number.isInteger(Number(g.books)) && g.books >= 1 && g.books <= 1000) o.books = Number(g.books); else drop(`books goal ${g.books}`, 'implausible'); }
-      if (g.words != null) { if (Number.isInteger(Number(g.words)) && g.words >= 10000 && g.words <= 100000000) o.words = Number(g.words); else drop(`words goal ${g.words}`, 'implausible'); }
+      if (g.books != null) { if (Number.isInteger(Number(g.books)) && g.books >= 1 && g.books <= 1000) o.books = Number(g.books); else drop(t('books goal {n}', { n: g.books }), t('implausible')); }
+      if (g.words != null) { if (Number.isInteger(Number(g.words)) && g.words >= 10000 && g.words <= 100000000) o.words = Number(g.words); else drop(t('words goal {n}', { n: g.words }), t('implausible')); }
       if (Object.keys(o).length) out.goalAdvice = { ...o, why: String(g.why || '') };
     }
   }
-  if (raw?.answer != null) { if (a.answer && String(raw.answer).trim()) out.answer = String(raw.answer); else drop('answer', 'not part of the requested operations'); }
+  if (raw?.answer != null) { if (a.answer && String(raw.answer).trim()) out.answer = String(raw.answer); else drop(t('answer'), NOT_REQUESTED()); }
   if (raw?.queueOrder?.length) {
-    if (!a.queueOrder) drop(`${raw.queueOrder.length} queue order(s)`, 'not part of the requested operations');
+    if (!a.queueOrder) drop(t.n('{n} queue order', '{n} queue orders', raw.queueOrder.length), NOT_REQUESTED());
     else {
       out.queueOrder = raw.queueOrder.filter((qo) => {
         const q = queues.find((x) => x.id === qo?.queueId && !x.deleted);
-        if (!q) { drop(`queue order ${qo?.queueId}`, 'no such queue'); return false; }
+        if (!q) { drop(t('queue order {id}', { id: qo?.queueId }), t('no such queue')); return false; }
         const ids = Array.isArray(qo.ids) ? qo.ids : [];
         const same = ids.length === (q.ids || []).length && new Set(ids).size === ids.length && ids.every((id) => q.ids.includes(id));
-        if (!same) { drop(`order for “${q.name}”`, 'not exactly the same books (would add, drop or duplicate one)'); return false; }
+        if (!same) { drop(t('order for “{queue}”', { queue: q.name }), t('not exactly the same books (would add, drop or duplicate one)')); return false; }
         if (ids.every((id, i) => id === q.ids[i])) return false; // already in that order
         return true;
       });
     }
   }
   if (raw?.queueAdds?.length) {
-    if (!a.queueAdds) drop(`${raw.queueAdds.length} queue addition(s)`, 'not part of the requested operations');
+    if (!a.queueAdds) drop(t.n('{n} queue addition', '{n} queue additions', raw.queueAdds.length), NOT_REQUESTED());
     else {
       const seen = new Set();
       out.queueAdds = raw.queueAdds.flatMap((qa) => {
         const q = queues.find((x) => x.id === qa?.queueId && !x.deleted);
-        if (!q) { drop(`additions to ${qa?.queueId}`, 'no such queue'); return []; }
-        if (!String(q.dynamic || '').trim()) { drop(`additions to “${q.name}”`, 'queue is not dynamic'); return []; }
+        if (!q) { drop(t('additions to {queue}', { queue: qa?.queueId }), t('no such queue')); return []; }
+        if (!String(q.dynamic || '').trim()) { drop(t('additions to “{queue}”', { queue: q.name }), t('queue is not dynamic')); return []; }
         return (Array.isArray(qa.ids) ? qa.ids : []).filter((id) => {
           const b = booksById[id];
-          const why = !b ? 'no such book' : b.locked ? 'book is locked 🔒' : !isUnread(b) ? 'not a to-read book' : queuedIds.has(id) ? 'already in a queue' : seen.has(id) ? 'suggested twice' : null;
-          if (why) { drop(`add ${b?.title || id} to “${q.name}”`, why); return false; }
+          const why = !b ? t('no such book') : b.locked ? LOCKED() : !isUnread(b) ? t('not a to-read book') : queuedIds.has(id) ? t('already in a queue') : seen.has(id) ? t('suggested twice') : null;
+          if (why) { drop(t('add {title} to “{queue}”', { title: b?.title || id, queue: q.name }), why); return false; }
           seen.add(id); return true;
         }).map((id) => ({ queueId: q.id, bookId: id, why: String(qa.why || '') }));
       });
     }
   }
   if (raw?.queueMoves?.length) {
-    if (!a.queueMoves) drop(`${raw.queueMoves.length} queue move(s)`, 'not part of the requested operations');
+    if (!a.queueMoves) drop(t.n('{n} queue move', '{n} queue moves', raw.queueMoves.length), NOT_REQUESTED());
     else {
       const skip = new Set((requeueSkip || []).map((x) => `${x.bookId}→${x.toQueueId}`));
       out.queueMoves = raw.queueMoves.filter((m) => {
         const b = booksById[m?.bookId], to = queues.find((x) => x.id === m?.toQueueId && !x.deleted), from = queueOf(queues, m?.bookId);
-        const why = !b || !to ? 'unknown book or queue' : b.locked ? 'book is locked 🔒' : !isUnread(b) ? 'not a to-read book' : !from ? 'book is in no queue' : from.id === to.id ? 'already there'
-          : skip.has(`${m.bookId}→${m.toQueueId}`) ? 'you declined this before' : null;
-        if (why) { drop(`move ${b?.title || m?.bookId} → “${to?.name || m?.toQueueId}”`, why); return false; }
+        const why = !b || !to ? t('unknown book or queue') : b.locked ? LOCKED() : !isUnread(b) ? t('not a to-read book') : !from ? t('book is in no queue') : from.id === to.id ? t('already there')
+          : skip.has(`${m.bookId}→${m.toQueueId}`) ? t('you declined this before') : null;
+        if (why) { drop(t('move {title} → “{queue}”', { title: b?.title || m?.bookId, queue: to?.name || m?.toQueueId }), why); return false; }
         return true;
       }).map((m) => ({ bookId: m.bookId, toQueueId: m.toQueueId, why: String(m.why || '') }));
     }
   }
   if (raw?.duplicates?.length) {
-    if (!a.duplicates) drop(`${raw.duplicates.length} duplicate pair(s)`, 'not part of the requested operations');
+    if (!a.duplicates) drop(t.n('{n} duplicate pair', '{n} duplicate pairs', raw.duplicates.length), NOT_REQUESTED());
     else {
       out.duplicates = raw.duplicates.filter((d) => {
-        if (!booksById[d?.keepId] || !booksById[d?.foldId] || d.keepId === d.foldId) { drop(`pair ${d?.keepId} + ${d?.foldId}`, 'unknown or identical books'); return false; }
-        if (booksById[d.keepId].locked || booksById[d.foldId].locked) { drop(`pair ${booksById[d.keepId].title} + ${booksById[d.foldId].title}`, 'a locked book 🔒'); return false; }
+        if (!booksById[d?.keepId] || !booksById[d?.foldId] || d.keepId === d.foldId) { drop(t('pair {a} + {b}', { a: d?.keepId, b: d?.foldId }), t('unknown or identical books')); return false; }
+        if (booksById[d.keepId].locked || booksById[d.foldId].locked) { drop(t('pair {a} + {b}', { a: booksById[d.keepId].title, b: booksById[d.foldId].title }), t('a locked book 🔒')); return false; }
         return true;
       });
     }
@@ -711,14 +716,14 @@ export function planRows(output, { booksById = {}, files = {}, goals = {}, queue
   const rows = [];
   const title = (id) => booksById[id]?.title || id;
   const qname = (id) => queues.find((q) => q.id === id)?.name || id;
-  if (output.brief) rows.push({ key: 'brief', kind: 'brief', label: `Morning brief ${output.brief.date || ''}`.trim(), to: short(output.brief.text), value: output.brief });
-  if (output.analysis) rows.push({ key: 'analysis', kind: 'analysis', label: 'Dashboard analysis', to: short(output.analysis), value: output.analysis });
-  if (output.recommendations) rows.push({ key: 'recs', kind: 'recommendations', label: `Read-next list (${output.recommendations.length})`, to: output.recommendations.map((r) => r.title).join(', '), value: output.recommendations });
+  if (output.brief) rows.push({ key: 'brief', kind: 'brief', label: t('Morning brief {date}', { date: output.brief.date || '' }).trim(), to: short(output.brief.text), value: output.brief });
+  if (output.analysis) rows.push({ key: 'analysis', kind: 'analysis', label: t('Dashboard analysis'), to: short(output.analysis), value: output.analysis });
+  if (output.recommendations) rows.push({ key: 'recs', kind: 'recommendations', label: t('Read-next list ({n})', { n: output.recommendations.length }), to: output.recommendations.map((r) => r.title).join(', '), value: output.recommendations });
   for (const w of output.weeklies || []) {
     const week = String(w?.week || '').slice(0, 10);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(week) && String(w.text || '').trim()) rows.push({ key: `wk:${week}`, kind: 'weekly', label: `Week of ${week}`, to: short(w.text), value: { week, text: String(w.text).trim() } });
+    if (/^\d{4}-\d{2}-\d{2}$/.test(week) && String(w.text || '').trim()) rows.push({ key: `wk:${week}`, kind: 'weekly', label: t('Week of {week}', { week }), to: short(w.text), value: { week, text: String(w.text).trim() } });
   }
-  if (output.treeMeta) rows.push({ key: 'tree', kind: 'treeMeta', label: 'Tech tree / knowledge graph layout', to: `${Object.keys(output.treeMeta.pos || {}).length} positions, ${(output.treeMeta.edges || []).length} edges`, value: output.treeMeta });
+  if (output.treeMeta) rows.push({ key: 'tree', kind: 'treeMeta', label: t('Tech tree / knowledge graph layout'), to: t('{pos} positions, {edges} edges', { pos: Object.keys(output.treeMeta.pos || {}).length, edges: (output.treeMeta.edges || []).length }), value: output.treeMeta });
   for (const p of output.bookPatches || []) {
     for (const [f, v] of Object.entries(p)) {
       if (f === 'id') continue;
@@ -727,39 +732,39 @@ export function planRows(output, { booksById = {}, files = {}, goals = {}, queue
   }
   (output.aiNotes || []).forEach((n, i) => {
     if (!booksById[n?.bookId] || !String(n?.text || '').trim()) return;
-    rows.push({ key: `n:${i}`, kind: 'note', label: `${title(n.bookId)} — ${AI_NOTE_TYPES[n.type] || 'Note'}${n.sectionTitle ? ` (${n.sectionTitle})` : ''}`, to: short(n.text), value: n });
+    rows.push({ key: `n:${i}`, kind: 'note', label: `${title(n.bookId)} — ${AI_NOTE_TYPES[n.type] || t('Note')}${n.sectionTitle ? ` (${n.sectionTitle})` : ''}`, to: short(n.text), value: n });
   });
   (output.crossNotes || []).forEach((n, i) => {
     if (!String(n?.text || '').trim()) return;
     const ids = (n.bookIds || []).filter((id) => booksById[id]);
     if (!ids.length && !n.series) return;
-    rows.push({ key: `x:${i}`, kind: 'cross', label: `Shared note — ${n.series || ids.map(title).join(' + ')}`, to: short(n.text), value: { bookIds: ids, series: n.series || null, type: AI_NOTE_TYPES[n.type] ? n.type : 'other', text: String(n.text).trim() } });
+    rows.push({ key: `x:${i}`, kind: 'cross', label: t('Shared note — {books}', { books: n.series || ids.map(title).join(' + ') }), to: short(n.text), value: { bookIds: ids, series: n.series || null, type: AI_NOTE_TYPES[n.type] ? n.type : 'other', text: String(n.text).trim() } });
   });
-  for (const b of output.bindings || []) rows.push({ key: `l:${b.checksum}`, kind: 'link', label: `Link ${files[b.checksum]?.fileName || `${b.checksum.slice(0, 8)}…`}`, from: '(unlinked)', to: title(b.bookId), value: b });
-  for (const r of output.sessionReviews || []) rows.push({ key: `sr:${r.sessionId}`, kind: 'sessionReview', label: `AI review — ${sessionLabel(r.sessionId)}`, from: scores[r.sessionId] || '', to: `${r.grade} — ${short(r.summary)}`, value: r });
-  (output.reports || []).forEach((r, i) => rows.push({ key: `r:${i}`, kind: 'report', label: `Report — ${r.title || r.kind}`, to: short(r.text), value: { kind: r.kind, title: String(r.title || r.kind), text: String(r.text) } }));
-  (output.newBooks || []).forEach((nb, i) => rows.push({ key: `nb:${i}`, kind: 'newBook', label: `New to-read book — ${nb.title} — ${nb.author}`, from: '(not in library)', to: short(String(nb.why || '')), value: nb }));
-  for (const t of output.addTags || []) rows.push({ key: `t:${t.id}`, kind: 'tags', label: `${title(t.id)} — tags`, from: bookTags(booksById[t.id]).join(', ') || '—', to: `+ ${t.tags.join(', ')}`, bookId: t.id, value: t.tags });
-  for (const c of output.vocabCards || []) rows.push({ key: `v:${c.word}`, kind: 'vocab', label: `Vocabulary card — ${c.word}`, from: '(not in deck)', to: short(c.context), value: c });
-  if (output.typingPlan) rows.push({ key: 'plan', kind: 'typingPlan', label: `Typing plan — ${output.typingPlan.name}`, from: '(new)', to: output.typingPlan.steps.map((st) => `${st.mode} ${st.runLimit}${st.runMode === 'seconds' ? 's' : 'w'}×${st.sets}`).join(' → '), value: output.typingPlan });
+  for (const b of output.bindings || []) rows.push({ key: `l:${b.checksum}`, kind: 'link', label: t('Link {file}', { file: files[b.checksum]?.fileName || `${b.checksum.slice(0, 8)}…` }), from: t('(unlinked)'), to: title(b.bookId), value: b });
+  for (const r of output.sessionReviews || []) rows.push({ key: `sr:${r.sessionId}`, kind: 'sessionReview', label: t('AI review — {session}', { session: sessionLabel(r.sessionId) }), from: scores[r.sessionId] || '', to: `${r.grade} — ${short(r.summary)}`, value: r });
+  (output.reports || []).forEach((r, i) => rows.push({ key: `r:${i}`, kind: 'report', label: t('Report — {title}', { title: r.title || r.kind }), to: short(r.text), value: { kind: r.kind, title: String(r.title || r.kind), text: String(r.text) } }));
+  (output.newBooks || []).forEach((nb, i) => rows.push({ key: `nb:${i}`, kind: 'newBook', label: t('New to-read book — {title} — {author}', { title: nb.title, author: nb.author }), from: t('(not in library)'), to: short(String(nb.why || '')), value: nb }));
+  for (const tg of output.addTags || []) rows.push({ key: `t:${tg.id}`, kind: 'tags', label: t('{title} — tags', { title: title(tg.id) }), from: bookTags(booksById[tg.id]).join(', ') || '—', to: `+ ${tg.tags.join(', ')}`, bookId: tg.id, value: tg.tags });
+  for (const c of output.vocabCards || []) rows.push({ key: `v:${c.word}`, kind: 'vocab', label: t('Vocabulary card — {word}', { word: c.word }), from: t('(not in deck)'), to: short(c.context), value: c });
+  if (output.typingPlan) rows.push({ key: 'plan', kind: 'typingPlan', label: t('Typing plan — {name}', { name: output.typingPlan.name }), from: t('(new)'), to: output.typingPlan.steps.map((st) => `${st.mode} ${st.runLimit}${st.runMode === 'seconds' ? 's' : 'w'}×${st.sets}`).join(' → '), value: output.typingPlan });
   for (const r of output.renames || []) {
     for (const b of Object.values(booksById)) {
       if (b.deleted || b.locked || String(b[r.field] || '').trim() !== r.from) continue;
-      rows.push({ key: `f:${b.id}:${r.field}`, kind: 'field', rename: true, label: `${b.title} — ${r.field} (rename)`, from: r.from, to: r.to, bookId: b.id, field: r.field, value: r.to });
+      rows.push({ key: `f:${b.id}:${r.field}`, kind: 'field', rename: true, label: t('{title} — {field} (rename)', { title: b.title, field: r.field }), from: r.from, to: r.to, bookId: b.id, field: r.field, value: r.to });
     }
   }
   if (output.goalAdvice) {
     const why = output.goalAdvice.why ? ` — ${short(output.goalAdvice.why)}` : '';
-    if (output.goalAdvice.books != null) rows.push({ key: 'g:books', kind: 'goal', label: `${year} books goal${why}`, from: goals[year] ?? '—', to: output.goalAdvice.books, value: { key: String(year), n: output.goalAdvice.books } });
-    if (output.goalAdvice.words != null) rows.push({ key: 'g:words', kind: 'goal', label: `${year} words goal${why}`, from: goals[`${year}-words`] ?? '—', to: output.goalAdvice.words, value: { key: `${year}-words`, n: output.goalAdvice.words } });
+    if (output.goalAdvice.books != null) rows.push({ key: 'g:books', kind: 'goal', label: `${t('{year} books goal', { year })}${why}`, from: goals[year] ?? '—', to: output.goalAdvice.books, value: { key: String(year), n: output.goalAdvice.books } });
+    if (output.goalAdvice.words != null) rows.push({ key: 'g:words', kind: 'goal', label: `${t('{year} words goal', { year })}${why}`, from: goals[`${year}-words`] ?? '—', to: output.goalAdvice.words, value: { key: `${year}-words`, n: output.goalAdvice.words } });
   }
-  if (output.answer) rows.push({ key: 'answer', kind: 'answer', label: 'Answer to your question', to: short(output.answer), value: output.answer });
+  if (output.answer) rows.push({ key: 'answer', kind: 'answer', label: t('Answer to your question'), to: short(output.answer), value: output.answer });
   for (const qo of output.queueOrder || []) {
-    rows.push({ key: `q:${qo.queueId}`, kind: 'queueOrder', label: `Reorder queue — ${qo.why ? short(String(qo.why)) : ''}`.replace(/ — $/, ''), from: '(current order)', to: qo.ids.slice(0, 6).map(title).join(' → ') + (qo.ids.length > 6 ? ' → …' : ''), value: { queueId: qo.queueId, ids: qo.ids } });
+    rows.push({ key: `q:${qo.queueId}`, kind: 'queueOrder', label: qo.why ? t('Reorder queue — {why}', { why: short(String(qo.why)) }) : t('Reorder queue'), from: t('(current order)'), to: qo.ids.slice(0, 6).map(title).join(' → ') + (qo.ids.length > 6 ? ' → …' : ''), value: { queueId: qo.queueId, ids: qo.ids } });
   }
-  for (const qa of output.queueAdds || []) rows.push({ key: `qa:${qa.queueId}:${qa.bookId}`, kind: 'queueAdd', label: `${title(qa.bookId)} → queue “${qname(qa.queueId)}”${qa.why ? ` — ${short(qa.why)}` : ''}`, from: '(no queue)', to: qname(qa.queueId), bookId: qa.bookId, value: { queueId: qa.queueId, bookId: qa.bookId } });
-  for (const m of output.queueMoves || []) rows.push({ key: `qm:${m.bookId}:${m.toQueueId}`, kind: 'queueMove', label: `${title(m.bookId)} — move queue${m.why ? ` — ${short(m.why)}` : ''}`, from: queueOf(queues, m.bookId)?.name || '?', to: qname(m.toQueueId), bookId: m.bookId, value: { queueId: m.toQueueId, bookId: m.bookId } });
-  for (const d of output.duplicates || []) rows.push({ key: `d:${d.keepId}:${d.foldId}`, kind: 'dupe', label: `Duplicate? keep “${title(d.keepId)}”, fold in “${title(d.foldId)}”`, to: short(String(d.why || '')), value: { keepId: d.keepId, foldId: d.foldId, why: String(d.why || '') } });
+  for (const qa of output.queueAdds || []) rows.push({ key: `qa:${qa.queueId}:${qa.bookId}`, kind: 'queueAdd', label: `${t('{title} → queue “{queue}”', { title: title(qa.bookId), queue: qname(qa.queueId) })}${qa.why ? ` — ${short(qa.why)}` : ''}`, from: t('(no queue)'), to: qname(qa.queueId), bookId: qa.bookId, value: { queueId: qa.queueId, bookId: qa.bookId } });
+  for (const m of output.queueMoves || []) rows.push({ key: `qm:${m.bookId}:${m.toQueueId}`, kind: 'queueMove', label: `${t('{title} — move queue', { title: title(m.bookId) })}${m.why ? ` — ${short(m.why)}` : ''}`, from: queueOf(queues, m.bookId)?.name || '?', to: qname(m.toQueueId), bookId: m.bookId, value: { queueId: m.toQueueId, bookId: m.bookId } });
+  for (const d of output.duplicates || []) rows.push({ key: `d:${d.keepId}:${d.foldId}`, kind: 'dupe', label: t('Duplicate? keep “{keep}”, fold in “{fold}”', { keep: title(d.keepId), fold: title(d.foldId) }), to: short(String(d.why || '')), value: { keepId: d.keepId, foldId: d.foldId, why: String(d.why || '') } });
   return rows;
 }
 
@@ -847,26 +852,26 @@ export const opForReport = (kind) => Object.keys(COWORK_OPS).find((id) => COWORK
 export function applySummary(rows) {
   const n = (k) => rows.filter((r) => r.kind === k).length;
   const parts = [
-    n('field') && `${n('field')} book field${n('field') === 1 ? '' : 's'}`,
-    n('note') && `${n('note')} note${n('note') === 1 ? '' : 's'}`,
-    n('cross') && `${n('cross')} shared note${n('cross') === 1 ? '' : 's'}`,
-    n('link') && `${n('link')} file link${n('link') === 1 ? '' : 's'}`,
-    n('weekly') && `${n('weekly')} weekly summar${n('weekly') === 1 ? 'y' : 'ies'}`,
-    n('queueOrder') && `${n('queueOrder')} queue order${n('queueOrder') === 1 ? '' : 's'}`,
-    n('queueAdd') && `${n('queueAdd')} book${n('queueAdd') === 1 ? '' : 's'} queued`,
-    n('queueMove') && `${n('queueMove')} book${n('queueMove') === 1 ? '' : 's'} re-queued`,
-    n('dupe') && `${n('dupe')} duplicate suggestion${n('dupe') === 1 ? '' : 's'}`,
-    n('answer') && 'answer',
-    n('report') && `${n('report')} report${n('report') === 1 ? '' : 's'}`,
-    n('sessionReview') && `${n('sessionReview')} session review${n('sessionReview') === 1 ? '' : 's'}`,
-    n('newBook') && `${n('newBook')} new book${n('newBook') === 1 ? '' : 's'}`,
-    n('tags') && `tags on ${n('tags')} book${n('tags') === 1 ? '' : 's'}`,
-    n('vocab') && `${n('vocab')} vocabulary card${n('vocab') === 1 ? '' : 's'}`,
-    n('typingPlan') && 'typing plan',
-    n('goal') && `${n('goal')} goal${n('goal') === 1 ? '' : 's'}`,
-    n('analysis') && 'analysis', n('recommendations') && 'read-next list', n('treeMeta') && 'tree layout', n('brief') && 'morning brief',
+    n('field') && t.n('{n} book field', '{n} book fields', n('field')),
+    n('note') && t.n('{n} note', '{n} notes', n('note')),
+    n('cross') && t.n('{n} shared note', '{n} shared notes', n('cross')),
+    n('link') && t.n('{n} file link', '{n} file links', n('link')),
+    n('weekly') && t.n('{n} weekly summary', '{n} weekly summaries', n('weekly')),
+    n('queueOrder') && t.n('{n} queue order', '{n} queue orders', n('queueOrder')),
+    n('queueAdd') && t.n('{n} book queued', '{n} books queued', n('queueAdd')),
+    n('queueMove') && t.n('{n} book re-queued', '{n} books re-queued', n('queueMove')),
+    n('dupe') && t.n('{n} duplicate suggestion', '{n} duplicate suggestions', n('dupe')),
+    n('answer') && t('answer'),
+    n('report') && t.n('{n} report', '{n} reports', n('report')),
+    n('sessionReview') && t.n('{n} session review', '{n} session reviews', n('sessionReview')),
+    n('newBook') && t.n('{n} new book', '{n} new books', n('newBook')),
+    n('tags') && t.n('tags on {n} book', 'tags on {n} books', n('tags')),
+    n('vocab') && t.n('{n} vocabulary card', '{n} vocabulary cards', n('vocab')),
+    n('typingPlan') && t('typing plan'),
+    n('goal') && t.n('{n} goal', '{n} goals', n('goal')),
+    n('analysis') && t('analysis'), n('recommendations') && t('read-next list'), n('treeMeta') && t('tree layout'), n('brief') && t('morning brief'),
   ].filter(Boolean);
-  return parts.join(', ') || 'nothing';
+  return parts.join(', ') || t('nothing');
 }
 
 // ── Which request does a reply answer? ───────────────────────────────────────────────────────────

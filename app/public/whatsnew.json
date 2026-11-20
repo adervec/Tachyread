@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-11-20",
+    "items": [
+      "Trackyread now speaks your language too: the library, queues, timeline, analytics, notes, the tech tree and the AI / Cowork page.",
+      "Every theme picker now starts with the shared themes every app offers: Light, Dark, Midnight, Slate, Ocean, Forest, Ember, Gold, Synthwave, Terminal, Paper, Pastel, Mono and High contrast. Light, Dark, Midnight, Slate and Forest now use the shared colours; all of Tachyread’s other themes are still there."
+    ]
+  },
+  {
     "date": "2026-11-14",
     "items": [
       "More of Tachyread now speaks your language: the reading screen, the status bar, the contents, index and companion panes, and the Find, History, Statistics, Notes, Proper Names, HTML tools, OPDS, web-grab and other reader windows. A book keeps its own reading direction whatever language the menus are in.",

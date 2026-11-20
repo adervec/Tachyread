@@ -467,7 +467,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = t('
         >
           {THEME_CATEGORIES.map((g) => (
             <optgroup key={g.label} label={g.label}>
-              {g.themes.map((n) => <option key={n} value={n}>{n}</option>)}
+              {g.themes.map((n) => <option key={n} value={n}>{t(n)}</option>)}
             </optgroup>
           ))}
         </select>

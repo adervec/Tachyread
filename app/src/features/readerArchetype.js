@@ -6,15 +6,16 @@
 
 import { finishMs, pubYear, readStatus } from './journeyLibrary.js';
 import { localDay } from './localDay.js';
+import { t } from '../i18n.js';
 
 export const AXES = ['fiction', 'nonfiction', 'literary', 'genreFiction', 'ideas', 'contemporary', 'challenge', 'volume', 'speculative', 'factual', 'poetic', 'series'];
 export const MIN_BOOKS = 3; // below this we don't claim an archetype
 
-// Human labels for the axes — used by the Archetype legend so the vectors read as English.
+// Human labels for the axes — used by the Archetype legend so the vectors read as words (translated).
 export const AXIS_LABELS = {
-  fiction: 'Fiction', nonfiction: 'Non-fiction', literary: 'Literary', genreFiction: 'Genre fiction',
-  ideas: 'Ideas & knowledge', contemporary: 'Contemporary', challenge: 'Challenging', volume: 'Long / tomes',
-  speculative: 'Speculative (SFF)', factual: 'Factual (history/science)', poetic: 'Poetry & drama', series: 'Series',
+  fiction: t('Fiction'), nonfiction: t('Non-fiction'), literary: t('Literary'), genreFiction: t('Genre fiction'),
+  ideas: t('Ideas & knowledge'), contemporary: t('Contemporary'), challenge: t('Challenging'), volume: t('Long / tomes'),
+  speculative: t('Speculative (SFF)'), factual: t('Factual (history/science)'), poetic: t('Poetry & drama'), series: t('Series'),
 };
 
 const LITERARY_GENRES = /liter|classic|poet|drama|modernis/i;
@@ -52,22 +53,22 @@ export function bookVector(b) {
 // axis order: [fiction, nonfiction, literary, genreFiction, ideas, contemporary, challenge, volume,
 //              speculative, factual, poetic, series]
 export const READER_ARCHETYPES = [
-  { id: 'classicist', name: 'The Classicist', blurb: 'Old, difficult, literary fiction — the canon.', vector: [0.9, 0.1, 1.0, 0.1, 0.1, 0.05, 0.8, 0.7, 0.1, 0.1, 0.5, 0.1] },
-  { id: 'aesthete', name: 'The Literary Aesthete', blurb: 'Literary fiction for the prose, any era.', vector: [0.9, 0.1, 1.0, 0.05, 0.2, 0.4, 0.7, 0.5, 0.1, 0.1, 0.6, 0.1] },
-  { id: 'poet', name: 'The Poet', blurb: 'Poetry, verse and drama above all.', vector: [0.7, 0.3, 0.9, 0.1, 0.3, 0.4, 0.6, 0.2, 0.1, 0.1, 1.0, 0.1] },
-  { id: 'genre-devotee', name: 'The Genre Devotee', blurb: 'SFF, mystery, thriller — story-first fiction.', vector: [1.0, 0.0, 0.1, 1.0, 0.0, 0.7, 0.2, 0.4, 0.8, 0.0, 0.0, 0.5] },
-  { id: 'worldbuilder', name: 'The Worldbuilder', blurb: 'Epic speculative fiction — big SFF worlds and series.', vector: [1.0, 0.0, 0.4, 1.0, 0.0, 0.7, 0.5, 0.9, 1.0, 0.0, 0.1, 0.9] },
-  { id: 'series-binger', name: 'The Series Binger', blurb: 'Long genre series, read run by run.', vector: [0.9, 0.1, 0.2, 0.9, 0.1, 0.7, 0.2, 0.7, 0.7, 0.0, 0.0, 1.0] },
-  { id: 'storyteller', name: 'The Storyteller', blurb: 'Broadly-read fiction across genres.', vector: [1.0, 0.05, 0.5, 0.5, 0.1, 0.5, 0.4, 0.5, 0.4, 0.1, 0.2, 0.4] },
-  { id: 'autodidact', name: 'The Autodidact', blurb: 'Non-fiction to learn — ideas and knowledge.', vector: [0.1, 1.0, 0.2, 0.0, 1.0, 0.5, 0.6, 0.5, 0.0, 0.8, 0.05, 0.1] },
-  { id: 'historian', name: 'The Historian', blurb: 'History, biography and the factual record.', vector: [0.1, 1.0, 0.3, 0.0, 1.0, 0.3, 0.6, 0.7, 0.0, 1.0, 0.05, 0.2] },
-  { id: 'scholar', name: 'The Scholar', blurb: 'Dense, weighty non-fiction and ideas.', vector: [0.05, 1.0, 0.3, 0.0, 1.0, 0.3, 0.9, 0.8, 0.0, 0.7, 0.1, 0.2] },
-  { id: 'deep-diver', name: 'The Deep Diver', blurb: 'The hardest, longest books, fiction or not.', vector: [0.5, 0.5, 0.8, 0.1, 0.6, 0.2, 1.0, 1.0, 0.3, 0.5, 0.3, 0.3] },
-  { id: 'contemporary', name: 'The Contemporary', blurb: 'What’s recent and talked-about, mixed.', vector: [0.6, 0.4, 0.3, 0.5, 0.3, 1.0, 0.3, 0.4, 0.4, 0.3, 0.1, 0.3] },
-  { id: 'voracious', name: 'The Voracious', blurb: 'High volume, broad, keeps turning pages.', vector: [0.6, 0.4, 0.4, 0.5, 0.4, 0.6, 0.4, 0.9, 0.4, 0.4, 0.1, 0.6] },
-  { id: 'completionist', name: 'The Completionist', blurb: 'Series and long genre runs, start to finish.', vector: [0.8, 0.2, 0.2, 0.8, 0.1, 0.6, 0.3, 0.8, 0.6, 0.1, 0.0, 1.0] },
-  { id: 'eclectic', name: 'The Eclectic', blurb: 'Balanced across every kind of book.', vector: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
-  { id: 'explorer', name: 'The Casual Explorer', blurb: 'Lighter, recent, wide-ranging reads.', vector: [0.6, 0.4, 0.1, 0.5, 0.2, 0.8, 0.05, 0.1, 0.4, 0.3, 0.1, 0.2] },
+  { id: 'classicist', name: t('The Classicist'), blurb: t('Old, difficult, literary fiction — the canon.'), vector: [0.9, 0.1, 1.0, 0.1, 0.1, 0.05, 0.8, 0.7, 0.1, 0.1, 0.5, 0.1] },
+  { id: 'aesthete', name: t('The Literary Aesthete'), blurb: t('Literary fiction for the prose, any era.'), vector: [0.9, 0.1, 1.0, 0.05, 0.2, 0.4, 0.7, 0.5, 0.1, 0.1, 0.6, 0.1] },
+  { id: 'poet', name: t('The Poet'), blurb: t('Poetry, verse and drama above all.'), vector: [0.7, 0.3, 0.9, 0.1, 0.3, 0.4, 0.6, 0.2, 0.1, 0.1, 1.0, 0.1] },
+  { id: 'genre-devotee', name: t('The Genre Devotee'), blurb: t('SFF, mystery, thriller — story-first fiction.'), vector: [1.0, 0.0, 0.1, 1.0, 0.0, 0.7, 0.2, 0.4, 0.8, 0.0, 0.0, 0.5] },
+  { id: 'worldbuilder', name: t('The Worldbuilder'), blurb: t('Epic speculative fiction — big SFF worlds and series.'), vector: [1.0, 0.0, 0.4, 1.0, 0.0, 0.7, 0.5, 0.9, 1.0, 0.0, 0.1, 0.9] },
+  { id: 'series-binger', name: t('The Series Binger'), blurb: t('Long genre series, read run by run.'), vector: [0.9, 0.1, 0.2, 0.9, 0.1, 0.7, 0.2, 0.7, 0.7, 0.0, 0.0, 1.0] },
+  { id: 'storyteller', name: t('The Storyteller'), blurb: t('Broadly-read fiction across genres.'), vector: [1.0, 0.05, 0.5, 0.5, 0.1, 0.5, 0.4, 0.5, 0.4, 0.1, 0.2, 0.4] },
+  { id: 'autodidact', name: t('The Autodidact'), blurb: t('Non-fiction to learn — ideas and knowledge.'), vector: [0.1, 1.0, 0.2, 0.0, 1.0, 0.5, 0.6, 0.5, 0.0, 0.8, 0.05, 0.1] },
+  { id: 'historian', name: t('The Historian'), blurb: t('History, biography and the factual record.'), vector: [0.1, 1.0, 0.3, 0.0, 1.0, 0.3, 0.6, 0.7, 0.0, 1.0, 0.05, 0.2] },
+  { id: 'scholar', name: t('The Scholar'), blurb: t('Dense, weighty non-fiction and ideas.'), vector: [0.05, 1.0, 0.3, 0.0, 1.0, 0.3, 0.9, 0.8, 0.0, 0.7, 0.1, 0.2] },
+  { id: 'deep-diver', name: t('The Deep Diver'), blurb: t('The hardest, longest books, fiction or not.'), vector: [0.5, 0.5, 0.8, 0.1, 0.6, 0.2, 1.0, 1.0, 0.3, 0.5, 0.3, 0.3] },
+  { id: 'contemporary', name: t('The Contemporary'), blurb: t('What’s recent and talked-about, mixed.'), vector: [0.6, 0.4, 0.3, 0.5, 0.3, 1.0, 0.3, 0.4, 0.4, 0.3, 0.1, 0.3] },
+  { id: 'voracious', name: t('The Voracious'), blurb: t('High volume, broad, keeps turning pages.'), vector: [0.6, 0.4, 0.4, 0.5, 0.4, 0.6, 0.4, 0.9, 0.4, 0.4, 0.1, 0.6] },
+  { id: 'completionist', name: t('The Completionist'), blurb: t('Series and long genre runs, start to finish.'), vector: [0.8, 0.2, 0.2, 0.8, 0.1, 0.6, 0.3, 0.8, 0.6, 0.1, 0.0, 1.0] },
+  { id: 'eclectic', name: t('The Eclectic'), blurb: t('Balanced across every kind of book.'), vector: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
+  { id: 'explorer', name: t('The Casual Explorer'), blurb: t('Lighter, recent, wide-ranging reads.'), vector: [0.6, 0.4, 0.1, 0.5, 0.2, 0.8, 0.05, 0.1, 0.4, 0.3, 0.1, 0.2] },
 ];
 
 // The defining axes of an archetype (highest-weighted) — powers the legend. Pure.
@@ -108,13 +109,13 @@ export function currentArchetype(books) {
 // computed from the finished books inside a trailing `windowDays` window. Pure, so the UI recomputes
 // the whole series instantly when the window slider moves. `now` is injectable for deterministic tests.
 export function archetypeTrend(books, windowDays = 365, now = Date.now()) {
-  const finished = books.map((b) => ({ b, t: finishMs(b) })).filter((x) => x.t != null).sort((a, b) => a.t - b.t);
+  const finished = books.map((b) => ({ b, ms: finishMs(b) })).filter((x) => x.ms != null).sort((a, b) => a.ms - b.ms);
   if (!finished.length) return [];
-  const stepMs = 30 * 864e5, winMs = windowDays * 864e5, start = finished[0].t;
+  const stepMs = 30 * 864e5, winMs = windowDays * 864e5, start = finished[0].ms;
   const out = [];
-  for (let t = start; ; t += stepMs) {
-    const tt = Math.min(t, now);
-    const win = finished.filter((x) => x.t <= tt && x.t > tt - winMs).map((x) => x.b);
+  for (let step = start; ; step += stepMs) {
+    const tt = Math.min(step, now);
+    const win = finished.filter((x) => x.ms <= tt && x.ms > tt - winMs).map((x) => x.b);
     const m = matchArchetype(readerProfile(win));
     out.push({ t: tt, date: localDay(tt), archetypeId: m.archetype?.id || null, archetypeName: m.archetype?.name || null, sim: m.sim || 0, count: m.count });
     if (tt >= now) break;

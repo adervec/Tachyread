@@ -13,6 +13,7 @@
 // Pure; see journeyRecat.test.mjs.
 
 import { CONTENT_TYPES, contentType } from './journeyLibrary.js';
+import { t } from '../i18n.js';
 
 // Roughly where short-form ends and a book begins. A "short story" of 90k words is a novel; a
 // "novel" of 900 words is an article or a poem.
@@ -39,55 +40,55 @@ const RULES = [
     id: 'ai-author',
     to: 'ai-gen',
     test: (b) => AI_AUTHOR.test(String(b.author || '')),
-    why: (b) => `author is “${b.author}”`,
+    why: (b) => t('author is “{author}”', { author: b.author }),
   },
   {
     id: 'ai-title',
     to: 'ai-gen',
     test: (b) => AI_TITLE.test(text(b)),
-    why: () => 'the title reads like generated or prompt material',
+    why: () => t('the title reads like generated or prompt material'),
   },
   {
     id: 'url-title',
     to: 'article',
     test: (b) => URLISH.test(text(b)) || URLISH.test(String(b.source || '')),
-    why: () => 'the title or source looks like a web address',
+    why: () => t('the title or source looks like a web address'),
   },
   {
     id: 'article-title',
     to: 'article',
     test: (b) => ARTICLE_TITLE.test(text(b)) && words(b) <= SHORT_MAX_WORDS,
-    why: () => 'the title names an article format and it is short',
+    why: () => t('the title names an article format and it is short'),
   },
   {
     id: 'reference-title',
     to: 'reference',
     test: (b) => REFERENCE_TITLE.test(text(b)),
-    why: () => 'the title names a reference work',
+    why: () => t('the title names a reference work'),
   },
   {
     id: 'poetry-genre',
     to: 'poetry',
     test: (b) => POETRY_GENRE.test(String(b.genre || '')) || POETRY_TITLE.test(text(b)),
-    why: (b) => (POETRY_GENRE.test(String(b.genre || '')) ? `genre is “${b.genre}”` : 'the title names a poetry collection'),
+    why: (b) => (POETRY_GENRE.test(String(b.genre || '')) ? t('genre is “{genre}”', { genre: b.genre }) : t('the title names a poetry collection')),
   },
   {
     id: 'too-short-for-long',
     to: 'short',
     test: (b) => contentType(b) === 'long' && words(b) > 0 && words(b) < SHORT_MAX_WORDS && words(b) >= TINY_WORDS,
-    why: (b) => `${words(b).toLocaleString()} words is short-form length`,
+    why: (b) => t('{words} words is short-form length', { words: words(b).toLocaleString() }),
   },
   {
     id: 'tiny-for-long',
     to: 'article',
     test: (b) => contentType(b) === 'long' && words(b) > 0 && words(b) < TINY_WORDS,
-    why: (b) => `only ${words(b).toLocaleString()} words`,
+    why: (b) => t('only {words} words', { words: words(b).toLocaleString() }),
   },
   {
     id: 'too-long-for-short',
     to: 'long',
     test: (b) => (contentType(b) === 'short' || contentType(b) === 'article') && words(b) >= LONG_MIN_WORDS,
-    why: (b) => `${words(b).toLocaleString()} words is book length`,
+    why: (b) => t('{words} words is book length', { words: words(b).toLocaleString() }),
   },
 ];
 

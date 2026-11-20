@@ -1,6 +1,7 @@
 // Reading-time math for a tracked book: how long it took, and — when the rest was finished as an
 // audiobook — an estimated total based on 1× narration. Pure; see readingTime.demo.mjs.
 import { parseDay } from './localDay.js';
+import { t } from '../i18n.js';
 
 export const AUDIOBOOK_WPM = 150; // typical audiobook narration at 1× speed
 
@@ -44,10 +45,10 @@ export function readingTimeSummary(b, finishISO) {
   const total = readSecs + abSecs;
   const days = daysBetween(b?.startTime, finishISO);
   const parts = [];
-  parts.push(b?.startTime ? `Started ${b.startTime}` : 'No start date set');
-  if (days != null) parts.push(`${days} day${days === 1 ? '' : 's'} to finish`);
-  if (readSecs > 0) parts.push(`${fmtDur(readSecs)} reading`);
-  if (b?.audiobookFinish) parts.push(`+ ~${fmtDur(abSecs)} audiobook (1×) = ~${fmtDur(total)} total`);
-  else if (readSecs > 0) parts.push(`(${fmtDur(total)} total)`);
+  parts.push(b?.startTime ? t('Started {date}', { date: b.startTime }) : t('No start date set'));
+  if (days != null) parts.push(t.n('{n} day to finish', '{n} days to finish', days));
+  if (readSecs > 0) parts.push(t('{time} reading', { time: fmtDur(readSecs) }));
+  if (b?.audiobookFinish) parts.push(t('+ ~{audio} audiobook (1×) = ~{total} total', { audio: fmtDur(abSecs), total: fmtDur(total) }));
+  else if (readSecs > 0) parts.push(t('({total} total)', { total: fmtDur(total) }));
   return parts.join(' · ');
 }

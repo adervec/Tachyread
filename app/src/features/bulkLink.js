@@ -9,6 +9,7 @@
 // unlinked" rather than a guess: a wrong link the user accepts is worse than a file left for later.
 import { bookWordCount } from './readingTime.js';
 import { bookFromOpenedDoc } from './trackyreadAdd.js';
+import { t } from '../i18n.js';
 
 const STOP = new Set('the a an and or of in on at to for by with from vol volume edition ed part complete works novel ebook txt epub pdf md html'.split(' '));
 export function tokensOf(s) {
@@ -22,23 +23,23 @@ export const baseName = (fileName) => String(fileName || '').replace(/\.[a-z0-9]
 export function matchScore(fileName, book) {
   const author = tokensOf(book?.author);
   const raw = tokensOf(baseName(fileName));
-  const f = new Set([...raw].filter((t) => !author.has(t)));
-  const t = tokensOf(book?.title);
-  if (!f.size || !t.size) return 0;
-  const common = [...f].filter((x) => t.has(x)).length;
+  const f = new Set([...raw].filter((tok) => !author.has(tok)));
+  const tt = tokensOf(book?.title);
+  if (!f.size || !tt.size) return 0;
+  const common = [...f].filter((x) => tt.has(x)).length;
   const byAuthor = [...author].some((a) => a.length > 2 && raw.has(a)) ? 0.2 : 0;
-  return Math.min(1, (2 * common) / (f.size + t.size) + byAuthor);
+  return Math.min(1, (2 * common) / (f.size + tt.size) + byAuthor);
 }
 
 export const STRONG = 0.75, WEAK = 0.4;
 export function tierOf(score, fileWords, book) {
-  if (score < WEAK) return { tier: 'none', why: 'no book title comes close' };
+  if (score < WEAK) return { tier: 'none', why: t('no book title comes close') };
   const bw = bookWordCount(book);
   if (bw > 0 && fileWords > 0 && (fileWords < bw * 0.25 || fileWords > bw * 4)) {
-    return { tier: 'weak', why: `the title fits, but the file is ${fileWords.toLocaleString()} words and the book about ${bw.toLocaleString()}` };
+    return { tier: 'weak', why: t('the title fits, but the file is {file} words and the book about {book}', { file: fileWords.toLocaleString(), book: bw.toLocaleString() }) };
   }
-  if (score >= STRONG) return { tier: 'strong', why: `${Math.round(score * 100)}% of the title words match` };
-  return { tier: 'weak', why: `only ${Math.round(score * 100)}% of the title words match` };
+  if (score >= STRONG) return { tier: 'strong', why: t('{pct}% of the title words match', { pct: Math.round(score * 100) }) };
+  return { tier: 'weak', why: t('only {pct}% of the title words match', { pct: Math.round(score * 100) }) };
 }
 
 // files: [{ cs, fileName, words, coverage }] — already filtered to the unlinked ones. Rows come back

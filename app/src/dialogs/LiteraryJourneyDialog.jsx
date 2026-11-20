@@ -10,6 +10,7 @@ import { scanMiscategorized, applyRecat, recatSummary } from '../features/journe
 import { forgettingScan, driftingScan } from '../features/journeyForgetting.js';
 import { bookCovers, bookCoverSrc, addCover, removeCover, setMaster, coverId, coverSpecToSvg, proceduralCover, coverPromptFor, parseCoverSpec } from '../features/bookCovers.js';
 import { fmtDateTime } from '../features/dateFmt.js';
+import { t } from '../i18n.js';
 import {
   getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef, saveLibraryRef,
   getJourneyAi, saveJourneyAi, exportLibraryData, importLibraryData, librarySize, clearLibrary,
@@ -84,10 +85,10 @@ const applyStatus = (book, status) => setReadStatus(book, status, todayISO());
 
 // Unified vs split view of the headline numbers: bucket books into long-form / short-form+articles /
 // AI-generated so throwaway content can be read OUT of the "real" totals at a glance.
-const TYPE_BUCKETS = [['long', '📚 Long-form'], ['short', '📄 Short-form & articles'], ['ai-gen', '🤖 AI-generated']];
+const TYPE_BUCKETS = [['long', `📚 ${t('Long-form')}`], ['short', `📄 ${t('Short-form & articles')}`], ['ai-gen', `🤖 ${t('AI-generated')}`]];
 const bucketOf = (b) => {
-  const t = contentType(b);
-  return t === 'ai-gen' ? 'ai-gen' : t === 'short' || t === 'article' ? 'short' : 'long';
+  const ct = contentType(b);
+  return ct === 'ai-gen' ? 'ai-gen' : ct === 'short' || ct === 'article' ? 'short' : 'long';
 };
 function TypeSplit({ books }) {
   const rows = TYPE_BUCKETS.map(([key, label]) => {
@@ -105,7 +106,7 @@ function TypeSplit({ books }) {
   return (
     <div className="lj-tablewrap">
       <table className="lj-table lj-split-table">
-        <thead><tr><th>Content</th><th>Books</th><th>Finished</th><th>Words read</th><th>Pages read</th></tr></thead>
+        <thead><tr><th>{t('Content')}</th><th>{t('Books')}</th><th>{t('Finished')}</th><th>{t('Words read')}</th><th>{t('Pages read')}</th></tr></thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.key}>
@@ -141,34 +142,34 @@ function GoalCard({ books, goals, onSetGoal }) {
       {g.target > 0 ? (
         <>
           <div className="lj-goal-head">
-            <b>{g.year} goal</b>
-            <span>{g.finished} of {g.target} books</span>
+            <b>{t('{year} goal', { year: g.year })}</b>
+            <span>{t('{finished} of {target} books', { finished: g.finished, target: g.target })}</span>
             <span className={`lj-goal-badge ${g.finished >= g.target ? 'won' : g.onTrack ? 'on' : 'off'}`}>
-              {g.finished >= g.target ? '🏆 goal hit!' : g.onTrack ? '✓ on track' : '⚠ behind pace'}
+              {g.finished >= g.target ? `🏆 ${t('goal hit!')}` : g.onTrack ? `✓ ${t('on track')}` : `⚠ ${t('behind pace')}`}
             </span>
             <span className="lj-spacer" />
-            <button className="link-btn" onClick={() => { setVal(String(g.target)); setEditing(true); }}>edit</button>
+            <button className="link-btn" onClick={() => { setVal(String(g.target)); setEditing(true); }}>{t('edit')}</button>
           </div>
-          <div className="lj-goal-bar" title={`${g.finished}/${g.target} · the tick marks where today sits in the year`}>
+          <div className="lj-goal-bar" title={t('{done}/{target} · the tick marks where today sits in the year', { done: g.finished, target: g.target })}>
             <i style={{ width: `${pct}%` }} />
             <em style={{ left: `${g.yearFrac * 100}%` }} />
           </div>
           <p className="settings-note lj-goal-note">
             {g.finished >= g.target
-              ? `Done with ${g.daysLeft} days to spare — raise the bar?`
-              : `${g.remaining} to go · need ~${g.needPerMonth ?? '—'}/month · current pace projects ${g.projected ?? '—'} by year-end`}
+              ? t('Done with {n} days to spare — raise the bar?', { n: g.daysLeft })
+              : t('{remaining} to go · need ~{perMonth}/month · current pace projects {projected} by year-end', { remaining: g.remaining, perMonth: g.needPerMonth ?? '—', projected: g.projected ?? '—' })}
           </p>
         </>
       ) : (
-        <button onClick={() => { setVal('12'); setEditing(true); }}>🎯 Set a {year} reading goal…</button>
+        <button onClick={() => { setVal('12'); setEditing(true); }}>🎯 {t('Set a {year} reading goal…', { year })}</button>
       )}
       {editing && (
         <div className="lj-inline">
-          <label className="settings-note" style={{ margin: 0 }}>Books in {year}:</label>
+          <label className="settings-note" style={{ margin: 0 }}>{t('Books in {year}:', { year })}</label>
           <input className="lj-goal-num" type="number" min="1" max="1000" value={val} onChange={(e) => setVal(e.target.value)} />
-          <button className="toggle-on" onClick={() => { onSetGoal(year, Math.max(0, Math.round(Number(val) || 0))); setEditing(false); }}>Set goal</button>
-          {g.target > 0 && <button onClick={() => { onSetGoal(year, 0); setEditing(false); }}>Remove</button>}
-          <button onClick={() => setEditing(false)}>Cancel</button>
+          <button className="toggle-on" onClick={() => { onSetGoal(year, Math.max(0, Math.round(Number(val) || 0))); setEditing(false); }}>{t('Set goal')}</button>
+          {g.target > 0 && <button onClick={() => { onSetGoal(year, 0); setEditing(false); }}>{t('Remove')}</button>}
+          <button onClick={() => setEditing(false)}>{t('Cancel')}</button>
         </div>
       )}
     </div>
@@ -184,8 +185,8 @@ const fmtMin = (secs) => (secs >= 3600 ? `${Math.floor(secs / 3600)}h ${Math.rou
 function TodayCard({ books, goals, dayAgg, fileStats, bindMap, linkedIds, openChecksums = [], onOpenBook, onOpenFile, onQueues }) {
   const now = useMemo(() => Date.now(), []); // eslint-disable-line react-hooks/purity
   const byId = useMemo(() => new Map(books.map((b) => [b.id, b])), [books]);
-  const t = useMemo(() => todaySummary({ dayAgg, fileStats, bookOf: (cs) => byId.get(bindMap[cs]) || null, books, now }), [dayAgg, fileStats, bindMap, byId, books, now]);
-  const pace = useMemo(() => recentPace(dayAgg.filter((d) => d.date !== t.today), { now: now - 86400000 }), [dayAgg, t.today, now]);
+  const ts = useMemo(() => todaySummary({ dayAgg, fileStats, bookOf: (cs) => byId.get(bindMap[cs]) || null, books, now }), [dayAgg, fileStats, bindMap, byId, books, now]);
+  const pace = useMemo(() => recentPace(dayAgg.filter((d) => d.date !== ts.today), { now: now - 86400000 }), [dayAgg, ts.today, now]);
   const wordsTarget = Number(goals?.[`${new Date(now).getFullYear()}-words`]) || 0;
   const wg = useMemo(() => (wordsTarget ? yearWordsGoal(dayAgg, books, linkedIds, wordsTarget, now) : null), [wordsTarget, dayAgg, books, linkedIds, now]);
   // What's next in each queue (first few queues).
@@ -195,13 +196,13 @@ function TodayCard({ books, goals, dayAgg, fileStats, bindMap, linkedIds, openCh
     getLibraryRef('queues').then((qs) => {
       if (!live) return;
       // Skip what you're already reading today — "up next" means the one after it.
-      const readToday = new Set(t.files.map((f) => f.book?.id).filter(Boolean));
+      const readToday = new Set(ts.files.map((f) => f.book?.id).filter(Boolean));
       setNexts(liveQueues(qs || []).map((q) => { const todo = splitFinished(queueBooks(q, books)).todo; return { q, book: todo.find((b) => !readToday.has(b.id)) || todo[0] || null }; }).filter((x) => x.book).slice(0, 4));
     }).catch(() => {});
     return () => { live = false; };
-  }, [books, t.files]);
+  }, [books, ts.files]);
   // Today's need = what's left of the year's goal per day, plus today's own share already read.
-  const need = wg && wg.remaining > 0 ? Math.round((wg.remaining + t.words) / Math.max(1, wg.daysLeft + 1)) : null;
+  const need = wg && wg.remaining > 0 ? Math.round((wg.remaining + ts.words) / Math.max(1, wg.daysLeft + 1)) : null;
   const usual = pace.wordsPerDay;
   const bar = (v, of) => (of ? Math.min(1, v / of) : 0);
   const csOf = {};
@@ -209,48 +210,48 @@ function TodayCard({ books, goals, dayAgg, fileStats, bindMap, linkedIds, openCh
   return (
     <div className="lj-today">
       <div className="lj-today-head">
-        <b>Today</b>
+        <b>{t('Today')}</b>
         <span className="settings-note" style={{ margin: 0 }}>{new Date(now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
         <span className="lj-spacer" />
-        <span className={`lj-today-streak${t.streak.readToday ? ' on' : ''}`} title="Consecutive days with some reading">
-          🔥 {t.streak.days} day{t.streak.days === 1 ? '' : 's'}{!t.streak.readToday && t.streak.days ? ' — read today to keep it' : ''}
+        <span className={`lj-today-streak${ts.streak.readToday ? ' on' : ''}`} title={t('Consecutive days with some reading')}>
+          🔥 {!ts.streak.readToday && ts.streak.days ? t.n('{n} day — read today to keep it', '{n} days — read today to keep it', ts.streak.days) : t.n('{n} day', '{n} days', ts.streak.days)}
         </span>
       </div>
       <div className="lj-qstats">
-        <div className="ab-stat"><b>{t.words.toLocaleString()}</b><span>words today{t.aloudWords ? ` (${t.aloudWords.toLocaleString()} aloud)` : ''}</span></div>
-        <div className="ab-stat"><b>{fmtMin(t.secs)}</b><span>active reading</span></div>
-        <div className="ab-stat"><b>{t.wpm ?? '—'}</b><span>wpm today{pace.wpm ? ` · usually ~${pace.wpm}` : ''}</span></div>
-        <div className="ab-stat" title="Your recent words per day (last ~6 weeks, recent days weighted most)">
-          <b>{usual ? `${Math.round((t.words / usual) * 100)}%` : '—'}</b><span>{usual ? `of your usual ~${usual.toLocaleString()}/day` : 'of a usual day (no history yet)'}</span>
-          {usual ? <Bar pct={bar(t.words, usual)} label="Today against your usual day" /> : null}
+        <div className="ab-stat"><b>{ts.words.toLocaleString()}</b><span>{ts.aloudWords ? t('words today ({n} aloud)', { n: ts.aloudWords.toLocaleString() }) : t('words today')}</span></div>
+        <div className="ab-stat"><b>{fmtMin(ts.secs)}</b><span>{t('active reading')}</span></div>
+        <div className="ab-stat"><b>{ts.wpm ?? '—'}</b><span>{pace.wpm ? t('wpm today · usually ~{wpm}', { wpm: pace.wpm }) : t('wpm today')}</span></div>
+        <div className="ab-stat" title={t('Your recent words per day (last ~6 weeks, recent days weighted most)')}>
+          <b>{usual ? `${Math.round((ts.words / usual) * 100)}%` : '—'}</b><span>{usual ? t('of your usual ~{n}/day', { n: usual.toLocaleString() }) : t('of a usual day (no history yet)')}</span>
+          {usual ? <Bar pct={bar(ts.words, usual)} label={t('Today against your usual day')} /> : null}
         </div>
         {need != null && (
-          <div className="ab-stat" title="What's left of this year's words goal, spread over the days left (today included)">
-            <b>{t.words >= need ? '✓' : (need - t.words).toLocaleString()}</b><span>{t.words >= need ? `words goal: today's ~${need.toLocaleString()} done` : `words to go for today's goal share (~${need.toLocaleString()})`}</span>
-            <Bar cls={t.words >= need ? 'fin' : ''} pct={bar(t.words, need)} label="Today against the words goal's daily share" />
+          <div className="ab-stat" title={t("What's left of this year's words goal, spread over the days left (today included)")}>
+            <b>{ts.words >= need ? '✓' : (need - ts.words).toLocaleString()}</b><span>{ts.words >= need ? t("words goal: today's ~{n} done", { n: need.toLocaleString() }) : t("words to go for today's goal share (~{n})", { n: need.toLocaleString() })}</span>
+            <Bar cls={ts.words >= need ? 'fin' : ''} pct={bar(ts.words, need)} label={t("Today against the words goal's daily share")} />
           </div>
         )}
       </div>
-      {t.files.length > 0 ? (
+      {ts.files.length > 0 ? (
         <div className="lj-today-list">
-          {t.files.slice(0, 8).map((f) => (
+          {ts.files.slice(0, 8).map((f) => (
             <div key={f.cs} className="lj-today-row">
-              <button className="link-btn" onClick={() => (f.book ? onOpenBook(f.book.id) : onOpenFile(f.cs))} title={f.book ? 'Open in Library' : 'Open the file'}>{f.book?.title || f.name}</button>
-              <span className="lj-qdim">{f.words.toLocaleString()} words · {fmtMin(f.secs)}</span>
-              <Bar pct={f.coverage} label={`${Math.round(f.coverage * 100)}% of the book read`} /><span className="lj-cand-pct">{Math.round(f.coverage * 100)}%</span>
-              {!openChecksums.includes(f.cs) && <button onClick={() => onOpenFile(f.cs)} title="Continue reading">▶</button>}
+              <button className="link-btn" onClick={() => (f.book ? onOpenBook(f.book.id) : onOpenFile(f.cs))} title={f.book ? t('Open in Library') : t('Open the file')}>{f.book?.title || f.name}</button>
+              <span className="lj-qdim">{t('{n} words · {time}', { n: f.words.toLocaleString(), time: fmtMin(f.secs) })}</span>
+              <Bar pct={f.coverage} label={t('{pct}% of the book read', { pct: Math.round(f.coverage * 100) })} /><span className="lj-cand-pct">{Math.round(f.coverage * 100)}%</span>
+              {!openChecksums.includes(f.cs) && <button onClick={() => onOpenFile(f.cs)} title={t('Continue reading')}>▶</button>}
             </div>
           ))}
         </div>
-      ) : <p className="settings-note">Nothing read yet today.</p>}
-      {t.finished.length > 0 && <p className="settings-note lj-today-fin">🎉 Finished today: {t.finished.map((b) => b.title).join(', ')}</p>}
+      ) : <p className="settings-note">{t('Nothing read yet today.')}</p>}
+      {ts.finished.length > 0 && <p className="settings-note lj-today-fin">🎉 {t('Finished today: {titles}', { titles: ts.finished.map((b) => b.title).join(', ') })}</p>}
       {nexts.length > 0 && (
         <div className="lj-today-next">
-          <span className="settings-note" style={{ margin: 0 }}>Up next:</span>
+          <span className="settings-note" style={{ margin: 0 }}>{t('Up next:')}</span>
           {nexts.map(({ q, book }) => (
             <span key={q.id} className="lj-today-chip">
-              <button className="link-btn" onClick={onQueues} title={`Queue “${q.name}”`}>{q.name}</button> → <button className="link-btn" onClick={() => onOpenBook(book.id)}>{book.title}</button>
-              {csOf[book.id] && <button onClick={() => onOpenFile(csOf[book.id])} title="Open it">▶</button>}
+              <button className="link-btn" onClick={onQueues} title={t('Queue “{name}”', { name: q.name })}>{q.name}</button> → <button className="link-btn" onClick={() => onOpenBook(book.id)}>{book.title}</button>
+              {csOf[book.id] && <button onClick={() => onOpenFile(csOf[book.id])} title={t('Open it')}>▶</button>}
             </span>
           ))}
         </div>
@@ -276,36 +277,36 @@ function WordsGoalCard({ books, goals, dayAgg, linkedIds, onSetGoal }) {
       {g.target > 0 ? (
         <>
           <div className="lj-goal-head">
-            <b>{g.year} words goal</b>
-            <span title={`${g.appWords.toLocaleString()} read in the app + ${g.offApp.toLocaleString()} from books finished elsewhere`}>{g.read.toLocaleString()} of {g.target.toLocaleString()} words</span>
+            <b>{t('{year} words goal', { year: g.year })}</b>
+            <span title={t('{app} read in the app + {off} from books finished elsewhere', { app: g.appWords.toLocaleString(), off: g.offApp.toLocaleString() })}>{t('{read} of {target} words', { read: g.read.toLocaleString(), target: g.target.toLocaleString() })}</span>
             <span className={`lj-goal-badge ${g.read >= g.target ? 'won' : g.onTrack ? 'on' : 'off'}`}>
-              {g.read >= g.target ? '🏆 goal hit!' : g.onTrack ? '✓ on track' : '⚠ behind pace'}
+              {g.read >= g.target ? `🏆 ${t('goal hit!')}` : g.onTrack ? `✓ ${t('on track')}` : `⚠ ${t('behind pace')}`}
             </span>
             <span className="lj-spacer" />
-            <button className="link-btn" onClick={() => { setVal(String(g.target)); setEditing(true); }}>edit</button>
+            <button className="link-btn" onClick={() => { setVal(String(g.target)); setEditing(true); }}>{t('edit')}</button>
           </div>
-          <div className="lj-goal-bar" title={`${fmtWords(g.read)}/${fmtWords(g.target)} · the tick marks where today sits in the year`}>
+          <div className="lj-goal-bar" title={t('{done}/{target} · the tick marks where today sits in the year', { done: fmtWords(g.read), target: fmtWords(g.target) })}>
             <i style={{ width: `${pct}%` }} />
             <em style={{ left: `${g.yearFrac * 100}%` }} />
           </div>
           <p className="settings-note lj-goal-note">
             {g.read >= g.target
-              ? `Done with ${g.daysLeft} days to spare — raise the bar?`
-              : `${fmtWords(g.remaining)} to go · need ~${(g.needPerDay ?? 0).toLocaleString()} words/day · current pace projects ${g.projected != null ? fmtWords(g.projected) : '—'} by year-end`}
-            {' '}· {fmtWords(g.appWords)} read in the app{g.offApp ? ` + ${fmtWords(g.offApp)} finished elsewhere` : ''}
+              ? t('Done with {n} days to spare — raise the bar?', { n: g.daysLeft })
+              : t('{remaining} to go · need ~{perDay} words/day · current pace projects {projected} by year-end', { remaining: fmtWords(g.remaining), perDay: (g.needPerDay ?? 0).toLocaleString(), projected: g.projected != null ? fmtWords(g.projected) : '—' })}
+            {' · '}{g.offApp ? t('{app} read in the app + {off} finished elsewhere', { app: fmtWords(g.appWords), off: fmtWords(g.offApp) }) : t('{app} read in the app', { app: fmtWords(g.appWords) })}
           </p>
         </>
       ) : (
-        <button onClick={() => { setVal('3000000'); setEditing(true); }}>🎯 Set a {year} words goal…</button>
+        <button onClick={() => { setVal('3000000'); setEditing(true); }}>🎯 {t('Set a {year} words goal…', { year })}</button>
       )}
       {editing && (
         <div className="lj-inline">
-          <label className="settings-note" style={{ margin: 0 }}>Words in {year}:</label>
-          <input className="lj-goal-num lj-goal-words" type="number" min="1000" step="100000" value={val} onChange={(e) => setVal(e.target.value)} aria-label={`Words goal for ${year}`} />
-          <span className="settings-note" style={{ margin: 0 }}>{Number(val) > 0 ? `≈ ${fmtWords(Number(val))} · ~${Math.round(Number(val) / 90000)} novels` : ''}</span>
-          <button className="toggle-on" onClick={() => { onSetGoal(key, Math.max(0, Math.round(Number(val) || 0))); setEditing(false); }}>Set goal</button>
-          {g.target > 0 && <button onClick={() => { onSetGoal(key, 0); setEditing(false); }}>Remove</button>}
-          <button onClick={() => setEditing(false)}>Cancel</button>
+          <label className="settings-note" style={{ margin: 0 }}>{t('Words in {year}:', { year })}</label>
+          <input className="lj-goal-num lj-goal-words" type="number" min="1000" step="100000" value={val} onChange={(e) => setVal(e.target.value)} aria-label={t('Words goal for {year}', { year })} />
+          <span className="settings-note" style={{ margin: 0 }}>{Number(val) > 0 ? t.n('≈ {words} · ~{n} novel', '≈ {words} · ~{n} novels', Math.round(Number(val) / 90000), { words: fmtWords(Number(val)) }) : ''}</span>
+          <button className="toggle-on" onClick={() => { onSetGoal(key, Math.max(0, Math.round(Number(val) || 0))); setEditing(false); }}>{t('Set goal')}</button>
+          {g.target > 0 && <button onClick={() => { onSetGoal(key, 0); setEditing(false); }}>{t('Remove')}</button>}
+          <button onClick={() => setEditing(false)}>{t('Cancel')}</button>
         </div>
       )}
     </div>
@@ -468,7 +469,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     setSelected(bookId); setLinkCs(null);
   }
   async function linkAsNewBook() {
-    const title = String(linkName || 'Untitled').replace(/\.[a-z0-9]+$/i, '');
+    const title = String(linkName || t('Untitled')).replace(/\.[a-z0-9]+$/i, '');
     const book = { id: deriveId({ title }), title };
     await saveLibraryBook(book);
     await bind(linkCs, book.id);
@@ -476,17 +477,19 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   }
 
   const syncResultMsg = (r) => (r.skipped
-    ? 'Already in sync — nothing needed to move. ✅'
-    : `Synced — ${r.pulled ? 'pulled updates' : 'nothing to pull'}${r.pushed ? ` · pushed ${r.books} books (${Math.round(r.bytes / 1024)} KB)` : ' · nothing to push'}.`);
+    ? `${t('Already in sync — nothing needed to move.')} ✅`
+    : r.pulled
+      ? (r.pushed ? t('Synced — pulled updates · pushed {books} books ({kb} KB).', { books: r.books, kb: Math.round(r.bytes / 1024) }) : t('Synced — pulled updates · nothing to push.'))
+      : (r.pushed ? t('Synced — nothing to pull · pushed {books} books ({kb} KB).', { books: r.books, kb: Math.round(r.bytes / 1024) }) : t('Synced — nothing to pull · nothing to push.')));
 
   async function syncTracker() {
-    setSyncBusy(true); setSyncMsg('Syncing tracker…');
+    setSyncBusy(true); setSyncMsg(t('Syncing tracker…'));
     try {
       const r = await syncLibraryWithProvider(sync.provider, sync);
       onPatch?.({ sync: { ...sync, lastLibrarySync: Date.now() } });
       if (!r.skipped) { reconciled.current = false; await reload(); }
       setSyncMsg(syncResultMsg(r));
-    } catch (e) { setSyncMsg('Sync failed: ' + (e?.message || e)); }
+    } catch (e) { setSyncMsg(t('Sync failed: {error}', { error: e?.message || e })); }
     setSyncBusy(false);
   }
 
@@ -602,12 +605,12 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     try {
       const raw = JSON.parse(await file.text());
       const env = normalizeSeed(raw);
-      if (importMode === 'replace' && !window.confirm(`Replace the tracker with ${env.books.length} books from this file? Books you added on this device that aren’t in the file are removed.`)) return;
+      if (importMode === 'replace' && !window.confirm(t('Replace the tracker with {n} books from this file? Books you added on this device that aren’t in the file are removed.', { n: env.books.length }))) return;
       const r = await importLibraryData(env, { mode: importMode });
       await reload();
-      window.alert(`Imported ${env.books.length} books (${r.added} new, ${r.merged} updated).`);
+      window.alert(t('Imported {n} books ({added} new, {merged} updated).', { n: env.books.length, added: r.added, merged: r.merged }));
     } catch (err) {
-      window.alert('Import failed: ' + (err?.message || err));
+      window.alert(t('Import failed: {error}', { error: err?.message || err }));
     }
   }
 
@@ -643,11 +646,11 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     await reload();
   }
   async function removeBook(id) {
-    if (!window.confirm('Remove this book from your tracker?')) return;
+    if (!window.confirm(t('Remove this book from your tracker?'))) return;
     await deleteLibraryBook(id); setSelected(null); await reload();
   }
   async function wipe() {
-    if (!window.confirm('Delete the ENTIRE reading tracker from this device? Export first if you want a copy.')) return;
+    if (!window.confirm(t('Delete the ENTIRE reading tracker from this device? Export first if you want a copy.'))) return;
     await clearLibrary(); await reload();
   }
 
@@ -665,7 +668,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     const dups = findDuplicates(books);
     setCleanup({ dups, datable, undatable, contradictory });
     const nothing = !dups.length && !datable.length && !undatable.length && !contradictory.length;
-    setCleanMsg(nothing ? 'No issues found — the tracker looks consistent. ✅' : '');
+    setCleanMsg(nothing ? `${t('No issues found — the tracker looks consistent.')} ✅` : '');
   }
   // Safe pass: stamp sourced finish dates, clear contradictory in-progress flags, merge duplicates
   // (repointing any document links from the dropped copy to the keeper). Never un-finishes a book.
@@ -686,7 +689,9 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
       n++;
     }
     if (qs !== qs0) await saveLibraryRef('queues', qs);
-    setCleanMsg(`Applied ${n} fix${n === 1 ? '' : 'es'}${cleanup.undatable.length ? ` · ${cleanup.undatable.length} undated finish(es) left as-is` : ''}.`);
+    setCleanMsg(cleanup.undatable.length
+      ? t.n('Applied {n} fix · {left} undated finish(es) left as-is.', 'Applied {n} fixes · {left} undated finish(es) left as-is.', n, { left: cleanup.undatable.length })
+      : t.n('Applied {n} fix.', 'Applied {n} fixes.', n));
     setCleanup(null); await reload();
   }
   // ── Quick-added copies of recommended books ───────────────────────────────────────────────────
@@ -699,11 +704,14 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     const csQ = Object.entries(bindMap || {}).filter(([, id]) => id === quick.id).map(([cs]) => cs);
     const csK = Object.entries(bindMap || {}).filter(([, id]) => id === keep.id).map(([cs]) => cs);
     const merged = mergeQuickInto(keep, quick);
-    let fileNote = 'no linked file';
-    if (csQ.length && !csK.length) fileNote = `${csQ.map(nameOfCs).join(', ')} becomes the kept entry’s linked file`;
+    let fileNote = t('no linked file');
+    if (csQ.length && !csK.length) fileNote = t('{files} becomes the kept entry’s linked file', { files: csQ.map(nameOfCs).join(', ') });
     else if (csQ.length && csK.length) {
       const g = groupFiles(groups, [...csK, ...csQ], keep.title, csK[0], 0);
-      fileNote = `both files stay linked (${[...csK, ...csQ].map(nameOfCs).join(' + ')}) and ${g.made ? `become one book group “${keep.title}”` : `join book group “${g.group.name}”`} — shared reading position`;
+      const files = [...csK, ...csQ].map(nameOfCs).join(' + ');
+      fileNote = g.made
+        ? t('both files stay linked ({files}) and become one book group “{group}” — shared reading position', { files, group: keep.title })
+        : t('both files stay linked ({files}) and join book group “{group}” — shared reading position', { files, group: g.group.name });
     }
     return { id: quick.id, quick, keep, merged, authorHit, alternatives, manual, diff: bookDiff(keep, merged), csQ, csK, fileNote, queueNote: swapQueueId(qs, quick.id, keep.id).note };
   }
@@ -716,11 +724,11 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     const live = new Map(books.filter((b) => !b.deleted).map((b) => [b.id, b]));
     const taken = new Set([...manual, ...found.map((pr) => ({ id: pr.quick.id }))].map((x) => x.id));
     const fromAi = (ai?.dupeSuggestions || []).filter((d) => live.has(d.keepId) && live.has(d.foldId) && !taken.has(d.foldId) && taken.add(d.foldId))
-      .map((d) => ({ ...planFor({ quick: live.get(d.foldId), keep: live.get(d.keepId) }, qs, groups), aiWhy: d.why || 'suggested by the cowork agent' }));
+      .map((d) => ({ ...planFor({ quick: live.get(d.foldId), keep: live.get(d.keepId) }, qs, groups), aiWhy: d.why || t('suggested by the cowork agent') }));
     const plans = [...manual, ...found.map((pr) => planFor(pr, qs, groups)), ...fromAi];
     setRecon(plans);
     setReconPick(new Set(plans.filter((pl) => pl.authorHit && !pl.alternatives.length && !pl.aiWhy).map((pl) => pl.id))); // the sure ones ticked; AI suggestions never pre-ticked
-    setReconMsg(plans.length ? '' : 'No quick-added copies of recommended books found. ✅');
+    setReconMsg(plans.length ? '' : `${t('No quick-added copies of recommended books found.')} ✅`);
   }
   // Manual pairing, for when the scan misses or mismatches: pick the entry to KEEP and the one to fold
   // into it; it joins the list (ticked) with the same preview and the same apply / undo.
@@ -733,14 +741,14 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   };
   async function addManualPair() {
     const keep = bookByLabel(manKeep), quick = bookByLabel(manFold);
-    if (!keep || !quick) { setReconMsg('Pick both entries from the suggestions (start typing a title).'); return; }
-    if (keep.id === quick.id) { setReconMsg('Those are the same entry.'); return; }
+    if (!keep || !quick) { setReconMsg(t('Pick both entries from the suggestions (start typing a title).')); return; }
+    if (keep.id === quick.id) { setReconMsg(t('Those are the same entry.')); return; }
     const qs = (await getLibraryRef('queues')) || [];
     const pl = planFor({ quick, keep, manual: true }, qs, global?.bookGroups || []);
     setRecon((r) => [pl, ...(r || []).filter((x) => x.id !== quick.id)]);
     setReconPick((s0) => new Set([...s0, quick.id]));
     setManKeep(''); setManFold('');
-    setReconMsg(`Added “${quick.title}” → “${keep.title}” to the list below — check its row, then reconcile.`);
+    setReconMsg(t('Added “{fold}” → “{keep}” to the list below — check its row, then reconcile.', { fold: quick.title, keep: keep.title }));
   }
   async function applyRecon() {
     const plans = (recon || []).filter((pl) => reconPick.has(pl.id));
@@ -771,7 +779,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     await saveLibraryRef('queues', qs);
     if (groups !== groups0) onPatch?.({ bookGroups: groups });
     setReconUndo(undo);
-    setReconMsg(`Reconciled ${plans.length} pair${plans.length === 1 ? '' : 's'} — each quick entry is folded into its recommendation (snapshot kept on it). ↶ Undo puts everything back.`);
+    setReconMsg(t.n('Reconciled {n} pair — each quick entry is folded into its recommendation (snapshot kept on it). ↶ Undo puts everything back.', 'Reconciled {n} pairs — each quick entry is folded into its recommendation (snapshot kept on it). ↶ Undo puts everything back.', plans.length));
     setRecon(null);
     setBindMap(await getBinding());
     await reload();
@@ -784,7 +792,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     await saveLibraryRef('queues', u.queues);
     onPatch?.({ bookGroups: u.groups });
     setReconUndo(null);
-    setReconMsg('Undone — both entries, their file links, queues and book groups are back as they were.');
+    setReconMsg(t('Undone — both entries, their file links, queues and book groups are back as they were.'));
     setBindMap(await getBinding());
     await reload();
   }
@@ -793,9 +801,9 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   // for when they were mis-flagged. Kept separate so a real off-app read is never silently cleared.
   async function clearUndatedFinishes() {
     if (!cleanup?.undatable.length) return;
-    if (!window.confirm(`Un-finish ${cleanup.undatable.length} book(s) that have no finish date and no reading history to date them from? They move to “To read”. (Export first if unsure.)`)) return;
+    if (!window.confirm(t('Un-finish {n} book(s) that have no finish date and no reading history to date them from? They move to “To read”. (Export first if unsure.)', { n: cleanup.undatable.length }))) return;
     for (const it of cleanup.undatable) await saveLibraryBook(it.fix);
-    setCleanMsg(`Un-finished ${cleanup.undatable.length} undated book(s).`);
+    setCleanMsg(t('Un-finished {n} undated book(s).', { n: cleanup.undatable.length }));
     setCleanup(null); await reload();
   }
 
@@ -806,45 +814,45 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     const found = scanMiscategorized(books || []);
     setRecat(found);
     setRecatPick(new Set(found.map((s) => s.id))); // everything ticked — it's a review list, not a quiz
-    setRecatMsg(found.length ? '' : 'Every record’s content type matches its evidence. ✅');
+    setRecatMsg(found.length ? '' : `${t('Every record’s content type matches its evidence.')} ✅`);
   }
   async function applyRecatPicks() {
     const accepted = (recat || []).filter((s) => recatPick.has(s.id));
     const updated = applyRecat(books || [], accepted);
     for (const b of updated) await saveLibraryBook(b);
-    setRecatMsg(`Recategorised ${updated.length} record${updated.length === 1 ? '' : 's'}. Types you set are locked, so the scan won’t re-flag them.`);
+    setRecatMsg(t.n('Recategorised {n} record. Types you set are locked, so the scan won’t re-flag them.', 'Recategorised {n} records. Types you set are locked, so the scan won’t re-flag them.', updated.length));
     setRecat(null); setRecatPick(new Set());
     await reload();
   }
 
   const empty = books && books.length === 0;
   const TABS = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'library', label: `Library${books ? ` (${books.length})` : ''}` },
-    { id: 'queue', label: 'Queues' },
-    { id: 'series', label: 'Series' },
-    { id: 'groups', label: 'Groups' },
-    { id: 'timeline', label: 'Timeline' },
-    { id: 'rhistory', label: 'Reading History' },
-    { id: 'notes', label: 'Notes' },
-    { id: 'analytics', label: 'Analytics' },
-    { id: 'authors', label: 'Authors' },
-    { id: 'genres', label: 'Genres' },
-    { id: 'archetype', label: 'Archetype' },
-    { id: 'constellation', label: 'Tech Tree' },
-    { id: 'ai', label: 'AI / Cowork' },
-    { id: 'data', label: 'Import / Export' },
+    { id: 'dashboard', label: t('Dashboard') },
+    { id: 'library', label: books ? t('Library ({n})', { n: books.length }) : t('Library') },
+    { id: 'queue', label: t('Queues') },
+    { id: 'series', label: t('Series') },
+    { id: 'groups', label: t('Groups') },
+    { id: 'timeline', label: t('Timeline') },
+    { id: 'rhistory', label: t('Reading History') },
+    { id: 'notes', label: t('Notes') },
+    { id: 'analytics', label: t('Analytics') },
+    { id: 'authors', label: t('Authors') },
+    { id: 'genres', label: t('Genres') },
+    { id: 'archetype', label: t('Archetype') },
+    { id: 'constellation', label: t('Tech Tree') },
+    { id: 'ai', label: t('AI / Cowork') },
+    { id: 'data', label: t('Import / Export') },
   ];
 
   return (
-    <Dialog title="Trackyread" onClose={handleClose} width={tab === 'queue' ? 1500 : 880} buttons={<button onClick={handleClose}>Close</button>}>
-      {!books && <p>Loading…</p>}
+    <Dialog title="Trackyread" onClose={handleClose} width={tab === 'queue' ? 1500 : 880} buttons={<button onClick={handleClose}>{t('Close')}</button>}>
+      {!books && <p>{t('Loading…')}</p>}
       {books && (
         <>
-          {empty && <p className="settings-note">Your reading tracker is empty — import your <code>library.json</code> under <b>Import / Export</b> (nothing is bundled with the app).</p>}
+          {empty && <p className="settings-note">{t('Your reading tracker is empty — import your library.json under Import / Export (nothing is bundled with the app).')}</p>}
           <div className="rh-tabs">
-            {TABS.map((t) => (
-              <button key={t.id} className={`rh-tab${tab === t.id ? ' on' : ''}`} onClick={() => { setTab(t.id); setSelected(null); }}>{t.label}</button>
+            {TABS.map((tb) => (
+              <button key={tb.id} className={`rh-tab${tab === tb.id ? ' on' : ''}`} onClick={() => { setTab(tb.id); setSelected(null); }}>{tb.label}</button>
             ))}
           </div>
 
@@ -855,7 +863,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               {views.some((v) => v.pinned) && (
                 <div className="lj-pinned-views">
                   {views.filter((v) => v.pinned).map((v) => (
-                    <button key={v.id} className="lj-pinned-view" onClick={() => applyView(v)} title="Open the library with this saved view">
+                    <button key={v.id} className="lj-pinned-view" onClick={() => applyView(v)} title={t('Open the library with this saved view')}>
                       <b>{viewCounts[v.id] ?? '…'}</b><span>📌 {v.name}</span>
                     </button>
                   ))}
@@ -864,30 +872,30 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               <GoalCard books={books} goals={goals} onSetGoal={setGoalTarget} />
               <WordsGoalCard books={books} goals={goals} dayAgg={dayAgg} linkedIds={linkedIds} onSetGoal={setGoalTarget} />
               <div className="rh-stat-grid">
-                <Stat v={stats.total} l="books" />
-                <Stat v={stats.finished} l="finished" sub={`${stats.reading} reading${stats.abandoned ? ` · ${stats.abandoned} abandoned` : ''}`} />
-                <Stat v={stats.queue} l="on deck" sub={`${stats.toread.toLocaleString()} to read`} />
-                <Stat v={stats.fiction} l="fiction" sub={`${stats.nonfiction} non-fiction`} />
-                <Stat v={stats.words ? (stats.words / 1e6).toFixed(1) + 'M' : '0'} l="words read" />
-                <Stat v={stats.pages ? stats.pages.toLocaleString() : '0'} l="pages read" />
+                <Stat v={stats.total} l={t('books')} />
+                <Stat v={stats.finished} l={t('finished')} sub={stats.abandoned ? t('{reading} reading · {abandoned} abandoned', { reading: stats.reading, abandoned: stats.abandoned }) : t('{reading} reading', { reading: stats.reading })} />
+                <Stat v={stats.queue} l={t('on deck')} sub={t('{n} to read', { n: stats.toread.toLocaleString() })} />
+                <Stat v={stats.fiction} l={t('fiction')} sub={t('{n} non-fiction', { n: stats.nonfiction })} />
+                <Stat v={stats.words ? (stats.words / 1e6).toFixed(1) + 'M' : '0'} l={t('words read')} />
+                <Stat v={stats.pages ? stats.pages.toLocaleString() : '0'} l={t('pages read')} />
               </div>
-              <label className="inline-check" title="Break the totals out by long-form vs short-form/articles vs AI-generated content">
-                <input type="checkbox" checked={!!global?.ljSplitTypes} onChange={(e) => onPatch?.({ ljSplitTypes: e.target.checked })} /> Split by content type
+              <label className="inline-check" title={t('Break the totals out by long-form vs short-form/articles vs AI-generated content')}>
+                <input type="checkbox" checked={!!global?.ljSplitTypes} onChange={(e) => onPatch?.({ ljSplitTypes: e.target.checked })} /> {t('Split by content type')}
               </label>
               {global?.ljSplitTypes && <TypeSplit books={books} />}
 
-              <div className="rh-section-h">Difficulty of finished books</div>
+              <div className="rh-section-h">{t('Difficulty of finished books')}</div>
               <div className="lj-diffbars">
                 {[1, 2, 3, 4, 5].map((d) => {
                   const n = stats.byDifficulty[d] || 0;
                   const max = Math.max(1, ...Object.values(stats.byDifficulty));
-                  return <div key={d} className="lj-diffbar" title={`${n} book(s)`}><span className="lj-diffbar-fill" style={{ height: `${(n / max) * 100}%` }} /><em>{d}</em></div>;
+                  return <div key={d} className="lj-diffbar" title={t('{n} book(s)', { n })}><span className="lj-diffbar-fill" style={{ height: `${(n / max) * 100}%` }} /><em>{d}</em></div>;
                 })}
               </div>
 
-              {ai?.analysis && (<><div className="rh-section-h">AI analysis{ai.updatedAt ? <span className="lj-analysis-time"> · {fmtDateTime(ai.updatedAt)}</span> : null}</div><p className="lj-analysis">{ai.analysis}</p></>)}
+              {ai?.analysis && (<><div className="rh-section-h">{t('AI analysis')}{ai.updatedAt ? <span className="lj-analysis-time"> · {fmtDateTime(ai.updatedAt)}</span> : null}</div><p className="lj-analysis">{ai.analysis}</p></>)}
               {ai?.recommendations?.length > 0 && (
-                <><div className="rh-section-h">Recommended next</div>
+                <><div className="rh-section-h">{t('Recommended next')}</div>
                   <ul className="lj-recs">{ai.recommendations.slice(0, 8).map((r, i) => {
                     const rec = typeof r === 'string' ? { title: r } : r;
                     const label = `${rec.title || ''}${rec.author ? ' — ' + rec.author : ''}${rec.why ? ' · ' + rec.why : ''}`;
@@ -902,15 +910,15 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                     return (
                       <li key={i}>
                         {label}{' '}
-                        {st === 'queue' ? <span className="settings-note" style={{ margin: 0 }}>· on deck 📋</span>
-                          : st === 'finished' ? <span className="settings-note" style={{ margin: 0 }}>· finished ✅</span>
+                        {st === 'queue' ? <span className="settings-note" style={{ margin: 0 }}>· {t('on deck')} 📋</span>
+                          : st === 'finished' ? <span className="settings-note" style={{ margin: 0 }}>· {t('finished')} ✅</span>
                           : (
-                            <button className="link-btn" title={match ? 'Add this library book to the queue' : 'Create it as a book and add it to the queue'}
+                            <button className="link-btn" title={match ? t('Add this library book to the queue') : t('Create it as a book and add it to the queue')}
                               onClick={async () => {
                                 if (match) { await shelve(match, 'queue'); return; }
                                 const book = setReadStatus({ id: deriveId({ title: rec.title, author: rec.author }), title: rec.title, author: rec.author || '', recBy: 'Claude', notes: rec.why || '' }, 'queue');
                                 await saveLibraryBook(book); await reload();
-                              }}>📋 Queue{match ? '' : ' (new)'}</button>
+                              }}>📋 {match ? t('Queue') : t('Queue (new)')}</button>
                           )}
                         {match && st !== 'queue' && <button className="link-btn" onClick={() => { setTab('library'); setSelected(match.id); }}>↗</button>}
                       </li>
@@ -920,74 +928,71 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
 
               {drifting.length > 0 && (
                 <>
-                  <div className="rh-section-h">🌫️ Drifting — unfinished reads going cold</div>
+                  <div className="rh-section-h">🌫️ {t('Drifting — unfinished reads going cold')}</div>
                   <p className="settings-note">
-                    Books you’re partway through but haven’t opened in a while. The risk here isn’t forgetting
-                    the gist — it’s losing your place and the thread. Resume before they go cold.
+                    {t('Books you’re partway through but haven’t opened in a while. The risk here isn’t forgetting the gist — it’s losing your place and the thread. Resume before they go cold.')}
                   </p>
                   <ul className="lj-fading">
                     {drifting.slice(0, driftAll ? drifting.length : 6).map((d) => {
                       const cov = Math.round((fileStats[csForBook[d.id]]?.coverage || 0) * 100);
                       return (
                         <li key={d.id} className={`lj-fade-${d.tier === 'cold' ? 'faded' : 'fading'}`}>
-                          <span className="lj-fade-bar" title={`${cov}% read so far`}>
+                          <span className="lj-fade-bar" title={t('{pct}% read so far', { pct: cov })}>
                             <span className="lj-fade-fill" style={{ width: `${cov}%` }} />
                           </span>
                           <span className="lj-fade-pct">{cov}%</span>
                           <span className="lj-fade-title"><b>{d.title}</b>{d.author ? ` — ${d.author}` : ''}</span>
                           <span className="settings-note lj-fade-meta">
-                            {d.tier === 'cold' ? 'gone cold' : 'drifting'} · {d.daysSince}d untouched
+                            {d.tier === 'cold' ? t('gone cold · {days}d untouched', { days: d.daysSince }) : t('drifting · {days}d untouched', { days: d.daysSince })}
                           </span>
                           <button
                             className="link-btn"
-                            title="Bring it back on deck to resume"
+                            title={t('Bring it back on deck to resume')}
                             onClick={async () => { const b = books.find((x) => x.id === d.id); if (b) await shelve(b, 'queue'); }}
-                          >📋 Resume</button>
+                          >📋 {t('Resume')}</button>
                         </li>
                       );
                     })}
                   </ul>
                   {drifting.length > 6 && (
-                    <button className="link-btn" onClick={() => setDriftAll((v) => !v)}>{driftAll ? 'Show fewer' : `Show all ${drifting.length}`}</button>
+                    <button className="link-btn" onClick={() => setDriftAll((v) => !v)}>{driftAll ? t('Show fewer') : t('Show all {n}', { n: drifting.length })}</button>
                   )}
                 </>
               )}
 
-              <div className="rh-section-h">🧠 Fading — finished books you may be forgetting</div>
+              <div className="rh-section-h">🧠 {t('Fading — finished books you may be forgetting')}</div>
               <p className="settings-note">
-                Estimated from a forgetting curve: how much you’d likely still have of each finished book,
-                decaying with time since you last read it and firming up with every re-read. Leads with the
-                ones still worth a quick refresh before they slip further.
+                {t('Estimated from a forgetting curve: how much you’d likely still have of each finished book, decaying with time since you last read it and firming up with every re-read. Leads with the ones still worth a quick refresh before they slip further.')}
               </p>
               {fading.length === 0 ? (
-                <p className="settings-note">Nothing fading — your finished books are either fresh or already re-read. ✅</p>
+                <p className="settings-note">{t('Nothing fading — your finished books are either fresh or already re-read.')} ✅</p>
               ) : (
                 <ul className="lj-fading">
                   {fading.slice(0, fadingAll ? fading.length : 8).map((f) => (
                     <li key={f.id} className={`lj-fade-${f.tier}`}>
-                      <span className="lj-fade-bar" title={`~${Math.round(f.retention * 100)}% retained`}>
+                      <span className="lj-fade-bar" title={t('~{pct}% retained', { pct: Math.round(f.retention * 100) })}>
                         <span className="lj-fade-fill" style={{ width: `${Math.round(f.retention * 100)}%` }} />
                       </span>
                       <span className="lj-fade-pct">{Math.round(f.retention * 100)}%</span>
                       <span className="lj-fade-title"><b>{f.title}</b>{f.author ? ` — ${f.author}` : ''}</span>
                       <span className="settings-note lj-fade-meta">
-                        {f.tier === 'faded' ? 'likely gone' : 'fading'} · {f.daysSince}d ago{f.reads > 1 ? ` · read ${f.reads}×` : ''}
+                        {f.tier === 'faded' ? t('likely gone · {days}d ago', { days: f.daysSince }) : t('fading · {days}d ago', { days: f.daysSince })}{f.reads > 1 ? ` · ${t('read {n}×', { n: f.reads })}` : ''}
                       </span>
                       <button
                         className="link-btn"
-                        title="Add to the queue for a refresher read"
+                        title={t('Add to the queue for a refresher read')}
                         onClick={async () => { const b = books.find((x) => x.id === f.id); if (b) await shelve(b, 'queue'); }}
-                      >📋 Refresh</button>
+                      >📋 {t('Refresh')}</button>
                     </li>
                   ))}
                 </ul>
               )}
               {fading.length > 8 && (
-                <button className="link-btn" onClick={() => setFadingAll((v) => !v)}>{fadingAll ? 'Show fewer' : `Show all ${fading.length}`}</button>
+                <button className="link-btn" onClick={() => setFadingAll((v) => !v)}>{fadingAll ? t('Show fewer') : t('Show all {n}', { n: fading.length })}</button>
               )}
 
-              <div className="rh-section-h">Recently finished</div>
-              {stats.recentFinishes.length === 0 && <p className="settings-note">No dated finishes yet.</p>}
+              <div className="rh-section-h">{t('Recently finished')}</div>
+              {stats.recentFinishes.length === 0 && <p className="settings-note">{t('No dated finishes yet.')}</p>}
               <ul className="lj-recent">
                 {stats.recentFinishes.map((b) => (
                   <li key={b.id}><b>{b.title}</b> — {b.author} <em>{finishMs(b) ? localDay(finishMs(b)) : ''}</em></li>
@@ -1000,66 +1005,66 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
             <div className="lj-lib">
               {linkCs && (
                 <div className="lj-linkbar">
-                  <span>🔗 Link <b>{linkName}</b> to a tracker book:</span>
-                  {linkSuggestion && <button className="toggle-on" onClick={() => linkTo(linkSuggestion.id)}>Link “{linkSuggestion.title}”</button>}
-                  <button onClick={linkAsNewBook}>＋ New book from this file</button>
-                  <span className="settings-note" style={{ margin: 0 }}>…or open any book below and set its “Linked document”.</span>
-                  <button onClick={() => setLinkCs(null)}>Dismiss</button>
+                  <span>🔗 {t('Link {file} to a tracker book:', { file: linkName })}</span>
+                  {linkSuggestion && <button className="toggle-on" onClick={() => linkTo(linkSuggestion.id)}>{t('Link “{title}”', { title: linkSuggestion.title })}</button>}
+                  <button onClick={linkAsNewBook}>＋ {t('New book from this file')}</button>
+                  <span className="settings-note" style={{ margin: 0 }}>{t('…or open any book below and set its “Linked document”.')}</span>
+                  <button onClick={() => setLinkCs(null)}>{t('Dismiss')}</button>
                 </div>
               )}
               <div className="lj-toolbar">
                 <select value={flt.fnf} onChange={(e) => setFlt({ ...flt, fnf: e.target.value })}>
-                  <option value="all">Fiction + NF</option><option value="F">Fiction</option><option value="NF">Non-fiction</option>
+                  <option value="all">{t('Fiction + NF')}</option><option value="F">{t('Fiction')}</option><option value="NF">{t('Non-fiction')}</option>
                 </select>
-                <select value={flt.recBy} onChange={(e) => setFlt({ ...flt, recBy: e.target.value })} title="Recommended by">
-                  <option value="all">Any recommender</option>{recOptions.map((r) => <option key={r} value={r}>{r}</option>)}
+                <select value={flt.recBy} onChange={(e) => setFlt({ ...flt, recBy: e.target.value })} title={t('Recommended by')}>
+                  <option value="all">{t('Any recommender')}</option>{recOptions.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
                 <select value={flt.recMin} onChange={(e) => setFlt({ ...flt, recMin: Number(e.target.value) })}>
-                  <option value={0}>Any rec</option><option value={9}>Rec 9+</option><option value={8}>Rec 8+</option>
+                  <option value={0}>{t('Any rec')}</option><option value={9}>{t('Rec 9+')}</option><option value={8}>{t('Rec 8+')}</option>
                 </select>
                 {tagOptions.length > 0 && (
-                  <select value={flt.tag} onChange={(e) => setFlt({ ...flt, tag: e.target.value })} title="Filter by tag">
-                    <option value="all">All tags</option>{tagOptions.map((t) => <option key={t} value={t}>🏷 {t}</option>)}
+                  <select value={flt.tag} onChange={(e) => setFlt({ ...flt, tag: e.target.value })} title={t('Filter by tag')}>
+                    <option value="all">{t('All tags')}</option>{tagOptions.map((tg) => <option key={tg} value={tg}>🏷 {tg}</option>)}
                   </select>
                 )}
-                <span className="lj-diffpick">Diff:{[1, 2, 3, 4, 5].map((d) => (
+                <span className="lj-diffpick">{t('Diff:')}{[1, 2, 3, 4, 5].map((d) => (
                   <label key={d}><input type="checkbox" checked={flt.difficulty.includes(d)} onChange={(e) => { const s = new Set(flt.difficulty); e.target.checked ? s.add(d) : s.delete(d); setFlt({ ...flt, difficulty: [...s] }); }} />{d}</label>
                 ))}</span>
               </div>
               <div className="lj-toolbar2">
-                <span className="settings-note">{filtered.length} match{filtered.length === 1 ? '' : 'es'}</span>
+                <span className="settings-note">{t.n('{n} match', '{n} matches', filtered.length)}</span>
                 {views.map((v) => (
                   <span key={v.id} className="lj-view-chip">
-                    <button className="link-btn" onClick={() => applyView(v)} title="Apply this saved view">{v.pinned ? '📌 ' : '☆ '}{v.name}</button>
-                    <button className="link-btn" title={v.pinned ? 'Unpin from the dashboard' : 'Pin to the dashboard'} onClick={() => saveViews(views.map((x) => (x.id === v.id ? { ...x, pinned: !x.pinned } : x)))}>{v.pinned ? '⊖' : '📌'}</button>
-                    <button className="link-btn" title="Delete this saved view" aria-label={`Delete view ${v.name}`} onClick={() => saveViews(views.filter((x) => x.id !== v.id))}>✕</button>
+                    <button className="link-btn" onClick={() => applyView(v)} title={t('Apply this saved view')}>{v.pinned ? '📌 ' : '☆ '}{v.name}</button>
+                    <button className="link-btn" title={v.pinned ? t('Unpin from the dashboard') : t('Pin to the dashboard')} onClick={() => saveViews(views.map((x) => (x.id === v.id ? { ...x, pinned: !x.pinned } : x)))}>{v.pinned ? '⊖' : '📌'}</button>
+                    <button className="link-btn" title={t('Delete this saved view')} aria-label={t('Delete view {name}', { name: v.name })} onClick={() => saveViews(views.filter((x) => x.id !== v.id))}>✕</button>
                   </span>
                 ))}
                 {naming == null
-                  ? <button onClick={() => setNaming('')} title="Save the current filters and sort as a named view you can re-apply (or pin to the dashboard)">☆ Save view</button>
+                  ? <button onClick={() => setNaming('')} title={t('Save the current filters and sort as a named view you can re-apply (or pin to the dashboard)')}>☆ {t('Save view')}</button>
                   : (
                     <form className="lj-view-name" onSubmit={(e) => { e.preventDefault(); const name = naming.trim(); if (name) saveViews([...views, { id: `v${Date.now().toString(36)}`, name, flt, colF, sort, pinned: true }]); setNaming(null); }}>
-                      <input autoFocus value={naming} onChange={(e) => setNaming(e.target.value)} placeholder="View name" aria-label="Saved view name" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setNaming(null); } }} />
-                      <button type="submit" className="toggle-on" disabled={!naming.trim()}>Save</button>
-                      <button type="button" onClick={() => setNaming(null)}>Cancel</button>
+                      <input autoFocus value={naming} onChange={(e) => setNaming(e.target.value)} placeholder={t('View name')} aria-label={t('Saved view name')} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setNaming(null); } }} />
+                      <button type="submit" className="toggle-on" disabled={!naming.trim()}>{t('Save')}</button>
+                      <button type="button" onClick={() => setNaming(null)}>{t('Cancel')}</button>
                     </form>
                   )}
-                {anySet(colF) && <button onClick={() => { setColF(NO_COLF); setLimit(100); }} title="Clear the filters under the table's column headers">Clear column filters</button>}
-                <span className="lj-viewtoggle" role="tablist" aria-label="List view">
-                  <button className={ljView !== 'tiles' ? 'on' : ''} onClick={() => onPatch?.({ ljView: 'table' })} title="Table view">▤ Table</button>
-                  <button className={ljView === 'tiles' ? 'on' : ''} onClick={() => onPatch?.({ ljView: 'tiles' })} title="Cover tile grid">▦ Tiles</button>
+                {anySet(colF) && <button onClick={() => { setColF(NO_COLF); setLimit(100); }} title={t("Clear the filters under the table's column headers")}>{t('Clear column filters')}</button>}
+                <span className="lj-viewtoggle" role="tablist" aria-label={t('List view')}>
+                  <button className={ljView !== 'tiles' ? 'on' : ''} onClick={() => onPatch?.({ ljView: 'table' })} title={t('Table view')}>▤ {t('Table')}</button>
+                  <button className={ljView === 'tiles' ? 'on' : ''} onClick={() => onPatch?.({ ljView: 'tiles' })} title={t('Cover tile grid')}>▦ {t('Tiles')}</button>
                 </span>
                 {ljView !== 'tiles' && (
-                  <label className="inline-check" title="Show cover thumbnails in the list — loads them from covers.openlibrary.org for visible books with an ISBN or fetched cover">
-                    <input type="checkbox" checked={showCovers} onChange={(e) => onPatch?.({ ljCovers: e.target.checked })} /> Covers
+                  <label className="inline-check" title={t('Show cover thumbnails in the list — loads them from covers.openlibrary.org for visible books with an ISBN or fetched cover')}>
+                    <input type="checkbox" checked={showCovers} onChange={(e) => onPatch?.({ ljCovers: e.target.checked })} /> {t('Covers')}
                   </label>
                 )}
                 <CoverBatchButton books={filtered} legacyOf={(b) => bookCoverUrl(b)} apiKey={global?.anthropicKey} onSaveBook={saveBook} onReload={reload} />
                 <span className="lj-spacer" />
-                <button onClick={() => setAdding(true)}>+ Add book</button>
+                <button onClick={() => setAdding(true)}>+ {t('Add book')}</button>
                 <IsbnAdd books={books || []} onFound={(b) => { setSelected(null); setAdding(b); }} onOpenExisting={(id) => setSelected(id)} />
-                <button onClick={() => exportView('json')}>Export view (JSON)</button>
-                <button onClick={() => exportView('md')}>Export view (Markdown)</button>
+                <button onClick={() => exportView('json')}>{t('Export view (JSON)')}</button>
+                <button onClick={() => exportView('md')}>{t('Export view (Markdown)')}</button>
               </div>
 
               {adding && <BookEditor key={adding === true ? 'blank' : adding.isbn || 'new'} book={adding === true ? { id: '', title: '', author: '', genre: '', fnf: 'F', type: 'long' } : { id: '', ...adding }} isNew apiKey={global?.anthropicKey} onCancel={() => setAdding(false)} onSave={async (b) => { await saveBook({ ...b, id: deriveId(b) }); setAdding(false); }} />}
@@ -1085,36 +1090,36 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                 <table className="lj-table">
                   <thead>
                     <tr>
-                      {[['status', 'St'], ['title', 'Title'], ['author', 'Author'], ['genre', 'Genre'], ['type', 'Type'], ['file', '📄'], ['started', 'Started'], ['pct', '%'], ['diff', 'D'], ['rec', '★'], ['pages', 'Pages'], ['pub', 'Pub'], ['finished', 'Finished']].map(([k, l]) => (
-                        <th key={k} className={sort.key === k ? 'on' : ''} onClick={() => sortBy(k)} title="Click to sort (click again to flip)">{l}{sortMark(k)}</th>
+                      {[['status', t('St')], ['title', t('Title')], ['author', t('Author')], ['genre', t('Genre')], ['type', t('Type')], ['file', '📄'], ['started', t('Started')], ['pct', '%'], ['diff', t('D')], ['rec', '★'], ['pages', t('Pages')], ['pub', t('Pub')], ['finished', t('Finished')]].map(([k, l]) => (
+                        <th key={k} className={sort.key === k ? 'on' : ''} onClick={() => sortBy(k)} title={t('Click to sort (click again to flip)')}>{l}{sortMark(k)}</th>
                       ))}
-                      <th aria-label="Shelf actions" />
+                      <th aria-label={t('Shelf actions')} />
                     </tr>
                     {/* Column filters live right under their headers. */}
                     <tr className="lj-filter-row">
                       <th>
-                        <select value={colF.status} onChange={(e) => { setColF({ ...colF, status: e.target.value }); setLimit(100); }} title="Filter by status">
-                          <option value="all">all</option><option value="finished">✅</option><option value="reading">📖</option><option value="queue">📋</option><option value="toread">🔖</option><option value="abandoned">✕</option>
+                        <select value={colF.status} onChange={(e) => { setColF({ ...colF, status: e.target.value }); setLimit(100); }} title={t('Filter by status')}>
+                          <option value="all">{t('all')}</option><option value="finished">✅</option><option value="reading">📖</option><option value="queue">📋</option><option value="toread">🔖</option><option value="abandoned">✕</option>
                         </select>
                       </th>
-                      <th><TextF value={colF.title} onChange={(v) => { setColF({ ...colF, title: v }); setLimit(100); }} label="title or series" /></th>
-                      <th><TextF value={colF.author} onChange={(v) => { setColF({ ...colF, author: v }); setLimit(100); }} label="author" /></th>
+                      <th><TextF value={colF.title} onChange={(v) => { setColF({ ...colF, title: v }); setLimit(100); }} label={t('title or series')} /></th>
+                      <th><TextF value={colF.author} onChange={(v) => { setColF({ ...colF, author: v }); setLimit(100); }} label={t('author')} /></th>
                       <th>
-                        <select value={colF.genre} onChange={(e) => { setColF({ ...colF, genre: e.target.value }); setLimit(100); }} title="Filter by genre">
-                          <option value="all">all</option>{genreOptions.map((g) => <option key={g} value={g}>{g}</option>)}
-                        </select>
-                      </th>
-                      <th>
-                        <select value={colF.type} onChange={(e) => { setColF({ ...colF, type: e.target.value }); setLimit(100); }} title="Filter by content type">
-                          <option value="all">all</option>{Object.entries(CONTENT_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                        <select value={colF.genre} onChange={(e) => { setColF({ ...colF, genre: e.target.value }); setLimit(100); }} title={t('Filter by genre')}>
+                          <option value="all">{t('all')}</option>{genreOptions.map((g) => <option key={g} value={g}>{g}</option>)}
                         </select>
                       </th>
                       <th>
-                        <select value={colF.file} onChange={(e) => { setColF({ ...colF, file: e.target.value }); setLimit(100); }} title="Filter by file link">
-                          <option value="all">all</option><option value="linked">📄</option><option value="unlinked">—</option>
+                        <select value={colF.type} onChange={(e) => { setColF({ ...colF, type: e.target.value }); setLimit(100); }} title={t('Filter by content type')}>
+                          <option value="all">{t('all')}</option>{Object.entries(CONTENT_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                         </select>
                       </th>
-                      {[['started', 'Started', 'date'], ['pct', '% read'], ['diff', 'difficulty'], ['rec', 'rec score'], ['pages', 'pages'], ['pub', 'year published'], ['finished', 'Finished', 'date']].map(([k, label, kind]) => (
+                      <th>
+                        <select value={colF.file} onChange={(e) => { setColF({ ...colF, file: e.target.value }); setLimit(100); }} title={t('Filter by file link')}>
+                          <option value="all">{t('all')}</option><option value="linked">📄</option><option value="unlinked">—</option>
+                        </select>
+                      </th>
+                      {[['started', t('Started'), 'date'], ['pct', t('% read')], ['diff', t('difficulty')], ['rec', t('rec score')], ['pages', t('pages')], ['pub', t('year published')], ['finished', t('Finished'), 'date']].map(([k, label, kind]) => (
                         <th key={k}>{kind === 'date'
                           ? <DateF value={colF[k]} onChange={(v) => { setColF({ ...colF, [k]: v }); setLimit(100); }} label={label} />
                           : <RangeF value={colF[k]} onChange={(v) => { setColF({ ...colF, [k]: v }); setLimit(100); }} label={label} />}</th>
@@ -1137,7 +1142,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                             {showCovers && (cov
                               ? <img className="lj-row-cover" src={cov} alt="" loading="lazy" onError={(e) => { e.target.style.visibility = 'hidden'; }} />
                               : <span className="lj-row-cover lj-row-cover-none" />)}
-                            <b>{b.title}</b>{b.locked && <span title="Locked — cowork operations never change this book"> 🔒</span>}
+                            <b>{b.title}</b>{b.locked && <span title={t('Locked — cowork operations never change this book')}> 🔒</span>}
                             {(b.series || rc > 1 || tgs.length > 0 || recommender(b) !== 'Claude') && (
                               <em>{b.series ? `${b.series}${b.seriesNum ? ' #' + b.seriesNum : ''}` : ''}{rc > 1 ? ` ↻×${rc}` : ''}{tgs.length ? ` 🏷${tgs.slice(0, 2).join(', ')}` : ''}{recommender(b) !== 'Claude' ? ` ✦${recommender(b)}` : ''}</em>
                             )}
@@ -1149,7 +1154,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                             {cs && (
                               <button
                                 className="lj-file-open"
-                                title={`Linked file: ${ff?.fileName || cs.slice(0, 8)} — open it in the reader`}
+                                title={t('Linked file: {file} — open it in the reader', { file: ff?.fileName || cs.slice(0, 8) })}
                                 onClick={async () => { if (await openRecent(cs)) handleClose(); }}
                               >📄</button>
                             )}
@@ -1162,10 +1167,10 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                           <td>{pubYear(b) || ''}</td>
                           <td>{finishMs(b) ? localDay(finishMs(b)) : ''}</td>
                           <td className="lj-row-acts" onClick={(e) => e.stopPropagation()}>
-                            <button title="On deck (queue)" className={st === 'queue' ? 'on' : ''} onClick={() => shelve(b, st === 'queue' ? 'toread' : 'queue')}>📋</button>
-                            <button title="Reading" className={st === 'reading' ? 'on' : ''} onClick={() => shelve(b, 'reading')}>📖</button>
-                            <button title="Finished" className={st === 'finished' ? 'on' : ''} onClick={() => shelve(b, 'finished')}>✅</button>
-                            <button title="Abandon" className={st === 'abandoned' ? 'on' : ''} onClick={() => shelve(b, st === 'abandoned' ? 'toread' : 'abandoned')}>✕</button>
+                            <button title={t('On deck (queue)')} className={st === 'queue' ? 'on' : ''} onClick={() => shelve(b, st === 'queue' ? 'toread' : 'queue')}>📋</button>
+                            <button title={t('Reading')} className={st === 'reading' ? 'on' : ''} onClick={() => shelve(b, 'reading')}>📖</button>
+                            <button title={t('Finished')} className={st === 'finished' ? 'on' : ''} onClick={() => shelve(b, 'finished')}>✅</button>
+                            <button title={t('Abandon')} className={st === 'abandoned' ? 'on' : ''} onClick={() => shelve(b, st === 'abandoned' ? 'toread' : 'abandoned')}>✕</button>
                           </td>
                         </tr>
                       );
@@ -1176,8 +1181,8 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               )}
               {filtered.length > limit && (
                 <div className="lj-inline">
-                  <button className="lj-more" onClick={() => setLimit(limit + 200)}>Load more ({filtered.length - limit} left)</button>
-                  <button className="lj-more" onClick={() => setLimit(filtered.length)}>Load all {filtered.length}</button>
+                  <button className="lj-more" onClick={() => setLimit(limit + 200)}>{t('Load more ({n} left)', { n: filtered.length - limit })}</button>
+                  <button className="lj-more" onClick={() => setLimit(filtered.length)}>{t('Load all {n}', { n: filtered.length })}</button>
                 </div>
               )}
             </div>
@@ -1217,91 +1222,87 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
 
           {tab === 'data' && (
             <div className="lj-data">
-              <div className="rh-section-h">Import a library</div>
-              <p className="settings-note">Import your own <code>library.json</code> (or a tracker export). Nothing is shipped with the app.</p>
+              <div className="rh-section-h">{t('Import a library')}</div>
+              <p className="settings-note">{t('Import your own library.json (or a tracker export). Nothing is shipped with the app.')}</p>
               <div className="lj-inline">
-                <label><input type="radio" checked={importMode === 'merge'} onChange={() => setImportMode('merge')} /> Merge (keep existing, update matches)</label>
-                <label><input type="radio" checked={importMode === 'replace'} onChange={() => setImportMode('replace')} /> Replace</label>
+                <label><input type="radio" checked={importMode === 'merge'} onChange={() => setImportMode('merge')} /> {t('Merge (keep existing, update matches)')}</label>
+                <label><input type="radio" checked={importMode === 'replace'} onChange={() => setImportMode('replace')} /> {t('Replace')}</label>
               </div>
               <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={onImportFile} />
-              <button onClick={() => fileRef.current?.click()}>Choose file…</button>
+              <button onClick={() => fileRef.current?.click()}>{t('Choose file…')}</button>
 
-              <div className="rh-section-h">Import from Goodreads / StoryGraph</div>
+              <div className="rh-section-h">{t('Import from Goodreads / StoryGraph')}</div>
               <ShelfImportPanel books={books} onDone={reload} apiKey={global?.anthropicKey || ''} model={global?.anthropicModel || 'claude-sonnet-5'} />
 
-              <div className="rh-section-h">Export everything</div>
+              <div className="rh-section-h">{t('Export everything')}</div>
               <div className="lj-inline">
-                <button onClick={() => exportFull('json')}>Full tracker (JSON)</button>
-                <button onClick={() => exportFull('md')}>Reading history (Markdown)</button>
+                <button onClick={() => exportFull('json')}>{t('Full tracker (JSON)')}</button>
+                <button onClick={() => exportFull('md')}>{t('Reading history (Markdown)')}</button>
               </div>
-              <p className="settings-note">Filtered / partial exports live on the <b>Library</b> tab (“Export view”).</p>
+              <p className="settings-note">{t('Filtered / partial exports live on the Library tab (“Export view”).')}</p>
 
-              <div className="rh-section-h">Cloud sync (whole tracker)</div>
-              <p className="settings-note">Syncs the entire tracker as its own file ({provider?.label || 'no target set'}) — separate from reading-progress sync. Set up / sign in to the target under <b>Settings → Data Management → Cloud sync</b>.</p>
+              <div className="rh-section-h">{t('Cloud sync (whole tracker)')}</div>
+              <p className="settings-note">{t('Syncs the entire tracker as its own file ({target}) — separate from reading-progress sync. Set up / sign in to the target under Settings → Data Management → Cloud sync.', { target: provider?.label || t('no target set') })}</p>
               <div className="lj-inline">
-                <button disabled={!providerOk || syncBusy} onClick={syncTracker}>Sync tracker now</button>
-                {sync.lastLibrarySync ? <span className="settings-note">Last: {fmtDateTime(sync.lastLibrarySync)}</span> : null}
+                <button disabled={!providerOk || syncBusy} onClick={syncTracker}>{t('Sync tracker now')}</button>
+                {sync.lastLibrarySync ? <span className="settings-note">{t('Last: {when}', { when: fmtDateTime(sync.lastLibrarySync) })}</span> : null}
               </div>
               {syncMsg && <p className="settings-note">{syncMsg}</p>}
 
-              <div className="rh-section-h">Reconcile &amp; clean up</div>
-              <p className="settings-note">Find finished books missing a date and duplicate records, then fix them in one pass. Nothing changes until you apply.</p>
+              <div className="rh-section-h">{t('Reconcile & clean up')}</div>
+              <p className="settings-note">{t('Find finished books missing a date and duplicate records, then fix them in one pass. Nothing changes until you apply.')}</p>
               <div className="lj-inline">
-                <button onClick={scanCleanup}>Scan for issues</button>
+                <button onClick={scanCleanup}>{t('Scan for issues')}</button>
                 {cleanMsg && <span className="settings-note">{cleanMsg}</span>}
               </div>
               {cleanup && (
                 <div className="lj-cleanup">
                   {cleanup.datable.length > 0 && (
-                    <details open><summary><b>{cleanup.datable.length}</b> finished, dated from reading history</summary>
+                    <details open><summary>{t('{n} finished, dated from reading history', { n: cleanup.datable.length })}</summary>
                       <ul className="lj-clean-list">{cleanup.datable.map((it) => <li key={it.id}>{it.title} → <em>{it.date}</em></li>)}</ul>
                     </details>
                   )}
                   {cleanup.contradictory.length > 0 && (
-                    <details><summary><b>{cleanup.contradictory.length}</b> marked both finished &amp; reading — clear “reading”</summary>
+                    <details><summary>{t('{n} marked both finished & reading — clear “reading”', { n: cleanup.contradictory.length })}</summary>
                       <ul className="lj-clean-list">{cleanup.contradictory.map((it) => <li key={it.id}>{it.title}</li>)}</ul>
                     </details>
                   )}
                   {cleanup.dups.length > 0 && (
-                    <details open><summary><b>{cleanup.dups.length}</b> duplicate group(s) — merge into one record</summary>
-                      <ul className="lj-clean-list">{cleanup.dups.map((g) => <li key={g.keepId}>{g.titles.join(' + ')} <em>({g.dropIds.length} folded in)</em></li>)}</ul>
+                    <details open><summary>{t('{n} duplicate group(s) — merge into one record', { n: cleanup.dups.length })}</summary>
+                      <ul className="lj-clean-list">{cleanup.dups.map((g) => <li key={g.keepId}>{g.titles.join(' + ')} <em>{t('({n} folded in)', { n: g.dropIds.length })}</em></li>)}</ul>
                     </details>
                   )}
                   {cleanup.undatable.length > 0 && (
-                    <details><summary><b>{cleanup.undatable.length}</b> finished with no date and no reading history</summary>
-                      <p className="settings-note">These may be books you read elsewhere (keep them) or mis-flagged. Left untouched by the safe pass.</p>
+                    <details><summary>{t('{n} finished with no date and no reading history', { n: cleanup.undatable.length })}</summary>
+                      <p className="settings-note">{t('These may be books you read elsewhere (keep them) or mis-flagged. Left untouched by the safe pass.')}</p>
                       <ul className="lj-clean-list">{cleanup.undatable.map((it) => <li key={it.id}>{it.title}{it.author ? ` — ${it.author}` : ''}</li>)}</ul>
                     </details>
                   )}
                   <div className="lj-inline">
-                    <button className="toggle-on" disabled={!cleanup.datable.length && !cleanup.contradictory.length && !cleanup.dups.length} onClick={applySafeCleanup}>Apply safe fixes</button>
-                    {cleanup.undatable.length > 0 && <button className="lj-danger" onClick={clearUndatedFinishes}>Un-finish the {cleanup.undatable.length} undated…</button>}
-                    <button onClick={() => { setCleanup(null); setCleanMsg(''); }}>Dismiss</button>
+                    <button className="toggle-on" disabled={!cleanup.datable.length && !cleanup.contradictory.length && !cleanup.dups.length} onClick={applySafeCleanup}>{t('Apply safe fixes')}</button>
+                    {cleanup.undatable.length > 0 && <button className="lj-danger" onClick={clearUndatedFinishes}>{t('Un-finish the {n} undated…', { n: cleanup.undatable.length })}</button>}
+                    <button onClick={() => { setCleanup(null); setCleanMsg(''); }}>{t('Dismiss')}</button>
                   </div>
                 </div>
               )}
 
-              <div className="rh-section-h">Reconcile quick-added copies</div>
+              <div className="rh-section-h">{t('Reconcile quick-added copies')}</div>
               <p className="settings-note">
-                Finds books that exist twice: a recommendation with good details (author, ISBN, cover…) and a
-                second entry made by <i>Add to Trackyread</i> when you opened its file — titled from the file
-                name, and usually the one you read and queued. Each pair shows exactly what will happen. The
-                recommendation is kept and takes over the reading state, the file link and the queue place;
-                the quick entry is retired but kept as a snapshot on it, and ↶ Undo restores everything.
+                {t('Finds books that exist twice: a recommendation with good details (author, ISBN, cover…) and a second entry made by Add to Trackyread when you opened its file — titled from the file name, and usually the one you read and queued. Each pair shows exactly what will happen. The recommendation is kept and takes over the reading state, the file link and the queue place; the quick entry is retired but kept as a snapshot on it, and ↶ Undo restores everything.')}
               </p>
               <div className="lj-inline">
-                <button onClick={scanRecon}>Scan for quick-added copies</button>
-                {(ai?.dupeSuggestions || []).length > 0 && <span className="settings-note" style={{ margin: 0 }}>🤖 {ai.dupeSuggestions.length} pair{ai.dupeSuggestions.length === 1 ? '' : 's'} suggested by the cowork agent — included in the scan</span>}
-                {reconUndo && <button onClick={undoRecon}>↶ Undo last reconcile</button>}
+                <button onClick={scanRecon}>{t('Scan for quick-added copies')}</button>
+                {(ai?.dupeSuggestions || []).length > 0 && <span className="settings-note" style={{ margin: 0 }}>🤖 {t.n('{n} pair suggested by the cowork agent — included in the scan', '{n} pairs suggested by the cowork agent — included in the scan', ai.dupeSuggestions.length)}</span>}
+                {reconUndo && <button onClick={undoRecon}>↶ {t('Undo last reconcile')}</button>}
                 {reconMsg && <span className="settings-note">{reconMsg}</span>}
               </div>
               <form className="lj-inline lj-recon-man" onSubmit={(e) => { e.preventDefault(); addManualPair(); }}>
-                <span className="settings-note" style={{ margin: 0 }}>Pair two yourself — keep</span>
-                <input list="lj-recon-books" value={manKeep} onChange={(e) => setManKeep(e.target.value)} placeholder="entry to keep (good details)…" aria-label="Entry to keep" />
-                <span className="settings-note" style={{ margin: 0 }}>← fold in</span>
-                <input list="lj-recon-books" value={manFold} onChange={(e) => setManFold(e.target.value)} placeholder="entry to retire…" aria-label="Entry to fold in and retire" />
-                <button type="button" title="Swap which entry is kept" onClick={() => { setManKeep(manFold); setManFold(manKeep); }}>⇄</button>
-                <button type="submit" disabled={!manKeep || !manFold}>＋ Add pair</button>
+                <span className="settings-note" style={{ margin: 0 }}>{t('Pair two yourself — keep')}</span>
+                <input list="lj-recon-books" value={manKeep} onChange={(e) => setManKeep(e.target.value)} placeholder={t('entry to keep (good details)…')} aria-label={t('Entry to keep')} />
+                <span className="settings-note" style={{ margin: 0 }}>← {t('fold in')}</span>
+                <input list="lj-recon-books" value={manFold} onChange={(e) => setManFold(e.target.value)} placeholder={t('entry to retire…')} aria-label={t('Entry to fold in and retire')} />
+                <button type="button" title={t('Swap which entry is kept')} onClick={() => { setManKeep(manFold); setManFold(manKeep); }}>⇄</button>
+                <button type="submit" disabled={!manKeep || !manFold}>＋ {t('Add pair')}</button>
                 <datalist id="lj-recon-books">
                   {books.filter((b) => !b.deleted).map((b) => <option key={b.id} value={`${b.title}${b.author ? ` — ${b.author}` : ''} [${b.id}]`} />)}
                 </datalist>
@@ -1311,32 +1312,32 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                   <div className="lj-q-box lj-recon-box">
                     <table className="lj-cand lj-recon-table">
                       <colgroup><col className="c-tick" /><col className="c-keep" /><col className="c-fold" /><col className="c-file" /><col className="c-queue" /><col className="c-chg" /><col className="c-more" /></colgroup>
-                      <thead><tr><th aria-label="Reconcile" /><th>Keep</th><th>Fold in &amp; retire</th><th>File link</th><th>Queue</th><th>Changes</th><th aria-label="Details" /></tr></thead>
+                      <thead><tr><th aria-label={t('Reconcile')} /><th>{t('Keep')}</th><th>{t('Fold in & retire')}</th><th>{t('File link')}</th><th>{t('Queue')}</th><th>{t('Changes')}</th><th aria-label={t('Details')} /></tr></thead>
                       <tbody>
                         {recon.map((pl) => {
-                          const warn = [!pl.authorHit && 'matched on the title alone — the file name doesn’t mention the author', pl.alternatives.length && `also matches ${pl.alternatives.map((b) => b.title).join('; ')}`].filter(Boolean);
+                          const warn = [!pl.authorHit && t('matched on the title alone — the file name doesn’t mention the author'), pl.alternatives.length && t('also matches {titles}', { titles: pl.alternatives.map((b) => b.title).join('; ') })].filter(Boolean);
                           const open = reconOpen === pl.id;
                           return (
                             <Fragment key={pl.id}>
                               <tr className={warn.length ? 'warn' : ''}>
-                                <td><input type="checkbox" checked={reconPick.has(pl.id)} aria-label={`Reconcile “${pl.quick.title}” into “${pl.keep.title}”`}
+                                <td><input type="checkbox" checked={reconPick.has(pl.id)} aria-label={t('Reconcile “{fold}” into “{keep}”', { fold: pl.quick.title, keep: pl.keep.title })}
                                   onChange={() => setReconPick((s0) => { const s1 = new Set(s0); if (s1.has(pl.id)) s1.delete(pl.id); else s1.add(pl.id); return s1; })} /></td>
                                 <td title={`${pl.keep.title} — ${pl.keep.author || ''}${pl.keep.isbn ? ` · ISBN ${pl.keep.isbn}` : ''}`}><b>{pl.keep.title}</b>{pl.keep.author ? <span className="lj-qdim"> — {pl.keep.author}</span> : ''}</td>
-                                <td title={pl.quick.title}>{warn.length ? <span title={warn.join(' · ')}>⚠ </span> : ''}{pl.manual ? <span title="Paired by you">✋ </span> : ''}{pl.aiWhy ? <span title={`Suggested by the cowork agent: ${pl.aiWhy}`}>🤖 </span> : ''}{pl.quick.title} <span className="lj-qdim">({STATUS_LABEL[readStatus(pl.quick)].replace(/^\S+\s/, '')})</span></td>
-                                <td title={pl.fileNote}>{pl.csQ.length ? (pl.csK.length ? '🔗 both linked + grouped' : `📎 ${pl.csQ.map(nameOfCs).join(', ')}`) : '—'}</td>
+                                <td title={pl.quick.title}>{warn.length ? <span title={warn.join(' · ')}>⚠ </span> : ''}{pl.manual ? <span title={t('Paired by you')}>✋ </span> : ''}{pl.aiWhy ? <span title={t('Suggested by the cowork agent: {why}', { why: pl.aiWhy })}>🤖 </span> : ''}{pl.quick.title} <span className="lj-qdim">({STATUS_LABEL[readStatus(pl.quick)].replace(/^\S+\s/, '')})</span></td>
+                                <td title={pl.fileNote}>{pl.csQ.length ? (pl.csK.length ? `🔗 ${t('both linked + grouped')}` : `📎 ${pl.csQ.map(nameOfCs).join(', ')}`) : '—'}</td>
                                 <td title={pl.queueNote}>{pl.queueNote}</td>
-                                <td title={pl.diff.map((d) => `${d.key}: ${fmtVal(d.from)} → ${fmtVal(d.to)}`).join('\n')}>{pl.diff.length ? `${pl.diff.length} field${pl.diff.length === 1 ? '' : 's'}: ${pl.diff.map((d) => d.key).join(', ')}` : 'none'}</td>
-                                <td><button className="lj-recon-more" onClick={() => setReconOpen(open ? null : pl.id)} aria-expanded={open} title="Details">{open ? '▾' : '▸'}</button></td>
+                                <td title={pl.diff.map((d) => `${d.key}: ${fmtVal(d.from)} → ${fmtVal(d.to)}`).join('\n')}>{pl.diff.length ? t.n('{n} field: {keys}', '{n} fields: {keys}', pl.diff.length, { keys: pl.diff.map((d) => d.key).join(', ') }) : t('none')}</td>
+                                <td><button className="lj-recon-more" onClick={() => setReconOpen(open ? null : pl.id)} aria-expanded={open} title={t('Details')}>{open ? '▾' : '▸'}</button></td>
                               </tr>
                               {open && (
                                 <tr className="lj-recon-detail"><td /><td colSpan={6}>
                                   <ul className="lj-clean-list">
                                     <li>📎 {pl.fileNote}</li>
-                                    <li>📋 Queue: {pl.queueNote}</li>
-                                    <li>✏️ {pl.diff.length ? pl.diff.map((d) => <span key={d.key} className="lj-recon-diff"><code>{d.key}</code> {fmtVal(d.from)} → <b>{fmtVal(d.to)}</b></span>) : 'no field changes on the kept entry'}</li>
-                                    <li>🗃 “{pl.quick.title}” is retired (kept as a tombstone + a snapshot in the kept entry’s history)</li>
-                                    {warn.map((w) => <li key={w} className="lj-recon-warn">⚠ {w}. Check it’s the same book.</li>)}
-                                    {pl.aiWhy && <li>🤖 Suggested by the cowork agent: {pl.aiWhy}</li>}
+                                    <li>📋 {t('Queue: {note}', { note: pl.queueNote })}</li>
+                                    <li>✏️ {pl.diff.length ? pl.diff.map((d) => <span key={d.key} className="lj-recon-diff"><code>{d.key}</code> {fmtVal(d.from)} → <b>{fmtVal(d.to)}</b></span>) : t('no field changes on the kept entry')}</li>
+                                    <li>🗃 {t('“{title}” is retired (kept as a tombstone + a snapshot in the kept entry’s history)', { title: pl.quick.title })}</li>
+                                    {warn.map((w) => <li key={w} className="lj-recon-warn">⚠ {t('{warning}. Check it’s the same book.', { warning: w })}</li>)}
+                                    {pl.aiWhy && <li>🤖 {t('Suggested by the cowork agent: {why}', { why: pl.aiWhy })}</li>}
                                   </ul>
                                 </td></tr>
                               )}
@@ -1347,38 +1348,35 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                     </table>
                   </div>
                   <div className="lj-inline">
-                    <button className="toggle-on" disabled={!reconPick.size} onClick={applyRecon}>Reconcile {reconPick.size} ticked</button>
-                    <button onClick={() => setReconPick(new Set(recon.map((pl) => pl.id)))}>Tick all</button>
-                    <button onClick={() => setReconPick(new Set())}>Untick all</button>
-                    <button onClick={() => { setRecon(null); setReconMsg(''); }}>Dismiss</button>
-                    <span className="settings-note" style={{ margin: 0 }}>⚠ = less certain (left unticked) · ✋ = paired by you · 🤖 = suggested by the cowork agent (left unticked) · hover a cell or ▸ for the full details</span>
+                    <button className="toggle-on" disabled={!reconPick.size} onClick={applyRecon}>{t('Reconcile {n} ticked', { n: reconPick.size })}</button>
+                    <button onClick={() => setReconPick(new Set(recon.map((pl) => pl.id)))}>{t('Tick all')}</button>
+                    <button onClick={() => setReconPick(new Set())}>{t('Untick all')}</button>
+                    <button onClick={() => { setRecon(null); setReconMsg(''); }}>{t('Dismiss')}</button>
+                    <span className="settings-note" style={{ margin: 0 }}>{t('⚠ = less certain (left unticked) · ✋ = paired by you · 🤖 = suggested by the cowork agent (left unticked) · hover a cell or ▸ for the full details')}</span>
                   </div>
                 </div>
               )}
 
-              <div className="rh-section-h">Fix miscategorised content</div>
+              <div className="rh-section-h">{t('Fix miscategorised content')}</div>
               <p className="settings-note">
-                Content types mostly come from how a record was imported, so the Dashboard’s long / short /
-                AI-generated splits inherit those guesses. This looks for records whose evidence — length,
-                author, title, genre — disagrees with their label. Every row says why, nothing changes until
-                you apply, and a type you set by hand is never re-flagged.
+                {t('Content types mostly come from how a record was imported, so the Dashboard’s long / short / AI-generated splits inherit those guesses. This looks for records whose evidence — length, author, title, genre — disagrees with their label. Every row says why, nothing changes until you apply, and a type you set by hand is never re-flagged.')}
               </p>
               <div className="lj-inline">
-                <button onClick={scanTypes}>Scan content types</button>
+                <button onClick={scanTypes}>{t('Scan content types')}</button>
                 {recatMsg && <span className="settings-note">{recatMsg}</span>}
               </div>
               {recat && recat.length > 0 && (
                 <div className="lj-cleanup">
                   <p className="settings-note">
-                    <b>{recat.length}</b> record{recat.length === 1 ? '' : 's'} look mislabelled:{' '}
-                    {Object.entries(recatSummary(recat)).map(([t, n]) => `${n} → ${CONTENT_TYPES[t] || t}`).join(' · ')}
+                    {t.n('{n} record looks mislabelled:', '{n} records look mislabelled:', recat.length)}{' '}
+                    {Object.entries(recatSummary(recat)).map(([ty, n]) => `${n} → ${CONTENT_TYPES[ty] || ty}`).join(' · ')}
                   </p>
                   <div className="lj-inline">
-                    <button onClick={() => setRecatPick(new Set(recat.map((x) => x.id)))}>Select all</button>
-                    <button onClick={() => setRecatPick(new Set())}>Select none</button>
+                    <button onClick={() => setRecatPick(new Set(recat.map((x) => x.id)))}>{t('Select all')}</button>
+                    <button onClick={() => setRecatPick(new Set())}>{t('Select none')}</button>
                   </div>
                   <table className="lj-recat">
-                    <thead><tr><th /><th>Title</th><th>Now</th><th>Suggested</th><th>Why</th></tr></thead>
+                    <thead><tr><th /><th>{t('Title')}</th><th>{t('Now')}</th><th>{t('Suggested')}</th><th>{t('Why')}</th></tr></thead>
                     <tbody>
                       {recat.map((sg) => (
                         <tr key={sg.id} className={recatPick.has(sg.id) ? 'on' : ''}>
@@ -1403,16 +1401,16 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
                   </table>
                   <div className="lj-inline">
                     <button className="toggle-on" disabled={!recatPick.size} onClick={applyRecatPicks}>
-                      Apply {recatPick.size} change{recatPick.size === 1 ? '' : 's'}
+                      {t.n('Apply {n} change', 'Apply {n} changes', recatPick.size)}
                     </button>
-                    <button onClick={() => { setRecat(null); setRecatMsg(''); }}>Dismiss</button>
+                    <button onClick={() => { setRecat(null); setRecatMsg(''); }}>{t('Dismiss')}</button>
                   </div>
                 </div>
               )}
 
-              <div className="rh-section-h">Storage</div>
-              <p className="settings-note">{size ? `${size.books.toLocaleString()} books · ~${(size.bytes / 1024 / 1024).toFixed(2)} MB on this device.` : ''} The tracker is excluded from the local full backup — it moves via these exports and (once set up) its own cloud file.</p>
-              <button className="lj-danger" onClick={wipe}>Delete tracker from this device…</button>
+              <div className="rh-section-h">{t('Storage')}</div>
+              <p className="settings-note">{size ? t('{n} books · ~{mb} MB on this device.', { n: size.books.toLocaleString(), mb: (size.bytes / 1024 / 1024).toFixed(2) }) : ''} {t('The tracker is excluded from the local full backup — it moves via these exports and (once set up) its own cloud file.')}</p>
+              <button className="lj-danger" onClick={wipe}>{t('Delete tracker from this device…')}</button>
             </div>
           )}
         </>
@@ -1449,20 +1447,20 @@ function AiNotesBlock({ book }) {
   for (const n of notes) (byType[n.type || 'other'] ||= []).push(n);
   return (
     <div className="lj-ainotes">
-      <div className="field-section" style={{ marginTop: 8 }}>AI notes ({notes.length})</div>
+      <div className="field-section" style={{ marginTop: 8 }}>{t('AI notes ({n})', { n: notes.length })}</div>
       {Object.entries(byType).map(([type, list]) => (
         <div key={type} className="lj-ainote-group">
-          <div className="lj-ainote-type">{AI_NOTE_TYPES[type] || 'Note'}</div>
+          <div className="lj-ainote-type">{AI_NOTE_TYPES[type] || t('Note')}</div>
           {list.map((n, i) => {
             const key = `${type}:${i}`;
             const spoilery = (type === 'summary' || type === 'section-summary') && !finished;
             const hidden = spoilery && !revealed.has(key);
             return (
               <div key={key} className={`lj-ainote${hidden ? ' lj-spoiler' : ''}`}
-                title={hidden ? 'Spoiler-protected — this summarizes something you haven’t finished reading. Click to reveal.' : undefined}
+                title={hidden ? t('Spoiler-protected — this summarizes something you haven’t finished reading. Click to reveal.') : undefined}
                 onClick={hidden ? () => setRevealed((r) => new Set(r).add(key)) : undefined}>
                 {n.sectionTitle && <span className="lj-ainote-sec">§ {n.sectionTitle}</span>}
-                {hidden ? <span className="lj-spoiler-label">🙈 Spoiler — unfinished {type === 'section-summary' ? 'section' : 'book'}. Click to reveal.</span> : null}
+                {hidden ? <span className="lj-spoiler-label">🙈 {type === 'section-summary' ? t('Spoiler — unfinished section. Click to reveal.') : t('Spoiler — unfinished book. Click to reveal.')}</span> : null}
                 <div className="lj-ainote-text">{n.text}</div>
               </div>
             );
@@ -1498,7 +1496,7 @@ function CrossNotesBlock({ book, books, crossNotes, onSaveCross, onDeleteCross }
   }
   return (
     <div className="lj-ainotes">
-      <div className="field-section" style={{ marginTop: 8 }}>Shared notes — multi-book / series{relevant.length ? ` (${relevant.length})` : ''}</div>
+      <div className="field-section" style={{ marginTop: 8 }}>{relevant.length ? t('Shared notes — multi-book / series ({n})', { n: relevant.length }) : t('Shared notes — multi-book / series')}</div>
       {relevant.map((n) => {
         const spoilery = (n.type === 'summary' || n.type === 'section-summary') && !allSpanFinished(n);
         const hidden = spoilery && !revealed.has(n.id);
@@ -1508,16 +1506,16 @@ function CrossNotesBlock({ book, books, crossNotes, onSaveCross, onDeleteCross }
             <span className="lj-xnote-span">
               {(n.bookIds || []).map((id) => <i key={id} className="lj-xnote-chip">{titleOf(id)}</i>)}
               {n.series && <i className="lj-xnote-chip lj-xnote-series">📚 {n.series}</i>}
-              <em className="lj-xnote-type">{AI_NOTE_TYPES[n.type] || 'Note'}{n.source === 'ai' ? ' · AI' : ''}</em>
-              <button className="close-x" title="Delete this shared note" onClick={(e) => { e.stopPropagation(); onDeleteCross?.(n.id); }}>×</button>
+              <em className="lj-xnote-type">{AI_NOTE_TYPES[n.type] || t('Note')}{n.source === 'ai' ? ` · ${t('AI')}` : ''}</em>
+              <button className="close-x" title={t('Delete this shared note')} onClick={(e) => { e.stopPropagation(); onDeleteCross?.(n.id); }}>×</button>
             </span>
-            {hidden ? <span className="lj-spoiler-label">🙈 Spoiler — spans unfinished book(s). Click to reveal.</span> : null}
+            {hidden ? <span className="lj-spoiler-label">🙈 {t('Spoiler — spans unfinished book(s). Click to reveal.')}</span> : null}
             <div className="lj-ainote-text">{n.text}</div>
           </div>
         );
       })}
       {!adding ? (
-        <button onClick={() => setAdding(true)}>＋ Shared note…</button>
+        <button onClick={() => setAdding(true)}>＋ {t('Shared note…')}</button>
       ) : (
         <div className="lj-xnote-editor">
           <div className="lj-inline">
@@ -1525,20 +1523,20 @@ function CrossNotesBlock({ book, books, crossNotes, onSaveCross, onDeleteCross }
               {Object.entries(AI_NOTE_TYPES).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
             </select>
             {book.series && (
-              <label className="inline-check"><input type="checkbox" checked={asSeries} onChange={(e) => setAsSeries(e.target.checked)} /> Attach to series “{book.series}”</label>
+              <label className="inline-check"><input type="checkbox" checked={asSeries} onChange={(e) => setAsSeries(e.target.checked)} /> {t('Attach to series “{series}”', { series: book.series })}</label>
             )}
           </div>
           <div className="lj-xnote-span" style={{ margin: '4px 0' }}>
             {span.map((id) => (
               <i key={id} className="lj-xnote-chip">{titleOf(id)}{span.length > 1 && <button className="close-x" onClick={() => setSpan((sp) => sp.filter((x) => x !== id))}>×</button>}</i>
             ))}
-            <input placeholder="＋ add another book…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <input placeholder={t('＋ add another book…')} value={q} onChange={(e) => setQ(e.target.value)} />
             {matches.map((x) => <button key={x.id} className="link-btn" onClick={() => { setSpan((sp) => [...sp, x.id]); setQ(''); }}>{x.title}</button>)}
           </div>
-          <textarea rows={3} placeholder="A note about these books together…" value={text} onChange={(e) => setText(e.target.value)} />
+          <textarea rows={3} placeholder={t('A note about these books together…')} value={text} onChange={(e) => setText(e.target.value)} />
           <div className="lj-inline">
-            <button className="toggle-on" disabled={!text.trim()} onClick={save}>Save shared note</button>
-            <button onClick={() => setAdding(false)}>Cancel</button>
+            <button className="toggle-on" disabled={!text.trim()} onClick={save}>{t('Save shared note')}</button>
+            <button onClick={() => setAdding(false)}>{t('Cancel')}</button>
           </div>
         </div>
       )}
@@ -1560,7 +1558,7 @@ function downscaleImage(file, maxW = 420) {
       URL.revokeObjectURL(url);
       try { resolve(cv.toDataURL('image/jpeg', 0.82)); } catch (e) { reject(e); }
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that image.')); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(t('Could not read that image.'))); };
     img.src = url;
   });
 }
@@ -1597,7 +1595,7 @@ function CoverGallery({ b, onChange, legacy, apiKey, model }) {
   }
   function addUrl() {
     const u = url.trim();
-    if (!/^https?:\/\//i.test(u) && !u.startsWith('data:')) { setMsg('Enter an http(s) or data: image URL.'); return; }
+    if (!/^https?:\/\//i.test(u) && !u.startsWith('data:')) { setMsg(t('Enter an http(s) or data: image URL.')); return; }
     push({ src: u, source: 'link' }); setUrl(''); setMsg('');
   }
   function addProcedural() {
@@ -1605,14 +1603,14 @@ function CoverGallery({ b, onChange, legacy, apiKey, model }) {
     setMsg('');
   }
   async function addAi() {
-    if (!apiKey) { setMsg('Add your Anthropic API key in Settings to have Claude design a cover.'); return; }
-    setBusy('ai'); setMsg('Claude is designing a cover…');
+    if (!apiKey) { setMsg(t('Add your Anthropic API key in Settings to have Claude design a cover.')); return; }
+    setBusy('ai'); setMsg(t('Claude is designing a cover…'));
     try {
       const reply = await askClaude([{ role: 'user', content: coverPromptFor(b) }], { key: apiKey, model: model || 'claude-sonnet-5', maxTokens: 320, source: 'cover-design' });
       const spec = parseCoverSpec(reply);
-      if (!spec) { setMsg('Could not read a cover design from the reply — try again, or use Auto.'); }
-      else { push({ src: coverSpecToSvg(spec, { title: b.title, author: b.author }), source: 'ai', spec }); setMsg('AI cover added.'); }
-    } catch (err) { setMsg('AI cover failed: ' + (err?.message || err)); }
+      if (!spec) { setMsg(t('Could not read a cover design from the reply — try again, or use Auto.')); }
+      else { push({ src: coverSpecToSvg(spec, { title: b.title, author: b.author }), source: 'ai', spec }); setMsg(t('AI cover added.')); }
+    } catch (err) { setMsg(t('AI cover failed: {error}', { error: err?.message || err })); }
     setBusy(null);
   }
   function remove(id) {
@@ -1627,27 +1625,27 @@ function CoverGallery({ b, onChange, legacy, apiKey, model }) {
   return (
     <div className="lj-covers">
       <div className="lj-cover-grid">
-        {list.length === 0 && <span className="lj-cover lj-cover-none" title="No cover yet">📕</span>}
+        {list.length === 0 && <span className="lj-cover lj-cover-none" title={t('No cover yet')}>📕</span>}
         {list.map((c) => {
           const isMaster = c.src === master;
           return (
             <div key={c.id} className={`lj-cover-cell${isMaster ? ' master' : ''}`}>
               <img className="lj-cover" src={c.src} alt="" loading="lazy" onError={(ev) => { ev.target.style.opacity = 0.2; }} />
-              <button type="button" className={`lj-cover-star${isMaster ? ' on' : ''}`} title={isMaster ? 'Master cover (shown on tiles)' : 'Make this the master cover'} onClick={() => makeMaster(c.id)}>{isMaster ? '★' : '☆'}</button>
-              <button type="button" className="lj-cover-del" title="Remove this cover" onClick={() => remove(c.id)}>×</button>
+              <button type="button" className={`lj-cover-star${isMaster ? ' on' : ''}`} title={isMaster ? t('Master cover (shown on tiles)') : t('Make this the master cover')} onClick={() => makeMaster(c.id)}>{isMaster ? '★' : '☆'}</button>
+              <button type="button" className="lj-cover-del" title={t('Remove this cover')} onClick={() => remove(c.id)}>×</button>
               <span className="lj-cover-src">{c.legacy ? 'link' : c.source}</span>
             </div>
           );
         })}
       </div>
       <div className="lj-cover-actions">
-        <label className="lj-cover-btn" title="Upload one or more images (downscaled locally)">⬆ Upload<input type="file" accept="image/*" multiple hidden onChange={onUpload} /></label>
-        <button type="button" className="lj-cover-btn" disabled={busy === 'ai'} onClick={addAi} title="Have Claude design a cover (needs your API key)">✨ AI cover</button>
-        <button type="button" className="lj-cover-btn" onClick={addProcedural} title="Generate a stylised cover from the book's own details — no API needed">🎨 Auto</button>
+        <label className="lj-cover-btn" title={t('Upload one or more images (downscaled locally)')}>⬆ {t('Upload')}<input type="file" accept="image/*" multiple hidden onChange={onUpload} /></label>
+        <button type="button" className="lj-cover-btn" disabled={busy === 'ai'} onClick={addAi} title={t('Have Claude design a cover (needs your API key)')}>✨ {t('AI cover')}</button>
+        <button type="button" className="lj-cover-btn" onClick={addProcedural} title={t("Generate a stylised cover from the book's own details — no API needed")}>🎨 {t('Auto')}</button>
       </div>
       <div className="lj-cover-url">
-        <input placeholder="Image URL…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addUrl())} />
-        <button type="button" onClick={addUrl} disabled={!url.trim()}>＋ Add URL</button>
+        <input placeholder={t('Image URL…')} value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addUrl())} />
+        <button type="button" onClick={addUrl} disabled={!url.trim()}>＋ {t('Add URL')}</button>
       </div>
       {msg && <p className="settings-note lj-cover-msg">{msg}</p>}
     </div>
@@ -1660,7 +1658,7 @@ function CoverBatchButton({ books, legacyOf, apiKey, model, onSaveBook, onReload
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState('');
   const coverless = (books || []).filter((b) => !bookCoverSrc(b) && !legacyOf(b));
-  if (coverless.length === 0) return <span className="settings-note" title="Every book in view already has a cover">🖼 all covered</span>;
+  if (coverless.length === 0) return <span className="settings-note" title={t('Every book in view already has a cover')}>🖼 {t('all covered')}</span>;
 
   async function auto() {
     setBusy(true);
@@ -1672,7 +1670,7 @@ function CoverBatchButton({ books, legacyOf, apiKey, model, onSaveBook, onReload
     setProg(''); setBusy(false); onReload?.();
   }
   async function ai() {
-    if (!apiKey) { setProg('needs API key'); return; }
+    if (!apiKey) { setProg(t('needs API key')); return; }
     setBusy(true);
     const batch = coverless.slice(0, 20); // cap the spend; re-run for more
     for (let i = 0; i < batch.length; i++) {
@@ -1690,8 +1688,8 @@ function CoverBatchButton({ books, legacyOf, apiKey, model, onSaveBook, onReload
 
   return (
     <span className="lj-coverbatch">
-      <button disabled={busy} onClick={auto} title={`Generate a stylised cover for ${coverless.length} book(s) in view without one — no API`}>🎨 Auto-cover {coverless.length}</button>
-      <button disabled={busy} onClick={ai} title={apiKey ? 'Have Claude design covers for the coverless books in view (up to 20)' : 'Add an Anthropic API key in Settings to use this'}>✨ AI-cover</button>
+      <button disabled={busy} onClick={auto} title={t('Generate a stylised cover for {n} book(s) in view without one — no API', { n: coverless.length })}>🎨 {t('Auto-cover {n}', { n: coverless.length })}</button>
+      <button disabled={busy} onClick={ai} title={apiKey ? t('Have Claude design covers for the coverless books in view (up to 20)') : t('Add an Anthropic API key in Settings to use this')}>✨ {t('AI-cover')}</button>
       {prog && <span className="settings-note">{prog}</span>}
     </span>
   );
@@ -1728,13 +1726,13 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
     setOlBusy(true); setOlMsg('');
     try {
       const { doc, patch } = await olFetch(b);
-      if (!doc) setOlMsg('No confident match on Open Library.');
+      if (!doc) setOlMsg(t('No confident match on Open Library.'));
       else {
         const got = Object.keys(patch);
         set(patch);
-        setOlMsg(got.length ? `Filled: ${got.join(', ')} — review, then Save.` : 'Matched, but every field is already filled.');
+        setOlMsg(got.length ? t('Filled: {fields} — review, then Save.', { fields: got.join(', ') }) : t('Matched, but every field is already filled.'));
       }
-    } catch (e) { setOlMsg('Lookup failed: ' + (e?.message || e)); }
+    } catch (e) { setOlMsg(t('Lookup failed: {error}', { error: e?.message || e })); }
     setOlBusy(false);
   }
   const currentLink = !isNew && Object.entries(bindMap || {}).find(([, id]) => id === b.id)?.[0];
@@ -1755,10 +1753,10 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
       if (!clean(b.title) && meta.title) p.title = meta.title;
       const got = Object.keys(p);
       set(p);
-      if (got.length) setOlMsg(`From the document: ${got.join(', ')} — review, then Save.`);
-      else if (!payload?.fullText && !words) setOlMsg('The linked file’s text isn’t stored on this device — open it once, then retry.');
-      else setOlMsg('Nothing new found in the document’s front matter.');
-    } catch (e) { setOlMsg('Text scan failed: ' + (e?.message || e)); }
+      if (got.length) setOlMsg(t('From the document: {fields} — review, then Save.', { fields: got.join(', ') }));
+      else if (!payload?.fullText && !words) setOlMsg(t('The linked file’s text isn’t stored on this device — open it once, then retry.'));
+      else setOlMsg(t('Nothing new found in the document’s front matter.'));
+    } catch (e) { setOlMsg(t('Text scan failed: {error}', { error: e?.message || e })); }
     setTxtBusy(false);
   }
   const linkedGroup = currentLink ? groupForChecksum(groups, currentLink) : null;
@@ -1776,113 +1774,113 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
       <div className="lj-cover-ed">
         <CoverGallery b={b} onChange={set} legacy={cover} apiKey={apiKey} model={aiModel} />
         <div className={`lj-cover-ctl ${dcls('coverUrl', 'coverId') || ''}`}>
-          <button type="button" disabled={olBusy || (!b.title && !b.isbn)} title="Fetch a cover + blank details from Open Library" onClick={fetchOl}>🔎 Open Library</button>
+          <button type="button" disabled={olBusy || (!b.title && !b.isbn)} title={t('Fetch a cover + blank details from Open Library')} onClick={fetchOl}>🔎 Open Library</button>
           {olMsg && <span className="settings-note">{olMsg}</span>}
         </div>
       </div>
       <div className="lj-editor-grid">
-        <label className={dcls('title')}>Title<input value={b.title || ''} onChange={(e) => set({ title: e.target.value })} /></label>
-        <label className={dcls('author')}>Author<input value={b.author || ''} onChange={(e) => set({ author: e.target.value })} /></label>
-        <label className={dcls('genre')}>Genre<input value={b.genre || ''} onChange={(e) => set({ genre: e.target.value })} /></label>
-        <label className={dcls('subgenre')}>Subgenre<input value={b.subgenre || ''} onChange={(e) => set({ subgenre: e.target.value })} /></label>
-        <label className={dcls('fnf')}>Fiction?<select value={b.fnf || ''} onChange={(e) => set({ fnf: e.target.value })}><option value="F">Fiction</option><option value="NF">Non-fiction</option></select></label>
-        <label className={dcls('type')}>Content type<select value={contentType(b)} onChange={(e) => set({ type: e.target.value })}>{Object.entries(CONTENT_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
-        <label className={dcls('completion', 'inProgress', 'shelf')}>Status<select value={status} onChange={(e) => setB(applyStatus(b, e.target.value))}><option value="toread">To read</option><option value="queue">On deck</option><option value="reading">Reading</option><option value="finished">Finished</option><option value="abandoned">Abandoned</option></select></label>
-        <label className={dcls('finishTime')}>Finished<input type="date" value={(finishMs(b) ? localDay(finishMs(b)) : '')} onChange={(e) => set({ finishTime: e.target.value })} /></label>
-        <label className={dcls('recBy')}>Rec. by<input value={b.recBy || ''} placeholder="Claude" onChange={(e) => set({ recBy: e.target.value })} /></label>
-        <label className={dcls('rating')}>Rating<input type="number" min="0" max="5" value={bookRating(b) || ''} onChange={(e) => set({ rating: Number(e.target.value) })} /></label>
-        <label className={dcls('locked')} title="A locked book is never changed by any cowork operation (fills, rescoring, notes, duplicates) — those changes are discarded before review">
-          🔒 Lock from AI<input type="checkbox" checked={!!b.locked} onChange={(e) => set({ locked: e.target.checked || undefined })} />
+        <label className={dcls('title')}>{t('Title')}<input value={b.title || ''} onChange={(e) => set({ title: e.target.value })} /></label>
+        <label className={dcls('author')}>{t('Author')}<input value={b.author || ''} onChange={(e) => set({ author: e.target.value })} /></label>
+        <label className={dcls('genre')}>{t('Genre')}<input value={b.genre || ''} onChange={(e) => set({ genre: e.target.value })} /></label>
+        <label className={dcls('subgenre')}>{t('Subgenre')}<input value={b.subgenre || ''} onChange={(e) => set({ subgenre: e.target.value })} /></label>
+        <label className={dcls('fnf')}>{t('Fiction?')}<select value={b.fnf || ''} onChange={(e) => set({ fnf: e.target.value })}><option value="F">{t('Fiction')}</option><option value="NF">{t('Non-fiction')}</option></select></label>
+        <label className={dcls('type')}>{t('Content type')}<select value={contentType(b)} onChange={(e) => set({ type: e.target.value })}>{Object.entries(CONTENT_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+        <label className={dcls('completion', 'inProgress', 'shelf')}>{t('Status')}<select value={status} onChange={(e) => setB(applyStatus(b, e.target.value))}><option value="toread">{t('To read')}</option><option value="queue">{t('On deck')}</option><option value="reading">{t('Reading')}</option><option value="finished">{t('Finished')}</option><option value="abandoned">{t('Abandoned')}</option></select></label>
+        <label className={dcls('finishTime')}>{t('Finished')}<input type="date" value={(finishMs(b) ? localDay(finishMs(b)) : '')} onChange={(e) => set({ finishTime: e.target.value })} /></label>
+        <label className={dcls('recBy')}>{t('Rec. by')}<input value={b.recBy || ''} placeholder="Claude" onChange={(e) => set({ recBy: e.target.value })} /></label>
+        <label className={dcls('rating')}>{t('Rating')}<input type="number" min="0" max="5" value={bookRating(b) || ''} onChange={(e) => set({ rating: Number(e.target.value) })} /></label>
+        <label className={dcls('locked')} title={t('A locked book is never changed by any cowork operation (fills, rescoring, notes, duplicates) — those changes are discarded before review')}>
+          🔒 {t('Lock from AI')}<input type="checkbox" checked={!!b.locked} onChange={(e) => set({ locked: e.target.checked || undefined })} />
         </label>
         {b.aiSet && Object.keys(b.aiSet).length > 0 && (
-          <span className="settings-note lj-aiset" title="Fields a cowork operation filled or changed — edit any of them to make it yours (the marker stays as history)">
-            🤖 Set by cowork: {Object.entries(b.aiSet).map(([f, v]) => `${f} (${String(new Date(v.at).toISOString()).slice(0, 10)}${v.by ? ` · ${v.by}` : ''})`).join(', ')}
+          <span className="settings-note lj-aiset" title={t('Fields a cowork operation filled or changed — edit any of them to make it yours (the marker stays as history)')}>
+            🤖 {t('Set by cowork:')} {Object.entries(b.aiSet).map(([f, v]) => `${f} (${String(new Date(v.at).toISOString()).slice(0, 10)}${v.by ? ` · ${v.by}` : ''})`).join(', ')}
           </span>
         )}
-        <label className={dcls('difficultyLevel')}>Difficulty<input type="number" min="1" max="5" value={b.difficultyLevel || ''} onChange={(e) => set({ difficultyLevel: Number(e.target.value) })} /></label>
-        <label className={dcls('recScore')}>Rec score<input type="number" min="0" max="10" value={b.recScore || ''} onChange={(e) => set({ recScore: Number(e.target.value) })} /></label>
-        <label className={dcls('pages')}>Pages<input type="number" value={b.pages || ''} onChange={(e) => set({ pages: Number(e.target.value) })} /></label>
-        <label className={dcls('words')}>Words<input type="number" value={b.words || ''} placeholder={b.pages ? `~${bookWordCount({ pages: b.pages })}` : ''} onChange={(e) => set({ words: Number(e.target.value) })} /></label>
-        <label className={dcls('pubDate')}>Published<input value={b.pubDate || ''} onChange={(e) => set({ pubDate: e.target.value })} /></label>
+        <label className={dcls('difficultyLevel')}>{t('Difficulty')}<input type="number" min="1" max="5" value={b.difficultyLevel || ''} onChange={(e) => set({ difficultyLevel: Number(e.target.value) })} /></label>
+        <label className={dcls('recScore')}>{t('Rec score')}<input type="number" min="0" max="10" value={b.recScore || ''} onChange={(e) => set({ recScore: Number(e.target.value) })} /></label>
+        <label className={dcls('pages')}>{t('Pages')}<input type="number" value={b.pages || ''} onChange={(e) => set({ pages: Number(e.target.value) })} /></label>
+        <label className={dcls('words')}>{t('Words')}<input type="number" value={b.words || ''} placeholder={b.pages ? `~${bookWordCount({ pages: b.pages })}` : ''} onChange={(e) => set({ words: Number(e.target.value) })} /></label>
+        <label className={dcls('pubDate')}>{t('Published')}<input value={b.pubDate || ''} onChange={(e) => set({ pubDate: e.target.value })} /></label>
         <label className={dcls('isbn')}>ISBN<input value={b.isbn || ''} onChange={(e) => set({ isbn: e.target.value })} /></label>
-        <label className={dcls('tags')}>Tags<input value={Array.isArray(b.tags) ? b.tags.join(', ') : (b.tags || '')} placeholder="comma, separated" onChange={(e) => set({ tags: e.target.value })} /></label>
+        <label className={dcls('tags')}>{t('Tags')}<input value={Array.isArray(b.tags) ? b.tags.join(', ') : (b.tags || '')} placeholder={t('comma, separated')} onChange={(e) => set({ tags: e.target.value })} /></label>
       </div>
       <div className="lj-inline">
         <button type="button" disabled={olBusy || (!b.title && !b.isbn)} onClick={fetchOl}
-          title="Search Open Library by ISBN (or title + author) and fill the blank fields — sends that query to openlibrary.org">
-          {olBusy ? 'Searching…' : '🔎 Fetch details (Open Library)'}
+          title={t('Search Open Library by ISBN (or title + author) and fill the blank fields — sends that query to openlibrary.org')}>
+          {olBusy ? t('Searching…') : `🔎 ${t('Fetch details (Open Library)')}`}
         </button>
         {currentLink && (
           <button type="button" disabled={txtBusy} onClick={pullFromText}
-            title="Fill blank fields from the linked document itself: exact word count (and a pages estimate), plus author / publish year / ISBN scraped from its front matter. Nothing leaves the device.">
-            {txtBusy ? 'Scanning…' : '📄 Fill from linked document'}
+            title={t('Fill blank fields from the linked document itself: exact word count (and a pages estimate), plus author / publish year / ISBN scraped from its front matter. Nothing leaves the device.')}>
+            {txtBusy ? t('Scanning…') : `📄 ${t('Fill from linked document')}`}
           </button>
         )}
         {status === 'finished' && (
-          <button type="button" title="Finished it again? The current finish date moves into history and today becomes the finish" onClick={() => setB(logReread(b, todayISO()))}>↻ Log re-read</button>
+          <button type="button" title={t('Finished it again? The current finish date moves into history and today becomes the finish')} onClick={() => setB(logReread(b, todayISO()))}>↻ {t('Log re-read')}</button>
         )}
-        {finishCount(b) > 1 && <span className="settings-note" style={{ margin: 0 }}>Read ×{finishCount(b)} · previously {b.finishHistory.join(', ')}</span>}
+        {finishCount(b) > 1 && <span className="settings-note" style={{ margin: 0 }}>{t('Read ×{n} · previously {dates}', { n: finishCount(b), dates: b.finishHistory.join(', ') })}</span>}
         {olMsg && <span className="settings-note" style={{ margin: 0 }}>{olMsg}</span>}
       </div>
       <div className="lj-readtime">
-        <div className="field-section" style={{ marginTop: 0 }}>Reading time</div>
+        <div className="field-section" style={{ marginTop: 0 }}>{t('Reading time')}</div>
         <div className="lj-editor-grid">
-          <label className={dcls('startTime')}>Started
+          <label className={dcls('startTime')}>{t('Started')}
             <span className="lj-inline">
               <input type="date" value={b.startTime || ''} onChange={(e) => set({ startTime: e.target.value })} />
-              {docStats?.firstRead && b.startTime !== docStats.firstRead && <button type="button" className="link-btn" title="Use the first date you read the linked document" onClick={() => set({ startTime: docStats.firstRead })}>auto</button>}
+              {docStats?.firstRead && b.startTime !== docStats.firstRead && <button type="button" className="link-btn" title={t('Use the first date you read the linked document')} onClick={() => set({ startTime: docStats.firstRead })}>{t('auto')}</button>}
             </span>
           </label>
-          <label className={dcls('readSecs')}>Time reading (min)
+          <label className={dcls('readSecs')}>{t('Time reading (min)')}
             <span className="lj-inline">
               <input type="number" min="0" value={b.readSecs ? Math.round(b.readSecs / 60) : ''} onChange={(e) => set({ readSecs: Math.max(0, Number(e.target.value) || 0) * 60 })} />
-              {docStats?.activeSecs > 0 && b.readSecs !== docStats.activeSecs && <button type="button" className="link-btn" title="Use the active reading time recorded for the linked document" onClick={() => set({ readSecs: docStats.activeSecs })}>auto</button>}
+              {docStats?.activeSecs > 0 && b.readSecs !== docStats.activeSecs && <button type="button" className="link-btn" title={t('Use the active reading time recorded for the linked document')} onClick={() => set({ readSecs: docStats.activeSecs })}>{t('auto')}</button>}
             </span>
           </label>
         </div>
         <label className="inline-check">
           <input type="checkbox" checked={!!b.audiobookFinish} onChange={(e) => set({ audiobookFinish: e.target.checked, audiobookEyePct: e.target.checked ? (b.audiobookEyePct ?? Math.round((docStats?.coverage || 0) * 100)) : b.audiobookEyePct })} />
-          Finished the rest by audiobook
+          {t('Finished the rest by audiobook')}
         </label>
         {b.audiobookFinish && (
-          <label className="lj-ab-pct">Read by eye first (%)
+          <label className="lj-ab-pct">{t('Read by eye first (%)')}
             <input type="number" min="0" max="100" value={b.audiobookEyePct ?? ''} onChange={(e) => set({ audiobookEyePct: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} />
             <span className="settings-note" style={{ margin: 0 }}>
-              {bookWordCount(b) ? `~${fmtDur(abSecs)} of audiobook at 1× · estimated total ~${fmtDur(totalSecs)}` : 'Add a word or page count to estimate the audiobook time.'}
+              {bookWordCount(b) ? t('~{audio} of audiobook at 1× · estimated total ~{total}', { audio: fmtDur(abSecs), total: fmtDur(totalSecs) }) : t('Add a word or page count to estimate the audiobook time.')}
             </span>
           </label>
         )}
         <p className="settings-note" style={{ margin: '2px 0 0' }}>{readingTimeSummary(b, finishISO)}</p>
       </div>
 
-      <label className={`lj-editor-notes ${dcls('notes') || ''}`}>Notes<textarea rows={3} value={b.notes || ''} onChange={(e) => set({ notes: e.target.value })} /></label>
+      <label className={`lj-editor-notes ${dcls('notes') || ''}`}>{t('Notes')}<textarea rows={3} value={b.notes || ''} onChange={(e) => set({ notes: e.target.value })} /></label>
       <AiNotesBlock book={b} />
       {!isNew && <CrossNotesBlock book={b} books={books} crossNotes={crossNotes} onSaveCross={onSaveCross} onDeleteCross={onDeleteCross} />}
       {!isNew && onBind && (
         <div className="lj-bind">
-          <label>Linked document
+          <label>{t('Linked document')}
             <select value={currentLink || ''} onChange={(e) => onBind(e.target.value, b.id)}>
-              <option value="">— none —</option>
+              <option value="">{t('— none —')}</option>
               {docMeta.map((d) => <option key={d.checksum} value={d.checksum}>{d.fileName}</option>)}
             </select>
           </label>
-          {suggested && <button className="link-btn" onClick={() => onBind(suggested.checksum, b.id)}>Link “{suggested.fileName}”?</button>}
-          {currentLink && onProgress && <button className="link-btn" title="Reading progress detail for the linked document — works even when the file isn't on this device (uses the synced reading state)" onClick={() => onProgress(currentLink)}>📈 Progress</button>}
-          {linkedGroup && <span className="settings-note">📚 Also in book group <b>{linkedGroup.name}</b> (Settings → Book Groups).</span>}
-          <span className="settings-note">Linking auto-marks this book finished when you complete that document.</span>
+          {suggested && <button className="link-btn" onClick={() => onBind(suggested.checksum, b.id)}>{t('Link “{file}”?', { file: suggested.fileName })}</button>}
+          {currentLink && onProgress && <button className="link-btn" title={t("Reading progress detail for the linked document — works even when the file isn't on this device (uses the synced reading state)")} onClick={() => onProgress(currentLink)}>📈 {t('Progress')}</button>}
+          {linkedGroup && <span className="settings-note">📚 {t('Also in book group {group} (Settings → Book Groups).', { group: linkedGroup.name })}</span>}
+          <span className="settings-note">{t('Linking auto-marks this book finished when you complete that document.')}</span>
         </div>
       )}
       <div className="lj-editor-buttons">
         <button
           className="primary"
           disabled={!b.title || (!isNew && dirtyKeys.size === 0)}
-          title={!isNew && dirtyKeys.size === 0 ? 'No changes yet — edit a field first' : undefined}
+          title={!isNew && dirtyKeys.size === 0 ? t('No changes yet — edit a field first') : undefined}
           onClick={() => onSave({ ...b, tags: bookTags(b) })}
         >
-          {isNew ? 'Add' : dirtyKeys.size ? `Save ${dirtyKeys.size} change${dirtyKeys.size === 1 ? '' : 's'}` : 'Save'}
+          {isNew ? t('Add') : dirtyKeys.size ? t.n('Save {n} change', 'Save {n} changes', dirtyKeys.size) : t('Save')}
         </button>
-        <button onClick={onCancel}>Cancel</button>
-        {!isNew && onDelete && <button className="lj-danger" onClick={onDelete}>Delete</button>}
+        <button onClick={onCancel}>{t('Cancel')}</button>
+        {!isNew && onDelete && <button className="lj-danger" onClick={onDelete}>{t('Delete')}</button>}
       </div>
     </div>
   );
@@ -1905,7 +1903,7 @@ function RefList({ kind, items, subitems, books, onOpen }) {
   }, [items, books, nameKey]);
   const rows = useMemo(() => {
     const base = (items || derived || [])
-      .filter((it) => { const t = textMatcher(q).test; return !t || t(it[nameKey] || ''); })
+      .filter((it) => { const mt = textMatcher(q).test; return !mt || mt(it[nameKey] || ''); })
       .map((it) => {
         const name = it[nameKey] || '—';
         const mine = books.filter((b) => (b[nameKey] || '') === name);
@@ -1930,23 +1928,23 @@ function RefList({ kind, items, subitems, books, onOpen }) {
   const wikiUrl = (name) => `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(name)}`;
   return (
     <div className="lj-ref">
-      <p className="settings-note">{rows.length} {kind}{rows.length === 1 ? '' : 's'}{!items && ' (derived from your books)'}{rows.length > 300 ? ' · showing the first 300 — filter to narrow' : ''} · click a name for its reference details
-        {(q || anySet(rf)) && <> · <button className="link-btn" onClick={() => { setQ(''); setRf({ books: ['', ''], finished: ['', ''], pct: ['', ''] }); }}>clear filters</button></>}</p>
+      <p className="settings-note">{kind === 'author' ? t.n('{n} author', '{n} authors', rows.length) : t.n('{n} genre', '{n} genres', rows.length)}{!items && ` ${t('(derived from your books)')}`}{rows.length > 300 ? ` · ${t('showing the first 300 — filter to narrow')}` : ''} · {t('click a name for its reference details')}
+        {(q || anySet(rf)) && <> · <button className="link-btn" onClick={() => { setQ(''); setRf({ books: ['', ''], finished: ['', ''], pct: ['', ''] }); }}>{t('clear filters')}</button></>}</p>
       <div className="lj-tablewrap">
         <table className="lj-table lj-ref-table">
           <thead>
             <tr>
-              {[['name', kind === 'author' ? 'Author' : 'Genre'], ['books', 'Books'], ['finished', 'Finished'], ['pct', 'Completion']].map(([k, l]) => (
-                <th key={k} className={rsort.key === k ? 'on' : ''} onClick={() => rsortBy(k)} title="Click to sort (click again to flip)">{l}{rsortMark(k)}</th>
+              {[['name', kind === 'author' ? t('Author') : t('Genre')], ['books', t('Books')], ['finished', t('Finished')], ['pct', t('Completion')]].map(([k, l]) => (
+                <th key={k} className={rsort.key === k ? 'on' : ''} onClick={() => rsortBy(k)} title={t('Click to sort (click again to flip)')}>{l}{rsortMark(k)}</th>
               ))}
-              <th>Links</th>
-              <th aria-label="Show in library" />
+              <th>{t('Links')}</th>
+              <th aria-label={t('Show in library')} />
             </tr>
             <tr className="lj-filter-row">
-              <th><TextF value={q} onChange={setQ} label={kind === 'author' ? 'author name' : 'genre name'} /></th>
-              <th><RangeF value={rf.books} onChange={(v) => setRf({ ...rf, books: v })} label="books" /></th>
-              <th><RangeF value={rf.finished} onChange={(v) => setRf({ ...rf, finished: v })} label="finished" /></th>
-              <th><RangeF value={rf.pct} onChange={(v) => setRf({ ...rf, pct: v })} label="completion %" /></th>
+              <th><TextF value={q} onChange={setQ} label={kind === 'author' ? t('author name') : t('genre name')} /></th>
+              <th><RangeF value={rf.books} onChange={(v) => setRf({ ...rf, books: v })} label={t('books')} /></th>
+              <th><RangeF value={rf.finished} onChange={(v) => setRf({ ...rf, finished: v })} label={t('finished')} /></th>
+              <th><RangeF value={rf.pct} onChange={(v) => setRf({ ...rf, pct: v })} label={t('completion %')} /></th>
               <th colSpan={2} />
             </tr>
           </thead>
@@ -1958,18 +1956,18 @@ function RefList({ kind, items, subitems, books, onOpen }) {
                   <td>{total}</td>
                   <td>{fin}</td>
                   <td>
-                    <div className="rh-td-prog" title={`${fin} of ${total} finished`}>
+                    <div className="rh-td-prog" title={t('{done} of {total} finished', { done: fin, total })}>
                       <span>{total ? Math.round(pct) : 0}%</span>
                       <span className="lj-series-bar lj-ref-bar"><i style={{ width: `${pct}%` }} /></span>
                     </div>
                   </td>
                   <td onClick={(e) => e.stopPropagation()}>
-                    <a className="link-btn" href={grUrl(name)} target="_blank" rel="noreferrer noopener" title={`Search Goodreads for ${name}`}>GR</a>
+                    <a className="link-btn" href={grUrl(name)} target="_blank" rel="noreferrer noopener" title={t('Search Goodreads for {name}', { name })}>GR</a>
                     {' '}
-                    <a className="link-btn" href={wikiUrl(name)} target="_blank" rel="noreferrer noopener" title={`Search Wikipedia for ${name}`}>W</a>
+                    <a className="link-btn" href={wikiUrl(name)} target="_blank" rel="noreferrer noopener" title={t('Search Wikipedia for {name}', { name })}>W</a>
                   </td>
                   <td onClick={(e) => e.stopPropagation()}>
-                    <button className="link-btn" title={`Show ${name} in the Library`} onClick={() => onOpen?.(name)}>↗</button>
+                    <button className="link-btn" title={t('Show {name} in the Library', { name })} onClick={() => onOpen?.(name)}>↗</button>
                   </td>
                 </tr>
                 {open === i && (
@@ -1980,7 +1978,7 @@ function RefList({ kind, items, subitems, books, onOpen }) {
                           <div key={k}><b>{k}:</b> {String(v)}</div>
                         ))}
                         {kind === 'genre' && subitems?.length > 0 && (
-                          <div className="lj-subgenres">Subgenres: {subitems.filter((s) => s.genre === name).map((s) => s.subgenre).join(', ') || '—'}</div>
+                          <div className="lj-subgenres">{t('Subgenres:')} {subitems.filter((s) => s.genre === name).map((s) => s.subgenre).join(', ') || '—'}</div>
                         )}
                       </div>
                     </td>
@@ -1996,7 +1994,7 @@ function RefList({ kind, items, subitems, books, onOpen }) {
 }
 
 // ── Archetype view ───────────────────────────────────────────────────────────────────────────────
-const AXIS_SHORT = { fiction: 'Fic', nonfiction: 'NF', literary: 'Lit', genreFiction: 'Genre', ideas: 'Ideas', contemporary: 'New', challenge: 'Hard', volume: 'Vol', speculative: 'SFF', factual: 'Fact', poetic: 'Poet', series: 'Ser' };
+const AXIS_SHORT = { fiction: t('Fic'), nonfiction: t('NF'), literary: t('Lit'), genreFiction: t('Genre'), ideas: t('Ideas'), contemporary: t('New'), challenge: t('Hard'), volume: t('Vol'), speculative: t('SFF'), factual: t('Fact'), poetic: t('Poet'), series: t('Ser') };
 const ARCHETYPE_COLOR = {
   classicist: '#c9a227', aesthete: '#b5651d', poet: '#d264a5', 'genre-devotee': '#3a86ff', worldbuilder: '#4361ee',
   'series-binger': '#00b4d8', storyteller: '#5e60ce', autodidact: '#2a9d8f', historian: '#8a5a44', scholar: '#118ab2',
@@ -2028,34 +2026,34 @@ function ArchetypeView({ books }) {
   const allTime = useMemo(() => currentArchetype(finished), [finished]);
   const trend = useMemo(() => archetypeTrend(dated, windowDays, now), [dated, windowDays, now]);
   const present = [...new Set(trend.map((p) => p.archetypeId).filter(Boolean))];
-  const winLabel = windowDays >= 365 ? `${(windowDays / 365).toFixed(windowDays % 365 ? 1 : 0)} yr` : `${Math.round(windowDays / 30)} mo`;
+  const winLabel = windowDays >= 365 ? t('{n} yr', { n: (windowDays / 365).toFixed(windowDays % 365 ? 1 : 0) }) : t('{n} mo', { n: Math.round(windowDays / 30) });
 
-  if (finished.length < 3) return <p className="settings-note">Mark at least 3 books finished to reveal your Reader Archetype.</p>;
+  if (finished.length < 3) return <p className="settings-note">{t('Mark at least 3 books finished to reveal your Reader Archetype.')}</p>;
   return (
     <div className="lj-arch">
       <div className="lj-arch-top">
         <div className="lj-arch-head">
-          <div className="rh-section-h">All-time</div>
-          {allTime.archetype ? <><b className="lj-arch-name" style={{ color: ARCHETYPE_COLOR[allTime.archetype.id] }}>{allTime.archetype.name}</b><p className="settings-note">{allTime.archetype.blurb}{allTime.secondary ? ` · leaning ${allTime.secondary.name}` : ''}</p></> : <p className="settings-note">Not enough data.</p>}
-          <div className="rh-section-h">Now (last {winLabel})</div>
-          {cur.archetype ? <b className="lj-arch-name" style={{ color: ARCHETYPE_COLOR[cur.archetype.id] }}>{cur.archetype.name}</b> : <p className="settings-note">Fewer than 3 dated finishes in this window.</p>}
-          <p className="settings-note">{winBooks.length} book(s) in window</p>
+          <div className="rh-section-h">{t('All-time')}</div>
+          {allTime.archetype ? <><b className="lj-arch-name" style={{ color: ARCHETYPE_COLOR[allTime.archetype.id] }}>{allTime.archetype.name}</b><p className="settings-note">{allTime.archetype.blurb}{allTime.secondary ? ` · ${t('leaning {name}', { name: allTime.secondary.name })}` : ''}</p></> : <p className="settings-note">{t('Not enough data.')}</p>}
+          <div className="rh-section-h">{t('Now (last {window})', { window: winLabel })}</div>
+          {cur.archetype ? <b className="lj-arch-name" style={{ color: ARCHETYPE_COLOR[cur.archetype.id] }}>{cur.archetype.name}</b> : <p className="settings-note">{t('Fewer than 3 dated finishes in this window.')}</p>}
+          <p className="settings-note">{t('{n} book(s) in window', { n: winBooks.length })}</p>
         </div>
         <Radar vector={winProfile.count ? winProfile.vector : allTime.vector} />
       </div>
 
-      <div className="rh-section-h">How it changed (trailing {winLabel} window)</div>
-      <label className="lj-winslider">Window: {winLabel}
+      <div className="rh-section-h">{t('How it changed (trailing {window} window)', { window: winLabel })}</div>
+      <label className="lj-winslider">{t('Window: {window}', { window: winLabel })}
         <input type="range" min={30} max={1825} step={30} value={windowDays} onChange={(e) => setWindowDays(Number(e.target.value))} />
       </label>
-      {trend.length === 0 ? <p className="settings-note">Add finish dates to your books to reconstruct the timeline.</p> : (
+      {trend.length === 0 ? <p className="settings-note">{t('Add finish dates to your books to reconstruct the timeline.')}</p> : (
         <>
           <div className="lj-trend">
-            {trend.map((p, i) => <span key={i} className="lj-trend-cell" title={`${p.date}: ${p.archetypeName || 'insufficient data'} (${p.count} book${p.count === 1 ? '' : 's'})`} style={{ background: p.archetypeId ? ARCHETYPE_COLOR[p.archetypeId] : 'var(--divider)' }} />)}
+            {trend.map((p, i) => <span key={i} className="lj-trend-cell" title={t.n('{date}: {name} ({n} book)', '{date}: {name} ({n} books)', p.count, { date: p.date, name: p.archetypeName || t('insufficient data') })} style={{ background: p.archetypeId ? ARCHETYPE_COLOR[p.archetypeId] : 'var(--divider)' }} />)}
           </div>
           <div className="lj-trend-axis"><span>{trend[0].date}</span><span>{trend[trend.length - 1].date}</span></div>
           <div className="lj-legend">{present.map((id) => { const a = READER_ARCHETYPES.find((x) => x.id === id); return <span key={id} className="lj-legend-item"><i style={{ background: ARCHETYPE_COLOR[id] }} />{a?.name}</span>; })}</div>
-          {dated.length < finished.length && <p className="settings-note">{finished.length - dated.length} finished book(s) have no date and don’t appear in the timeline.</p>}
+          {dated.length < finished.length && <p className="settings-note">{t('{n} finished book(s) have no date and don’t appear in the timeline.', { n: finished.length - dated.length })}</p>}
         </>
       )}
 
@@ -2071,7 +2069,7 @@ function ArchetypeLegend({ currentId }) {
   return (
     <div className="lj-arch-legend">
       <button className="lj-arch-legend-toggle" onClick={() => setOpen((o) => !o)}>
-        {open ? '▾' : '▸'} What the archetypes mean ({READER_ARCHETYPES.length})
+        {open ? '▾' : '▸'} {t('What the archetypes mean ({n})', { n: READER_ARCHETYPES.length })}
       </button>
       {open && (
         <div className="lj-arch-legend-list">
@@ -2079,7 +2077,7 @@ function ArchetypeLegend({ currentId }) {
             <div key={a.id} className={`lj-arch-legend-row${a.id === currentId ? ' current' : ''}`}>
               <span className="lj-arch-legend-dot" style={{ background: ARCHETYPE_COLOR[a.id] }} />
               <div className="lj-arch-legend-body">
-                <b style={{ color: ARCHETYPE_COLOR[a.id] }}>{a.name}{a.id === currentId ? ' — you' : ''}</b>
+                <b style={{ color: ARCHETYPE_COLOR[a.id] }}>{a.name}{a.id === currentId ? ` — ${t('you')}` : ''}</b>
                 <span className="settings-note">{a.blurb}</span>
                 <span className="lj-arch-legend-axes">
                   {archetypeAxes(a, 4).map((x) => <span key={x.ax} className="lj-arch-legend-axis">{x.label}</span>)}
@@ -2099,7 +2097,7 @@ function ArchetypeLegend({ currentId }) {
 // Phone: stacked. ETAs and hours use your RECENT pace (recentPace), not an all-time average.
 const pctTxt = (p) => `${Math.round((p || 0) * 100)}%`;
 const Bar = ({ pct, cls = '', label }) => (
-  <span className={`lj-pbar ${cls}`} role="img" aria-label={label || `${pctTxt(pct)} read`}><i style={{ width: pctTxt(Math.min(1, pct)) }} /></span>
+  <span className={`lj-pbar ${cls}`} role="img" aria-label={label || t('{pct} read', { pct: pctTxt(pct) })}><i style={{ width: pctTxt(Math.min(1, pct)) }} /></span>
 );
 function QueueView({ initialSel = null, books, onOpen, fileStats = {}, bindMap = {}, openChecksums = [], dayAgg = [] }) {
   const { openRecent, openFiles, closeDialog } = useApp();
@@ -2118,7 +2116,7 @@ function QueueView({ initialSel = null, books, onOpen, fileStats = {}, bindMap =
     return m;
   }, [bindMap]);
   async function addDir() {
-    try { setDirs(await addSearchDir(await window.showDirectoryPicker({ id: 'tachyread-library-dirs', mode: 'read' }))); setFindMsg(''); } catch (e) { if (e?.name !== 'AbortError') setFindMsg(`Could not add that folder: ${e?.message || e}`); }
+    try { setDirs(await addSearchDir(await window.showDirectoryPicker({ id: 'tachyread-library-dirs', mode: 'read' }))); setFindMsg(''); } catch (e) { if (e?.name !== 'AbortError') setFindMsg(t('Could not add that folder: {error}', { error: e?.message || e })); }
   }
   // Local copy → already-open tab → the designated folders. Only the last step can be slow, and it
   // runs straight off this click so a folder whose permission lapsed can ask for it back.
@@ -2126,12 +2124,12 @@ function QueueView({ initialSel = null, books, onOpen, fileStats = {}, bindMap =
     const cs = csOf[b.id];
     if (!cs || finding) return;
     const name = fileStats[cs]?.fileName || b.title;
-    setFinding(b.id); setFindMsg(dirs.length ? `Looking for “${name}”…` : '');
+    setFinding(b.id); setFindMsg(dirs.length ? t('Looking for “{name}”…', { name }) : '');
     try {
       const r = await openBookFile({ cs, name, openChecksums, dirs, openRecent, openFiles });
       if (r.ok) closeDialog?.(); else setFindMsg(r.msg);
     } catch (e) {
-      setFindMsg(`Could not open “${name}”: ${e?.message || e}`);
+      setFindMsg(t('Could not open “{name}”: {error}', { name, error: e?.message || e }));
     } finally { setFinding(null); }
   }
   const [queues, setQueues] = useState(null); // null = loading
@@ -2156,7 +2154,7 @@ function QueueView({ initialSel = null, books, onOpen, fileStats = {}, bindMap =
     window.addEventListener('tachyread-library-changed', load); // a sync can bring queues in
     return () => { live = false; window.removeEventListener('tachyread-library-changed', load); };
   }, [books]);
-  const saveQueues = (next) => { setQueues(next); saveLibraryRef('queues', next).catch((e) => setFindMsg(`Could not save queues: ${e?.message || e}`)); };
+  const saveQueues = (next) => { setQueues(next); saveLibraryRef('queues', next).catch((e) => setFindMsg(t('Could not save queues: {error}', { error: e?.message || e }))); };
   const bulk = (fn, label) => { setUndo({ queues, label }); saveQueues(fn(queues)); };
   const shownQueues = liveQueues(queues);
   const overview = sel === 'overview';
@@ -2168,42 +2166,42 @@ function QueueView({ initialSel = null, books, onOpen, fileStats = {}, bindMap =
     setSel(nq.id);
   }
   const pctOf = (b) => (readStatus(b) === 'finished' ? 1 : fileStats[csOf[b.id]]?.coverage || 0);
-  if (!queues) return <p className="settings-note">Loading queues…</p>;
+  if (!queues) return <p className="settings-note">{t('Loading queues…')}</p>;
 
   return (
     <div className="lj-queue">
-      <div className="lj-queue-pick" role="tablist" aria-label="Queues">
-        {shownQueues.length > 0 && <button role="tab" aria-selected={overview} className={`lj-qcat${overview ? ' on' : ''}`} onClick={() => setSel('overview')} title="Every queue at a glance (view only)">📊 All queues</button>}
+      <div className="lj-queue-pick" role="tablist" aria-label={t('Queues')}>
+        {shownQueues.length > 0 && <button role="tab" aria-selected={overview} className={`lj-qcat${overview ? ' on' : ''}`} onClick={() => setSel('overview')} title={t('Every queue at a glance (view only)')}>📊 {t('All queues')}</button>}
         {shownQueues.map((x, qi) => {
           const qb = queueBooks(x, books);
           const done = qb.filter((b) => readStatus(b) === 'finished').length;
           const on = selQueue?.id === x.id;
           return (
             <span key={x.id} className="lj-qpill">
-              {on && <button className="lj-qnudge" disabled={qi === 0} onClick={() => saveQueues(moveQueue(queues, x.id, -1))} aria-label={`Move “${x.name}” left`} title="Move this queue left">‹</button>}
+              {on && <button className="lj-qnudge" disabled={qi === 0} onClick={() => saveQueues(moveQueue(queues, x.id, -1))} aria-label={t('Move “{name}” left', { name: x.name })} title={t('Move this queue left')}>‹</button>}
               <button role="tab" aria-selected={on} className={`lj-qcat lj-qchip${on ? ' on' : ''}`} onClick={() => setSel(x.id)}
-                title={`${x.name}: ${done} of ${qb.length} finished`}>
+                title={t('{name}: {done} of {total} finished', { name: x.name, done, total: qb.length })}>
                 <span>{x.name} ({qb.length})</span>
-                <Bar pct={qb.length ? done / qb.length : 0} label={`${done} of ${qb.length} finished`} />
+                <Bar pct={qb.length ? done / qb.length : 0} label={t('{done} of {total} finished', { done, total: qb.length })} />
               </button>
-              {on && <button className="lj-qnudge" disabled={qi === shownQueues.length - 1} onClick={() => saveQueues(moveQueue(queues, x.id, 1))} aria-label={`Move “${x.name}” right`} title="Move this queue right">›</button>}
+              {on && <button className="lj-qnudge" disabled={qi === shownQueues.length - 1} onClick={() => saveQueues(moveQueue(queues, x.id, 1))} aria-label={t('Move “{name}” right', { name: x.name })} title={t('Move this queue right')}>›</button>}
             </span>
           );
         })}
         {naming == null
-          ? <button className="lj-qcat" onClick={() => setNaming('')} title="A hand-picked, hand-ordered list — a book can sit in several">＋ New queue</button>
+          ? <button className="lj-qcat" onClick={() => setNaming('')} title={t('A hand-picked, hand-ordered list — a book can sit in several')}>＋ {t('New queue')}</button>
           : (
             <form className="lj-q-new" onSubmit={(e) => { e.preventDefault(); if (naming.trim()) createQueue(); }}>
-              <input autoFocus value={naming} placeholder="Queue name, e.g. AI lore" aria-label="New queue name"
+              <input autoFocus value={naming} placeholder={t('Queue name, e.g. AI lore')} aria-label={t('New queue name')}
                 onChange={(e) => setNaming(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setNaming(null); } }} />
-              <button type="submit" disabled={!naming.trim()}>Create</button>
-              <button type="button" onClick={() => setNaming(null)}>Cancel</button>
+              <button type="submit" disabled={!naming.trim()}>{t('Create')}</button>
+              <button type="button" onClick={() => setNaming(null)}>{t('Cancel')}</button>
             </form>
           )}
-        {undo && <button className="lj-qcat" onClick={() => { saveQueues(undo.queues); setUndo(null); }} title="Put the queues back as they were">↶ Undo {undo.label}</button>}
+        {undo && <button className="lj-qcat" onClick={() => { saveQueues(undo.queues); setUndo(null); }} title={t('Put the queues back as they were')}>↶ {t('Undo {action}', { action: undo.label })}</button>}
       </div>
       {overview ? <QueuesDashboard queues={queues} books={books} wpm={wpm} pace={pace} fileStats={fileStats} csOf={csOf} onPick={setSel} onBulk={bulk} />
-        : !selQueue ? <p className="settings-note">No queues yet — ＋ New queue to make one, then add books to it from the table that appears.</p> : (
+        : !selQueue ? <p className="settings-note">{t('No queues yet — ＋ New queue to make one, then add books to it from the table that appears.')}</p> : (
         <div className={`lj-q-panes${stacked ? ' stacked' : ''}`}>
           <NamedQueue
             paths={paths} stacked={stacked} onLayout={toggleLayout}
@@ -2211,24 +2209,24 @@ function QueueView({ initialSel = null, books, onOpen, fileStats = {}, bindMap =
             queue={selQueue} others={shownQueues.filter((x) => x.id !== selQueue.id)} books={books} wpm={wpm} setWpm={setWpm} pace={pace} fileStats={fileStats} csOf={csOf} pctOf={pctOf}
             openChecksums={openChecksums} dirs={dirs} finding={finding} openTheFile={openTheFile} findMsg={findMsg}
             onChange={(next) => saveQueues(queues.map((x) => (x.id === next.id ? next : x)))}
-            onDelete={() => { bulk((qs) => deleteQueue(qs, selQueue.id), `delete “${selQueue.name}”`); setSel(null); }}
+            onDelete={() => { bulk((qs) => deleteQueue(qs, selQueue.id), t('delete “{name}”', { name: selQueue.name })); setSel(null); }}
             onEdit={(fn) => saveQueues(fn(queues))}
             onBulk={bulk}
             onOpen={onOpen}
             folders={(
               <div className="lj-inline lj-findfolders">
-                <span className="settings-note" style={{ margin: 0 }} title="A document's text never leaves the device it was opened on — only your reading record syncs. Name the folders your files live in and ▶ can find them on any device.">
-                  📁 Where your documents live{dirs.length ? ':' : ' — none set yet, so ▶ only opens books this device has already read.'}
+                <span className="settings-note" style={{ margin: 0 }} title={t("A document's text never leaves the device it was opened on — only your reading record syncs. Name the folders your files live in and ▶ can find them on any device.")}>
+                  📁 {dirs.length ? t('Where your documents live:') : t('Where your documents live — none set yet, so ▶ only opens books this device has already read.')}
                 </span>
                 {dirs.map((d) => (
                   <span key={d.name} className="lj-dirchip">
                     📁 {d.name}
-                    <button title={`Stop searching “${d.name}”`} onClick={async () => setDirs(await removeSearchDir(d))}>✕</button>
+                    <button title={t('Stop searching “{name}”', { name: d.name })} onClick={async () => setDirs(await removeSearchDir(d))}>✕</button>
                   </span>
                 ))}
                 {pickerSupported()
-                  ? <button onClick={addDir} title="Pick a folder to search when a queued book has no copy on this device">➕ Add folder…</button>
-                  : <span className="settings-note" style={{ margin: 0 }}>Choosing folders needs a Chromium browser (Chrome, Edge, Brave).</span>}
+                  ? <button onClick={addDir} title={t('Pick a folder to search when a queued book has no copy on this device')}>➕ {t('Add folder…')}</button>
+                  : <span className="settings-note" style={{ margin: 0 }}>{t('Choosing folders needs a Chromium browser (Chrome, Edge, Brave).')}</span>}
               </div>
             )}
           />
@@ -2243,7 +2241,7 @@ function QueueView({ initialSel = null, books, onOpen, fileStats = {}, bindMap =
   );
 }
 
-const ROW_KIND = { field: 'Book field', note: 'Book note', cross: 'Shared note', link: 'File link', analysis: 'Analysis', recommendations: 'Read-next list', weekly: 'Weekly summary', brief: 'Morning brief', treeMeta: 'Tree links', answer: 'Answer', queueOrder: 'Queue order', queueAdd: 'Queue add', queueMove: 'Queue move', sessionReview: 'Session review', dupe: 'Duplicate pair', report: 'Report', newBook: 'New book', tags: 'Tags', vocab: 'Vocab card', typingPlan: 'Typing plan', goal: 'Goal' };
+const ROW_KIND = { field: t('Book field'), note: t('Book note'), cross: t('Shared note'), link: t('File link'), analysis: t('Analysis'), recommendations: t('Read-next list'), weekly: t('Weekly summary'), brief: t('Morning brief'), treeMeta: t('Tree links'), answer: t('Answer'), queueOrder: t('Queue order'), queueAdd: t('Queue add'), queueMove: t('Queue move'), sessionReview: t('Session review'), dupe: t('Duplicate pair'), report: t('Report'), newBook: t('New book'), tags: t('Tags'), vocab: t('Vocab card'), typingPlan: t('Typing plan'), goal: t('Goal') };
 const APPLY_CAP = 200; // most changes one apply may write (bigger replies are reviewed in pages)
 
 // Dashboard: every queue's progress and what's left, plus totals across all of them.
@@ -2258,83 +2256,83 @@ function QueuesDashboard({ queues, books, wpm, pace, fileStats, csOf, onPick, on
   }), [queues, books, wpm, pace, fileStats, csOf]);
   const maxLeft = Math.max(1, ...rows.map((r) => r.st.wordsLeft));
   return (
-    <section className="lj-qdash" aria-label="All queues">
+    <section className="lj-qdash" aria-label={t('All queues')}>
       <div className="lj-qstats">
-        <div className="ab-stat"><b>{total.queues}</b><span>queues</span></div>
-        <div className="ab-stat"><b>{total.done} / {total.count}</b><span>books finished</span><Bar pct={total.count ? total.done / total.count : 0} label={`${total.done} of ${total.count} finished`} /></div>
-        <div className="ab-stat"><b>{total.wordsLeft.toLocaleString()}</b><span>words left of {total.wordsTotal.toLocaleString()}</span><Bar pct={total.wordsTotal ? 1 - total.wordsLeft / total.wordsTotal : 0} /></div>
-        <div className="ab-stat"><b>{total.hoursLeft} h</b><span>left at {wpm} wpm</span></div>
-        <div className="ab-stat" title="Everything left, read at your recent pace (last ~6 weeks, recent days weighted most)"><b>{total.eta || '—'}</b><span>{total.eta ? `all done at ~${pace.wordsPerDay.toLocaleString()} words/day` : 'needs some recent reading'}</span></div>
-        <div className="ab-stat"><b>{total.hoursSpent} h</b><span>spent so far</span></div>
+        <div className="ab-stat"><b>{total.queues}</b><span>{t('queues')}</span></div>
+        <div className="ab-stat"><b>{total.done} / {total.count}</b><span>{t('books finished')}</span><Bar pct={total.count ? total.done / total.count : 0} label={t('{done} of {total} finished', { done: total.done, total: total.count })} /></div>
+        <div className="ab-stat"><b>{total.wordsLeft.toLocaleString()}</b><span>{t('words left of {total}', { total: total.wordsTotal.toLocaleString() })}</span><Bar pct={total.wordsTotal ? 1 - total.wordsLeft / total.wordsTotal : 0} /></div>
+        <div className="ab-stat"><b>{t('{n} h', { n: total.hoursLeft })}</b><span>{t('left at {wpm} wpm', { wpm })}</span></div>
+        <div className="ab-stat" title={t('Everything left, read at your recent pace (last ~6 weeks, recent days weighted most)')}><b>{total.eta || '—'}</b><span>{total.eta ? t('all done at ~{n} words/day', { n: pace.wordsPerDay.toLocaleString() }) : t('needs some recent reading')}</span></div>
+        <div className="ab-stat"><b>{t('{n} h', { n: total.hoursSpent })}</b><span>{t('spent so far')}</span></div>
       </div>
       <div className="lj-inline lj-qdash-tools">
         {picked.length >= 2 ? (
           <form className="lj-q-new" onSubmit={(e) => {
             e.preventDefault();
             const order = rows.map((r) => r.queue.id).filter((id) => picked.includes(id));
-            onBulk((qs) => mergeQueues(qs, order, mergeName), `merge ${order.length} queues`);
+            onBulk((qs) => mergeQueues(qs, order, mergeName), t('merge {n} queues', { n: order.length }));
             setPicked([]); setMergeName('');
           }}>
-            <span className="settings-note" style={{ margin: 0 }}>Merge {picked.length} queues into</span>
-            <input value={mergeName} onChange={(e) => setMergeName(e.target.value)} aria-label="Name of the merged queue"
+            <span className="settings-note" style={{ margin: 0 }}>{t('Merge {n} queues into', { n: picked.length })}</span>
+            <input value={mergeName} onChange={(e) => setMergeName(e.target.value)} aria-label={t('Name of the merged queue')}
               placeholder={rows.find((r) => picked.includes(r.queue.id))?.queue.name} />
-            <button type="submit" className="toggle-on" title="Books keep their order (left-most queue first); the other queues are removed — ↶ Undo puts them back">Merge</button>
-            <button type="button" onClick={() => setPicked([])}>Cancel</button>
+            <button type="submit" className="toggle-on" title={t('Books keep their order (left-most queue first); the other queues are removed — ↶ Undo puts them back')}>{t('Merge')}</button>
+            <button type="button" onClick={() => setPicked([])}>{t('Cancel')}</button>
           </form>
-        ) : <span className="settings-note" style={{ margin: 0 }}>Tick two or more queues to merge them · ✂ on a row splits it.</span>}
+        ) : <span className="settings-note" style={{ margin: 0 }}>{t('Tick two or more queues to merge them · ✂ on a row splits it.')}</span>}
       </div>
       <div className="lj-q-box lj-qdash-box">
         <table className="lj-cand lj-qdash-table">
-          <thead><tr><th aria-label="Select" /><th>Queue</th><th>Finished</th><th>Words read</th><th>Words left</th><th>Hours left</th><th>Done by*</th><th title="The same, counting only books that have a linked document">Linked files only</th><th>Up next</th></tr></thead>
+          <thead><tr><th aria-label={t('Select')} /><th>{t('Queue')}</th><th>{t('Finished')}</th><th>{t('Words read')}</th><th>{t('Words left')}</th><th>{t('Hours left')}</th><th>{t('Done by*')}</th><th title={t('The same, counting only books that have a linked document')}>{t('Linked files only')}</th><th>{t('Up next')}</th></tr></thead>
           <tbody>
             {rows.map(({ queue: q, st, linked }) => (
               <tr key={q.id}>
-                <td><input type="checkbox" checked={picked.includes(q.id)} onChange={() => togglePick(q.id)} aria-label={`Select “${q.name}” to merge`} /></td>
+                <td><input type="checkbox" checked={picked.includes(q.id)} onChange={() => togglePick(q.id)} aria-label={t('Select “{name}” to merge', { name: q.name })} /></td>
                 <td>
-                  <button className="link-btn" onClick={() => onPick(q.id)} title="Open this queue">{q.name}</button>
+                  <button className="link-btn" onClick={() => onPick(q.id)} title={t('Open this queue')}>{q.name}</button>
                   {splitAt?.id === q.id ? (
                     <span className="lj-qdash-split">
-                      {' '}first <input type="number" min="1" max={Math.max(1, st.count - 1)} value={splitAt.n} onChange={(e) => setSplitAt({ id: q.id, n: e.target.value })} aria-label="Books that stay in this queue" /> stay
-                      <button onClick={() => { onBulk((qs) => splitQueue(qs, q.id, books, 'at', Number(splitAt.n) || 1), `split “${q.name}”`); setSplitAt(null); }}>Split</button>
+                      {' '}{t('first')} <input type="number" min="1" max={Math.max(1, st.count - 1)} value={splitAt.n} onChange={(e) => setSplitAt({ id: q.id, n: e.target.value })} aria-label={t('Books that stay in this queue')} /> {t('stay')}
+                      <button onClick={() => { onBulk((qs) => splitQueue(qs, q.id, books, 'at', Number(splitAt.n) || 1), t('split “{name}”', { name: q.name })); setSplitAt(null); }}>{t('Split')}</button>
                       <button onClick={() => setSplitAt(null)}>✕</button>
                     </span>
                   ) : st.count > 1 && (
-                    <select className="lj-q-move" value="" aria-label={`Split “${q.name}”`} title="Split this queue"
+                    <select className="lj-q-move" value="" aria-label={t('Split “{name}”', { name: q.name })} title={t('Split this queue')}
                       onChange={(e) => {
                         const how = e.target.value;
                         if (!how) return;
                         if (how === 'at') setSplitAt({ id: q.id, n: Math.ceil(st.count / 2) });
-                        else onBulk((qs) => splitQueue(qs, q.id, books, how), `split “${q.name}”`);
+                        else onBulk((qs) => splitQueue(qs, q.id, books, how), t('split “{name}”', { name: q.name }));
                       }}>
                       <option value="">✂</option>
                       {Object.entries(QUEUE_SPLITS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
                     </select>
                   )}
                 </td>
-                <td><Bar cls="fin" pct={st.count ? st.done / st.count : 0} label={`${st.done} of ${st.count} finished`} /><span className="lj-cand-pct lj-qdash-n">{st.done}/{st.count}</span></td>
+                <td><Bar cls="fin" pct={st.count ? st.done / st.count : 0} label={t('{done} of {total} finished', { done: st.done, total: st.count })} /><span className="lj-cand-pct lj-qdash-n">{st.done}/{st.count}</span></td>
                 <td><Bar pct={st.pctWords / 100} /><span className="lj-cand-pct">{st.pctWords}%</span></td>
-                <td title={`${st.wordsLeft.toLocaleString()} words`}><span className="lj-qdash-left"><i style={{ width: `${(st.wordsLeft / maxLeft) * 100}%` }} /></span>{Math.round(st.wordsLeft / 1000)}k</td>
-                <td>{st.hoursLeft} h</td>
+                <td title={t('{n} words', { n: st.wordsLeft.toLocaleString() })}><span className="lj-qdash-left"><i style={{ width: `${(st.wordsLeft / maxLeft) * 100}%` }} /></span>{Math.round(st.wordsLeft / 1000)}k</td>
+                <td>{t('{n} h', { n: st.hoursLeft })}</td>
                 <td>{st.eta || '—'}</td>
-                <td title={`${linked.count} of ${st.count} books have a linked document`}>{linked.count
-                  ? <><Bar cls="fin" pct={linked.done / linked.count} label={`${linked.done} of ${linked.count} linked books finished`} /><span className="lj-qdash-linked">{linked.done}/{linked.count} · {linked.pctWords}% · {linked.hoursLeft} h</span></>
-                  : <span className="settings-note">none linked</span>}</td>
-                <td title={st.next?.title || ''}>{st.next?.title || (st.count ? '✓ all finished' : 'empty')}</td>
+                <td title={t('{n} of {total} books have a linked document', { n: linked.count, total: st.count })}>{linked.count
+                  ? <><Bar cls="fin" pct={linked.done / linked.count} label={t('{done} of {total} linked books finished', { done: linked.done, total: linked.count })} /><span className="lj-qdash-linked">{linked.done}/{linked.count} · {linked.pctWords}% · {t('{n} h', { n: linked.hoursLeft })}</span></>
+                  : <span className="settings-note">{t('none linked')}</span>}</td>
+                <td title={st.next?.title || ''}>{st.next?.title || (st.count ? `✓ ${t('all finished')}` : t('empty'))}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="settings-note lj-cand-foot">* if that queue alone were read in order at your recent pace. Click a queue’s name to open it.</p>
+      <p className="settings-note lj-cand-foot">{t('* if that queue alone were read in order at your recent pace. Click a queue’s name to open it.')}</p>
     </section>
   );
 }
 
 // One queue: its stats (progress, pace, time, ETA, where the files are) with bars, the ordered list
 // with ▶ open / reorder / remove, and whole-queue reorders.
-const WHERE = { open: ['📂', 'Open in a tab'], local: ['💾', 'Saved on this device'], folder: ['📁', 'Found in a search folder'], unsearched: ['❔', 'Not on this device — not searched for yet'], missing: ['✖', 'Not on this device or in the search folders'], unlinked: ['—', 'No document linked'] };
+const WHERE = { open: ['📂', t('Open in a tab')], local: ['💾', t('Saved on this device')], folder: ['📁', t('Found in a search folder')], unsearched: ['❔', t('Not on this device — not searched for yet')], missing: ['✖', t('Not on this device or in the search folders')], unlinked: ['—', t('No document linked')] };
 // The queue table's filterable text columns (Words has min/max instead).
-const QCOLS = { title: 'Title', author: 'Author', genre: 'Genre', type: 'Type', folder: 'Folder', file: 'File' };
+const QCOLS = { title: t('Title'), author: t('Author'), genre: t('Genre'), type: t('Type'), folder: t('Folder'), file: t('File') };
 function NamedQueue({ queue, others = [], paths = {}, stacked = true, onLayout, books, wpm, setWpm, pace, fileStats, csOf, pctOf, openChecksums, dirs, finding, openTheFile, findMsg, onChange, onDelete, onEdit, onBulk, onOpen, folders }) {
   const qBooks = useMemo(() => queueBooks(queue, books), [queue, books]);
   const st = useMemo(() => queueStats(qBooks, {
@@ -2350,7 +2348,7 @@ function NamedQueue({ queue, others = [], paths = {}, stacked = true, onLayout, 
   // operation adds matching unread books from, and the prep-note types wanted for its unread books.
   const [cw, setCw] = useState(false);
   const [dyn, setDyn] = useState(queue.dynamic || '');
-  const togglePrep = (t) => onChange({ ...queue, prep: (queue.prep || []).includes(t) ? queue.prep.filter((x) => x !== t) : [...(queue.prep || []), t] });
+  const togglePrep = (pt) => onChange({ ...queue, prep: (queue.prep || []).includes(pt) ? queue.prep.filter((x) => x !== pt) : [...(queue.prep || []), pt] });
   // File presence: the cheap checks (open tab / local copy) run on their own; the folder search only
   // on request, since it walks directories.
   const [where, setWhere] = useState({});
@@ -2399,153 +2397,153 @@ function NamedQueue({ queue, others = [], paths = {}, stacked = true, onLayout, 
   }), [fin, todo, hideFin, csOf, st, paths, fileStats]);
   const num = (v) => (String(v).trim() === '' ? null : Number(v) * 1000);
   const { rows: shownRows, bad: qbad } = useMemo(() => filterCandidates(qrows, { cols: qcols, state: qstate, minWords: num(minW), maxWords: num(maxW), keepOrder: true }), [qrows, qcols, qstate, minW, maxW]);
-  const qfiltered = Object.values(qcols).some((t) => t?.trim()) || minW !== '' || maxW !== '' || qstate !== 'all';
-  const resort = (key) => onBulk((qs) => setQueueIds(qs, queue.id, sortQueueIds(qBooks, key, (b) => ({ pct: pctOf(b), lastRead: fileStats[csOf[b.id]]?.lastRead }))), `sort (${QUEUE_SORTS[key][0].toLowerCase()})`);
+  const qfiltered = Object.values(qcols).some((v) => v?.trim()) || minW !== '' || maxW !== '' || qstate !== 'all';
+  const resort = (key) => onBulk((qs) => setQueueIds(qs, queue.id, sortQueueIds(qBooks, key, (b) => ({ pct: pctOf(b), lastRead: fileStats[csOf[b.id]]?.lastRead }))), t('sort ({how})', { how: QUEUE_SORTS[key][0].toLowerCase() }));
 
   return (
-    <section className="lj-q-pane" aria-label={`Queue: ${queue.name}`}>
+    <section className="lj-q-pane" aria-label={t('Queue: {name}', { name: queue.name })}>
       <div className="rh-section-h lj-sh-row">
         {renaming == null
           ? <span>{queue.name}</span>
           : (
             <form className="lj-q-new" onSubmit={(e) => { e.preventDefault(); if (renaming.trim()) { onChange({ ...queue, name: renaming.trim() }); setRenaming(null); } }}>
-              <input autoFocus value={renaming} aria-label="Queue name" onChange={(e) => setRenaming(e.target.value)} />
-              <button type="submit">Save</button>
-              <button type="button" onClick={() => setRenaming(null)}>Cancel</button>
+              <input autoFocus value={renaming} aria-label={t('Queue name')} onChange={(e) => setRenaming(e.target.value)} />
+              <button type="submit">{t('Save')}</button>
+              <button type="button" onClick={() => setRenaming(null)}>{t('Cancel')}</button>
             </form>
           )}
         <span className="lj-spacer" />
-        {renaming == null && <button onClick={() => setRenaming(queue.name)}>Rename</button>}
-        <button aria-expanded={cw} onClick={() => setCw(!cw)} title="What the cowork may do with this queue: fill it from a description, prepare notes for its unread books">🤖 Cowork{String(queue.dynamic || '').trim() ? ' · 🧲' : ''}{queue.prep?.length ? ' · 📖' : ''}</button>
+        {renaming == null && <button onClick={() => setRenaming(queue.name)}>{t('Rename')}</button>}
+        <button aria-expanded={cw} onClick={() => setCw(!cw)} title={t('What the cowork may do with this queue: fill it from a description, prepare notes for its unread books')}>🤖 {t('Cowork')}{String(queue.dynamic || '').trim() ? ' · 🧲' : ''}{queue.prep?.length ? ' · 📖' : ''}</button>
         {confirmDel
-          ? <><button className="danger" onClick={onDelete}>Delete “{queue.name}”</button><button onClick={() => setConfirmDel(false)}>Keep</button></>
-          : <button onClick={() => setConfirmDel(true)} title="Delete this queue (the books stay in your library)">Delete</button>}
+          ? <><button className="danger" onClick={onDelete}>{t('Delete “{name}”', { name: queue.name })}</button><button onClick={() => setConfirmDel(false)}>{t('Keep')}</button></>
+          : <button onClick={() => setConfirmDel(true)} title={t('Delete this queue (the books stay in your library)')}>{t('Delete')}</button>}
       </div>
       {cw && (
         <div className="lj-qcw">
-          <label>🧲 Dynamic — the cowork adds unread books that fit:
-            <input type="text" value={dyn} placeholder="e.g. American literature (empty = not dynamic)" aria-label="Dynamic queue description"
+          <label>🧲 {t('Dynamic — the cowork adds unread books that fit:')}
+            <input type="text" value={dyn} placeholder={t('e.g. American literature (empty = not dynamic)')} aria-label={t('Dynamic queue description')}
               onChange={(e) => setDyn(e.target.value)} onBlur={() => { if (dyn.trim() !== String(queue.dynamic || '')) onChange({ ...queue, dynamic: dyn.trim() }); }} />
           </label>
-          <span>📖 Prep notes for its unread books:
-            {PREP_NOTE_TYPES.map((t) => <label key={t}><input type="checkbox" checked={(queue.prep || []).includes(t)} onChange={() => togglePrep(t)} /> {AI_NOTE_TYPES[t]}</label>)}
+          <span>📖 {t('Prep notes for its unread books:')}
+            {PREP_NOTE_TYPES.map((pt) => <label key={pt}><input type="checkbox" checked={(queue.prep || []).includes(pt)} onChange={() => togglePrep(pt)} /> {AI_NOTE_TYPES[pt]}</label>)}
           </span>
-          <p className="settings-note">Cowork page → “Fill dynamic queues”, “Prep notes for queued books”, “Suggest re-queuing mis-queued books”. Every change is reviewed there before it lands.</p>
+          <p className="settings-note">{t('Cowork page → “Fill dynamic queues”, “Prep notes for queued books”, “Suggest re-queuing mis-queued books”. Every change is reviewed there before it lands.')}</p>
         </div>
       )}
       {st.count > 0 && (
         <>
           {/* The whole queue at a glance: one segment per book, sized by length, filled by progress. */}
-          <div className="lj-qseg" role="img" aria-label={`${st.pctWords}% of the queue's words read`}>
+          <div className="lj-qseg" role="img" aria-label={t("{pct}% of the queue's words read", { pct: st.pctWords })}>
             {qBooks.map((b) => (
               <span key={b.id} style={{ flexGrow: Math.max(1, Math.sqrt(Number(b.words) || (Number(b.pages) || 0) * 275 || 1)) }}
-                title={`${b.title} — ${pctTxt(st.pctById[b.id])} read`} className={readStatus(b) === 'finished' ? 'fin' : ''}>
+                title={t('{title} — {pct} read', { title: b.title, pct: pctTxt(st.pctById[b.id]) })} className={readStatus(b) === 'finished' ? 'fin' : ''}>
                 <i style={{ width: pctTxt(st.pctById[b.id]) }} />
               </span>
             ))}
           </div>
           <div className="lj-qstats">
-            <div className="ab-stat"><b>{st.done} / {st.count}</b><span>finished</span><Bar pct={st.done / st.count} label={`${st.done} of ${st.count} finished`} /></div>
-            <div className="ab-stat"><b>{st.pctWords}%</b><span>of {st.wordsTotal.toLocaleString()} words read</span><Bar pct={st.pctWords / 100} /></div>
-            <div className="ab-stat"><b>{avail} / {st.count}</b><span>files available{counts.unsearched ? ` · ${counts.unsearched} not searched` : ''}{counts.missing ? ` · ${counts.missing} missing` : ''}</span><Bar cls="files" pct={avail / st.count} label={`${avail} of ${st.count} files available`} /></div>
-            <div className="ab-stat"><b>{st.hoursLeft} h</b><span>left at {wpm} wpm</span></div>
-            <div className="ab-stat" title="Projected finish if read in order at your recent pace — the last ~6 weeks of reading, recent days weighted most (days off count too)">
-              <b>{st.eta || '—'}</b><span>{st.eta ? `ETA at ~${st.wordsPerDay.toLocaleString()} words/day lately` : 'ETA needs some recent reading'}</span>
+            <div className="ab-stat"><b>{st.done} / {st.count}</b><span>{t('finished')}</span><Bar pct={st.done / st.count} label={t('{done} of {total} finished', { done: st.done, total: st.count })} /></div>
+            <div className="ab-stat"><b>{st.pctWords}%</b><span>{t('of {n} words read', { n: st.wordsTotal.toLocaleString() })}</span><Bar pct={st.pctWords / 100} /></div>
+            <div className="ab-stat"><b>{avail} / {st.count}</b><span>{t('files available')}{counts.unsearched ? ` · ${t('{n} not searched', { n: counts.unsearched })}` : ''}{counts.missing ? ` · ${t('{n} missing', { n: counts.missing })}` : ''}</span><Bar cls="files" pct={avail / st.count} label={t('{done} of {total} files available', { done: avail, total: st.count })} /></div>
+            <div className="ab-stat"><b>{t('{n} h', { n: st.hoursLeft })}</b><span>{t('left at {wpm} wpm', { wpm })}</span></div>
+            <div className="ab-stat" title={t('Projected finish if read in order at your recent pace — the last ~6 weeks of reading, recent days weighted most (days off count too)')}>
+              <b>{st.eta || '—'}</b><span>{st.eta ? t('ETA at ~{n} words/day lately', { n: st.wordsPerDay.toLocaleString() }) : t('ETA needs some recent reading')}</span>
             </div>
-            <div className="ab-stat"><b>{st.hoursSpent} h</b><span>spent{st.readingWpm ? ` · ~${st.readingWpm} wpm on these` : ''}</span></div>
+            <div className="ab-stat"><b>{t('{n} h', { n: st.hoursSpent })}</b><span>{st.readingWpm ? t('spent · ~{wpm} wpm on these', { wpm: st.readingWpm }) : t('spent')}</span></div>
           </div>
-          <div className="lj-qlinked" title="The same stats counting only books that have a linked document">
-            <span className="lj-qlinked-h">🔗 Linked files only · {lst.count} of {st.count}</span>
+          <div className="lj-qlinked" title={t('The same stats counting only books that have a linked document')}>
+            <span className="lj-qlinked-h">🔗 {t('Linked files only · {n} of {total}', { n: lst.count, total: st.count })}</span>
             {lst.count ? <>
-              <span className="lj-qlinked-s"><Bar cls="fin" pct={lst.done / lst.count} label={`${lst.done} of ${lst.count} linked books finished`} />{lst.done}/{lst.count} finished</span>
-              <span className="lj-qlinked-s"><Bar pct={lst.pctWords / 100} />{lst.pctWords}% read</span>
-              <span className="lj-qlinked-s">{lst.hoursLeft} h left</span>
-              <span className="lj-qlinked-s">{lst.eta ? `done ~${lst.eta}` : 'ETA —'}</span>
-              <span className="lj-qlinked-s">{lst.hoursSpent} h spent{lst.readingWpm ? ` · ~${lst.readingWpm} wpm` : ''}</span>
-            </> : <span className="settings-note" style={{ margin: 0 }}>none of these books has a linked document yet</span>}
+              <span className="lj-qlinked-s"><Bar cls="fin" pct={lst.done / lst.count} label={t('{done} of {total} linked books finished', { done: lst.done, total: lst.count })} />{t('{done}/{total} finished', { done: lst.done, total: lst.count })}</span>
+              <span className="lj-qlinked-s"><Bar pct={lst.pctWords / 100} />{t('{pct}% read', { pct: lst.pctWords })}</span>
+              <span className="lj-qlinked-s">{t('{n} h left', { n: lst.hoursLeft })}</span>
+              <span className="lj-qlinked-s">{lst.eta ? t('done ~{eta}', { eta: lst.eta }) : t('ETA —')}</span>
+              <span className="lj-qlinked-s">{lst.readingWpm ? t('{n} h spent · ~{wpm} wpm', { n: lst.hoursSpent, wpm: lst.readingWpm }) : t('{n} h spent', { n: lst.hoursSpent })}</span>
+            </> : <span className="settings-note" style={{ margin: 0 }}>{t('none of these books has a linked document yet')}</span>}
           </div>
         </>
       )}
       <div className="lj-inline lj-q-tools">
-        <label className="settings-note" title={pace.wpm ? `Your recent reading speed is ~${pace.wpm} wpm` : 'No recent reading speed yet'}>
-          Speed <input type="number" className="lj-wpm" min="100" max="1500" step="10" value={wpm} onChange={(e) => setWpm(Number(e.target.value) || null)} aria-label="Words per minute" /> wpm
+        <label className="settings-note" title={pace.wpm ? t('Your recent reading speed is ~{wpm} wpm', { wpm: pace.wpm }) : t('No recent reading speed yet')}>
+          {t('Speed')} <input type="number" className="lj-wpm" min="100" max="1500" step="10" value={wpm} onChange={(e) => setWpm(Number(e.target.value) || null)} aria-label={t('Words per minute')} /> {t('wpm')}
         </label>
-        <select value="" onChange={(e) => { if (e.target.value) resort(e.target.value); }} aria-label="Reorder the whole queue" disabled={qBooks.length < 2}>
-          <option value="">⇅ Reorder…</option>
+        <select value="" onChange={(e) => { if (e.target.value) resort(e.target.value); }} aria-label={t('Reorder the whole queue')} disabled={qBooks.length < 2}>
+          <option value="">⇅ {t('Reorder…')}</option>
           {Object.entries(QUEUE_SORTS).map(([k, [label]]) => <option key={k} value={k}>{label}</option>)}
         </select>
-        <select value={qstate} onChange={(e) => setQstate(e.target.value)} aria-label="Show">
-          {Object.entries(CAND_STATES).map(([k, label]) => <option key={k} value={k}>{k === 'all' ? 'All books' : label}</option>)}
+        <select value={qstate} onChange={(e) => setQstate(e.target.value)} aria-label={t('Show')}>
+          {Object.entries(CAND_STATES).map(([k, label]) => <option key={k} value={k}>{k === 'all' ? t('All books') : label}</option>)}
         </select>
-        {qfiltered && <button onClick={() => { setQcols({}); setMinW(''); setMaxW(''); setQstate('all'); }}>Clear filters</button>}
+        {qfiltered && <button onClick={() => { setQcols({}); setMinW(''); setMaxW(''); setQstate('all'); }}>{t('Clear filters')}</button>}
         <span className="lj-spacer" />
-        <button onClick={onLayout} title={stacked ? 'Put the queue and the add-books table side by side' : 'Stack the add-books table under the queue (room for every column)'}>{stacked ? '⇔ Side by side' : '⇕ Stack'}</button>
-        {counts.unsearched > 0 && <button disabled={searching} onClick={searchFolders} title="Look through your search folders for the files not on this device">{searching ? '⟳ Searching…' : `🔎 Search folders (${counts.unsearched})`}</button>}
-        <button disabled={!st.next} title="Open a random unfinished pick from this queue" onClick={() => {
+        <button onClick={onLayout} title={stacked ? t('Put the queue and the add-books table side by side') : t('Stack the add-books table under the queue (room for every column)')}>{stacked ? `⇔ ${t('Side by side')}` : `⇕ ${t('Stack')}`}</button>
+        {counts.unsearched > 0 && <button disabled={searching} onClick={searchFolders} title={t('Look through your search folders for the files not on this device')}>{searching ? `⟳ ${t('Searching…')}` : `🔎 ${t('Search folders ({n})', { n: counts.unsearched })}`}</button>}
+        <button disabled={!st.next} title={t('Open a random unfinished pick from this queue')} onClick={() => {
           const pool = qBooks.filter((b) => readStatus(b) !== 'finished');
           if (pool.length) onOpen(pool[Math.floor(Math.random() * pool.length)].id);
         }}>🎲</button>
       </div>
       {findMsg && <p className="settings-note lj-findmsg">{findMsg}</p>}
       <div className="lj-q-box">
-        {qBooks.length === 0 ? <p className="settings-note">Empty so far — add books from the table {stacked ? 'below' : <><span className="lj-q-wide-only">on the right</span><span className="lj-q-narrow-only">below</span></>}.</p> : (
+        {qBooks.length === 0 ? <p className="settings-note">{stacked ? t('Empty so far — add books from the table below.') : <><span className="lj-q-wide-only">{t('Empty so far — add books from the table on the right.')}</span><span className="lj-q-narrow-only">{t('Empty so far — add books from the table below.')}</span></>}</p> : (
           <table className="lj-cand lj-qtable">
             <colgroup><col className="c-rank" /><col className="c-title" /><col className="c-author" /><col className="c-genre" /><col className="c-type" /><col className="c-words" /><col className="c-read" /><col className="c-eta" /><col className="c-folder" /><col className="c-file" /><col className="c-acts" /></colgroup>
             <thead>
-              <tr><th>#</th><th>Title</th><th>Author</th><th>Genre</th><th>Type</th><th title="Words · hours at your speed">Words</th><th>Read</th><th>Done by</th><th>Folder</th><th>File</th><th aria-label="Actions" /></tr>
+              <tr><th>#</th><th>{t('Title')}</th><th>{t('Author')}</th><th>{t('Genre')}</th><th>{t('Type')}</th><th title={t('Words · hours at your speed')}>{t('Words')}</th><th>{t('Read')}</th><th>{t('Done by')}</th><th>{t('Folder')}</th><th>{t('File')}</th><th aria-label={t('Actions')} /></tr>
               <tr className="lj-cand-filters">
                 <th />
                 {['title', 'author', 'genre', 'type'].map((k) => (
-                  <th key={k}><input value={qcols[k] || ''} onChange={(e) => setQcols({ ...qcols, [k]: e.target.value })} placeholder="regex" className={qbad.includes(k) ? 'bad' : ''} aria-label={`Filter ${QCOLS[k]} (regular expression)`} /></th>
+                  <th key={k}><input value={qcols[k] || ''} onChange={(e) => setQcols({ ...qcols, [k]: e.target.value })} placeholder={t('regex')} className={qbad.includes(k) ? 'bad' : ''} aria-label={t('Filter {column} (regular expression)', { column: QCOLS[k] })} /></th>
                 ))}
                 <th className="lj-qwords-f">
-                  <input value={minW} onChange={(e) => setMinW(e.target.value)} placeholder="min k" inputMode="numeric" aria-label="Minimum words, in thousands" title="Minimum words, in thousands (e.g. 50 = 50,000)" />
-                  <input value={maxW} onChange={(e) => setMaxW(e.target.value)} placeholder="max k" inputMode="numeric" aria-label="Maximum words, in thousands" title="Maximum words, in thousands (e.g. 120 = 120,000)" />
+                  <input value={minW} onChange={(e) => setMinW(e.target.value)} placeholder={t('min k')} inputMode="numeric" aria-label={t('Minimum words, in thousands')} title={t('Minimum words, in thousands (e.g. 50 = 50,000)')} />
+                  <input value={maxW} onChange={(e) => setMaxW(e.target.value)} placeholder={t('max k')} inputMode="numeric" aria-label={t('Maximum words, in thousands')} title={t('Maximum words, in thousands (e.g. 120 = 120,000)')} />
                 </th>
                 <th /><th />
                 {['folder', 'file'].map((k) => (
-                  <th key={k}><input value={qcols[k] || ''} onChange={(e) => setQcols({ ...qcols, [k]: e.target.value })} placeholder="regex" className={qbad.includes(k) ? 'bad' : ''} aria-label={`Filter ${QCOLS[k]} (regular expression)`} /></th>
+                  <th key={k}><input value={qcols[k] || ''} onChange={(e) => setQcols({ ...qcols, [k]: e.target.value })} placeholder={t('regex')} className={qbad.includes(k) ? 'bad' : ''} aria-label={t('Filter {column} (regular expression)', { column: QCOLS[k] })} /></th>
                 ))}
                 <th />
               </tr>
             </thead>
             <tbody>
               {fin.length > 0 && (
-                <tr className="lj-q-finhead"><td colSpan={11}><button onClick={toggleFin} aria-expanded={!hideFin}>{hideFin ? '▸' : '▾'} ✓ {fin.length} finished</button></td></tr>
+                <tr className="lj-q-finhead"><td colSpan={11}><button onClick={toggleFin} aria-expanded={!hideFin}>{hideFin ? '▸' : '▾'} ✓ {t('{n} finished', { n: fin.length })}</button></td></tr>
               )}
               {shownRows.map(({ book: b, pct: p, cols: c, words }) => {
                 const isFin = readStatus(b) === 'finished';
                 const i = isFin ? -1 : todo.indexOf(b);
-                const w = WHERE[where[b.id]] || ['…', 'Checking'];
+                const w = WHERE[where[b.id]] || ['…', t('Checking')];
                 const last = i === todo.length - 1;
                 return (
                   <tr key={b.id} className={isFin ? 'done' : ''}>
                     <td className="lj-qrank">{isFin ? '✓' : i + 1}</td>
-                    <td title={b.title}><button className="link-btn" onClick={() => onOpen(b.id)} title="Open in Library">{b.title}</button></td>
+                    <td title={b.title}><button className="link-btn" onClick={() => onOpen(b.id)} title={t('Open in Library')}>{b.title}</button></td>
                     <td title={c.author}>{c.author}</td>
                     <td title={c.genre}>{c.genre}</td>
                     <td>{c.type}</td>
-                    <td title={`${words.toLocaleString()} words`}>{words ? `${Math.round(words / 1000)}k` : '—'}{estHours(b, wpm) != null ? <span className="lj-qdim"> · {estHours(b, wpm)} h</span> : ''}</td>
+                    <td title={t('{n} words', { n: words.toLocaleString() })}>{words ? `${Math.round(words / 1000)}k` : '—'}{estHours(b, wpm) != null ? <span className="lj-qdim"> · {t('{n} h', { n: estHours(b, wpm) })}</span> : ''}</td>
                     <td><Bar pct={p} cls={isFin ? 'fin' : ''} /><span className="lj-cand-pct">{pctTxt(p)}</span></td>
                     <td>{isFin ? (b.finishTime || '✓') : st.etaById[b.id] || '—'}</td>
                     <td title={c.folder}>{c.folder}</td>
                     <td title={c.file}><span className="lj-where" role="img" aria-label={w[1]} title={w[1]}>{w[0]}</span>{c.file}</td>
                     <td className="lj-qacts">
-                      {csOf[b.id] && <button className="lj-queue-read" disabled={finding === b.id} onClick={() => openTheFile(b)} title="Read it">{finding === b.id ? '⟳' : '▶'}</button>}
+                      {csOf[b.id] && <button className="lj-queue-read" disabled={finding === b.id} onClick={() => openTheFile(b)} title={t('Read it')}>{finding === b.id ? '⟳' : '▶'}</button>}
                       {!isFin && <>
-                        <button disabled={i === 0} onClick={() => move(b, 0)} aria-label={`Move “${b.title}” to the top`} title="To the top (of what's left)">⤒</button>
-                        <button disabled={i === 0} onClick={() => move(b, i - 1)} aria-label={`Move “${b.title}” up`} title="Up one place in the full queue">↑</button>
-                        <button disabled={last} onClick={() => move(b, i + 1)} aria-label={`Move “${b.title}” down`} title="Down one place in the full queue">↓</button>
-                        <button disabled={last} onClick={() => move(b, todo.length)} aria-label={`Move “${b.title}” to the bottom`} title="To the bottom">⤓</button>
+                        <button disabled={i === 0} onClick={() => move(b, 0)} aria-label={t('Move “{title}” to the top', { title: b.title })} title={t("To the top (of what's left)")}>⤒</button>
+                        <button disabled={i === 0} onClick={() => move(b, i - 1)} aria-label={t('Move “{title}” up', { title: b.title })} title={t('Up one place in the full queue')}>↑</button>
+                        <button disabled={last} onClick={() => move(b, i + 1)} aria-label={t('Move “{title}” down', { title: b.title })} title={t('Down one place in the full queue')}>↓</button>
+                        <button disabled={last} onClick={() => move(b, todo.length)} aria-label={t('Move “{title}” to the bottom', { title: b.title })} title={t('To the bottom')}>⤓</button>
                       </>}
                       {others.length > 0 && (
-                        <select className="lj-q-move" value="" aria-label={`Move “${b.title}” to another queue`} title="Move to another queue"
+                        <select className="lj-q-move" value="" aria-label={t('Move “{title}” to another queue', { title: b.title })} title={t('Move to another queue')}
                           onChange={(e) => { if (e.target.value) onEdit((qs) => addToQueue(qs, e.target.value, b.id)); }}>
                           <option value="">⇄</option>
                           {others.map((x) => <option key={x.id} value={x.id}>→ {x.name}</option>)}
                         </select>
                       )}
-                      <button title="Remove from this queue" aria-label={`Remove “${b.title}” from this queue`} onClick={() => onEdit((qs) => removeFromQueue(qs, queue.id, b.id))}>✕</button>
+                      <button title={t('Remove from this queue')} aria-label={t('Remove “{title}” from this queue', { title: b.title })} onClick={() => onEdit((qs) => removeFromQueue(qs, queue.id, b.id))}>✕</button>
                     </td>
                   </tr>
                 );
@@ -2554,7 +2552,9 @@ function NamedQueue({ queue, others = [], paths = {}, stacked = true, onLayout, 
           </table>
         )}
       </div>
-      {qfiltered && <p className="settings-note lj-cand-foot">Showing {shownRows.length} of {qrows.length}{hideFin && fin.length ? ` (${fin.length} finished hidden)` : ''} — numbers and moves still follow the full queue order.</p>}
+      {qfiltered && <p className="settings-note lj-cand-foot">{hideFin && fin.length
+        ? t('Showing {n} of {total} ({fin} finished hidden) — numbers and moves still follow the full queue order.', { n: shownRows.length, total: qrows.length, fin: fin.length })
+        : t('Showing {n} of {total} — numbers and moves still follow the full queue order.', { n: shownRows.length, total: qrows.length })}</p>}
       {folders}
     </section>
   );
@@ -2575,13 +2575,16 @@ function QueueCandidates({ queue, queues, books, dirs = [], paths, setPaths, wpm
   async function runIndex(ask) {
     const wanted = Object.entries(csOf).map(([, cs]) => ({ cs, name: fileStats[cs]?.fileName })).filter((w) => w.name);
     if (!dirs.length || !wanted.length) return;
-    setIndexing('⟳ Looking through your folders…');
+    setIndexing(`⟳ ${t('Looking through your folders…')}`);
     const r = await indexFolders(dirs, wanted, { ask }).catch(() => null);
-    if (!r) { setIndexing('Could not read the search folders.'); return; }
+    if (!r) { setIndexing(t('Could not read the search folders.')); return; }
     // A walk that read every folder to the end and still missed a file: its remembered path is stale.
     rememberPaths(r.paths, r.complete ? wanted.map((w) => w.cs).filter((cs) => !r.paths[cs]) : []);
     setPaths(foundPaths());
-    setIndexing(ask || r.found ? `Found ${r.found} of ${wanted.length} linked files (${r.scanned.toLocaleString()} entries looked at)${r.skipped ? ` · ${r.skipped} folder${r.skipped === 1 ? '' : 's'} need permission — use Find folders` : ''}.` : '');
+    const foundMsg = { found: r.found, total: wanted.length, scanned: r.scanned.toLocaleString() };
+    setIndexing(ask || r.found ? (r.skipped
+      ? t.n('Found {found} of {total} linked files ({scanned} entries looked at) · {n} folder needs permission — use Find folders.', 'Found {found} of {total} linked files ({scanned} entries looked at) · {n} folders need permission — use Find folders.', r.skipped, foundMsg)
+      : t('Found {found} of {total} linked files ({scanned} entries looked at).', foundMsg)) : '');
   }
   useEffect(() => {
     if (foldersIndexed || !dirs.length || !Object.keys(fileStats).length) return;
@@ -2595,34 +2598,34 @@ function QueueCandidates({ queue, queues, books, dirs = [], paths, setPaths, wpm
   }), [books, queues, csOf, pctOf, paths, fileStats, openChecksums]);
   const { rows, bad } = useMemo(() => filterCandidates(all, { cols, state }), [all, cols, state]);
   const shown = rows.slice(0, CAND_SHOW);
-  const filtered = Object.values(cols).some((t) => t?.trim()) || state !== 'unfinished';
+  const filtered = Object.values(cols).some((v) => v?.trim()) || state !== 'unfinished';
   return (
-    <section className="lj-q-pane" aria-label={`Add books to ${queue.name}`}>
+    <section className="lj-q-pane" aria-label={t('Add books to {name}', { name: queue.name })}>
       <div className="rh-section-h lj-sh-row">
-        <span>Add books</span>
+        <span>{t('Add books')}</span>
         <span className="lj-spacer" />
-        <select value={state} onChange={(e) => setState(e.target.value)} aria-label="Completion">
+        <select value={state} onChange={(e) => setState(e.target.value)} aria-label={t('Completion')}>
           {Object.entries(CAND_STATES).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
         </select>
-        {filtered && <button onClick={() => { setCols({}); setState('unfinished'); }}>Clear filters</button>}
+        {filtered && <button onClick={() => { setCols({}); setState('unfinished'); }}>{t('Clear filters')}</button>}
         <button disabled={!dirs.length || indexing.startsWith('⟳')} onClick={() => runIndex(true)}
-          title={dirs.length ? 'Look through your search folders and record which folder each linked file is in' : 'Add a search folder first (📁 Where your documents live, under the queue)'}>📁 Find folders</button>
-        <button disabled={!rows.length} onClick={() => onAdd(shown.map((r) => r.book.id), `add ${shown.length}`)}
-          title={`Add the ${shown.length} books shown to “${queue.name}”, in this order`}>＋ All shown ({shown.length})</button>
+          title={dirs.length ? t('Look through your search folders and record which folder each linked file is in') : t('Add a search folder first (📁 Where your documents live, under the queue)')}>📁 {t('Find folders')}</button>
+        <button disabled={!rows.length} onClick={() => onAdd(shown.map((r) => r.book.id), t('add {n}', { n: shown.length }))}
+          title={t('Add the {n} books shown to “{name}”, in this order', { n: shown.length, name: queue.name })}>＋ {t('All shown ({n})', { n: shown.length })}</button>
       </div>
       {indexing && <p className="settings-note lj-findmsg">{indexing}</p>}
       <div className="lj-q-box lj-cand-box">
         <table className="lj-cand">
           <colgroup><col className="c-add" /><col className="c-title" /><col className="c-author" /><col className="c-genre" /><col className="c-type" /><col className="c-status" /><col className="c-folder" /><col className="c-file" /><col className="c-prog" /><col className="c-size" /></colgroup>
           <thead>
-            <tr><th aria-label="Add" />{Object.values(CAND_COLS).map((l) => <th key={l}>{l}</th>)}<th>Read</th><th>Size</th></tr>
+            <tr><th aria-label={t('Add')} />{Object.values(CAND_COLS).map((l) => <th key={l}>{l}</th>)}<th>{t('Read')}</th><th>{t('Size')}</th></tr>
             <tr className="lj-cand-filters">
               <th />
               {Object.entries(CAND_COLS).map(([k, l]) => (
                 <th key={k}>
-                  <input value={cols[k] || ''} onChange={(e) => setCols({ ...cols, [k]: e.target.value })} placeholder="regex"
-                    className={bad.includes(k) ? 'bad' : ''} aria-label={`Filter ${l} (regular expression)`}
-                    title={bad.includes(k) ? 'Not a valid regular expression — matching it as plain text' : `Filter ${l} — a regular expression, case-insensitive (e.g. ^the|war$)`} />
+                  <input value={cols[k] || ''} onChange={(e) => setCols({ ...cols, [k]: e.target.value })} placeholder={t('regex')}
+                    className={bad.includes(k) ? 'bad' : ''} aria-label={t('Filter {column} (regular expression)', { column: l })}
+                    title={bad.includes(k) ? t('Not a valid regular expression — matching it as plain text') : t('Filter {column} — a regular expression, case-insensitive (e.g. ^the|war$)', { column: l })} />
                 </th>
               ))}
               <th /><th />
@@ -2631,8 +2634,8 @@ function QueueCandidates({ queue, queues, books, dirs = [], paths, setPaths, wpm
           <tbody>
             {shown.map(({ book: b, pct, cols: c, open }) => (
               <tr key={b.id} className={open ? 'open' : ''}>
-                <td><button className="lj-cand-add" onClick={() => onAdd([b.id])} aria-label={`Add “${b.title}” to ${queue.name}`} title={`Add to ${queue.name}`}>＋</button></td>
-                <td title={c.title}><button className="link-btn" onClick={() => onOpen(b.id)} title="Open in Library">{c.title}</button>{open ? ' 📂' : ''}</td>
+                <td><button className="lj-cand-add" onClick={() => onAdd([b.id])} aria-label={t('Add “{title}” to {name}', { title: b.title, name: queue.name })} title={t('Add to {name}', { name: queue.name })}>＋</button></td>
+                <td title={c.title}><button className="link-btn" onClick={() => onOpen(b.id)} title={t('Open in Library')}>{c.title}</button>{open ? ' 📂' : ''}</td>
                 <td title={c.author}>{c.author}</td>
                 <td title={c.genre}>{c.genre}</td>
                 <td>{c.type}</td>
@@ -2640,17 +2643,17 @@ function QueueCandidates({ queue, queues, books, dirs = [], paths, setPaths, wpm
                 <td title={c.folder}>{c.folder}</td>
                 <td title={c.file}>{c.file}</td>
                 <td><Bar pct={pct} /><span className="lj-cand-pct">{pctTxt(pct)}</span></td>
-                <td>{estHours(b, wpm) != null ? `~${estHours(b, wpm)} h` : '—'}</td>
+                <td>{estHours(b, wpm) != null ? t('~{n} h', { n: estHours(b, wpm) }) : '—'}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        {!rows.length && <p className="settings-note">No books match{filtered ? ' these filters' : ' — everything unfinished is already queued'}.</p>}
+        {!rows.length && <p className="settings-note">{filtered ? t('No books match these filters.') : t('No books match — everything unfinished is already queued.')}</p>}
       </div>
       <p className="settings-note lj-cand-foot">
-        {rows.length > CAND_SHOW ? `Showing ${CAND_SHOW} of ${rows.length} — filter to narrow. ` : `${rows.length} book${rows.length === 1 ? '' : 's'}. `}
-        Books already in a queue aren’t listed (a book sits in one queue — use ⇄ on its row to move it).
-        Folder comes from your search folders (the browser doesn’t say where a file was opened from) — 📁 Find folders fills it in; File is the linked document’s name.
+        {rows.length > CAND_SHOW ? t('Showing {n} of {total} — filter to narrow.', { n: CAND_SHOW, total: rows.length }) : t.n('{n} book.', '{n} books.', rows.length)}{' '}
+        {t('Books already in a queue aren’t listed (a book sits in one queue — use ⇄ on its row to move it).')}{' '}
+        {t('Folder comes from your search folders (the browser doesn’t say where a file was opened from) — 📁 Find folders fills it in; File is the linked document’s name.')}
       </p>
     </section>
   );
@@ -2661,12 +2664,12 @@ function QueueCandidates({ queue, queues, books, dirs = [], paths, setPaths, wpm
 // volume with a one-tap queue. Active series (started, unfinished) sort first.
 function SeriesView({ books, crossNotes = [], onDeleteCross, onShelve, onOpen }) {
   const series = useMemo(() => seriesProgress(books), [books]);
-  if (!series.length) return <p className="settings-note">No multi-book series in your tracker yet — set the <b>Series</b> field (and #) on books to group them here.</p>;
+  if (!series.length) return <p className="settings-note">{t('No multi-book series in your tracker yet — set the Series field (and #) on books to group them here.')}</p>;
   const active = series.filter((s) => s.active).length;
   const done = series.filter((s) => s.done).length;
   return (
     <div className="lj-series">
-      <p className="settings-note">{series.length} series · {active} in progress · {done} completed. Click a volume to open it.</p>
+      <p className="settings-note">{t('{n} series · {active} in progress · {done} completed. Click a volume to open it.', { n: series.length, active, done })}</p>
       {series.map((s) => (
         <div key={s.series} className={`lj-series-row${s.done ? ' done' : ''}`}>
           <div className="lj-series-head">
@@ -2689,16 +2692,16 @@ function SeriesView({ books, crossNotes = [], onDeleteCross, onShelve, onOpen })
           </div>
           {s.next && !s.done && (
             <div className="lj-series-next">
-              <span className="settings-note" style={{ margin: 0 }}>Next up:</span> <b>{s.next.title}</b>
+              <span className="settings-note" style={{ margin: 0 }}>{t('Next up:')}</span> <b>{s.next.title}</b>
               {readStatus(s.next) === 'queue'
-                ? <span className="settings-note" style={{ margin: 0 }}>· on deck 📋</span>
-                : <button onClick={() => onShelve(s.next, 'queue')}>📋 Queue it</button>}
+                ? <span className="settings-note" style={{ margin: 0 }}>· {t('on deck')} 📋</span>
+                : <button onClick={() => onShelve(s.next, 'queue')}>📋 {t('Queue it')}</button>}
             </div>
           )}
           {crossNotes.filter((n) => n.series === s.series).map((n) => (
             <div key={n.id} className="lj-ainote lj-xnote">
-              <span className="lj-xnote-span"><em className="lj-xnote-type">{AI_NOTE_TYPES[n.type] || 'Note'}{n.source === 'ai' ? ' · AI' : ''} · series note</em>
-                <button className="close-x" title="Delete this series note" onClick={() => onDeleteCross?.(n.id)}>×</button></span>
+              <span className="lj-xnote-span"><em className="lj-xnote-type">{AI_NOTE_TYPES[n.type] || t('Note')}{n.source === 'ai' ? ` · ${t('AI')}` : ''} · {t('series note')}</em>
+                <button className="close-x" title={t('Delete this series note')} onClick={() => onDeleteCross?.(n.id)}>×</button></span>
               <div className="lj-ainote-text">{n.text}</div>
             </div>
           ))}
@@ -2764,7 +2767,7 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
       await onSaveBook({ ...book, completion: true, inProgress: false, finishTime: book.finishTime || fileStats[anthCs]?.lastRead || todayISO() });
       n++;
     }
-    setMsg(n ? `Marked ${n} fully-read component(s) finished. ✅` : 'No fully-read unfinished components to mark.');
+    setMsg(n ? `${t('Marked {n} fully-read component(s) finished.', { n })} ✅` : t('No fully-read unfinished components to mark.'));
   }
 
   // Group management (rename / master / members / forget) — mutates global.bookGroups in place.
@@ -2782,16 +2785,16 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
       return { ...g, members, master: g.master === cs ? members[0] : g.master };
     })
     .filter((g) => (g.members || []).length >= 2));
-  const forgetGrp = (id) => { onGroups(groups.filter((g) => g.id !== id)); setEditGrp(null); setMsg('Group forgotten on this device — its files keep their own progress.'); };
+  const forgetGrp = (id) => { onGroups(groups.filter((g) => g.id !== id)); setEditGrp(null); setMsg(t('Group forgotten on this device — its files keep their own progress.')); };
   // Create a group right here (same makeGroup as Settings → Book Groups).
   const [newSel, setNewSel] = useState(() => new Set());
   const [newName, setNewName] = useState('');
   function createGroup() {
     const g = makeGroup(newName, [...newSel], Date.now());
-    if (!g) { setMsg('Pick at least two files to group as one book.'); return; }
+    if (!g) { setMsg(t('Pick at least two files to group as one book.')); return; }
     onGroups([...groups, g]);
     setNewSel(new Set()); setNewName('');
-    setMsg(`Grouped ${g.members.length} files as “${g.name}”.`);
+    setMsg(t('Grouped {n} files as “{name}”.', { n: g.members.length, name: g.name }));
   }
   const qMatches = useMemo(() => {
     if (!q.trim()) return [];
@@ -2823,7 +2826,7 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
       .map(([cs, f]) => ({ cs, fileName: f.fileName, words: f.words || 0, coverage: f.coverage || 0 }));
     const rows = planBulkLinks(files, books);
     setBulk(rows.length ? rows : null); setPick(null);
-    if (!rows.length) setMsg('Every opened file is already linked. ✅');
+    if (!rows.length) setMsg(`${t('Every opened file is already linked.')} ✅`);
   }
   const setTarget = (cs, target) => setBulk((rows) => rows.map((r) => (r.cs === cs ? { ...r, target } : r)));
   // A book found by search joins the row's candidates (so the dropdown can show it) and becomes its target.
@@ -2847,29 +2850,31 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
       const r = todo[i];
       const making = r.target.startsWith('new:');
       const to = making ? r.title : (r.cands.find((c) => c.book.id === r.target)?.book.title || r.target);
-      setBusy({ done: i, total: todo.length, label: `${making ? 'Creating' : 'Linking'} “${r.title}”${making ? '' : ` → ${to}`}` });
+      setBusy({ done: i, total: todo.length, label: making ? t('Creating “{title}”', { title: r.title }) : t('Linking “{title}” → {to}', { title: r.title, to }) });
       mark(r.cs, { state: 'busy' });
       try {
         let id = r.target;
         if (making) { const book = newBookFor(r, id.slice(4)); await onSaveBook(book); id = book.id; created++; } else linked++;
         await onBind(r.cs, id);
-        mark(r.cs, { state: making ? 'created' : 'linked', outcome: making ? `created “${to}”` : `linked to “${to}”`, target: 'skip' });
+        mark(r.cs, { state: making ? 'created' : 'linked', outcome: making ? t('created “{title}”', { title: to }) : t('linked to “{title}”', { title: to }), target: 'skip' });
       } catch (e) {
         failed++;
         if (making) created--; else linked--;
-        mark(r.cs, { state: 'failed', outcome: `failed: ${e?.message || e}` });
+        mark(r.cs, { state: 'failed', outcome: t('failed: {error}', { error: e?.message || e }) });
       }
     }
     setBusy(null);
-    setMsg(`Linked ${linked} file(s) to existing books and created ${created} new book(s).${failed ? ` ${failed} failed — see the table.` : ''}`);
+    setMsg(failed
+      ? t('Linked {linked} file(s) to existing books and created {created} new book(s). {failed} failed — see the table.', { linked, created, failed })
+      : t('Linked {linked} file(s) to existing books and created {created} new book(s).', { linked, created }));
     // Everything worked → the table has nothing left to say. A failure keeps it up, marked.
     if (!failed) { setBulk(null); setPick(null); }
   }
 
   return (
     <div className="lj-groupsview">
-      <div className="rh-section-h">Book groups ↔ tracker books</div>
-      {groups.length === 0 && <p className="settings-note">No book groups yet — group edition files under <b>Settings → Book Groups</b>, then link each group to its tracker book here.</p>}
+      <div className="rh-section-h">{t('Book groups ↔ tracker books')}</div>
+      {groups.length === 0 && <p className="settings-note">{t('No book groups yet — group edition files under Settings → Book Groups, then link each group to its tracker book here.')}</p>}
       {groups.map((g) => {
         const master = masterOf(g);
         const linkedId = bindMap[master] || (g.members || []).map((m) => bindMap[m]).find(Boolean);
@@ -2880,49 +2885,49 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
           <div key={g.id || g.name} className="lj-grp-row">
             <span className="lj-grp-name">
               {editing
-                ? <input value={g.name} onChange={(e) => renameGrp(g.id, e.target.value)} aria-label="Group name" />
+                ? <input value={g.name} onChange={(e) => renameGrp(g.id, e.target.value)} aria-label={t('Group name')} />
                 : <b>{g.name}</b>}
-              <em>{(g.members || []).length} file(s) · master: {nameOf(master)}</em>
+              <em>{t('{n} file(s) · master: {file}', { n: (g.members || []).length, file: nameOf(master) })}</em>
             </span>
             {linked ? (
               <span className="lj-grp-acts">
                 <span className="rh-link-chip on">🔗 {linked.title}</span>
-                <button onClick={() => onOpen(linked.id)}>↗ Open</button>
-                <button title="Remove the link between this group's master file and the tracker book" onClick={() => onBind(null, linked.id)}>Unlink</button>
+                <button onClick={() => onOpen(linked.id)}>↗ {t('Open')}</button>
+                <button title={t("Remove the link between this group's master file and the tracker book")} onClick={() => onBind(null, linked.id)}>{t('Unlink')}</button>
               </span>
             ) : (
               <span className="lj-grp-acts">
-                <span className="rh-link-chip">○ not linked</span>
-                {sugg && <button className="toggle-on" onClick={() => onBind(master, sugg.id)}>Link “{sugg.title}”</button>}
-                <button title="Create a tracker book named after the group and link it" onClick={async () => { const book = { id: deriveId({ title: g.name }), title: g.name }; await onSaveBook(book); await onBind(master, book.id); }}>＋ New book</button>
+                <span className="rh-link-chip">○ {t('not linked')}</span>
+                {sugg && <button className="toggle-on" onClick={() => onBind(master, sugg.id)}>{t('Link “{title}”', { title: sugg.title })}</button>}
+                <button title={t('Create a tracker book named after the group and link it')} onClick={async () => { const book = { id: deriveId({ title: g.name }), title: g.name }; await onSaveBook(book); await onBind(master, book.id); }}>＋ {t('New book')}</button>
               </span>
             )}
             <span className="lj-grp-acts">
-              <button title="Rename, change the master, add/remove files, or forget this group" onClick={() => setEditGrp(editing ? null : g.id)}>{editing ? 'Done' : '✎ Edit'}</button>
+              <button title={t('Rename, change the master, add/remove files, or forget this group')} onClick={() => setEditGrp(editing ? null : g.id)}>{editing ? t('Done') : `✎ ${t('Edit')}`}</button>
             </span>
             {editing && (
               <div className="lj-grp-edit">
                 {(g.members || []).map((cs) => (
                   <div key={cs} className="lj-grp-member">
-                    <label title={cs === master ? 'Master (canonical) copy' : 'Make this the master copy'}>
+                    <label title={cs === master ? t('Master (canonical) copy') : t('Make this the master copy')}>
                       <input type="radio" name={`ljm-${g.id}`} checked={cs === master} onChange={() => setGrpMaster(g.id, cs)} />
                       <span>{cs === master ? '★' : '☆'}</span>
                     </label>
                     <span className="lj-grp-member-name" title={cs}>{nameOf(cs)}</span>
-                    <button title="Remove this file from the group" onClick={() => removeGrpMember(g.id, cs)}>×</button>
+                    <button title={t('Remove this file from the group')} onClick={() => removeGrpMember(g.id, cs)}>×</button>
                   </div>
                 ))}
                 <div className="lj-inline" style={{ margin: '4px 0 0' }}>
                   {ungroupedFiles.length > 0 && (
                     <form className="lj-q-new" onSubmit={(e) => { e.preventDefault(); const m = /\[([^\]]+)\]$/.exec(grpAddQ.trim()); if (m) { addGrpMember(g.id, m[1]); setGrpAddQ(''); } }}>
-                      <input list="lj-grp-files" value={grpAddQ} onChange={(e) => setGrpAddQ(e.target.value)} placeholder="＋ Add a file — type to search…" aria-label="Add a file to this group" title="Add another edition/file to this group (type part of its name)" />
-                      <button type="submit" disabled={!/\[[^\]]+\]$/.test(grpAddQ.trim())}>Add</button>
+                      <input list="lj-grp-files" value={grpAddQ} onChange={(e) => setGrpAddQ(e.target.value)} placeholder={t('＋ Add a file — type to search…')} aria-label={t('Add a file to this group')} title={t('Add another edition/file to this group (type part of its name)')} />
+                      <button type="submit" disabled={!/\[[^\]]+\]$/.test(grpAddQ.trim())}>{t('Add')}</button>
                       <datalist id="lj-grp-files">
                         {ungroupedFiles.map(([cs, f]) => <option key={cs} value={`${f.fileName || cs.slice(0, 8)} [${cs}]`} />)}
                       </datalist>
                     </form>
                   )}
-                  <button className="lj-danger" title="Delete the group (files keep their own progress)" onClick={() => forgetGrp(g.id)}>🗑 Forget group</button>
+                  <button className="lj-danger" title={t('Delete the group (files keep their own progress)')} onClick={() => forgetGrp(g.id)}>🗑 {t('Forget group')}</button>
                 </div>
               </div>
             )}
@@ -2932,8 +2937,8 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
 
       {ungroupedFiles.length >= 2 && (
         <details className="lj-newgrp">
-          <summary>＋ New group — pick 2+ files that are the same book</summary>
-          <TextF value={grpQ} onChange={setGrpQ} label="file name" />
+          <summary>＋ {t('New group — pick 2+ files that are the same book')}</summary>
+          <TextF value={grpQ} onChange={setGrpQ} label={t('file name')} />
           <div className="lj-newgrp-list">
             {ungroupedFiles.filter(([cs, f]) => newSel.has(cs) || !textMatcher(grpQ).test || textMatcher(grpQ).test(f.fileName || '')).map(([cs, f]) => (
               <label key={cs} className="inline-check">
@@ -2943,43 +2948,41 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
             ))}
           </div>
           <div className="lj-inline">
-            <input placeholder="Book name" value={newName} onChange={(e) => setNewName(e.target.value)} />
-            <button className="toggle-on" disabled={newSel.size < 2} onClick={createGroup}>Group {newSel.size >= 2 ? newSel.size : ''} as one book</button>
+            <input placeholder={t('Book name')} value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <button className="toggle-on" disabled={newSel.size < 2} onClick={createGroup}>{newSel.size >= 2 ? t('Group {n} as one book', { n: newSel.size }) : t('Group as one book')}</button>
           </div>
         </details>
       )}
       {msg && !anth && <p className="settings-note">{msg}</p>}
 
-      <div className="rh-section-h">Unlinked files — bulk link</div>
+      <div className="rh-section-h">{t('Unlinked files — bulk link')}</div>
       <p className="settings-note">
-        Find every opened file with no tracker book. Each gets a best guess — an existing book when the title <em>and</em> length
-        really fit, a new <b>AI-generated</b> book when nothing comes close, or <b>leave unlinked</b> when it is only a partial
-        match — and every guess is a dropdown away from being changed before anything is written.
+        {t('Find every opened file with no tracker book. Each gets a best guess — an existing book when the title and length really fit, a new AI-generated book when nothing comes close, or leave unlinked when it is only a partial match — and every guess is a dropdown away from being changed before anything is written.')}
       </p>
       <div className="lj-inline">
-        <button disabled={!!busy} onClick={scanUnlinked}>🔍 Scan opened files</button>
-        {bulk && <span className="settings-note" style={{ margin: 0 }}>{bulk.length} unlinked · {tierCount.strong} sure · {tierCount.weak} to review · {tierCount.none} new</span>}
+        <button disabled={!!busy} onClick={scanUnlinked}>🔍 {t('Scan opened files')}</button>
+        {bulk && <span className="settings-note" style={{ margin: 0 }}>{t('{n} unlinked · {sure} sure · {weak} to review · {none} new', { n: bulk.length, sure: tierCount.strong, weak: tierCount.weak, none: tierCount.none })}</span>}
       </div>
       {bulk && (
         <div className="lj-cleanup">
           <div className="lj-tablewrap">
             <table className="lj-table lj-bulk">
               <thead>
-                <tr><th>File</th><th>Words</th><th>Read</th><th>Match</th><th>Link to</th><th></th></tr>
+                <tr><th>{t('File')}</th><th>{t('Words')}</th><th>{t('Read')}</th><th>{t('Match')}</th><th>{t('Link to')}</th><th></th></tr>
                 <tr className="lj-filter-row">
-                  <th><TextF value={bulkF.file} onChange={(v) => setBulkF({ ...bulkF, file: v })} label="file" /></th>
-                  <th><RangeF value={bulkF.words} onChange={(v) => setBulkF({ ...bulkF, words: v })} label="words" unit="k" /></th>
-                  <th><RangeF value={bulkF.read} onChange={(v) => setBulkF({ ...bulkF, read: v })} label="% read" /></th>
+                  <th><TextF value={bulkF.file} onChange={(v) => setBulkF({ ...bulkF, file: v })} label={t('file')} /></th>
+                  <th><RangeF value={bulkF.words} onChange={(v) => setBulkF({ ...bulkF, words: v })} label={t('words')} unit="k" /></th>
+                  <th><RangeF value={bulkF.read} onChange={(v) => setBulkF({ ...bulkF, read: v })} label={t('% read')} /></th>
                   <th>
-                    <select value={bulkF.tier} onChange={(e) => setBulkF({ ...bulkF, tier: e.target.value })} aria-label="Filter by match">
-                      <option value="all">all</option><option value="strong">✓ sure</option><option value="weak">? review</option><option value="none">– none</option>
+                    <select value={bulkF.tier} onChange={(e) => setBulkF({ ...bulkF, tier: e.target.value })} aria-label={t('Filter by match')}>
+                      <option value="all">{t('all')}</option><option value="strong">✓ {t('sure')}</option><option value="weak">? {t('review')}</option><option value="none">– {t('none')}</option>
                     </select>
                   </th>
                   <th colSpan={2} />
                 </tr>
               </thead>
               <tbody>
-                {bulk.filter((r) => { const t = textMatcher(bulkF.file).test; return (!t || t(`${r.title} ${r.fileName || ''}`)) && inRange(r.words, ...bulkF.words, 1000) && inRange(r.coverage * 100, ...bulkF.read) && (bulkF.tier === 'all' || r.tier === bulkF.tier); }).map((r) => {
+                {bulk.filter((r) => { const mt = textMatcher(bulkF.file).test; return (!mt || mt(`${r.title} ${r.fileName || ''}`)) && inRange(r.words, ...bulkF.words, 1000) && inRange(r.coverage * 100, ...bulkF.read) && (bulkF.tier === 'all' || r.tier === bulkF.tier); }).map((r) => {
                   const toBook = r.target !== 'skip' && !r.target.startsWith('new:');
                   const dupe = toBook && bulk.some((o) => o !== r && o.target === r.target);
                   const taken = toBook ? fileOf[r.target] : null;
@@ -2990,36 +2993,36 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
                         <td>{r.words ? r.words.toLocaleString() : '—'}</td>
                         <td>{Math.round(r.coverage * 100)}%</td>
                         <td>{r.state
-                          ? <span className={`lj-tier t-${r.state}`} title={r.outcome || ''}>{r.state === 'busy' ? '⟳ working…' : r.state === 'linked' ? '✓ linked' : r.state === 'created' ? '✓ created' : '✕ failed'}</span>
-                          : <span className={`lj-tier t-${r.tier}`} title={r.why}>{r.tier === 'strong' ? '✓ sure' : r.tier === 'weak' ? '? review' : '– none'}</span>}</td>
+                          ? <span className={`lj-tier t-${r.state}`} title={r.outcome || ''}>{r.state === 'busy' ? `⟳ ${t('working…')}` : r.state === 'linked' ? `✓ ${t('linked')}` : r.state === 'created' ? `✓ ${t('created')}` : `✕ ${t('failed')}`}</span>
+                          : <span className={`lj-tier t-${r.tier}`} title={r.why}>{r.tier === 'strong' ? `✓ ${t('sure')}` : r.tier === 'weak' ? `? ${t('review')}` : `– ${t('none')}`}</span>}</td>
                         <td>
                           {r.state === 'linked' || r.state === 'created' ? <span className="lj-bulk-done">{r.outcome}</span> : (
-                          <select disabled={!!busy} value={r.target} onChange={(e) => setTarget(r.cs, e.target.value)} aria-label={`Link ${r.title} to`}>
-                            <option value="skip">— leave unlinked</option>
-                            <optgroup label="Create a new tracker book">
-                              <option value="new:ai-gen">＋ AI-generated</option>
-                              <option value="new:long">＋ Long-form book</option>
-                              <option value="new:short">＋ Short-form</option>
-                              <option value="new:article">＋ Article</option>
+                          <select disabled={!!busy} value={r.target} onChange={(e) => setTarget(r.cs, e.target.value)} aria-label={t('Link {title} to', { title: r.title })}>
+                            <option value="skip">— {t('leave unlinked')}</option>
+                            <optgroup label={t('Create a new tracker book')}>
+                              <option value="new:ai-gen">＋ {t('AI-generated')}</option>
+                              <option value="new:long">＋ {t('Long-form book')}</option>
+                              <option value="new:short">＋ {t('Short-form')}</option>
+                              <option value="new:article">＋ {t('Article')}</option>
                             </optgroup>
                             {r.cands.length > 0 && (
-                              <optgroup label="Existing books">
+                              <optgroup label={t('Existing books')}>
                                 {r.cands.map((c) => <option key={c.book.id} value={c.book.id}>{Math.round(c.score * 100)}% · {c.book.title}{c.book.author ? ` — ${c.book.author}` : ''}{fileOf[c.book.id] ? ' 🔗' : ''}</option>)}
                               </optgroup>
                             )}
                           </select>)}
                           {r.state === 'failed' && <span className="lj-bulk-warn" title={r.outcome}>⚠ {r.outcome}</span>}
-                          {dupe && !r.state && <span className="lj-bulk-warn" title="Another row targets the same book. A book keeps one linked file, so only the last one applied stays linked — group editions under Settings → Book Groups instead.">⚠ twice</span>}
-                          {taken && !dupe && !r.state && <span className="lj-bulk-warn" title={`Already linked to “${nameOf(taken)}” — applying moves that link to this file (group editions under Settings → Book Groups instead)`}>⚠ relink</span>}
+                          {dupe && !r.state && <span className="lj-bulk-warn" title={t('Another row targets the same book. A book keeps one linked file, so only the last one applied stays linked — group editions under Settings → Book Groups instead.')}>⚠ {t('twice')}</span>}
+                          {taken && !dupe && !r.state && <span className="lj-bulk-warn" title={t('Already linked to “{file}” — applying moves that link to this file (group editions under Settings → Book Groups instead)', { file: nameOf(taken) })}>⚠ {t('relink')}</span>}
                         </td>
-                        <td className="lj-bulk-acts">{r.state !== 'linked' && r.state !== 'created' && <button disabled={!!busy} onClick={() => setPick(pick?.cs === r.cs ? null : { cs: r.cs, q: '' })} title="Search the whole library for the right book">🔍</button>}</td>
+                        <td className="lj-bulk-acts">{r.state !== 'linked' && r.state !== 'created' && <button disabled={!!busy} onClick={() => setPick(pick?.cs === r.cs ? null : { cs: r.cs, q: '' })} title={t('Search the whole library for the right book')}>🔍</button>}</td>
                       </tr>
                       {pick?.cs === r.cs && (
                         <tr className="lj-bulk-pickrow"><td colSpan={6}>
                           <span className="lj-anth-pick">
-                            <input autoFocus placeholder="Search title or author…" value={pick.q} onChange={(e) => setPick({ cs: r.cs, q: e.target.value })} aria-label="Search books" />
+                            <input autoFocus placeholder={t('Search title or author…')} value={pick.q} onChange={(e) => setPick({ cs: r.cs, q: e.target.value })} aria-label={t('Search books')} />
                             {pickMatches.map((b) => <button key={b.id} onClick={() => chooseBook(r, b)}>{b.title}{b.author ? ` — ${b.author}` : ''}</button>)}
-                            {pick.q.trim() && !pickMatches.length && <em className="settings-note" style={{ margin: 0 }}>no book matches</em>}
+                            {pick.q.trim() && !pickMatches.length && <em className="settings-note" style={{ margin: 0 }}>{t('no book matches')}</em>}
                           </span>
                         </td></tr>
                       )}
@@ -3036,23 +3039,23 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
             </div>
           )}
           <div className="lj-inline">
-            <button className="toggle-on" disabled={!!busy || (!nLink && !nNew)} onClick={applyBulk}>{busy ? `⟳ Applying ${busy.done}/${busy.total}…` : `✓ Apply — link ${nLink}, create ${nNew}`}</button>
-            <button disabled={!!busy} onClick={() => { setBulk(null); setPick(null); }}>Dismiss</button>
+            <button className="toggle-on" disabled={!!busy || (!nLink && !nNew)} onClick={applyBulk}>{busy ? `⟳ ${t('Applying {done}/{total}…', { done: busy.done, total: busy.total })}` : `✓ ${t('Apply — link {link}, create {create}', { link: nLink, create: nNew })}`}</button>
+            <button disabled={!!busy} onClick={() => { setBulk(null); setPick(null); }}>{t('Dismiss')}</button>
           </div>
         </div>
       )}
 
-      <div className="rh-section-h">Anthologies &amp; collections — components map to sections</div>
-      <p className="settings-note">Pick a stored document (the anthology file); each ToC section can bind to its own tracker book. Reading a section fully lets you mark that component finished.</p>
+      <div className="rh-section-h">{t('Anthologies & collections — components map to sections')}</div>
+      <p className="settings-note">{t('Pick a stored document (the anthology file); each ToC section can bind to its own tracker book. Reading a section fully lets you mark that component finished.')}</p>
       <div className="lj-inline">
         <select value={anthCs} onChange={(e) => pickDoc(e.target.value)}>
-          <option value="">Pick a document…</option>
+          <option value="">{t('Pick a document…')}</option>
           {docMeta.map((d) => <option key={d.checksum} value={d.checksum}>{d.fileName}</option>)}
         </select>
-        {anth && anth.sections.some((s) => mappedFor(s)) && <button className="toggle-on" onClick={finishComponents}>✓ Mark fully-read components finished</button>}
+        {anth && anth.sections.some((s) => mappedFor(s)) && <button className="toggle-on" onClick={finishComponents}>✓ {t('Mark fully-read components finished')}</button>}
         {msg && <span className="settings-note" style={{ margin: 0 }}>{msg}</span>}
       </div>
-      {anth && anth.sections.length === 0 && <p className="settings-note">“{anth.fileName}” has no stored Table of Contents — open it and run the ToC wizard first.</p>}
+      {anth && anth.sections.length === 0 && <p className="settings-note">{t('“{file}” has no stored Table of Contents — open it and run the ToC wizard first.', { file: anth.fileName })}</p>}
       {anth && anth.sections.length > 0 && (
         <div className="lj-anth">
           {anth.sections.map((sec) => {
@@ -3061,23 +3064,23 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
             return (
               <div key={sec.start} className="lj-anth-row" style={{ paddingLeft: 8 + sec.level * 14 }}>
                 <span className="lj-anth-title">{sec.title}</span>
-                <span className="lj-series-bar" title={`${Math.round(sec.frac * 100)}% of this section read`}><i style={{ width: `${sec.frac * 100}%` }} /></span>
+                <span className="lj-series-bar" title={t('{pct}% of this section read', { pct: Math.round(sec.frac * 100) })}><i style={{ width: `${sec.frac * 100}%` }} /></span>
                 <span className="lj-anth-pct">{Math.round(sec.frac * 100)}%</span>
                 {m ? (
                   <span className="lj-grp-acts">
                     <span className="rh-link-chip on" title={book ? STATUS_LABEL[readStatus(book)] : ''}>🔗 {book?.title || m[0]}{book && readStatus(book) === 'finished' ? ' ✅' : ''}</span>
                     {book && <button onClick={() => onOpen(book.id)}>↗</button>}
-                    <button title="Unlink this section" onClick={() => onSecBind(anthCs, m[0], null)}>✕</button>
+                    <button title={t('Unlink this section')} onClick={() => onSecBind(anthCs, m[0], null)}>✕</button>
                   </span>
                 ) : (
                   <span className="lj-grp-acts">
-                    <button title="Create a tracker book named after this section and bind it" onClick={() => newBookForSection(sec)}>＋ Book</button>
-                    <button title="Bind an existing tracker book to this section" onClick={() => { setLinkFor(linkFor === sec.start ? null : sec.start); setQ(''); }}>🔗 Link…</button>
+                    <button title={t('Create a tracker book named after this section and bind it')} onClick={() => newBookForSection(sec)}>＋ {t('Book')}</button>
+                    <button title={t('Bind an existing tracker book to this section')} onClick={() => { setLinkFor(linkFor === sec.start ? null : sec.start); setQ(''); }}>🔗 {t('Link…')}</button>
                   </span>
                 )}
                 {linkFor === sec.start && (
                   <span className="lj-anth-pick">
-                    <input autoFocus placeholder="Search your library…" value={q} onChange={(e) => setQ(e.target.value)} />
+                    <input autoFocus placeholder={t('Search your library…')} value={q} onChange={(e) => setQ(e.target.value)} />
                     {qMatches.map((b) => (
                       <button key={b.id} onClick={async () => { await onSecBind(anthCs, b.id, sec); setLinkFor(null); }}>{b.title}{b.author ? ` — ${b.author}` : ''}</button>
                     ))}
@@ -3105,18 +3108,18 @@ function TimelineView({ books }) {
   useEffect(() => {
     if (!playing) return undefined;
     if (idx >= cum.length) { setPlaying(false); return undefined; }
-    const t = setInterval(() => setIdx((i) => Math.min(cum.length, i + 1)), 250);
-    return () => clearInterval(t);
+    const tm = setInterval(() => setIdx((i) => Math.min(cum.length, i + 1)), 250);
+    return () => clearInterval(tm);
   }, [playing, idx, cum.length]);
 
-  if (cum.length === 0) return <p className="settings-note">No dated finishes yet — add finish dates to your finished books to build the timeline.</p>;
+  if (cum.length === 0) return <p className="settings-note">{t('No dated finishes yet — add finish dates to your finished books to build the timeline.')}</p>;
 
   const pos = Math.min(cum.length, Math.max(1, idx));
   const shown = cum.slice(0, pos);
   const cur = cum[pos - 1];
   const W = 640, H = 150, pad = 6;
   const t0 = cum[0].t, span = Math.max(1, cum[cum.length - 1].t - t0), maxN = cum[cum.length - 1].n;
-  const px = (t) => pad + ((t - t0) / span) * (W - 2 * pad);
+  const px = (tv) => pad + ((tv - t0) / span) * (W - 2 * pad);
   const py = (n) => H - pad - (n / maxN) * (H - 2 * pad);
   const path = shown.map((r, i) => `${i === 0 ? 'M' : 'L'}${px(r.t).toFixed(1)},${py(r.n).toFixed(1)}`).join(' ');
   const play = () => { if (idx >= cum.length) setIdx(0); setPlaying((p) => !p); };
@@ -3124,13 +3127,13 @@ function TimelineView({ books }) {
 
   return (
     <div className="lj-timeline">
-      <div className="rh-section-h">Reading replay</div>
+      <div className="rh-section-h">{t('Reading replay')}</div>
       <div className="lj-replay-card">
         <div className="lj-replay-now">
           <span className="lj-replay-count">{cur.n}</span>
-          <span className="settings-note">books finished by {cur.date}</span>
+          <span className="settings-note">{t('books finished by {date}', { date: cur.date })}</span>
           <div className="lj-replay-book"><b>{cur.title}</b><em>{cur.author} · {cur.genre}</em></div>
-          <div className="settings-note">{(cur.words / 1e6).toFixed(2)}M words · {cur.pages.toLocaleString()} pages cumulatively</div>
+          <div className="settings-note">{t('{words}M words · {pages} pages cumulatively', { words: (cur.words / 1e6).toFixed(2), pages: cur.pages.toLocaleString() })}</div>
         </div>
         <svg className="lj-growth" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
           <path className="lj-growth-line" d={path} />
@@ -3138,12 +3141,12 @@ function TimelineView({ books }) {
         </svg>
       </div>
       <div className="lj-replay-ctl">
-        <button onClick={play}>{playing ? '⏸ Pause' : (idx >= cum.length ? '↻ Replay' : '▶ Play')}</button>
+        <button onClick={play}>{playing ? `⏸ ${t('Pause')}` : (idx >= cum.length ? `↻ ${t('Replay')}` : `▶ ${t('Play')}`)}</button>
         <input type="range" min="1" max={cum.length} value={pos} onChange={(e) => { setPlaying(false); setIdx(Number(e.target.value)); }} />
         <span className="settings-note">{pos} / {cum.length}</span>
       </div>
 
-      <div className="rh-section-h">Finishes by month</div>
+      <div className="rh-section-h">{t('Finishes by month')}</div>
       <div className="lj-heat lj-heat-compact">
         <div className="lj-heat-row lj-heat-head"><span className="lj-heat-yr" />{MON.map((m, i) => <span key={i} className="lj-heat-mlabel">{m}</span>)}</div>
         {hm.years.map((y) => (
@@ -3156,7 +3159,7 @@ function TimelineView({ books }) {
                 <button
                   key={mi}
                   className={`lj-heat-cell${on ? ' on' : ''}`}
-                  title={`${y}-${String(mi + 1).padStart(2, '0')}: ${c} finished — click to list them`}
+                  title={t('{month}: {n} finished — click to list them', { month: `${y}-${String(mi + 1).padStart(2, '0')}`, n: c })}
                   style={{ background: c ? `color-mix(in srgb, var(--toggle-active-bg) ${Math.round(20 + lvl * 80)}%, transparent)` : 'var(--divider)' }}
                   onClick={() => setMonthPick(on ? null : { y, m: mi })}
                 />
@@ -3170,15 +3173,15 @@ function TimelineView({ books }) {
         const fins = cum.filter((r) => r.date.startsWith(key));
         return (
           <div className="lj-month-fins">
-            <div className="lj-month-fins-head"><b>{key}</b> — {fins.length} finish{fins.length === 1 ? '' : 'es'} <button className="close-x" onClick={() => setMonthPick(null)}>×</button></div>
-            {fins.length === 0 && <p className="settings-note">Nothing finished this month.</p>}
+            <div className="lj-month-fins-head"><b>{key}</b> — {t.n('{n} finish', '{n} finishes', fins.length)} <button className="close-x" onClick={() => setMonthPick(null)}>×</button></div>
+            {fins.length === 0 && <p className="settings-note">{t('Nothing finished this month.')}</p>}
             <ul className="lj-recent">
               {fins.map((r) => <li key={r.id}><b>{r.title}</b> — {r.author} <em>{r.date}</em></li>)}
             </ul>
           </div>
         );
       })()}
-      <p className="settings-note">{hm.total} dated finishes across {hm.years.length} year{hm.years.length === 1 ? '' : 's'} — click a tile to see that month's books.</p>
+      <p className="settings-note">{t.n("{total} dated finishes across {n} year — click a tile to see that month's books.", "{total} dated finishes across {n} years — click a tile to see that month's books.", hm.years.length, { total: hm.total })}</p>
     </div>
   );
 }
@@ -3191,20 +3194,20 @@ function YearWrap({ books, years }) {
   return (
     <div className="lj-wrap">
       <div className="lj-wrap-head">
-        <b>Your {year} in books</b>
+        <b>{t('Your {year} in books', { year })}</b>
         <select value={year} onChange={(e) => setYear(Number(e.target.value))}>{years.map((y) => <option key={y} value={y}>{y}</option>)}</select>
       </div>
       <div className="rh-stat-grid">
-        <Stat v={w.books} l="finished" sub={`${w.fiction} fiction · ${w.nonfiction} non-fiction`} />
-        <Stat v={w.pages ? w.pages.toLocaleString() : '—'} l="pages" sub={w.words ? `${(w.words / 1e6).toFixed(1)}M words` : null} />
-        <Stat v={w.topGenre ? w.topGenre[0] : '—'} l="top genre" sub={w.topGenre ? `${w.topGenre[1]} book(s)` : null} />
-        <Stat v={w.topAuthor ? w.topAuthor[0] : '—'} l="top author" sub={w.topAuthor ? `${w.topAuthor[1]} book(s)` : null} />
-        {w.avgRating != null && <Stat v={`★${w.avgRating}`} l="avg rating" sub={w.avgDifficulty ? `avg difficulty ${w.avgDifficulty}` : null} />}
+        <Stat v={w.books} l={t('finished')} sub={t('{fiction} fiction · {nonfiction} non-fiction', { fiction: w.fiction, nonfiction: w.nonfiction })} />
+        <Stat v={w.pages ? w.pages.toLocaleString() : '—'} l={t('pages')} sub={w.words ? t('{n}M words', { n: (w.words / 1e6).toFixed(1) }) : null} />
+        <Stat v={w.topGenre ? w.topGenre[0] : '—'} l={t('top genre')} sub={w.topGenre ? t('{n} book(s)', { n: w.topGenre[1] }) : null} />
+        <Stat v={w.topAuthor ? w.topAuthor[0] : '—'} l={t('top author')} sub={w.topAuthor ? t('{n} book(s)', { n: w.topAuthor[1] }) : null} />
+        {w.avgRating != null && <Stat v={`★${w.avgRating}`} l={t('avg rating')} sub={w.avgDifficulty ? t('avg difficulty {n}', { n: w.avgDifficulty }) : null} />}
       </div>
       <div className="lj-wrap-superls">
-        {w.longest && <span title={`${w.longest.pages} pages`}>📏 Longest: <b>{w.longest.title}</b></span>}
-        {w.hardest && <span title={`Difficulty ${w.hardest.difficultyLevel}`}>🧗 Hardest: <b>{w.hardest.title}</b></span>}
-        {w.favorite && <span title={`Rated ${bookRating(w.favorite)}★`}>❤️ Favorite: <b>{w.favorite.title}</b></span>}
+        {w.longest && <span title={t('{n} pages', { n: w.longest.pages })}>📏 {t('Longest:')} <b>{w.longest.title}</b></span>}
+        {w.hardest && <span title={t('Difficulty {n}', { n: w.hardest.difficultyLevel })}>🧗 {t('Hardest:')} <b>{w.hardest.title}</b></span>}
+        {w.favorite && <span title={t('Rated {n}★', { n: bookRating(w.favorite) })}>❤️ {t('Favorite:')} <b>{w.favorite.title}</b></span>}
       </div>
     </div>
   );
@@ -3218,8 +3221,8 @@ function WeeklySummaries({ books, dayAgg, ai }) {
   const dressed = ai?.weeklies || {};
   return (
     <>
-      <div className="rh-section-h">Weekly summaries</div>
-      <p className="settings-note">Completed weeks (Mon–Sun), generated from your reading history. The AI / Cowork tab can “dress up” any week — dressed weeks show ✨.</p>
+      <div className="rh-section-h">{t('Weekly summaries')}</div>
+      <p className="settings-note">{t('Completed weeks (Mon–Sun), generated from your reading history. The AI / Cowork tab can “dress up” any week — dressed weeks show ✨.')}</p>
       <div className="lj-weeklies">
         {weeks.map((w) => {
           const d = dressed[w.week];
@@ -3227,9 +3230,9 @@ function WeeklySummaries({ books, dayAgg, ai }) {
             <div key={w.week} className="lj-weekly">
               <div className="lj-weekly-head">
                 <b>{w.start} → {w.end}</b>
-                {w.words > 0 && <em>{w.words.toLocaleString()} words · {w.daysActive} day{w.daysActive === 1 ? '' : 's'}{w.wpm ? ` · ${w.wpm} WPM` : ''}</em>}
+                {w.words > 0 && <em>{t('{n} words', { n: w.words.toLocaleString() })} · {t.n('{n} day', '{n} days', w.daysActive)}{w.wpm ? ` · ${t('{n} WPM', { n: w.wpm })}` : ''}</em>}
                 {w.finished.length > 0 && <em>✅ {w.finished.length}</em>}
-                {d && <span className="lj-weekly-ai" title="Written by the cowork AI from this week's numbers">✨ AI</span>}
+                {d && <span className="lj-weekly-ai" title={t("Written by the cowork AI from this week's numbers")}>✨ {t('AI')}</span>}
               </div>
               <div className="lj-weekly-text">{d?.text || w.text}</div>
             </div>
@@ -3245,23 +3248,23 @@ function AnalyticsView({ books, dayAgg = [], ai = null, splitTypes = false, onSp
   const pace = useMemo(() => paceByYear(withRereads(books)), [books]);
   const gt = useMemo(() => genreTrend(books, 6), [books]);
   const rb = useMemo(() => recommenderBreakdown(books), [books]);
-  if (pace.length === 0 && rb.length <= 1 && !dayAgg.length) return <p className="settings-note">Not much to chart yet — mark some books finished (with dates) and attribute a few recommendations.</p>;
+  if (pace.length === 0 && rb.length <= 1 && !dayAgg.length) return <p className="settings-note">{t('Not much to chart yet — mark some books finished (with dates) and attribute a few recommendations.')}</p>;
   const maxBooks = Math.max(1, ...pace.map((p) => p.books));
   const maxGT = Math.max(1, ...gt.rows.map((r) => r.total));
   const maxRec = Math.max(1, ...rb.map((r) => r.total));
   return (
     <div className="lj-analytics">
-      <label className="inline-check" title="Break the numbers out by long-form vs short-form/articles vs AI-generated content (shared with the Dashboard toggle)">
-        <input type="checkbox" checked={splitTypes} onChange={(e) => onSplitTypes?.(e.target.checked)} /> Split by content type
+      <label className="inline-check" title={t('Break the numbers out by long-form vs short-form/articles vs AI-generated content (shared with the Dashboard toggle)')}>
+        <input type="checkbox" checked={splitTypes} onChange={(e) => onSplitTypes?.(e.target.checked)} /> {t('Split by content type')}
       </label>
       {splitTypes && <TypeSplit books={books} />}
       <WeeklySummaries books={books} dayAgg={dayAgg} ai={ai} />
       {pace.length > 0 && <YearWrap books={books} years={pace.map((p) => p.year)} />}
-      <div className="rh-section-h">Pace by year</div>
-      {pace.length === 0 ? <p className="settings-note">No dated finishes.</p> : (
+      <div className="rh-section-h">{t('Pace by year')}</div>
+      {pace.length === 0 ? <p className="settings-note">{t('No dated finishes.')}</p> : (
         <div className="lj-bars">
           {pace.map((p) => (
-            <div key={p.year} className="lj-bar" title={`${p.year}: ${p.books} books · ${p.pages.toLocaleString()} pages${p.avgDifficulty ? ` · avg difficulty ${p.avgDifficulty}` : ''}${p.avgRating ? ` · avg ★${p.avgRating}` : ''}`}>
+            <div key={p.year} className="lj-bar" title={`${t('{year}: {books} books · {pages} pages', { year: p.year, books: p.books, pages: p.pages.toLocaleString() })}${p.avgDifficulty ? ` · ${t('avg difficulty {n}', { n: p.avgDifficulty })}` : ''}${p.avgRating ? ` · ${t('avg ★{n}', { n: p.avgRating })}` : ''}`}>
               <span className="lj-bar-fill" style={{ height: `${(p.books / maxBooks) * 100}%` }}><i>{p.books}</i></span>
               <em>{String(p.year).slice(2)}</em>
             </div>
@@ -3269,12 +3272,12 @@ function AnalyticsView({ books, dayAgg = [], ai = null, splitTypes = false, onSp
         </div>
       )}
 
-      <div className="rh-section-h">Genre mix over time</div>
-      {gt.rows.length === 0 ? <p className="settings-note">No dated finishes.</p> : (
+      <div className="rh-section-h">{t('Genre mix over time')}</div>
+      {gt.rows.length === 0 ? <p className="settings-note">{t('No dated finishes.')}</p> : (
         <>
           <div className="lj-stack">
             {gt.rows.map((r) => (
-              <div key={r.year} className="lj-stack-col" title={`${r.year}: ${r.total} books`}>
+              <div key={r.year} className="lj-stack-col" title={t('{year}: {n} books', { year: r.year, n: r.total })}>
                 <div className="lj-stack-bar" style={{ height: `${(r.total / maxGT) * 100}%` }}>
                   {gt.genres.map((g) => (r.counts[g] ? <span key={g} className="lj-stack-seg" style={{ flex: r.counts[g], background: genreHue(g) }} title={`${g}: ${r.counts[g]}`} /> : null))}
                 </div>
@@ -3286,19 +3289,19 @@ function AnalyticsView({ books, dayAgg = [], ai = null, splitTypes = false, onSp
         </>
       )}
 
-      <div className="rh-section-h">Recommenders</div>
+      <div className="rh-section-h">{t('Recommenders')}</div>
       <div className="lj-recgrid">
         {rb.map((r) => (
           <div key={r.name} className="lj-recrow">
-            <span className="lj-rec-name"><b>{r.name}</b> <em>{r.total} book{r.total === 1 ? '' : 's'}</em></span>
+            <span className="lj-rec-name"><b>{r.name}</b> <em>{t.n('{n} book', '{n} books', r.total)}</em></span>
             <span className="lj-rec-bar" style={{ width: `${(r.total / maxRec) * 100}%` }}>
-              {['finished', 'reading', 'queue', 'toread', 'abandoned'].map((k) => (r[k] ? <i key={k} className={`lj-seg lj-seg-${k}`} style={{ flex: r[k] }} title={`${r[k]} ${k}`} /> : null))}
+              {[['finished', t('finished')], ['reading', t('reading')], ['queue', t('on deck')], ['toread', t('to read')], ['abandoned', t('abandoned')]].map(([k, kl]) => (r[k] ? <i key={k} className={`lj-seg lj-seg-${k}`} style={{ flex: r[k] }} title={`${r[k]} ${kl}`} /> : null))}
             </span>
             <span className="lj-rec-rate">{r.finishRate != null ? `${r.finishRate}%` : '—'}</span>
           </div>
         ))}
       </div>
-      <p className="settings-note">Bars are sized by pile; segments show finished/reading/on-deck/to-read/abandoned. Finish rate is over resolved (finished + abandoned). Unattributed seed picks count as “Claude”.</p>
+      <p className="settings-note">{t('Bars are sized by pile; segments show finished/reading/on-deck/to-read/abandoned. Finish rate is over resolved (finished + abandoned). Unattributed seed picks count as “Claude”.')}</p>
     </div>
   );
 }
@@ -3356,12 +3359,12 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   const history = useMemo(() => mergedHistory(ai), [ai]);
   // Everything the AI has written for you, in one sortable table.
   const outputs = useMemo(() => [
-    ...Object.entries(ai?.briefs || {}).map(([date, b]) => ({ key: `b:${date}`, at: b.at || parseDay(date), date, kind: 'brief', op: 'cw-brief', title: `Morning brief ${date}`, text: b.text })),
-    ...(ai?.reports || []).map((r, i) => ({ key: `r:${r.at}:${i}`, at: r.at, kind: `report · ${r.kind}`, op: opForReport(r.kind), title: r.title || r.kind, text: r.text })),
-    ...Object.entries(ai?.sessionReviews || {}).map(([id, r]) => ({ key: `sr:${id}`, at: r.at, kind: 'session review', op: 'cw-session-review', title: `${sessionLabel(id)} — AI grade ${r.grade}`, text: reviewText(r) })),
-    ...(ai?.answers || []).map((a, i) => ({ key: `a:${a.at}:${i}`, at: a.at, kind: 'answer', op: 'cw-ask', title: a.question || 'Answer', text: a.text })),
-    ...(ai?.analysis ? [{ key: 'an:current', at: ai.updatedAt || 0, kind: 'analysis (current)', op: 'cw-light', title: 'Dashboard analysis', text: ai.analysis }] : []),
-    ...(ai?.analysisHistory || []).map((h, i) => ({ key: `ah:${h.at}:${i}`, at: h.at, kind: 'analysis (archived)', op: 'cw-light', title: 'Earlier analysis', text: h.text, analysisIndex: i })),
+    ...Object.entries(ai?.briefs || {}).map(([date, b]) => ({ key: `b:${date}`, at: b.at || parseDay(date), date, kind: t('brief'), op: 'cw-brief', title: t('Morning brief {date}', { date }), text: b.text })),
+    ...(ai?.reports || []).map((r, i) => ({ key: `r:${r.at}:${i}`, at: r.at, kind: t('report · {kind}', { kind: r.kind }), op: opForReport(r.kind), title: r.title || r.kind, text: r.text })),
+    ...Object.entries(ai?.sessionReviews || {}).map(([id, r]) => ({ key: `sr:${id}`, at: r.at, kind: t('session review'), op: 'cw-session-review', title: t('{session} — AI grade {grade}', { session: sessionLabel(id), grade: r.grade }), text: reviewText(r) })),
+    ...(ai?.answers || []).map((a, i) => ({ key: `a:${a.at}:${i}`, at: a.at, kind: t('answer'), op: 'cw-ask', title: a.question || t('Answer'), text: a.text })),
+    ...(ai?.analysis ? [{ key: 'an:current', at: ai.updatedAt || 0, kind: t('analysis (current)'), op: 'cw-light', title: t('Dashboard analysis'), text: ai.analysis }] : []),
+    ...(ai?.analysisHistory || []).map((h, i) => ({ key: `ah:${h.at}:${i}`, at: h.at, kind: t('analysis (archived)'), op: 'cw-light', title: t('Earlier analysis'), text: h.text, analysisIndex: i })),
   ], [ai]);
   // Subtasks in play — ticked, scheduled, or answered by the reply under review — each a chip that
   // narrows the page to that one operation: its row, its share of the reply, its outputs, its runs.
@@ -3402,7 +3405,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   // (coworkOps.sanitizeOutput: anything else is dropped, with the reason) and staged as review rows.
   async function stageReply(text, ops, source, extra = {}) {
     const hash = contentHash(text);
-    if ((ai?.ledger || []).includes(hash)) { setMsg('That reply was already applied.'); return; }
+    if ((ai?.ledger || []).includes(hash)) { setMsg(t('That reply was already applied.')); return; }
     const queues = (await getLibraryRef('queues').catch(() => null)) || [];
     const queuedIds = new Set(liveQueues(queues).flatMap((q) => q.ids || []));
     const [runs, speech] = await Promise.all([allTypingRuns().catch(() => []), getSpeechLog().catch(() => [])]);
@@ -3413,14 +3416,18 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     setReview({ rows, dropped, ops, source, hash, ...extra });
     setPicked(new Set(rows.slice(0, APPLY_CAP).map((r) => r.key))); // a huge reply goes in pages, never one click
     setMsg(rows.length
-      ? `Reply ready for review: ${rows.length} proposed change(s)${dropped.length ? `, ${dropped.length} out-of-scope item(s) discarded` : ''}. Nothing is written until you apply.`
-      : `Nothing in that reply is allowed by the requested operation(s)${dropped.length ? ` — ${dropped.length} item(s) discarded` : ''}.`);
+      ? (dropped.length
+        ? t('Reply ready for review: {n} proposed change(s), {dropped} out-of-scope item(s) discarded. Nothing is written until you apply.', { n: rows.length, dropped: dropped.length })
+        : t('Reply ready for review: {n} proposed change(s). Nothing is written until you apply.', { n: rows.length }))
+      : (dropped.length
+        ? t('Nothing in that reply is allowed by the requested operation(s) — {dropped} item(s) discarded.', { dropped: dropped.length })
+        : t('Nothing in that reply is allowed by the requested operation(s).')));
   }
   async function applyReview() {
     if (!review) return;
     const rows = review.rows.filter((r) => picked.has(r.key));
-    if (!rows.length) { setMsg('Nothing ticked.'); return; }
-    if (rows.length > APPLY_CAP) { setMsg(`At most ${APPLY_CAP} changes per apply — untick some, apply, then do the rest.`); return; }
+    if (!rows.length) { setMsg(t('Nothing ticked.')); return; }
+    if (rows.length > APPLY_CAP) { setMsg(t('At most {n} changes per apply — untick some, apply, then do the rest.', { n: APPLY_CAP })); return; }
     setBusy(true);
     try {
       const base = { ...(ai || {}), ledger: [...(ai?.ledger || []), review.hash].slice(-50) };
@@ -3430,21 +3437,21 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
       if (left.length && review.rows.length > APPLY_CAP) {
         setReview({ ...review, rows: left, hash: `${review.hash}+${Date.now()}` });
         setPicked(new Set(left.slice(0, APPLY_CAP).map((x) => x.key)));
-        setMsg(`Applied: ${r.summary}. ${left.length} more change(s) still to review below.`);
+        setMsg(t('Applied: {summary}. {n} more change(s) still to review below.', { summary: r.summary, n: left.length }));
         onReload(); setBusy(false); return;
       }
       if (review.inboxFile) await moveInbox(dir, review.inboxFile).catch(() => {});
-      setMsg(`Applied: ${r.summary}. ↶ Undo puts it all back.`);
+      setMsg(t('Applied: {summary}. ↶ Undo puts it all back.', { summary: r.summary }));
       setReview(null);
       refreshInbox();
       onReload();
-    } catch (e) { setMsg('Apply failed: ' + (e?.message || e)); }
+    } catch (e) { setMsg(t('Apply failed: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
   async function undoApply(at = null) {
     setBusy(true);
     try { const r = await undoLastApply(ai, at, { global, patchGlobal: onPatchGlobal }); setMsg(r.summary); onReload(); }
-    catch (e) { setMsg('Undo failed: ' + (e?.message || e)); }
+    catch (e) { setMsg(t('Undo failed: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
   // Agent inbox (inbox/*.json): suggestions dropped without a request — same filter, same review.
@@ -3455,23 +3462,23 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     try {
       const json = JSON.parse(await readInbox(dir, name));
       const ops = (Array.isArray(json?.ops) ? json.ops : []).filter((id) => COWORK_OPS[id]);
-      if (!ops.length) { await moveInbox(dir, name, 'rejected'); setMsg(`${name}: no known operations declared ("ops") — moved to inbox/rejected/.`); refreshInbox(); return; }
+      if (!ops.length) { await moveInbox(dir, name, 'rejected'); setMsg(t('{file}: no known operations declared ("ops") — moved to inbox/rejected/.', { file: name })); refreshInbox(); return; }
       const { ops: _o, ...reply } = json; // eslint-disable-line no-unused-vars
       await stageReply(JSON.stringify(reply), ops, `inbox: ${name}`, { inboxFile: name });
     } catch (e) {
       await moveInbox(dir, name, 'rejected').catch(() => {});
-      setMsg(`${name} couldn't be read (${e?.message || e}) — moved to inbox/rejected/.`); refreshInbox();
+      setMsg(t("{file} couldn't be read ({error}) — moved to inbox/rejected/.", { file: name, error: e?.message || e })); refreshInbox();
     }
   }
   async function snapshotNow() {
-    if (!dir) { setMsg('Choose the cowork folder first.'); return; }
+    if (!dir) { setMsg(t('Choose the cowork folder first.')); return; }
     setBusy(true);
     try {
       const n = await writeSnapshot(dir);
-      const cur = recordRun((await getJourneyAi().catch(() => null)) || ai || {}, ['cw-snapshot'], { at: Date.now(), kind: 'cowork', target: coworkTarget, ok: true, note: `wrote snapshot (${n} files)` });
+      const cur = recordRun((await getJourneyAi().catch(() => null)) || ai || {}, ['cw-snapshot'], { at: Date.now(), kind: 'cowork', target: coworkTarget, ok: true, note: t('wrote snapshot ({n} files)', { n }) });
       await saveJourneyAi(cur); onReloadAi();
-      setMsg(`Snapshot written: ${n} files in ${coworkTarget || dir.name}/snapshot/ (read-only for agents — see its README.md).`);
-    } catch (e) { setMsg('Snapshot failed: ' + (e?.message || e)); }
+      setMsg(t('Snapshot written: {n} files in {folder}/snapshot/ (read-only for agents — see its README.md).', { n, folder: coworkTarget || dir.name }));
+    } catch (e) { setMsg(t('Snapshot failed: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
 
@@ -3484,14 +3491,14 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   // record), then re-read the record and fold in the cowork write + cloud syncs + run stamps.
   async function runSelected(only = null) { // only: an explicit id list (a focused subtask) instead of the ticked set
     const ids = (only || [...sel]).filter((id) => actionById(id));
-    if (!ids.length) { setMsg('Nothing checked — tick at least one action in the tree.'); return; }
-    setBusy(true); setMsg('Running selected actions…');
+    if (!ids.length) { setMsg(t('Nothing checked — tick at least one action in the tree.')); return; }
+    setBusy(true); setMsg(t('Running selected actions…'));
     const now = Date.now();
     const parts = [];
     let apiTried = false; let apiOk = true; let apiNote = '';
     if (ids.includes('api-light')) {
       apiTried = true;
-      if (!keyOk) { apiOk = false; apiNote = 'skipped — no Anthropic API key'; }
+      if (!keyOk) { apiOk = false; apiNote = t('skipped — no Anthropic API key'); }
       else {
         try {
           const dataset = await datasetWithProgress(true); // API path is always the compact subset
@@ -3499,31 +3506,31 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
           const { system, messages } = buildApiMessages(dataset, instr);
           const reply = await askClaude(messages, { key: global.anthropicKey, model, system, maxTokens: 2048, source: 'trackyread-ai' });
           await stageReply(reply, instr.ops, `API (${model})`);
-          apiNote = 'ran — reply staged for review'; parts.push('API reply ready for review below');
-        } catch (e) { apiOk = false; apiNote = String(e?.message || e); parts.push('API failed'); }
+          apiNote = t('ran — reply staged for review'); parts.push(t('API reply ready for review below'));
+        } catch (e) { apiOk = false; apiNote = String(e?.message || e); parts.push(t('API failed')); }
       }
     }
     let cur = (await getJourneyAi().catch(() => null)) || ai || {};
     if (ids.includes('cw-snapshot') && dir) {
-      try { const n = await writeSnapshot(dir); cur = recordRun(cur, ['cw-snapshot'], { at: now, kind: 'cowork', target: coworkTarget, ok: true, note: `wrote snapshot (${n} files)` }); parts.push('snapshot written'); }
-      catch (e) { cur = recordRun(cur, ['cw-snapshot'], { at: now, kind: 'cowork', target: coworkTarget, ok: false, note: String(e?.message || e) }); parts.push('snapshot failed'); }
+      try { const n = await writeSnapshot(dir); cur = recordRun(cur, ['cw-snapshot'], { at: now, kind: 'cowork', target: coworkTarget, ok: true, note: t('wrote snapshot ({n} files)', { n }) }); parts.push(t('snapshot written')); }
+      catch (e) { cur = recordRun(cur, ['cw-snapshot'], { at: now, kind: 'cowork', target: coworkTarget, ok: false, note: String(e?.message || e) }); parts.push(t('snapshot failed')); }
     }
     const coworkIds = ids.filter((id) => COWORK_OPS[id]);
     if (coworkIds.length) {
       let ok = true; let note;
-      if (!dir) { ok = false; note = 'no cowork folder chosen'; parts.push('cowork skipped (no folder)'); }
+      if (!dir) { ok = false; note = t('no cowork folder chosen'); parts.push(t('cowork skipped (no folder)')); }
       else {
         try {
           const ci = combineCoworkInstruction(coworkIds, { question });
-          if (!ci) throw new Error('nothing to send — “Ask a question” needs a question');
+          if (!ci) throw new Error(t('nothing to send — “Ask a question” needs a question'));
           const dataset = await datasetWithProgress(ci.mode === 'light', ci.ops);
           if (!ids.includes('cw-snapshot')) await writeSnapshot(dir); // the agent reads snapshot/ too
           const req = buildCoworkRequest(dataset, ci);
           await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(req, null, 2));
           await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, ci));
           cur = logRequest({ ...cur, instruction: { ...ci, updatedAt: now } }, { hash: req.requestHash, ops: ci.ops, at: now }); // replies are matched back to this
-          note = `wrote request (${ci.mode})`; parts.push(`cowork request written (${ci.mode})`);
-        } catch (e) { ok = false; note = String(e?.message || e); parts.push('cowork write failed'); }
+          note = t('wrote request ({mode})', { mode: ci.mode }); parts.push(t('cowork request written ({mode})', { mode: ci.mode }));
+        } catch (e) { ok = false; note = String(e?.message || e); parts.push(t('cowork write failed')); }
       }
       cur = recordRun(cur, coworkIds, { at: now, kind: 'cowork', target: coworkTarget, ok, note });
     }
@@ -3531,63 +3538,63 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
       let ok = true; let note;
       const cfg = global?.sync || {};
       const p = getSyncProvider(cfg.provider);
-      const target = p?.label || cfg.provider || 'no provider';
+      const target = p?.label || cfg.provider || t('no provider');
       try {
-        if (!p || !p.supported()) { ok = false; note = 'no sync provider configured (Data → Cloud sync)'; }
-        else if (id === 'cloud-progress') { const r = await syncWithProvider(cfg.provider, cfg); note = `progress synced (${Math.round((r.bytes || 0) / 1024)} KB)`; }
-        else { const r = await syncLibraryWithProvider(cfg.provider, cfg); note = r.skipped ? 'library already in sync' : `library synced (${r.books ?? '?'} books)`; }
+        if (!p || !p.supported()) { ok = false; note = t('no sync provider configured (Data → Cloud sync)'); }
+        else if (id === 'cloud-progress') { const r = await syncWithProvider(cfg.provider, cfg); note = t('progress synced ({kb} KB)', { kb: Math.round((r.bytes || 0) / 1024) }); }
+        else { const r = await syncLibraryWithProvider(cfg.provider, cfg); note = r.skipped ? t('library already in sync') : t('library synced ({n} books)', { n: r.books ?? '?' }); }
       } catch (e) { ok = false; note = String(e?.message || e); }
-      parts.push(`${id === 'cloud-progress' ? 'progress' : 'library'}: ${note}`);
+      parts.push(id === 'cloud-progress' ? t('progress: {note}', { note }) : t('library: {note}', { note }));
       cur = recordRun(cur, [id], { at: now, kind: 'cloud', target, ok, note });
     }
     if (apiTried) cur = recordRun(cur, ['api-light'], { at: now, kind: 'api', target: model, ok: apiOk, note: apiNote });
     await saveJourneyAi(cur);
     if (ids.some((d) => d.startsWith('cloud-'))) onReload(); else onReloadAi(); // only a cloud sync can change books
-    setMsg(parts.length ? parts.join(' · ') : 'Done.');
+    setMsg(parts.length ? parts.join(' · ') : t('Done.'));
     setBusy(false);
   }
 
   async function readResponse() {
-    if (!dir) return; setBusy(true); setMsg('Reading response…');
+    if (!dir) return; setBusy(true); setMsg(t('Reading response…'));
     try {
-      const t = await readFromDir(dir, 'journey-cowork-response.json');
-      if (!t) { setMsg('No journey-cowork-response.json in the folder yet.'); }
+      const txt = await readFromDir(dir, 'journey-cowork-response.json');
+      if (!txt) { setMsg(t('No {file} in the folder yet.', { file: 'journey-cowork-response.json' })); }
       else {
         // Filtered by the operations of the request this reply answers (matched by its echoed
         // requestHash; otherwise every request from the last 3 days — still reviewed row by row).
-        let parsed = null; try { parsed = parseAiOutput(t); } catch { /* stageReply reports it */ }
+        let parsed = null; try { parsed = parseAiOutput(txt); } catch { /* stageReply reports it */ }
         const m = opsForReply(parsed, ai);
-        const how = m.how === 'matched' ? `matched to your request of ${fmtDateTime(m.at)}`
-          : m.how === 'recent' ? `no request id in the reply — checked against your ${m.count} request(s) from the last 3 days`
-            : 'checked against your last request';
-        await stageReply(t, m.ops, `cowork folder · ${how}`);
+        const how = m.how === 'matched' ? t('matched to your request of {when}', { when: fmtDateTime(m.at) })
+          : m.how === 'recent' ? t('no request id in the reply — checked against your {n} request(s) from the last 3 days', { n: m.count })
+            : t('checked against your last request');
+        await stageReply(txt, m.ops, t('cowork folder · {how}', { how }));
         await saveJourneyAi({ ...((await getJourneyAi().catch(() => null)) || ai || {}), lastReplyAt: Date.now() }); onReloadAi(); // scheduler: request answered
       }
-    } catch (e) { setMsg('Read failed: ' + (e?.message || e)); }
+    } catch (e) { setMsg(t('Read failed: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
   async function copyDigest() {
     try {
       const ci = combineCoworkInstruction([...sel], { question }) || opsInstruction(['cw-light']);
       await navigator.clipboard.writeText(buildDigest(await datasetWithProgress(ci.mode === 'light', ci.ops), ci));
-      await logActivity('digest', `Copied ${ci.mode} digest to clipboard`);
-      setMsg('Digest copied — paste it into a Claude chat, then paste the JSON reply below.');
-    } catch { setMsg('Clipboard blocked — use the cowork folder instead.'); }
+      await logActivity('digest', t('Copied {mode} digest to clipboard', { mode: ci.mode }));
+      setMsg(t('Digest copied — paste it into a Claude chat, then paste the JSON reply below.'));
+    } catch { setMsg(t('Clipboard blocked — use the cowork folder instead.')); }
   }
   async function applyPasted() {
     setBusy(true);
     const ticked = [...sel].filter((id) => COWORK_OPS[id]);
     try {
       let parsed = null; try { parsed = parseAiOutput(pasted); } catch { /* stageReply reports it */ }
-      await stageReply(pasted, ticked.length ? ticked : opsForReply(parsed, ai).ops, 'pasted reply'); setPasted('');
+      await stageReply(pasted, ticked.length ? ticked : opsForReply(parsed, ai).ops, t('pasted reply')); setPasted('');
     }
-    catch (e) { setMsg('Could not parse that reply: ' + (e?.message || e)); }
+    catch (e) { setMsg(t('Could not parse that reply: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
 
-  const targetOf = (g) => (g.kind === 'cowork' ? (coworkTarget || 'no folder chosen')
+  const targetOf = (g) => (g.kind === 'cowork' ? (coworkTarget || t('no folder chosen'))
     : g.kind === 'api' ? model
-      : (getSyncProvider(global?.sync?.provider)?.label || global?.sync?.provider || 'no provider'));
+      : (getSyncProvider(global?.sync?.provider)?.label || global?.sync?.provider || t('no provider')));
   const focusHistory = focus === 'all' ? history : history.filter((h) => inFocus(h.ids));
   const filteredHistory = dayFilter ? focusHistory.filter((h) => dayKey(h.at) === dayFilter) : focusHistory;
 
@@ -3596,44 +3603,44 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
       {/* Sync-machine role: once designated, only that device builds/runs — the rest watch. */}
       <div className={`cw-role cw-role-${role}`}>
         {role === 'machine' && (
-          <><span>🖥 <b>This device is the sync machine</b> — requests and schedules run here; other devices are view-only.</span>
-            <button onClick={releaseRole}>Release role</button></>
+          <><span>🖥 <b>{t('This device is the sync machine')}</b> — {t('requests and schedules run here; other devices are view-only.')}</span>
+            <button onClick={releaseRole}>{t('Release role')}</button></>
         )}
         {role === 'viewer' && (
-          <><span>👁 <b>View-only.</b> <b>{machine.name || 'Another device'}</b> is the sync machine (designated {fmtDateTime(machine.at)}). Status and history stay live via tracker sync.</span>
-            <button onClick={designate}>Take over as sync machine</button></>
+          <><span>👁 <b>{t('View-only.')}</b> {t('{device} is the sync machine (designated {when}). Status and history stay live via tracker sync.', { device: machine.name || t('Another device'), when: fmtDateTime(machine.at) })}</span>
+            <button onClick={designate}>{t('Take over as sync machine')}</button></>
         )}
         {role === 'open' && (
-          <><span>No sync machine designated — every device currently has full sync controls.</span>
-            <button onClick={designate}>🖥 Make this device the sync machine</button>
-            <span className="settings-note">Typically the desktop; other devices then become view-only status monitors.</span></>
+          <><span>{t('No sync machine designated — every device currently has full sync controls.')}</span>
+            <button onClick={designate}>🖥 {t('Make this device the sync machine')}</button>
+            <span className="settings-note">{t('Typically the desktop; other devices then become view-only status monitors.')}</span></>
         )}
       </div>
 
       {tasks.length > 0 && (
-        <div className="lj-queue-pick cw-tasks" role="tablist" aria-label="Subtasks">
-          <button role="tab" aria-selected={focus === 'all'} className={`lj-qcat${focus === 'all' ? ' on' : ''}`} onClick={() => { setTask('all'); setOpenExplain(null); }} title="Every operation, the whole reply and the full history">All</button>
+        <div className="lj-queue-pick cw-tasks" role="tablist" aria-label={t('Subtasks')}>
+          <button role="tab" aria-selected={focus === 'all'} className={`lj-qcat${focus === 'all' ? ' on' : ''}`} onClick={() => { setTask('all'); setOpenExplain(null); }} title={t('Every operation, the whole reply and the full history')}>{t('All')}</button>
           {tasks.map((id) => {
             const op = COWORK_OPS[id];
             const n = review ? review.rows.filter((r) => opForRow(r, review.ops) === id).length : 0;
             const run = actionRuns[id];
             return (
               <button key={id} role="tab" aria-selected={focus === id} className={`lj-qcat${focus === id ? ' on' : ''}`} onClick={() => { setTask(id); setOpenExplain(id); }}
-                title={`${op.label}: its request, its share of the reply, its outputs and runs${run ? ` · last run ${fmtAgo(run.at)}` : ''}`}>
-                {op.icon} {op.label}{n ? ` · ${n} to review` : ''}
+                title={run ? t('{op}: its request, its share of the reply, its outputs and runs · last run {ago}', { op: op.label, ago: fmtAgo(run.at) }) : t('{op}: its request, its share of the reply, its outputs and runs', { op: op.label })}>
+                {op.icon} {op.label}{n ? ` · ${t('{n} to review', { n })}` : ''}
               </button>
             );
           })}
         </div>
       )}
-      <div className="rh-section-h">{viewer ? 'Sync status (view-only)' : focusOp ? `Request — ${focusOp.label}` : 'Request builder'}</div>
+      <div className="rh-section-h">{viewer ? t('Sync status (view-only)') : focusOp ? t('Request — {op}', { op: focusOp.label }) : t('Request builder')}</div>
       {!focusOp && (
         <div className="lj-inline cw-opfilter">
-          <TextF value={opQ} onChange={setOpQ} label="operations (name or description)" />
-          <select value={opGroup} onChange={(e) => setOpGroup(e.target.value)} aria-label="Operation group">
-            <option value="all">All kinds</option><option value="snapshot">Snapshot</option>{OP_GROUPS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+          <TextF value={opQ} onChange={setOpQ} label={t('operations (name or description)')} />
+          <select value={opGroup} onChange={(e) => setOpGroup(e.target.value)} aria-label={t('Operation group')}>
+            <option value="all">{t('All kinds')}</option><option value="snapshot">{t('Snapshot')}</option>{OP_GROUPS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
           </select>
-          {(opQ || opGroup !== 'all') && <button onClick={() => { setOpQ(''); setOpGroup('all'); }}>Show all</button>}
+          {(opQ || opGroup !== 'all') && <button onClick={() => { setOpQ(''); setOpGroup('all'); }}>{t('Show all')}</button>}
         </div>
       )}
       {SYNC_ACTION_GROUPS.map((g) => {
@@ -3656,7 +3663,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
                 onChange={() => setSel((s) => { const n = new Set(s); for (const a of g.actions) { if (allOn) n.delete(a.id); else n.add(a.id); } return n; })}
               />
               <span className="cwt-gico">{g.icon}</span><b>{g.label}</b>
-              <span className="cwt-target" title="Where this group's actions land">→ {targetOf(g)}</span>
+              <span className="cwt-target" title={t("Where this group's actions land")}>→ {targetOf(g)}</span>
             </label>
             {shown.map((a, ai2) => {
               const run = actionRuns[a.id];
@@ -3664,9 +3671,9 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
               const prevOp = COWORK_OPS[shown[ai2 - 1]?.id];
               const sub = op && op.group !== prevOp?.group ? OP_GROUPS.find((x) => x.id === op.group) : null;
               const ex = op ? op.explain : a.id === 'cw-snapshot' ? {
-                sends: 'Nothing goes to an AI. Writes read-only files into the folder\'s snapshot/ subfolder: reading days, books, queues, goals, typing, reading aloud, narration quality, focus, an activity log and a README explaining every field.',
-                changes: 'Nothing in Tachyread — the app never reads these files back. Files in snapshot/ are overwritten each time. No document text, audio or keys are written.',
-                review: 'Nothing to review. Also written automatically with every operation request.',
+                sends: t("Nothing goes to an AI. Writes read-only files into the folder's snapshot/ subfolder: reading days, books, queues, goals, typing, reading aloud, narration quality, focus, an activity log and a README explaining every field."),
+                changes: t('Nothing in Tachyread — the app never reads these files back. Files in snapshot/ are overwritten each time. No document text, audio or keys are written.'),
+                review: t('Nothing to review. Also written automatically with every operation request.'),
               } : null;
               return (
                 <Fragment key={a.id}>
@@ -3679,41 +3686,41 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
                   </label>
                   <span
                     className={`cwt-last${run && !run.ok ? ' err' : ''}`}
-                    title={run ? `${run.ok ? 'OK' : 'Failed'} — ${fmtDateTime(run.at)}${run.target ? ` → ${run.target}` : ''}${run.note ? ` · ${run.note}` : ''}` : 'Never run'}
+                    title={run ? `${run.ok ? t('OK') : t('Failed')} — ${fmtDateTime(run.at)}${run.target ? ` → ${run.target}` : ''}${run.note ? ` · ${run.note}` : ''}` : t('Never run')}
                   >
-                    {run ? `${run.ok ? '✓' : '⚠'} ${fmtAgo(run.at)}${run.auto ? ' · auto' : ''}` : '· never run'}
+                    {run ? `${run.ok ? '✓' : '⚠'} ${fmtAgo(run.at)}${run.auto ? ` · ${t('auto')}` : ''}` : `· ${t('never run')}`}
                   </span>
                   <select
                     className="cwt-sched" disabled={viewer} value={schedules[a.id] || 'off'}
-                    title="Schedule this action — it then runs automatically on the sync machine"
+                    title={t('Schedule this action — it then runs automatically on the sync machine')}
                     onChange={(e) => setSched(a.id, e.target.value)}
                   >
-                    {SCHEDULE_OPTS.map((o) => <option key={o.id} value={o.id}>{o.id === 'off' ? '⏰ manual' : `⏰ ${o.label}`}</option>)}
+                    {SCHEDULE_OPTS.map((o) => <option key={o.id} value={o.id}>{o.id === 'off' ? `⏰ ${t('manual')}` : `⏰ ${o.label}`}</option>)}
                   </select>
-                  {ex && <button type="button" className="cwt-explain-btn" aria-expanded={openExplain === a.id} onClick={() => setOpenExplain(openExplain === a.id ? null : a.id)} title="Exactly what this does and may change">{openExplain === a.id ? '▾ details' : '▸ details'}</button>}
+                  {ex && <button type="button" className="cwt-explain-btn" aria-expanded={openExplain === a.id} onClick={() => setOpenExplain(openExplain === a.id ? null : a.id)} title={t('Exactly what this does and may change')}>{openExplain === a.id ? `▾ ${t('details')}` : `▸ ${t('details')}`}</button>}
                 </div>
                 {ex && openExplain === a.id && (
                   <div className="cwt-explain">
-                    <div><b>Sends / reads:</b> {ex.sends}</div>
-                    <div><b>May change:</b> {ex.changes}</div>
-                    {op && <div><b>Never changes:</b> {op.never || NEVER_CHANGED}</div>}
-                    <div><b>Review &amp; undo:</b> {ex.review}</div>
-                    {op && <div className="settings-note" style={{ margin: '2px 0 0' }}>Enforced by the app, not left to the AI: when the reply comes back, anything outside this permission is discarded and listed.</div>}
+                    <div><b>{t('Sends / reads:')}</b> {ex.sends}</div>
+                    <div><b>{t('May change:')}</b> {ex.changes}</div>
+                    {op && <div><b>{t('Never changes:')}</b> {op.never || NEVER_CHANGED}</div>}
+                    <div><b>{t('Review & undo:')}</b> {ex.review}</div>
+                    {op && <div className="settings-note" style={{ margin: '2px 0 0' }}>{t('Enforced by the app, not left to the AI: when the reply comes back, anything outside this permission is discarded and listed.')}</div>}
                   </div>
                 )}
                 {a.id === 'cw-ask' && sel.has('cw-ask') && !viewer && (
-                  <textarea className="lj-instr cwt-question" rows={2} placeholder="Your question — e.g. “Is my typing accuracy improving since I switched to word-backspace-only?”"
-                    value={question} onChange={(e) => setQuestion(e.target.value)} onBlur={() => persistAi({ question })} aria-label="Question for the agent" />
+                  <textarea className="lj-instr cwt-question" rows={2} placeholder={t('Your question — e.g. “Is my typing accuracy improving since I switched to word-backspace-only?”')}
+                    value={question} onChange={(e) => setQuestion(e.target.value)} onBlur={() => persistAi({ question })} aria-label={t('Question for the agent')} />
                 )}
                 </Fragment>
               );
             })}
             {g.id === 'cowork' && (
               <div className="lj-inline cwt-foot">
-                <button onClick={chooseFolder} disabled={viewer} title="Requests, replies and snapshots go to the Tachyread folder's cowork/ subfolder">{dir ? `📁 ${dirName || dir.name}` : '📁 Choose the Tachyread folder…'}</button>
+                <button onClick={chooseFolder} disabled={viewer} title={t("Requests, replies and snapshots go to the Tachyread folder's cowork/ subfolder")}>{dir ? `📁 ${dirName || dir.name}` : `📁 ${t('Choose the Tachyread folder…')}`}</button>
                 <input
                   className="cwt-path" type="text" disabled={viewer}
-                  placeholder="Full folder path (annotation — shown in history; browsers can't read real paths)"
+                  placeholder={t("Full folder path (annotation — shown in history; browsers can't read real paths)")}
                   value={dirPath} onChange={(e) => setDirPath(e.target.value)} onBlur={() => persistAi({ coworkDirPath: dirPath })}
                 />
               </div>
@@ -3725,117 +3732,117 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
       {!viewer && (
         <div className="lj-inline">
           {focusOp
-            ? <button className="toggle-on" disabled={busy} onClick={() => runSelected([focus])} title="Write a request for this one operation (the activity snapshot goes with it)">▶ Run {focusOp.label}</button>
+            ? <button className="toggle-on" disabled={busy} onClick={() => runSelected([focus])} title={t('Write a request for this one operation (the activity snapshot goes with it)')}>▶ {t('Run {op}', { op: focusOp.label })}</button>
             : null}
           {focus && COWORK_OPS[focus]?.group === 'report' && (
-            <label className="inline-check" title="On: a scheduled reply for this operation waits in the review list below. Off: its report (analysis, read-next, briefs) is applied on its own, still logged and undoable.">
+            <label className="inline-check" title={t('On: a scheduled reply for this operation waits in the review list below. Off: its report (analysis, read-next, briefs) is applied on its own, still logged and undoable.')}>
               <input type="checkbox" checked={reviewFirst(ai, [focus])} onChange={(e) => persistAi({ autoApply: { ...(ai?.autoApply || {}), [focus]: !e.target.checked } })} />
-              Review scheduled replies first
+              {t('Review scheduled replies first')}
             </label>
           )}
-          {focus === 'cw-requeue' && ai?.requeueSkip?.length > 0 && <button disabled={busy} onClick={() => persistAi({ requeueSkip: [] })} title="Reviewed re-queue suggestions are never made again — this clears that memory">Forget {ai.requeueSkip.length} reviewed suggestion{ai.requeueSkip.length === 1 ? '' : 's'}</button>}
+          {focus === 'cw-requeue' && ai?.requeueSkip?.length > 0 && <button disabled={busy} onClick={() => persistAi({ requeueSkip: [] })} title={t('Reviewed re-queue suggestions are never made again — this clears that memory')}>{t.n('Forget {n} reviewed suggestion', 'Forget {n} reviewed suggestions', ai.requeueSkip.length)}</button>}
           {focusOp
             ? null
-            : <button className="toggle-on" disabled={busy || sel.size === 0} onClick={() => runSelected()}>▶ Run selected ({[...sel].filter((id) => actionById(id)).length})</button>}
-          {dir && <button disabled={busy} onClick={readResponse} title="Read the agent's reply — it is filtered and shown for review, never applied straight away">📥 Read response</button>}
-          {dir && <button disabled={busy} onClick={snapshotNow} title="Write the read-only activity snapshot now">📸 Snapshot now</button>}
-          <span className="settings-note">Scheduled actions run automatically — on the sync machine only.</span>
+            : <button className="toggle-on" disabled={busy || sel.size === 0} onClick={() => runSelected()}>▶ {t('Run selected ({n})', { n: [...sel].filter((id) => actionById(id)).length })}</button>}
+          {dir && <button disabled={busy} onClick={readResponse} title={t("Read the agent's reply — it is filtered and shown for review, never applied straight away")}>📥 {t('Read response')}</button>}
+          {dir && <button disabled={busy} onClick={snapshotNow} title={t('Write the read-only activity snapshot now')}>📸 {t('Snapshot now')}</button>}
+          <span className="settings-note">{t('Scheduled actions run automatically — on the sync machine only.')}</span>
         </div>
       )}
 
       {!viewer && dir && (
         <div className="lj-inline cw-inbox">
-          <span className="settings-note" style={{ margin: 0 }} title="Agents can drop suggestion files into the folder's inbox/ at any time (format in inbox/README.md). Each is filtered by the operations it declares and reviewed here — nothing is applied automatically.">
-            📬 Agent inbox: {inbox.length ? `${inbox.length} suggestion file${inbox.length === 1 ? '' : 's'}` : 'empty'}
+          <span className="settings-note" style={{ margin: 0 }} title={t("Agents can drop suggestion files into the folder's inbox/ at any time (format in inbox/README.md). Each is filtered by the operations it declares and reviewed here — nothing is applied automatically.")}>
+            📬 {inbox.length ? t.n('Agent inbox: {n} suggestion file', 'Agent inbox: {n} suggestion files', inbox.length) : t('Agent inbox: empty')}
           </span>
-          {inbox.slice(0, 5).map((n) => <button key={n} disabled={busy || !!review} onClick={() => reviewInbox(n)} title={`Review ${n}`}>Review {n}</button>)}
-          <button onClick={refreshInbox} title="Look in inbox/ again">⟳</button>
+          {inbox.slice(0, 5).map((n) => <button key={n} disabled={busy || !!review} onClick={() => reviewInbox(n)} title={t('Review {file}', { file: n })}>{t('Review {file}', { file: n })}</button>)}
+          <button onClick={refreshInbox} title={t('Look in inbox/ again')}>⟳</button>
         </div>
       )}
       {!review && ai?.pendingReplies?.length > 0 && (
         <div className="settings-note" role="status">
-          ⏳ {ai.pendingReplies.length} scheduled repl{ai.pendingReplies.length === 1 ? 'y is' : 'ies are'} waiting for your review:
+          ⏳ {t.n('{n} scheduled reply is waiting for your review:', '{n} scheduled replies are waiting for your review:', ai.pendingReplies.length)}
           {ai.pendingReplies.map((p) => (
             <button key={p.hash} disabled={busy} style={{ marginLeft: 6 }} onClick={async () => { await stageReply(p.text, p.ops, `${p.source} · ${new Date(p.at).toLocaleString()}`); persistAi(unparkReply(ai, p.hash)); }}>
-              Review {p.ops.map((id) => COWORK_OPS[id]?.label || id).join(' + ')} ({new Date(p.at).toLocaleDateString()})
+              {t('Review {ops} ({date})', { ops: p.ops.map((id) => COWORK_OPS[id]?.label || id).join(' + '), date: new Date(p.at).toLocaleDateString() })}
             </button>
           ))}
         </div>
       )}
       {review && (
         <div className="cw-review">
-          <div className="rh-section-h">Review the reply — {review.source} · {(focusOp ? [focus] : review.ops).map((id) => COWORK_OPS[id]?.label || id).join(', ')}</div>
-          <p className="settings-note">Nothing has been written yet. Untick anything you don&rsquo;t want, then apply. Applied changes can be undone in one step.</p>
-          {focusOp && !revRows.length && review.rows.length > 0 && <p className="settings-note">Nothing in this reply for {focusOp.label} — the other {review.rows.length} change(s) are under their own subtasks (or All).</p>}
+          <div className="rh-section-h">{t('Review the reply — {source} · {ops}', { source: review.source, ops: (focusOp ? [focus] : review.ops).map((id) => COWORK_OPS[id]?.label || id).join(', ') })}</div>
+          <p className="settings-note">{t('Nothing has been written yet. Untick anything you don’t want, then apply. Applied changes can be undone in one step.')}</p>
+          {focusOp && !revRows.length && review.rows.length > 0 && <p className="settings-note">{t('Nothing in this reply for {op} — the other {n} change(s) are under their own subtasks (or All).', { op: focusOp.label, n: review.rows.length })}</p>}
           {revRows.length > 0 && (
             <DataTable stateKey="cw-review" rows={revRows} rowKey={(r) => r.key} maxRows={1000} className="cw-review-dt"
-              lead={{ header: '', cell: (r) => <input type="checkbox" checked={picked.has(r.key)} aria-label={`Apply: ${r.label}`} onChange={() => setPicked((s0) => { const s1 = new Set(s0); if (s1.has(r.key)) s1.delete(r.key); else s1.add(r.key); return s1; })} /> }}
+              lead={{ header: '', cell: (r) => <input type="checkbox" checked={picked.has(r.key)} aria-label={t('Apply: {change}', { change: r.label })} onChange={() => setPicked((s0) => { const s1 = new Set(s0); if (s1.has(r.key)) s1.delete(r.key); else s1.add(r.key); return s1; })} /> }}
               toolbar={(vis) => (<>
-                <button onClick={() => setPicked((s0) => new Set([...s0, ...vis.map((r) => r.key)]))} title="Tick every row the filters show">Tick shown ({vis.length})</button>
-                <button onClick={() => setPicked((s0) => { const s1 = new Set(s0); vis.forEach((r) => s1.delete(r.key)); return s1; })}>Untick shown</button>
+                <button onClick={() => setPicked((s0) => new Set([...s0, ...vis.map((r) => r.key)]))} title={t('Tick every row the filters show')}>{t('Tick shown ({n})', { n: vis.length })}</button>
+                <button onClick={() => setPicked((s0) => { const s1 = new Set(s0); vis.forEach((r) => s1.delete(r.key)); return s1; })}>{t('Untick shown')}</button>
               </>)}
               columns={[
-                { key: 'kind', label: 'Type', type: 'select', get: (r) => r.kind, render: (r) => ROW_KIND[r.kind] || r.kind, options: [...new Set(revRows.map((r) => r.kind))].map((k) => [k, ROW_KIND[k] || k]) },
-                { key: 'label', label: 'Change', type: 'text', get: (r) => r.label },
-                { key: 'from', label: 'Now', type: 'text', get: (r) => (r.from == null || r.from === '' ? '—' : String(r.from)) },
-                { key: 'to', label: 'Proposed', type: 'text', get: (r) => String(r.to ?? '') },
+                { key: 'kind', label: t('Type'), type: 'select', get: (r) => r.kind, render: (r) => ROW_KIND[r.kind] || r.kind, options: [...new Set(revRows.map((r) => r.kind))].map((k) => [k, ROW_KIND[k] || k]) },
+                { key: 'label', label: t('Change'), type: 'text', get: (r) => r.label },
+                { key: 'from', label: t('Now'), type: 'text', get: (r) => (r.from == null || r.from === '' ? '—' : String(r.from)) },
+                { key: 'to', label: t('Proposed'), type: 'text', get: (r) => String(r.to ?? '') },
               ]} />
           )}
           {review.dropped.length > 0 && (
             <details className="lj-fold" open={!review.rows.length}>
-              <summary>{review.dropped.length} item(s) in the reply were outside the requested operation(s) and were discarded</summary>
+              <summary>{t('{n} item(s) in the reply were outside the requested operation(s) and were discarded', { n: review.dropped.length })}</summary>
               <DataTable stateKey="cw-dropped" rows={review.dropped.map((d, i) => ({ ...d, i }))} rowKey={(d) => d.i} maxRows={1000}
                 columns={[
-                  { key: 'what', label: 'Item', type: 'text', get: (d) => d.what },
-                  { key: 'why', label: 'Why it was discarded', type: 'select', get: (d) => d.why, options: [...new Set(review.dropped.map((d) => d.why))].map((w) => [w, w]) },
+                  { key: 'what', label: t('Item'), type: 'text', get: (d) => d.what },
+                  { key: 'why', label: t('Why it was discarded'), type: 'select', get: (d) => d.why, options: [...new Set(review.dropped.map((d) => d.why))].map((w) => [w, w]) },
                 ]} />
             </details>
           )}
           <div className="lj-inline">
-            <button className="toggle-on" disabled={busy || !picked.size || picked.size > APPLY_CAP} onClick={applyReview} title={picked.size > APPLY_CAP ? `At most ${APPLY_CAP} per apply` : undefined}>Apply {picked.size} ticked{focusOp ? ` (${revRows.filter((r) => picked.has(r.key)).length} here)` : ''}</button>
-            {review.rows.length > APPLY_CAP && <span className="settings-note" style={{ margin: 0 }}>{review.rows.length} changes — applied in pages of up to {APPLY_CAP}</span>}
-            <button onClick={() => setPicked((s0) => new Set([...s0, ...revRows.map((r) => r.key)]))}>Tick all{focusOp ? ' here' : ''}</button>
-            <button onClick={() => setPicked((s0) => { const s1 = new Set(s0); revRows.forEach((r) => s1.delete(r.key)); return s1; })}>Untick all{focusOp ? ' here' : ''}</button>
-            <button onClick={async () => { if (review.inboxFile) { await moveInbox(dir, review.inboxFile).catch(() => {}); refreshInbox(); } setReview(null); setMsg('Reply discarded — nothing was changed.'); }}>Discard reply</button>
+            <button className="toggle-on" disabled={busy || !picked.size || picked.size > APPLY_CAP} onClick={applyReview} title={picked.size > APPLY_CAP ? t('At most {n} per apply', { n: APPLY_CAP }) : undefined}>{focusOp ? t('Apply {n} ticked ({here} here)', { n: picked.size, here: revRows.filter((r) => picked.has(r.key)).length }) : t('Apply {n} ticked', { n: picked.size })}</button>
+            {review.rows.length > APPLY_CAP && <span className="settings-note" style={{ margin: 0 }}>{t('{n} changes — applied in pages of up to {cap}', { n: review.rows.length, cap: APPLY_CAP })}</span>}
+            <button onClick={() => setPicked((s0) => new Set([...s0, ...revRows.map((r) => r.key)]))}>{focusOp ? t('Tick all here') : t('Tick all')}</button>
+            <button onClick={() => setPicked((s0) => { const s1 = new Set(s0); revRows.forEach((r) => s1.delete(r.key)); return s1; })}>{focusOp ? t('Untick all here') : t('Untick all')}</button>
+            <button onClick={async () => { if (review.inboxFile) { await moveInbox(dir, review.inboxFile).catch(() => {}); refreshInbox(); } setReview(null); setMsg(t('Reply discarded — nothing was changed.')); }}>{t('Discard reply')}</button>
           </div>
         </div>
       )}
       {(ai?.lastApply || (ai?.applyLog || []).length > 0) && (
         <>
-          <div className="rh-section-h">Applied changes</div>
+          <div className="rh-section-h">{t('Applied changes')}</div>
           {ai?.lastApply && !viewer && (
             <div className="lj-inline">
-              <span className="settings-note" style={{ margin: 0 }}>Last apply {fmtDateTime(ai.lastApply.at)}: {ai.lastApply.summary}</span>
-              <button disabled={busy} onClick={() => undoApply()} title="Restore every book, link, note and AI field the last apply changed (books you edited since are left alone)">↶ Undo last apply</button>
+              <span className="settings-note" style={{ margin: 0 }}>{t('Last apply {when}: {summary}', { when: fmtDateTime(ai.lastApply.at), summary: ai.lastApply.summary })}</span>
+              <button disabled={busy} onClick={() => undoApply()} title={t('Restore every book, link, note and AI field the last apply changed (books you edited since are left alone)')}>↶ {t('Undo last apply')}</button>
             </div>
           )}
           <details className="lj-fold">
-            <summary>Apply log ({(ai?.applyLog || []).filter((e) => inFocus(e.ops)).length}{focusOp ? ` — ${focusOp.label}` : ''})</summary>
+            <summary>{focusOp ? t('Apply log ({n} — {op})', { n: (ai?.applyLog || []).filter((e) => inFocus(e.ops)).length, op: focusOp.label }) : t('Apply log ({n})', { n: (ai?.applyLog || []).filter((e) => inFocus(e.ops)).length })}</summary>
             <DataTable stateKey="cw-applylog" rows={(ai?.applyLog || []).map((e, i) => ({ ...e, i })).filter((e) => inFocus(e.ops))} rowKey={(e) => `${e.at}-${e.i}`}
               columns={[
-                { key: 'at', label: 'When', type: 'date', get: (e) => e.at, render: (e) => fmtDateTime(e.at) },
-                { key: 'summary', label: 'What was applied', type: 'text', get: (e) => e.summary },
-                { key: 'source', label: 'Source', type: 'text', get: (e) => e.source || '' },
-                { key: 'auto', label: 'Auto', type: 'select', get: (e) => (e.auto ? 'yes' : 'no'), options: [['yes', 'auto'], ['no', 'manual']] },
-                { key: 'undo', label: 'Undo', type: 'select', get: (e) => ((ai?.undoStack || []).some((u) => u.at === e.at) ? 'available' : '—'), options: [['available', 'available']],
-                  render: (e) => (!viewer && (ai?.undoStack || []).some((u) => u.at === e.at) ? <button className="link-btn" disabled={busy} onClick={() => undoApply(e.at)} title="Undo this apply (books you or a later apply changed since are left alone)">↶ undo</button> : '—') },
+                { key: 'at', label: t('When'), type: 'date', get: (e) => e.at, render: (e) => fmtDateTime(e.at) },
+                { key: 'summary', label: t('What was applied'), type: 'text', get: (e) => e.summary },
+                { key: 'source', label: t('Source'), type: 'text', get: (e) => e.source || '' },
+                { key: 'auto', label: t('Auto'), type: 'select', get: (e) => (e.auto ? 'yes' : 'no'), options: [['yes', t('auto')], ['no', t('manual')]] },
+                { key: 'undo', label: t('Undo'), type: 'select', get: (e) => ((ai?.undoStack || []).some((u) => u.at === e.at) ? 'available' : '—'), options: [['available', t('available')]],
+                  render: (e) => (!viewer && (ai?.undoStack || []).some((u) => u.at === e.at) ? <button className="link-btn" disabled={busy} onClick={() => undoApply(e.at)} title={t('Undo this apply (books you or a later apply changed since are left alone)')}>↶ {t('undo')}</button> : '—') },
               ]} />
           </details>
         </>
       )}
       {outs.length > 0 && (
         <>
-          <div className="rh-section-h">{focusOp ? `Outputs — ${focusOp.label}` : 'AI outputs — briefs, reports, answers, analyses'}</div>
+          <div className="rh-section-h">{focusOp ? t('Outputs — {op}', { op: focusOp.label }) : t('AI outputs — briefs, reports, answers, analyses')}</div>
           <DataTable stateKey="cw-outputs" rows={outs} rowKey={(o) => o.key}
             columns={[
-              { key: 'at', label: 'When', type: 'date', get: (o) => o.at, render: (o) => (o.date || fmtDateTime(o.at)) },
-              { key: 'kind', label: 'Type', type: 'select', get: (o) => o.kind, options: [...new Set(outs.map((o) => o.kind))].map((k) => [k, k]) },
-              { key: 'text', label: 'Text (click to expand)', type: 'text', get: (o) => `${o.title} ${o.text}`,
+              { key: 'at', label: t('When'), type: 'date', get: (o) => o.at, render: (o) => (o.date || fmtDateTime(o.at)) },
+              { key: 'kind', label: t('Type'), type: 'select', get: (o) => o.kind, options: [...new Set(outs.map((o) => o.kind))].map((k) => [k, k]) },
+              { key: 'text', label: t('Text (click to expand)'), type: 'text', get: (o) => `${o.title} ${o.text}`,
                 render: (o) => (
                   <details className="cw-out">
                     <summary><b>{o.title}</b> <span className="lj-qdim">{String(o.text).slice(0, 110)}{String(o.text).length > 110 ? '…' : ''}</span></summary>
                     <p className="lj-analysis cw-brief">{o.text}</p>
-                    {o.analysisIndex != null && !viewer && <button className="grab-trash" title="Delete this archived analysis" onClick={async () => { await saveJourneyAi({ ...ai, analysisHistory: ai.analysisHistory.filter((_, j) => j !== o.analysisIndex) }); onReloadAi(); }}>🗑 Delete</button>}
+                    {o.analysisIndex != null && !viewer && <button className="grab-trash" title={t('Delete this archived analysis')} onClick={async () => { await saveJourneyAi({ ...ai, analysisHistory: ai.analysisHistory.filter((_, j) => j !== o.analysisIndex) }); onReloadAi(); }}>🗑 {t('Delete')}</button>}
                   </details>
                 ) },
             ]} />
@@ -3843,10 +3850,10 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
       )}
 
       <div className="rh-section-h cw-hist-h">
-        <span>Sync history ({focusHistory.length}{focusOp ? ` — ${focusOp.label}` : ''})</span>
+        <span>{focusOp ? t('Sync history ({n} — {op})', { n: focusHistory.length, op: focusOp.label }) : t('Sync history ({n})', { n: focusHistory.length })}</span>
         <span className="cw-hist-toggle">
-          <button className={histView === 'list' ? 'toggle-on' : ''} onClick={() => { setHistView('list'); setDayFilter(null); }}>☰ List</button>
-          <button className={histView === 'cal' ? 'toggle-on' : ''} onClick={() => setHistView('cal')}>📅 Calendar</button>
+          <button className={histView === 'list' ? 'toggle-on' : ''} onClick={() => { setHistView('list'); setDayFilter(null); }}>☰ {t('List')}</button>
+          <button className={histView === 'cal' ? 'toggle-on' : ''} onClick={() => setHistView('cal')}>📅 {t('Calendar')}</button>
         </span>
       </div>
       {histView === 'cal' && (
@@ -3862,7 +3869,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
               <button
                 key={c.key}
                 className={`cwcal-cell${c.inMonth ? '' : ' out'}${c.count ? ' has' : ''}${c.errs ? ' err' : ''}${dayFilter === c.key ? ' sel' : ''}`}
-                title={c.count ? `${c.count} run(s)${c.errs ? `, ${c.errs} failed` : ''} — click to see them` : undefined}
+                title={c.count ? (c.errs ? t('{n} run(s), {errs} failed — click to see them', { n: c.count, errs: c.errs }) : t('{n} run(s) — click to see them', { n: c.count })) : undefined}
                 onClick={() => setDayFilter(dayFilter === c.key ? null : (c.count ? c.key : dayFilter))}
               >
                 <span>{c.day}</span>{c.count > 0 && <em>{c.count}</em>}
@@ -3872,24 +3879,24 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
         </div>
       )}
       {(histView === 'list' || dayFilter) && (
-        <DataTable stateKey="cw-history" rows={filteredHistory.map((h, i) => ({ ...h, i }))} rowKey={(h) => `${h.at}-${h.i}`} empty={`No sync runs yet${dayFilter ? ' on that day' : ''}.`}
+        <DataTable stateKey="cw-history" rows={filteredHistory.map((h, i) => ({ ...h, i }))} rowKey={(h) => `${h.at}-${h.i}`} empty={dayFilter ? t('No sync runs yet on that day.') : t('No sync runs yet.')}
           columns={[
-            { key: 'at', label: 'When', type: 'date', get: (h) => h.at, render: (h) => fmtDateTime(h.at) },
-            { key: 'kind', label: 'Kind', type: 'select', get: (h) => h.kind, render: (h) => `${{ cowork: '🤝', api: '🤖', cloud: '☁️', request: '📤', apply: '✅', digest: '📋' }[h.kind] || '·'} ${h.kind}`, options: [...new Set(history.map((h) => h.kind))].map((k) => [k, k]) },
-            { key: 'ids', label: 'Actions', type: 'text', get: (h) => (h.ids?.length ? h.ids.map((id) => actionById(id)?.label || id).join(', ') : '') },
-            { key: 'note', label: 'Note', type: 'text', get: (h) => h.note || '' },
-            { key: 'target', label: 'Target', type: 'text', get: (h) => h.target || '' },
-            { key: 'auto', label: 'Auto', type: 'select', get: (h) => (h.auto ? 'yes' : 'no'), options: [['yes', 'auto'], ['no', 'manual']] },
-            { key: 'ok', label: 'Result', type: 'select', get: (h) => (h.ok ? 'ok' : 'failed'), render: (h) => (h.ok ? '✓' : <span className="cw-herr">failed</span>), options: [['ok', 'ok'], ['failed', 'failed']] },
+            { key: 'at', label: t('When'), type: 'date', get: (h) => h.at, render: (h) => fmtDateTime(h.at) },
+            { key: 'kind', label: t('Kind'), type: 'select', get: (h) => h.kind, render: (h) => `${{ cowork: '🤝', api: '🤖', cloud: '☁️', request: '📤', apply: '✅', digest: '📋' }[h.kind] || '·'} ${h.kind}`, options: [...new Set(history.map((h) => h.kind))].map((k) => [k, k]) },
+            { key: 'ids', label: t('Actions'), type: 'text', get: (h) => (h.ids?.length ? h.ids.map((id) => actionById(id)?.label || id).join(', ') : '') },
+            { key: 'note', label: t('Note'), type: 'text', get: (h) => h.note || '' },
+            { key: 'target', label: t('Target'), type: 'text', get: (h) => h.target || '' },
+            { key: 'auto', label: t('Auto'), type: 'select', get: (h) => (h.auto ? 'yes' : 'no'), options: [['yes', t('auto')], ['no', t('manual')]] },
+            { key: 'ok', label: t('Result'), type: 'select', get: (h) => (h.ok ? 'ok' : 'failed'), render: (h) => (h.ok ? '✓' : <span className="cw-herr">{t('failed')}</span>), options: [['ok', t('ok')], ['failed', t('failed')]] },
           ]} />
       )}
 
       {!viewer && (
         <details className="lj-fold">
-          <summary>Copy / paste (manual chat fallback)</summary>
-          <div className="lj-inline"><button onClick={copyDigest}>Copy digest to clipboard</button></div>
-          <textarea className="lj-instr" rows={3} placeholder="Paste Claude's JSON reply here…" value={pasted} onChange={(e) => setPasted(e.target.value)} />
-          <div className="lj-inline"><button disabled={busy || !pasted.trim()} onClick={applyPasted}>Review pasted reply</button><span className="settings-note" style={{ margin: 0 }}>Filtered by the ticked operations (or the last request&rsquo;s).</span></div>
+          <summary>{t('Copy / paste (manual chat fallback)')}</summary>
+          <div className="lj-inline"><button onClick={copyDigest}>{t('Copy digest to clipboard')}</button></div>
+          <textarea className="lj-instr" rows={3} placeholder={t("Paste Claude's JSON reply here…")} value={pasted} onChange={(e) => setPasted(e.target.value)} />
+          <div className="lj-inline"><button disabled={busy || !pasted.trim()} onClick={applyPasted}>{t('Review pasted reply')}</button><span className="settings-note" style={{ margin: 0 }}>{t('Filtered by the ticked operations (or the last request’s).')}</span></div>
         </details>
       )}
 

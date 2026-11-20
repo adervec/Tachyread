@@ -10,7 +10,9 @@ initAppHealth(); // new-version notice (font.js in index.html does the other hou
 
 // Languages: wait for the shared font.js dictionary, THEN load the app, so labels defined at module
 // level (menus, operation names) are translated too. English resolves at once.
-(window.appFont?.ready || Promise.resolve()).catch(() => {}).then(() => import('./App.jsx'))
+(window.appFont?.ready || Promise.resolve()).catch(() => {})
+  .then(() => import('./state/themes.js')).then(({ registerExtraThemes }) => registerExtraThemes()) // house standard 24
+  .then(() => import('./App.jsx'))
   .then(({ default: App }) => createRoot(document.getElementById('root')).render(<App />));
 
 // Let the maker's app portal (adervec.github.io — same origin as this Pages site) know Tachyread is

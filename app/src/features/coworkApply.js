@@ -11,6 +11,7 @@ import { setQueueIds, addToQueue } from './readingQueues.js';
 import { newCard } from '../engine/srs.js';
 import { makePlan, makeStep } from '../engine/typingPlans.js';
 import { COWORK_MANIFEST } from './coworkOps.js';
+import { t } from '../i18n.js';
 
 async function writeFile(dir, name, text) {
   const fh = await dir.getFileHandle(name, { create: true });
@@ -91,7 +92,7 @@ export async function moveInbox(dir, name, to = 'processed') {
 export async function commitRows(rows, { books, ai, ops = [], source = '', auto = false, now = Date.now(), global = null, patchGlobal = null, reviewed = rows }) {
   const booksById = Object.fromEntries((books || []).map((b) => [b.id, b]));
   const { bookUpdates, crossNoteAdds, bindingAdds, queueOrders, queueAdds, vocabAdds, planAdds, goalSets, aiNext, undo } = buildApply(rows, { booksById, ai, now, source: ops.join(',') || source });
-  if ((vocabAdds.length || planAdds.length) && !patchGlobal) throw new Error('vocabulary / typing plans can only be applied from the Cowork page');
+  if ((vocabAdds.length || planAdds.length) && !patchGlobal) throw new Error(t('vocabulary / typing plans can only be applied from the Cowork page'));
   if (vocabAdds.length) {
     await patchGlobal({ vocabDeck: [...(global?.vocabDeck || []), ...vocabAdds.map((c) => newCard(c.word, c.context, now))] });
     undo.vocabWords = vocabAdds.map((c) => c.word);
@@ -136,7 +137,7 @@ export async function commitRows(rows, { books, ai, ops = [], source = '', auto 
 export async function undoLastApply(ai, at = null, { global = null, patchGlobal = null } = {}) {
   const stack = ai?.undoStack?.length ? ai.undoStack : (ai?.lastApply ? [ai.lastApply] : []);
   const u = at == null ? stack[0] : stack.find((x) => x.at === at);
-  if (!u) return { ai, summary: 'nothing to undo' };
+  if (!u) return { ai, summary: t('nothing to undo') };
   let kept = 0;
   for (const b of u.books || []) {
     const cur = await getLibraryBook(b.id).catch(() => null);
@@ -166,7 +167,9 @@ export async function undoLastApply(ai, at = null, { global = null, patchGlobal 
   for (const [k, v] of Object.entries(u.ai || {})) { if (v === null) delete next[k]; else next[k] = v; }
   next.undoStack = stack.filter((x) => x !== u);
   if (next.undoStack.length) next.lastApply = next.undoStack[0]; else delete next.lastApply;
-  next.applyLog = [{ at: Date.now(), ops: u.ops, source: 'undo', summary: `undid: ${u.summary}`, n: 0 }, ...(ai.applyLog || [])].slice(0, 100);
+  next.applyLog = [{ at: Date.now(), ops: u.ops, source: 'undo', summary: t('undid: {summary}', { summary: u.summary }), n: 0 }, ...(ai.applyLog || [])].slice(0, 100);
   await saveJourneyAi(next);
-  return { ai: next, summary: `Undone — ${u.summary}${kept ? ` (${kept === 1 ? '1 book was' : `${kept} books were`} changed since — by you or a later apply — and left as ${kept === 1 ? 'it is' : 'they are'})` : ''}` };
+  return { ai: next, summary: kept
+    ? t.n('Undone — {summary} ({n} book was changed since — by you or a later apply — and left as it is)', 'Undone — {summary} ({n} books were changed since — by you or a later apply — and left as they are)', kept, { summary: u.summary })
+    : t('Undone — {summary}', { summary: u.summary }) };
 }

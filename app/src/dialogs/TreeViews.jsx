@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { mapLayout, allEdges, neighbourhood, treeComponents, treeLayout, libraryTree, genreHue, EDGE_KINDS, MAP_R } from '../features/bookGraph.js';
 import { readStatus, STATUS_LABEL, recommender, pubYear } from '../features/journeyLibrary.js';
+import { t } from '../i18n.js';
 
 // The Tech Tree tab, rebuilt for big libraries (thousands of books). Four views over the same data:
 //   Overview      — genre → subgenre sunburst: what the library is made of, and where you've read
@@ -14,11 +15,16 @@ const loadState = () => { try { return JSON.parse(localStorage.getItem(KEY)) || 
 const saveState = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* full / blocked */ } };
 const STATUS_ALPHA = { finished: 1, reading: 1, queue: 0.8, toread: 0.32, abandoned: 0.22 };
 const REL = {
-  link: { label: 'linked', color: '#c9a227' }, series: { label: 'series', color: '#06d6a0' },
-  author: { label: 'same author', color: '#b5651d' }, subgenre: { label: 'same subgenre', color: '#6c7a96' },
+  link: { label: t('linked'), color: '#c9a227' }, series: { label: t('series'), color: '#06d6a0' },
+  author: { label: t('same author'), color: '#b5651d' }, subgenre: { label: t('same subgenre'), color: '#6c7a96' },
 };
+// Link-kind labels live in bookGraph.js (EDGE_KINDS); they are translated where shown.
+// i18n-keys: influence | prerequisite | series | same author | shared theme | contrast / rebuttal | responds to | similar work | opposed pair | same universe | related
+const kindLabel = (kind) => t((EDGE_KINDS[kind] || EDGE_KINDS.link).label);
+// Bucket names from bookGraph.js and the filters stay English as values; they are shown translated.
+const groupName = (n) => (n === 'Uncategorized' ? t('Uncategorized') : n === 'Other genres' ? t('Other genres') : n === 'Other' ? t('Other') : n === '—' ? t('(no subgenre)') : n);
 const short = (s, n = 28) => (String(s || '').length > n ? `${String(s).slice(0, n - 1)}…` : String(s || ''));
-const BOOK_LINKS = [['isbnUrl', 'Find'], ['goodreadsUrl', 'Goodreads'], ['wikipediaUrl', 'Wikipedia'], ['platformUrl', 'Read']];
+const BOOK_LINKS = [['isbnUrl', t('Find')], ['goodreadsUrl', 'Goodreads'], ['wikipediaUrl', 'Wikipedia'], ['platformUrl', t('Read')]];
 
 export default function TreeViews({ books, ai, onOpenInLibrary }) {
   const saved = useMemo(() => loadState(), []);
@@ -41,9 +47,9 @@ export default function TreeViews({ books, ai, onOpenInLibrary }) {
     && (!subgenre || (String(b.subgenre || '').trim() || '—') === subgenre);
   const filtered = status !== 'all' || genre !== 'all' || !!subgenre;
   const matches = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    if (t.length < 2) return [];
-    return live.filter((b) => `${b.title} ${b.author || ''}`.toLowerCase().includes(t)).slice(0, 8);
+    const qq = q.trim().toLowerCase();
+    if (qq.length < 2) return [];
+    return live.filter((b) => `${b.title} ${b.author || ''}`.toLowerCase().includes(qq)).slice(0, 8);
   }, [q, live]);
 
   const goFocus = (id, toView) => {
@@ -57,13 +63,13 @@ export default function TreeViews({ books, ai, onOpenInLibrary }) {
   return (
     <div className="tt">
       <div className="lj-toolbar tt-bar">
-        <span className="tt-views" role="tablist" aria-label="Views">
-          {[['overview', '☀️ Overview'], ['map', '🗺 Map'], ['hood', '🧭 Neighbourhood'], ['tree', '🌳 Tech tree']].map(([k, l]) => (
+        <span className="tt-views" role="tablist" aria-label={t('Views')}>
+          {[['overview', `☀️ ${t('Overview')}`], ['map', `🗺 ${t('Map')}`], ['hood', `🧭 ${t('Neighbourhood')}`], ['tree', `🌳 ${t('Tech tree')}`]].map(([k, l]) => (
             <button key={k} role="tab" aria-selected={view === k} className={view === k ? 'toggle-on' : ''} onClick={() => setView(k)}>{l}</button>
           ))}
         </span>
         <span className="tt-search">
-          <input placeholder="Find a book…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Find a book"
+          <input placeholder={t('Find a book…')} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t('Find a book')}
             onKeyDown={(e) => { if (e.key === 'Enter' && matches[0]) { goFocus(matches[0].id, view === 'overview' ? 'map' : null); openCard(matches[0].id); setQ(''); } }} />
           {matches.length > 0 && (
             <span className="tt-results">
@@ -71,14 +77,14 @@ export default function TreeViews({ books, ai, onOpenInLibrary }) {
             </span>
           )}
         </span>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
-          <option value="all">All statuses</option><option value="finished">Finished</option><option value="reading">Reading</option><option value="queue">On deck</option><option value="toread">To read</option><option value="abandoned">Abandoned</option>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label={t('Status')}>
+          <option value="all">{t('All statuses')}</option><option value="finished">{t('Finished')}</option><option value="reading">{t('Reading')}</option><option value="queue">{t('On deck')}</option><option value="toread">{t('To read')}</option><option value="abandoned">{t('Abandoned')}</option>
         </select>
-        <select value={genre} onChange={(e) => { setGenre(e.target.value); setSubgenre(''); }} aria-label="Genre">
-          <option value="all">All genres</option>{genres.map((g) => <option key={g} value={g}>{g}</option>)}
+        <select value={genre} onChange={(e) => { setGenre(e.target.value); setSubgenre(''); }} aria-label={t('Genre')}>
+          <option value="all">{t('All genres')}</option>{genres.map((g) => <option key={g} value={g}>{groupName(g)}</option>)}
         </select>
-        {subgenre && <button className="toggle-on" onClick={() => setSubgenre('')} title="Clear the subgenre filter">{subgenre} ✕</button>}
-        {filtered && <button onClick={() => { setStatus('all'); setGenre('all'); setSubgenre(''); }}>Clear filters</button>}
+        {subgenre && <button className="toggle-on" onClick={() => setSubgenre('')} title={t('Clear the subgenre filter')}>{groupName(subgenre)} ✕</button>}
+        {filtered && <button onClick={() => { setStatus('all'); setGenre('all'); setSubgenre(''); }}>{t('Clear filters')}</button>}
       </div>
 
       <div className="tt-body">
@@ -108,25 +114,25 @@ export default function TreeViews({ books, ai, onOpenInLibrary }) {
 function BookCard({ book: b, edges, byId, onClose, onHood, onTree, onLibrary, onCard }) {
   const st = readStatus(b);
   const links = edges.filter((e) => e.a === b.id || e.b === b.id).slice(0, 8);
-  const facts = [b.pages ? `${b.pages} pp` : (b.words ? `${Math.round(b.words / 1000)}k words` : ''), pubYear(b) || '', b.finishTime ? `read ${String(b.finishTime).slice(0, 4)}` : '', recommender(b) !== 'Claude' ? `✦ ${recommender(b)}` : ''].filter(Boolean);
+  const facts = [b.pages ? t('{n} pp', { n: b.pages }) : (b.words ? t('{n}k words', { n: Math.round(b.words / 1000) }) : ''), pubYear(b) || '', b.finishTime ? t('read {year}', { year: String(b.finishTime).slice(0, 4) }) : '', recommender(b) !== 'Claude' ? `✦ ${recommender(b)}` : ''].filter(Boolean);
   return (
     <div className="lj-starcard tt-card">
-      <button className="close-x" onClick={onClose} aria-label="Close">×</button>
+      <button className="close-x" onClick={onClose} aria-label={t('Close')}>×</button>
       <b>{b.title}</b><br /><em>{b.author}</em>
-      <div className="settings-note">{b.genre || 'Uncategorized'}{b.subgenre ? ` › ${b.subgenre}` : ''}{b.series ? ` · ${b.series}${b.seriesNum ? ` #${b.seriesNum}` : ''}` : ''} · {STATUS_LABEL[st]}{b.recScore ? ` · rec ${b.recScore}` : ''}{b.rating ? ` · ${'★'.repeat(b.rating)}` : ''}</div>
+      <div className="settings-note">{b.genre || t('Uncategorized')}{b.subgenre ? ` › ${b.subgenre}` : ''}{b.series ? ` · ${b.series}${b.seriesNum ? ` #${b.seriesNum}` : ''}` : ''} · {STATUS_LABEL[st]}{b.recScore ? ` · ${t('rec {n}', { n: b.recScore })}` : ''}{b.rating ? ` · ${'★'.repeat(b.rating)}` : ''}</div>
       {facts.length > 0 && <div className="settings-note">{facts.join(' · ')}</div>}
       {b.description && <div className="lj-starcard-desc">{b.description}</div>}
       <div className="tt-card-acts">
-        <button onClick={onHood} title="Show the books around this one">🧭 Neighbourhood</button>
-        <button onClick={onTree} title="Show its read-before chain">🌳 Tech tree</button>
-        <button onClick={onLibrary} title="Open in the Library">↗ Library</button>
+        <button onClick={onHood} title={t('Show the books around this one')}>🧭 {t('Neighbourhood')}</button>
+        <button onClick={onTree} title={t('Show its read-before chain')}>🌳 {t('Tech tree')}</button>
+        <button onClick={onLibrary} title={t('Open in the Library')}>↗ {t('Library')}</button>
       </div>
       <div className="lj-starcard-links">{BOOK_LINKS.map(([k, l]) => (b[k] ? <a key={k} href={b[k]} target="_blank" rel="noreferrer">{l}</a> : null))}</div>
       {links.length > 0 && (
         <div className="lj-starcard-neighbors">
           {links.map((e, i) => { const other = byId.get(e.a === b.id ? e.b : e.a); return other && (
             <button key={i} className="lj-neighbor" onClick={() => onCard(other.id)}>
-              <i style={{ background: (EDGE_KINDS[e.kind] || EDGE_KINDS.link).color }} /> <span>{short(other.title, 34)}</span> <em>{(EDGE_KINDS[e.kind] || EDGE_KINDS.link).label}{EDGE_KINDS[e.kind]?.dir ? (e.a === b.id ? ' →' : ' ←') : ''}</em>
+              <i style={{ background: (EDGE_KINDS[e.kind] || EDGE_KINDS.link).color }} /> <span>{short(other.title, 34)}</span> <em>{kindLabel(e.kind)}{EDGE_KINDS[e.kind]?.dir ? (e.a === b.id ? ' →' : ' ←') : ''}</em>
             </button>
           ); })}
         </div>
@@ -158,44 +164,44 @@ function Overview({ books, onDrill }) {
   const pct = (x, n) => (n ? Math.round((x / n) * 100) : 0);
   return (
     <div className="tt-overview">
-      <svg viewBox="-300 -300 600 600" className="tt-sun" role="img" aria-label="Library by genre and subgenre">
+      <svg viewBox="-300 -300 600 600" className="tt-sun" role="img" aria-label={t('Library by genre and subgenre')}>
         {segs.map(({ g, a0, a1 }) => {
           let sa = a0;
           return (
             <g key={g.name}>
               <path d={arc(G ? 0 : 80, 170, a0, a1)} fill={genreHue(g.name)} opacity={0.35 + 0.65 * (g.read / Math.max(1, g.count))}
                 className="tt-arc" onClick={() => (G ? setZoom(null) : setZoom(g.name))}>
-                <title>{`${g.name}: ${g.count} books, ${g.read} finished (${pct(g.read, g.count)}%) — click to ${G ? 'zoom out' : 'zoom in'}`}</title>
+                <title>{G ? t('{name}: {count} books, {read} finished ({pct}%) — click to zoom out', { name: groupName(g.name), count: g.count, read: g.read, pct: pct(g.read, g.count) }) : t('{name}: {count} books, {read} finished ({pct}%) — click to zoom in', { name: groupName(g.name), count: g.count, read: g.read, pct: pct(g.read, g.count) })}</title>
               </path>
               {(g.subs || []).map((s) => {
                 const w = (a1 - a0) * (s.count / Math.max(1, g.count));
                 const p = <path key={s.name} d={arc(176, 280, sa, sa + w)} fill={genreHue(g.name)} opacity={0.25 + 0.75 * (s.read / Math.max(1, s.count))}
                   className="tt-arc" onClick={() => onDrill(g.name === 'Other genres' ? 'all' : g.name, s.name === 'Other' ? '' : s.name)}>
-                  <title>{`${g.name} › ${s.name === '—' ? '(no subgenre)' : s.name}: ${s.count} books, ${s.read} finished — click to see them on the map`}</title>
+                  <title>{t('{genre} › {sub}: {count} books, {read} finished — click to see them on the map', { genre: groupName(g.name), sub: groupName(s.name), count: s.count, read: s.read })}</title>
                 </path>;
                 sa += w;
                 return p;
               })}
-              {(a1 - a0) > 0.3 && !G && (() => { const m = (a0 + a1) / 2; return <text x={Math.cos(m) * 125} y={Math.sin(m) * 125} className="tt-sun-label" textAnchor="middle" dominantBaseline="middle">{short(g.name, 14)}</text>; })()}
+              {(a1 - a0) > 0.3 && !G && (() => { const m = (a0 + a1) / 2; return <text x={Math.cos(m) * 125} y={Math.sin(m) * 125} className="tt-sun-label" textAnchor="middle" dominantBaseline="middle">{short(groupName(g.name), 14)}</text>; })()}
             </g>
           );
         })}
         {G && (() => {
           let sa = -Math.PI / 2;
-          return (G.subs || []).map((s) => { const w = (Math.PI * 2) * (s.count / Math.max(1, G.count)); const m = sa + w / 2; sa += w; return w > 0.18 ? <text key={s.name} x={Math.cos(m) * 228} y={Math.sin(m) * 228} className="tt-sun-label" textAnchor="middle" dominantBaseline="middle">{short(s.name === '—' ? '(none)' : s.name, 14)}</text> : null; });
+          return (G.subs || []).map((s) => { const w = (Math.PI * 2) * (s.count / Math.max(1, G.count)); const m = sa + w / 2; sa += w; return w > 0.18 ? <text key={s.name} x={Math.cos(m) * 228} y={Math.sin(m) * 228} className="tt-sun-label" textAnchor="middle" dominantBaseline="middle">{short(s.name === '—' ? t('(none)') : groupName(s.name), 14)}</text> : null; });
         })()}
         <circle r={G ? 0 : 76} className="tt-sun-hub" onClick={() => setZoom(null)} />
         {!G && <text className="tt-sun-center" textAnchor="middle" y="-6">{data.total.toLocaleString()}</text>}
-        {!G && <text className="tt-sun-center-sub" textAnchor="middle" y="16">{pct(data.read, data.total)}% finished</text>}
+        {!G && <text className="tt-sun-center-sub" textAnchor="middle" y="16">{t('{pct}% finished', { pct: pct(data.read, data.total) })}</text>}
       </svg>
       <div className="tt-genre-list">
-        {G && <button onClick={() => setZoom(null)}>← All genres</button>}
+        {G && <button onClick={() => setZoom(null)}>← {t('All genres')}</button>}
         <table className="lj-cand">
-          <thead><tr><th>{G ? 'Subgenre' : 'Genre'}</th><th>Books</th><th>Finished</th><th aria-label="Bar" /></tr></thead>
+          <thead><tr><th>{G ? t('Subgenre') : t('Genre')}</th><th>{t('Books')}</th><th>{t('Finished')}</th><th aria-label={t('Bar')} /></tr></thead>
           <tbody>
             {(G ? G.subs : data.genres).map((x) => (
               <tr key={x.name} onClick={() => (G ? onDrill(G.name === 'Other genres' ? 'all' : G.name, x.name === 'Other' ? '' : x.name) : setZoom(x.name))} className="tt-row">
-                <td><i className="tt-dot" style={{ background: genreHue(G ? G.name : x.name) }} /> {x.name === '—' ? '(no subgenre)' : x.name}</td>
+                <td><i className="tt-dot" style={{ background: genreHue(G ? G.name : x.name) }} /> {groupName(x.name)}</td>
                 <td>{x.count.toLocaleString()}</td>
                 <td>{pct(x.read, x.count)}%</td>
                 <td><span className="lj-pbar"><i style={{ width: `${pct(x.read, x.count)}%` }} /></span></td>
@@ -203,7 +209,7 @@ function Overview({ books, onDrill }) {
             ))}
           </tbody>
         </table>
-        <p className="settings-note">Brighter = more of it finished. Click a genre to zoom in; click a subgenre to see its books on the map.</p>
+        <p className="settings-note">{t('Brighter = more of it finished. Click a genre to zoom in; click a subgenre to see its books on the map.')}</p>
       </div>
     </div>
   );
@@ -295,8 +301,8 @@ function MapCanvas({ books, edges, passes, filterKey, focus, onPick, onOpen }) {
     // cluster labels only where something is visible
     const liveWedge = new Set(), liveSub = new Set();
     for (const n of layout.nodes) if (visible.has(n.id)) { liveWedge.add(n.wedge); liveSub.add(`${n.wedge}|${n.subgenre}`); }
-    if (k * MAP_R > 450) for (const s of layout.subs) if (liveSub.has(`${s.genre}|${s.name}`)) label(`${s.name} · ${s.count}`, sx(s.x), sy(s.y), 'italic 11px sans-serif', 'rgba(200,210,230,0.75)', true);
-    for (const g of layout.genres) if (liveWedge.has(g.name)) label(`${g.name} · ${g.count.toLocaleString()} (${g.read} read)`, sx(g.x), sy(g.y), 'bold 12px sans-serif', genreHue(g.name), true);
+    if (k * MAP_R > 450) for (const s of layout.subs) if (liveSub.has(`${s.genre}|${s.name}`)) label(`${groupName(s.name)} · ${s.count}`, sx(s.x), sy(s.y), 'italic 11px sans-serif', 'rgba(200,210,230,0.75)', true);
+    for (const g of layout.genres) if (liveWedge.has(g.name)) label(t('{name} · {count} ({read} read)', { name: groupName(g.name), count: g.count.toLocaleString(), read: g.read }), sx(g.x), sy(g.y), 'bold 12px sans-serif', genreHue(g.name), true);
   };
   const schedule = () => { if (!raf.current) raf.current = requestAnimationFrame(draw); };
 
@@ -338,7 +344,7 @@ function MapCanvas({ books, edges, passes, filterKey, focus, onPick, onOpen }) {
             const d = drag.current; const dx = e.clientX - d.x, dy = e.clientY - d.y;
             if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
             cam.current = { ...d.cam, x: d.cam.x - dx / d.cam.k, y: d.cam.y - dy / d.cam.k }; schedule();
-          } else { const n = hit(e); setHint(n ? `${n.title}${n.author ? ` — ${n.author}` : ''} · ${n.genre}${n.subgenre !== '—' ? ` › ${n.subgenre}` : ''}` : ''); }
+          } else { const n = hit(e); setHint(n ? `${n.title}${n.author ? ` — ${n.author}` : ''} · ${groupName(n.genre)}${n.subgenre !== '—' ? ` › ${n.subgenre}` : ''}` : ''); }
         }}
         onPointerUp={(e) => { const d = drag.current; drag.current = null; if (d && !d.moved) { const n = hit(e); if (n) onPick(n.id); } }}
         onDoubleClick={(e) => { const n = hit(e); if (n) onOpen(n.id); }}
@@ -351,11 +357,11 @@ function MapCanvas({ books, edges, passes, filterKey, focus, onPick, onOpen }) {
         }}
       />
       <div className="tt-map-tools">
-        <button onClick={() => { cam.current = { ...cam.current, k: cam.current.k * 1.4 }; schedule(); }} aria-label="Zoom in">＋</button>
-        <button onClick={() => { cam.current = { ...cam.current, k: cam.current.k / 1.4 }; schedule(); }} aria-label="Zoom out">－</button>
-        <button onClick={() => { fitAll(); schedule(); }} title="Whole library">⤢</button>
+        <button onClick={() => { cam.current = { ...cam.current, k: cam.current.k * 1.4 }; schedule(); }} aria-label={t('Zoom in')}>＋</button>
+        <button onClick={() => { cam.current = { ...cam.current, k: cam.current.k / 1.4 }; schedule(); }} aria-label={t('Zoom out')}>－</button>
+        <button onClick={() => { fitAll(); schedule(); }} title={t('Whole library')}>⤢</button>
       </div>
-      <div className="tt-map-hint">{hint || `${visible.size.toLocaleString()} books · drag to pan, scroll to zoom · click a book for its card, double-click for its neighbourhood · faint = not read yet, ringed = reading`}</div>
+      <div className="tt-map-hint">{hint || t('{n} books · drag to pan, scroll to zoom · click a book for its card, double-click for its neighbourhood · faint = not read yet, ringed = reading', { n: visible.size.toLocaleString() })}</div>
     </div>
   );
 }
@@ -364,7 +370,7 @@ function MapCanvas({ books, edges, passes, filterKey, focus, onPick, onOpen }) {
 function Hood({ books, byId, edges, focus, canBack, onBack, onFocus, onCard, onTree }) {
   const me = focus && byId.get(focus);
   const around = useMemo(() => (me ? neighbourhood(books, edges, me.id, { max: 36 }) : []), [books, edges, me]);
-  if (!me) return <p className="settings-note tt-empty">Pick a book to centre on — use “Find a book…” above, or click one on the map.</p>;
+  if (!me) return <p className="settings-note tt-empty">{t('Pick a book to centre on — use “Find a book…” above, or click one on the map.')}</p>;
   const inner = around.slice(0, 14), outer = around.slice(14);
   const place = (list, r, off) => list.map((x, i) => ({ ...x, x: Math.cos(off + (i / list.length) * Math.PI * 2) * r, y: Math.sin(off + (i / list.length) * Math.PI * 2) * r }));
   const pts = [...place(inner, 230, -Math.PI / 2), ...place(outer, 390, -Math.PI / 2 + 0.15)];
@@ -372,19 +378,19 @@ function Hood({ books, byId, edges, focus, canBack, onBack, onFocus, onCard, onT
   return (
     <div className="tt-hood">
       <div className="tt-hood-head">
-        {canBack && <button onClick={onBack}>← Back</button>}
+        {canBack && <button onClick={onBack}>← {t('Back')}</button>}
         <b>{me.title}</b><em>{me.author}</em>
         <span className="lj-spacer" />
-        <button onClick={() => onCard(me.id)}>Card</button>
-        <button onClick={() => onTree(me.id)}>🌳 Tech tree</button>
+        <button onClick={() => onCard(me.id)}>{t('Card')}</button>
+        <button onClick={() => onTree(me.id)}>🌳 {t('Tech tree')}</button>
       </div>
-      <svg viewBox="-520 -470 1040 940" className="tt-hood-svg" role="img" aria-label={`Books around ${me.title}`}>
+      <svg viewBox="-520 -470 1040 940" className="tt-hood-svg" role="img" aria-label={t('Books around {title}', { title: me.title })}>
         {pts.map((p) => <line key={`l-${p.book.id}`} x1="0" y1="0" x2={p.x} y2={p.y} stroke={color(p)} strokeOpacity={p.rel === 'subgenre' ? 0.25 : 0.7} strokeWidth={p.rel === 'subgenre' ? 1 : 2.5} />)}
         {pts.map((p) => {
           const st = readStatus(p.book);
           return (
             <g key={p.book.id} className="tt-hood-node" transform={`translate(${p.x} ${p.y})`} onClick={() => onFocus(p.book.id)}>
-              <title>{`${p.book.title} — ${p.book.author || ''} · ${p.rel === 'link' ? (EDGE_KINDS[p.kind] || EDGE_KINDS.link).label + (p.dir === 'in' ? ' (leads here)' : ' (leads on)') : REL[p.rel].label} · ${STATUS_LABEL[st]} — click to centre on it`}</title>
+              <title>{`${p.book.title} — ${p.book.author || ''} · ${p.rel === 'link' ? (p.dir === 'in' ? t('{kind} (leads here)', { kind: kindLabel(p.kind) }) : t('{kind} (leads on)', { kind: kindLabel(p.kind) })) : REL[p.rel].label} · ${STATUS_LABEL[st]} — ${t('click to centre on it')}`}</title>
               <circle r={p.rel === 'subgenre' ? 9 : 13} fill={genreHue(p.book.genre || 'Uncategorized')} opacity={STATUS_ALPHA[st] < 0.5 ? 0.55 : 1} stroke={st === 'reading' ? '#fff' : 'none'} strokeWidth="2" />
               <text y={p.rel === 'subgenre' ? 22 : 27} textAnchor="middle" className="tt-hood-label">{short(p.book.title, 24)}</text>
             </g>
@@ -394,8 +400,8 @@ function Hood({ books, byId, edges, focus, canBack, onBack, onFocus, onCard, onT
         <text y="46" textAnchor="middle" className="tt-hood-center">{short(me.title, 36)}</text>
       </svg>
       <div className="lj-edge-legend tt-hood-legend">
-        {Object.entries(REL).map(([k, v]) => <span key={k} className="lj-legend-item"><i style={{ background: v.color }} />{v.label}{k === 'link' ? ' (AI link, coloured by kind)' : ''}</span>)}
-        <span className="settings-note" style={{ margin: 0 }}>{around.length} books · click one to move there</span>
+        {Object.entries(REL).map(([k, v]) => <span key={k} className="lj-legend-item"><i style={{ background: v.color }} />{k === 'link' ? t('{label} (AI link, coloured by kind)', { label: v.label }) : v.label}</span>)}
+        <span className="settings-note" style={{ margin: 0 }}>{t.n('{n} book · click one to move there', '{n} books · click one to move there', around.length)}</span>
       </div>
     </div>
   );
@@ -420,7 +426,7 @@ function TechTree({ books, byId, edges, focus, onFocus, onHood }) {
     return [...seen];
   }, [comp, focus, edges]);
   const L = useMemo(() => treeLayout(ids, edges), [ids, edges]);
-  if (!comps.length) return <p className="settings-note tt-empty">No read-before links yet. Series with numbered volumes appear here automatically; for more, run <b>AI / Cowork → Rebuild knowledge graph</b> (prerequisite / influence / responds-to links).</p>;
+  if (!comps.length) return <p className="settings-note tt-empty">{t('No read-before links yet. Series with numbered volumes appear here automatically; for more, run AI / Cowork → Rebuild knowledge graph (prerequisite / influence / responds-to links).')}</p>;
   const tallest = Math.max(1, ...L.layers.map((l) => l.length));
   const pos = new Map();
   L.layers.forEach((l, li) => l.forEach((id, i) => pos.set(id, { x: li * COL, y: (i - (l.length - 1) / 2) * ROW + ((tallest - 1) / 2) * ROW })));
@@ -428,10 +434,10 @@ function TechTree({ books, byId, edges, focus, onFocus, onHood }) {
   return (
     <div className="tt-tree">
       <div className="tt-tree-head">
-        <select value={comp?.ids[0] || ''} onChange={(e) => setPick(e.target.value)} aria-label="Which tree">
-          {comps.slice(0, 300).map((c) => <option key={c.ids[0]} value={c.ids[0]}>{short(c.label, 50)} · {c.size} books</option>)}
+        <select value={comp?.ids[0] || ''} onChange={(e) => setPick(e.target.value)} aria-label={t('Which tree')}>
+          {comps.slice(0, 300).map((c) => <option key={c.ids[0]} value={c.ids[0]}>{short(c.label, 50)} · {t.n('{n} book', '{n} books', c.size)}</option>)}
         </select>
-        <span className="settings-note" style={{ margin: 0 }}>{comps.length} trees · read left → right{comp && comp.size > MAX_NODES ? ` · showing the ${MAX_NODES} books nearest your focus of ${comp.size}` : ''}</span>
+        <span className="settings-note" style={{ margin: 0 }}>{t.n('{n} tree · read left → right', '{n} trees · read left → right', comps.length)}{comp && comp.size > MAX_NODES ? ` · ${t('showing the {max} books nearest your focus of {total}', { max: MAX_NODES, total: comp.size })}` : ''}</span>
       </div>
       <div className="tt-tree-scroll">
         <svg width={W + NODE_W} height={H + 20} className="tt-tree-svg">
@@ -439,14 +445,14 @@ function TechTree({ books, byId, edges, focus, onFocus, onHood }) {
             {L.edges.map((e, i) => {
               const a = pos.get(e.a), b = pos.get(e.b); if (!a || !b) return null;
               const x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2, x2 = b.x, y2 = b.y + NODE_H / 2, mx = (x1 + x2) / 2;
-              return <path key={i} d={`M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`} fill="none" stroke={(EDGE_KINDS[e.kind] || EDGE_KINDS.link).color} strokeWidth={focus && (e.a === focus || e.b === focus) ? 3 : 1.6} opacity="0.8"><title>{(EDGE_KINDS[e.kind] || EDGE_KINDS.link).label}</title></path>;
+              return <path key={i} d={`M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`} fill="none" stroke={(EDGE_KINDS[e.kind] || EDGE_KINDS.link).color} strokeWidth={focus && (e.a === focus || e.b === focus) ? 3 : 1.6} opacity="0.8"><title>{kindLabel(e.kind)}</title></path>;
             })}
             {ids.map((id) => {
               const p = pos.get(id), b = byId.get(id); if (!p || !b) return null;
               const st = readStatus(b);
               return (
                 <g key={id} transform={`translate(${p.x} ${p.y})`} className={`tt-tnode tt-${st}${focus === id ? ' on' : ''}`} onClick={() => onFocus(id)} onDoubleClick={() => onHood(id)}>
-                  <title>{`${b.title} — ${b.author || ''} · ${STATUS_LABEL[st]} (click: card · double-click: neighbourhood)`}</title>
+                  <title>{`${b.title} — ${b.author || ''} · ${STATUS_LABEL[st]} ${t('(click: card · double-click: neighbourhood)')}`}</title>
                   <rect width={NODE_W} height={NODE_H} rx="8" style={{ stroke: genreHue(b.genre || 'Uncategorized') }} />
                   <text x="10" y="18" className="tt-tnode-title">{short(b.title, 28)}</text>
                   <text x="10" y="34" className="tt-tnode-sub">{short(`${b.author || ''}${b.seriesNum ? ` · #${b.seriesNum}` : ''}`, 32)}</text>
@@ -456,7 +462,7 @@ function TechTree({ books, byId, edges, focus, onFocus, onHood }) {
           </g>
         </svg>
       </div>
-      <div className="lj-edge-legend tt-hood-legend">{['prereq', 'influence', 'responds', 'series'].map((k) => <span key={k} className="lj-legend-item"><i style={{ background: EDGE_KINDS[k].color }} />{EDGE_KINDS[k].label}</span>)}</div>
+      <div className="lj-edge-legend tt-hood-legend">{['prereq', 'influence', 'responds', 'series'].map((k) => <span key={k} className="lj-legend-item"><i style={{ background: EDGE_KINDS[k].color }} />{kindLabel(k)}</span>)}</div>
     </div>
   );
 }

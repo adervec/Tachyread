@@ -14,7 +14,7 @@ function ThemeOptions() {
   return THEME_CATEGORIES.map((g) => (
     // i18n-keys: Basic | Editor & code | Nature | Historical & cultural | Decades
     <optgroup key={g.label} label={t(g.label)}>
-      {g.themes.map((n) => <option key={n} value={n}>{n}</option>)}
+      {g.themes.map((n) => <option key={n} value={n}>{t(n)}</option>)}
     </optgroup>
   ));
 }

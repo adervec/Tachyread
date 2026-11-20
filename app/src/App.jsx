@@ -156,7 +156,7 @@ const HAND_LABEL = {
 };
 import { getSyncProvider, getDriveProfile } from './features/sync/syncProviders.js';
 import { backupToProvider, syncWithProvider } from './features/sync/syncManager.js';
-import { applyTheme, tabThemeName, systemPrefersDark } from './state/themes.js';
+import { applyTheme, tabThemeName, systemPrefersDark, houseThemeId } from './state/themes.js';
 import { ensureFamilyLoaded } from './state/fonts.js';
 import './App.css';
 import { markDue } from './features/coworkActions.js';
@@ -596,7 +596,10 @@ function AppInner() {
     return () => q?.removeEventListener?.('change', on);
   }, []);
   useEffect(() => {
-    applyTheme(tabThemeName(activeTab?.settings, sysDark), state.global.defaultSerifFamily, state.global.defaultSansFamily);
+    const name = tabThemeName(activeTab?.settings, sysDark);
+    applyTheme(name, state.global.defaultSerifFamily, state.global.defaultSansFamily);
+    // Keep font.js's per-app theme (its own notices, the --t-* palette) in step with the active tab.
+    window.appFont?.setTheme?.(activeTab?.settings?.themeName ? houseThemeId(name) : 'system');
   }, [
     sysDark,
     activeTab?.settings?.themeName,

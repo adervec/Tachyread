@@ -4,6 +4,7 @@
 
 import { readStatus, finishMs, recommender, bookRating } from './journeyLibrary.js';
 import { localDay, parseDay, mondayOf } from './localDay.js';
+import { t } from '../i18n.js';
 
 const yearOf = (b) => { const ms = finishMs(b); return ms == null ? null : new Date(ms).getFullYear(); };
 const monthOf = (b) => { const ms = finishMs(b); return ms == null ? null : new Date(ms).getMonth() + 1; };
@@ -13,13 +14,13 @@ const monthOf = (b) => { const ms = finishMs(b); return ms == null ? null : new 
 export function cumulativeFinishes(books) {
   const rows = books
     .filter((b) => readStatus(b) === 'finished' && finishMs(b) != null)
-    .map((b) => ({ b, t: finishMs(b) }))
-    .sort((a, b) => a.t - b.t);
+    .map((b) => ({ b, ms: finishMs(b) }))
+    .sort((a, b) => a.ms - b.ms);
   let n = 0, pages = 0, words = 0;
-  return rows.map(({ b, t }) => {
+  return rows.map(({ b, ms }) => {
     n += 1; pages += Number(b.pages) || 0; words += Number(b.words) || 0;
     return {
-      t, date: localDay(t), id: b.id, title: b.title, author: b.author,
+      t: ms, date: localDay(ms), id: b.id, title: b.title, author: b.author,
       genre: b.genre || 'Uncategorized', difficulty: Number(b.difficultyLevel) || null, rating: bookRating(b),
       n, pages, words,
     };
@@ -105,7 +106,7 @@ export function yearGoal(books, target, now = Date.now()) {
   const year = d.getFullYear();
   const y0 = new Date(year, 0, 1).getTime(), y1 = new Date(year + 1, 0, 1).getTime();
   const yearFrac = Math.min(1, Math.max(0, (now - y0) / (y1 - y0)));
-  const finished = books.filter((b) => { const t = finishMs(b); return readStatus(b) === 'finished' && t != null && t >= y0 && t < now + 1; }).length;
+  const finished = books.filter((b) => { const ms = finishMs(b); return readStatus(b) === 'finished' && ms != null && ms >= y0 && ms < now + 1; }).length;
   const expected = target > 0 ? target * yearFrac : 0;
   const projected = yearFrac > 0.02 ? Math.round(finished / yearFrac) : null; // too early in Jan → no projection
   const daysLeft = Math.max(0, Math.round((y1 - now) / 86400000));
@@ -188,9 +189,9 @@ export function weeklySummaries(days, books, { weeks = 8, now = Date.now() } = {
   const curMonday = mondayOf(now);
   const byWeek = new Map(); // weekStartMs → { words, secs, days:Set }
   for (const d of days || []) {
-    const t = parseDay(d.date || '');
-    if (!Number.isFinite(t) || t >= curMonday) continue; // only completed weeks
-    const w = mondayOf(t);
+    const ms = parseDay(d.date || '');
+    if (!Number.isFinite(ms) || ms >= curMonday) continue; // only completed weeks
+    const w = mondayOf(ms);
     const cur = byWeek.get(w) || { words: 0, secs: 0, days: new Set() };
     cur.words += d.wordsRead || 0;
     cur.secs += d.activeSecs || 0;
@@ -200,9 +201,9 @@ export function weeklySummaries(days, books, { weeks = 8, now = Date.now() } = {
   const finishesByWeek = new Map();
   for (const b of books || []) {
     if (readStatus(b) !== 'finished') continue;
-    const t = finishMs(b);
-    if (t == null || t >= curMonday) continue;
-    const w = mondayOf(t);
+    const ms = finishMs(b);
+    if (ms == null || ms >= curMonday) continue;
+    const w = mondayOf(ms);
     if (!finishesByWeek.has(w)) finishesByWeek.set(w, []);
     finishesByWeek.get(w).push(b);
   }
@@ -219,11 +220,15 @@ export function weeklySummaries(days, books, { weeks = 8, now = Date.now() } = {
     const hrs = Math.floor(secs / 3600), mins = Math.round((secs % 3600) / 60);
     const parts = [];
     if (words > 0) {
-      parts.push(`Read ${words.toLocaleString()} words in ${hrs ? `${hrs}h ${mins}m` : `${mins}m`} across ${daysActive} day${daysActive === 1 ? '' : 's'}${wpm ? ` (≈${wpm} WPM effective)` : ''}.`);
+      const time = hrs ? t('{h}h {m}m', { h: hrs, m: mins }) : t('{m}m', { m: mins });
+      const vals = { words: words.toLocaleString(), time, wpm };
+      parts.push(wpm
+        ? t.n('Read {words} words in {time} across {n} day (≈{wpm} WPM effective).', 'Read {words} words in {time} across {n} days (≈{wpm} WPM effective).', daysActive, vals)
+        : t.n('Read {words} words in {time} across {n} day.', 'Read {words} words in {time} across {n} days.', daysActive, vals));
     } else if (fins.length) {
-      parts.push('No in-app reading recorded.');
+      parts.push(t('No in-app reading recorded.'));
     }
-    if (fins.length) parts.push(`Finished ${fins.map((b) => `“${b.title}”${b.author ? ` (${b.author})` : ''}`).join(', ')}.`);
+    if (fins.length) parts.push(t('Finished {list}.', { list: fins.map((b) => `“${b.title}”${b.author ? ` (${b.author})` : ''}`).join(', ') }));
     out.push({
       week: iso(w), // the week's Monday — the key cowork uses to dress a week up
       start: iso(w),
@@ -254,12 +259,12 @@ export function recentWordsPerDay(books, windowDays = 90, now = Date.now()) {
   let words = 0, earliest = now;
   for (const b of books || []) {
     if (readStatus(b) !== 'finished') continue;
-    const t = parseDay(b.finishTime || '');
-    if (!t || t < cutoff || t > now) continue;
+    const ms = parseDay(b.finishTime || '');
+    if (!ms || ms < cutoff || ms > now) continue;
     const w = bookWords(b);
     if (!w) continue;
     words += w;
-    earliest = Math.min(earliest, t);
+    earliest = Math.min(earliest, ms);
   }
   if (!words) return null;
   const spanDays = Math.max(14, (now - earliest) / 86400000); // ponytail: 14-day floor tames small samples
@@ -307,8 +312,8 @@ export function yearWordsGoal(dayAgg, books, linkedIds, target, now = Date.now()
   const from = `${year}-01-01`, to = localDay(d);
   const appWords = (dayAgg || []).reduce((a, x) => a + (x.date >= from && x.date <= to ? x.wordsRead || 0 : 0), 0);
   const offApp = (books || []).reduce((a, b) => {
-    const t = finishMs(b);
-    return a + (!b.deleted && readStatus(b) === 'finished' && t != null && t >= y0 && t < now + 1 && !linkedIds?.has(b.id) ? bookWords(b) : 0);
+    const ms = finishMs(b);
+    return a + (!b.deleted && readStatus(b) === 'finished' && ms != null && ms >= y0 && ms < now + 1 && !linkedIds?.has(b.id) ? bookWords(b) : 0);
   }, 0);
   const read = appWords + offApp;
   const daysLeft = Math.max(0, Math.round((y1 - now) / 86400000));

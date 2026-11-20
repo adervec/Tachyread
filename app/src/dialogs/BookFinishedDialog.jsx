@@ -8,13 +8,14 @@ import { queueBooks, nextInQueue } from '../features/readingQueues.js';
 import { getSearchDirs } from '../features/fileLocator.js';
 import { fileWhere, openBookFile } from '../features/openBook.js';
 import { localDay } from '../features/localDay.js';
+import { t } from '../i18n.js';
 
 function fmtTime(secs) {
-  if (!secs) return '0s';
+  if (!secs) return t('{s}s', { s: 0 });
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = Math.floor(secs % 60);
-  return `${h ? h + 'h ' : ''}${m ? m + 'm ' : ''}${s}s`;
+  return h ? t('{h}h {m}m {s}s', { h, m, s }) : m ? t('{m}m {s}s', { m, s }) : t('{s}s', { s });
 }
 const todayISO = () => localDay();
 
@@ -27,7 +28,7 @@ function Stars({ value, onChange }) {
           type="button"
           className={`star ${n <= value ? 'on' : ''}`}
           onClick={() => onChange(n === value ? 0 : n)}
-          aria-label={`${n} star${n > 1 ? 's' : ''}`}
+          aria-label={t.n('{n} star', '{n} stars', n)}
         >
           ★
         </button>
@@ -92,7 +93,7 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
   // file can actually be opened (open tab, saved copy, or found in the search folders). Worked out
   // from the queues as they stand now, before this book is marked finished.
   const { state: appState, openRecent, openFiles, closeTab } = useApp();
-  const openChecksums = useMemo(() => appState.tabs.map((t) => (t.lazy ? t.settings?.contentChecksum : t.doc?.contentChecksum)).filter(Boolean), [appState.tabs]);
+  const openChecksums = useMemo(() => appState.tabs.map((tb) => (tb.lazy ? tb.settings?.contentChecksum : tb.doc?.contentChecksum)).filter(Boolean), [appState.tabs]);
   const linkedId = lib?.boundBook?.id || (choice.mode === 'existing' ? choice.bookId : null);
   const [upNext, setUpNext] = useState(null); // null = working it out → [{ label, book, cs, name, skipped }]
   const [dirs, setDirs] = useState([]);
@@ -162,95 +163,94 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
   async function saveAndOpen(n) {
     await record();
     const r = await openBookFile({ cs: n.cs, name: n.book.title, openChecksums, dirs, openRecent, openFiles }).catch((e) => ({ ok: false, msg: e?.message || String(e) }));
-    if (!r.ok) { setOpenMsg(`Saved — but ${r.msg}`); return; }
+    if (!r.ok) { setOpenMsg(t('Saved — but {msg}', { msg: r.msg })); return; }
     onClose();
     closeTab(tab.id);
   }
 
   return (
     <Dialog
-      title="Book Finished 🎉"
+      title={`${t('Book Finished')} 🎉`}
       onClose={onClose}
       width={520}
       buttons={
         <>
-          <button onClick={onClose}>Cancel</button>
-          <button className="toggle-on" onClick={save}>Save &amp; mark finished</button>
+          <button onClick={onClose}>{t('Cancel')}</button>
+          <button className="toggle-on" onClick={save}>{t('Save & mark finished')}</button>
         </>
       }
     >
       <div className="field-section">{tab.doc.fileName}</div>
       <table className="history-table" style={{ marginBottom: 12 }}>
         <tbody>
-          <tr><td>Book read (coverage)</td><td>{coverage.toFixed(1)}% ({readCount} / {tab.doc.words.length} words)</td></tr>
-          <tr><td>Total active reading time</td><td>{fmtTime(activeSecs)}</td></tr>
-          <tr><td>Effective reading speed</td><td>{effWpm} WPM</td></tr>
-          <tr><td>Times finished before</td><td>{completions.length}</td></tr>
+          <tr><td>{t('Book read (coverage)')}</td><td>{t('{pct}% ({read} / {total} words)', { pct: coverage.toFixed(1), read: readCount, total: tab.doc.words.length })}</td></tr>
+          <tr><td>{t('Total active reading time')}</td><td>{fmtTime(activeSecs)}</td></tr>
+          <tr><td>{t('Effective reading speed')}</td><td>{t('{n} WPM', { n: effWpm })}</td></tr>
+          <tr><td>{t('Times finished before')}</td><td>{completions.length}</td></tr>
         </tbody>
       </table>
 
       <div className="field-row">
-        <label>Your rating</label>
+        <label>{t('Your rating')}</label>
         <Stars value={rating} onChange={setRating} />
       </div>
       <div style={{ marginTop: 8 }}>
-        <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>Notes / review</label>
+        <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>{t('Notes / review')}</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={4}
           style={{ width: '100%', resize: 'vertical' }}
-          placeholder="What did you think? Key takeaways, favorite parts…"
+          placeholder={t('What did you think? Key takeaways, favorite parts…')}
         />
       </div>
 
       {/* Trackyread link check */}
-      <div className="field-section">Trackyread</div>
+      <div className="field-section">{t('Trackyread')}</div>
       {lib === null ? (
-        <p className="settings-note" style={{ marginTop: 0 }}>Checking your reading tracker…</p>
+        <p className="settings-note" style={{ marginTop: 0 }}>{t('Checking your reading tracker…')}</p>
       ) : lib.boundBook ? (
         <p className="settings-note bf-linked" style={{ marginTop: 0 }}>
-          🔗 Linked to “{lib.boundBook.title}” — it’ll be marked finished in Trackyread.
+          🔗 {t('Linked to “{title}” — it’ll be marked finished in Trackyread.', { title: lib.boundBook.title })}
         </p>
       ) : (
         <div className="bf-link">
-          <p className="settings-note" style={{ marginTop: 0 }}>This book isn’t linked to your Trackyread library — link it so it counts?</p>
+          <p className="settings-note" style={{ marginTop: 0 }}>{t('This book isn’t linked to your Trackyread library — link it so it counts?')}</p>
           <label className="bf-opt">
             <input type="radio" name="bf-link" checked={choice.mode === 'new'} onChange={() => setChoice({ mode: 'new', bookId: null })} />
-            <span>➕ Add “<b>{cleanName}</b>” to Trackyread as finished</span>
+            <span>➕ {t('Add “{name}” to Trackyread as finished', { name: cleanName })}</span>
           </label>
-          <input className="bf-search" placeholder="…or search your library to link an existing book" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input className="bf-search" placeholder={t('…or search your library to link an existing book')} value={search} onChange={(e) => setSearch(e.target.value)} />
           {candidates.map((b) => (
             <label key={b.id} className="bf-opt">
               <input type="radio" name="bf-link" checked={choice.mode === 'existing' && choice.bookId === b.id} onChange={() => setChoice({ mode: 'existing', bookId: b.id })} />
               <span>🔗 {b.title}{b.author ? <em> · {b.author}</em> : ''}</span>
             </label>
           ))}
-          {search.trim() && candidates.length === 0 && <p className="settings-note" style={{ margin: '2px 0' }}>No matching books.</p>}
+          {search.trim() && candidates.length === 0 && <p className="settings-note" style={{ margin: '2px 0' }}>{t('No matching books.')}</p>}
           <label className="bf-opt">
             <input type="radio" name="bf-link" checked={choice.mode === 'skip'} onChange={() => setChoice({ mode: 'skip', bookId: null })} />
-            <span>Don’t link now</span>
+            <span>{t('Don’t link now')}</span>
           </label>
         </div>
       )}
 
-      {(upNext === null || upNext.length > 0) && <div className="field-section">Up next</div>}
+      {(upNext === null || upNext.length > 0) && <div className="field-section">{t('Up next')}</div>}
       {upNext === null
-        ? <p className="settings-note" style={{ marginTop: 0 }}>Looking for the next book in your queues…</p>
+        ? <p className="settings-note" style={{ marginTop: 0 }}>{t('Looking for the next book in your queues…')}</p>
         : upNext.map((n) => (
           <div key={n.label} className="bf-next">
             {n.book
-              ? <button className="toggle-on" onClick={() => saveAndOpen(n)} title="Mark this finished, close its tab and open the next one">Save, close &amp; open “{n.book.title}”</button>
-              : <span className="settings-note">Nothing in {n.label} can be opened on this device.</span>}
-            <span className="settings-note"> {n.book ? `next in ${n.label}` : ''}{n.skipped ? ` · skipped ${n.skipped} whose file isn’t on this device` : ''}</span>
+              ? <button className="toggle-on" onClick={() => saveAndOpen(n)} title={t('Mark this finished, close its tab and open the next one')}>{t('Save, close & open “{title}”', { title: n.book.title })}</button>
+              : <span className="settings-note">{t('Nothing in {queue} can be opened on this device.', { queue: n.label })}</span>}
+            <span className="settings-note"> {n.book ? t('next in {queue}', { queue: n.label }) : ''}{n.skipped ? ` · ${t('skipped {n} whose file isn’t on this device', { n: n.skipped })}` : ''}</span>
           </div>
         ))}
       {openMsg && <p className="settings-note">{openMsg}</p>}
 
       {coverage < 90 && (
         <p className="settings-note">
-          Note: you’ve read {coverage.toFixed(1)}% of the book by coverage. Sections you skipped
-          aren’t counted as read.
+          {t('Note: you’ve read {pct}% of the book by coverage. Sections you skipped aren’t counted as read.', { pct: coverage.toFixed(1) })}
         </p>
       )}
     </Dialog>
