@@ -14,6 +14,11 @@ concurrency:
 permissions:
   contents: read
 
+# onnxruntime-node (a server-side dependency of the voice models, never in the browser build) would
+# download CUDA binaries during npm ci; that download now 404s. The browser app never needs them.
+env:
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+
 defaults:
   run:
     # The app lives in a subdirectory of the repo.
