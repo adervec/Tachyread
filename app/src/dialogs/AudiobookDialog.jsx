@@ -4,6 +4,8 @@ import { textMatcher, inRange, inDates, anySet } from '../features/tableFilter.j
 import { TextF, RangeF, DateF } from '../components/ColFilter.jsx';
 import { totalChars, chunkChars, etaSeconds, chunkHealth, fmtEta, previewText } from '../features/ttsProgress.js';
 import Dialog from './Dialog.jsx';
+import { t } from '../i18n.js';
+// narrationQuality's consistency label stays English (it is written to the narration log); shown via t() — i18n-keys: Very steady | Steady | Uneven
 import { fmtDateTime } from '../features/dateFmt.js';
 import { useApp } from '../state/AppContext.jsx';
 import {
@@ -96,7 +98,7 @@ function sectionsOf(tabLike, fileName, chunks) {
   const entries = getTocEntries(tabLike) || [];
   if (!entries.length) return [{ id: 'all', title: fileName || 'Document', chunks }];
   const secs = entries.map((e, i) => ({ id: 't' + i, title: e.title, start: e.wordIndex, chunks: [] }));
-  const lead = { id: 'lead', title: 'Front matter', start: -1, chunks: [] };
+  const lead = { id: 'lead', title: t('Front matter'), start: -1, chunks: [] };
   for (const c of chunks) {
     let target = lead;
     for (let i = secs.length - 1; i >= 0; i--) { if (c.startWordIndex >= secs[i].start) { target = secs[i]; break; } }
@@ -129,8 +131,8 @@ export default function AudiobookDialog({ onClose }) {
   const [genTick, setGenTick] = useState(0);
   useEffect(() => {
     if (!gen) return undefined;
-    const t = setInterval(() => setGenTick((n) => n + 1), 1000);
-    return () => clearInterval(t);
+    const tick = setInterval(() => setGenTick((n) => n + 1), 1000);
+    return () => clearInterval(tick);
   }, [!!gen]);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
@@ -238,7 +240,7 @@ export default function AudiobookDialog({ onClose }) {
       for (const f of foldersRef.current) {
         if (f.id !== existingId && typeof f.handle?.isSameEntry === 'function'
             && await f.handle.isSameEntry(handle).catch(() => false)) {
-          setMsg(`“${handle.name}” is already registered as a download folder.`);
+          setMsg(t('“{name}” is already registered as a download folder.', { name: handle.name }));
           return;
         }
       }
@@ -248,7 +250,7 @@ export default function AudiobookDialog({ onClose }) {
         setSeq((n) => n + 1);
       }
       refreshPerms(foldersRef.current);
-    } catch (e) { if (e?.name !== 'AbortError') setMsg('Could not open a folder: ' + (e?.message || e)); }
+    } catch (e) { if (e?.name !== 'AbortError') setMsg(t('Could not open a folder: {error}', { error: e?.message || e })); }
   }
   async function reconnectFolder(f) {
     // A dead handle can't be re-permissioned — only re-picked (its book assignments are kept).
@@ -269,10 +271,10 @@ export default function AudiobookDialog({ onClose }) {
       const man = await getAudiobookManifest(cs);
       const list = audiobookChunks(book.doc);
       const items = buildExportItems(sectionsOf(book.tabLike, book.fileName, list), man);
-      if (!items.length) { if (!quiet) setMsg(`“${book.fileName}” has no generated audio to sync yet.`); return 0; }
+      if (!items.length) { if (!quiet) setMsg(t('“{book}” has no generated audio to sync yet.', { book: book.fileName })); return 0; }
       const format = allItemsMp3(items) ? 'mp3' : 'wav';
       const tracks = planTracks(items);
-      const names = tracks.map((t) => trackFileName(t, tracks.length, format));
+      const names = tracks.map((tr) => trackFileName(tr, tracks.length, format));
       // Fresh tracker state every time: a book finished while the queue was running still lands right.
       const shelf = shelfFor(await getBinding(), await getLibraryBooks(), cs);
       // A shelf change is a move; a format flip renames every file. Either way it's a first sync
@@ -305,9 +307,9 @@ export default function AudiobookDialog({ onClose }) {
       return write.length;
     } catch (e) {
       if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') {
-        setMsg(`📁 “${folder.name}” needs reconnecting before it can be written — use Reconnect in the Folders view.`);
+        setMsg('📁 ' + t('“{folder}” needs reconnecting before it can be written — use Reconnect in the Folders view.', { folder: folder.name }));
         refreshPerms(foldersRef.current);
-      } else if (!quiet) setMsg(`Sync to “${folder.name}” failed: ${e?.message || e}`);
+      } else if (!quiet) setMsg(t('Sync to “{folder}” failed: {error}', { folder: folder.name, error: e?.message || e }));
       appendAppLog('audiobook-sync', `${folder.name}/${cs}: ${e?.message || e}`);
       return 0;
     } finally { setFsync(null); }
@@ -324,15 +326,15 @@ export default function AudiobookDialog({ onClose }) {
       wrote += await syncBookToFolder(f, cs);
     }
     setMsg(wrote
-      ? `📁 “${folder.name}”: wrote ${wrote} track file(s) across ${books.length} book(s).`
-      : `📁 “${folder.name}” is up to date — nothing needed rewriting.`);
+      ? '📁 ' + t.n('“{folder}”: wrote {n} track file across {books}.', '“{folder}”: wrote {n} track files across {books}.', wrote, { folder: folder.name, books: t.n('{n} book', '{n} books', books.length) })
+      : '📁 ' + t('“{folder}” is up to date — nothing needed rewriting.', { folder: folder.name }));
   }
   async function syncOneBook(folderId, cs) {
     syncStopRef.current = false;
     const f = foldersRef.current.find((x) => x.id === folderId);
     if (!f) return;
     const wrote = await syncBookToFolder(f, cs);
-    if (wrote) setMsg(`📁 “${f.name}”: wrote ${wrote} track file(s).`);
+    if (wrote) setMsg('📁 ' + t.n('“{folder}”: wrote {n} track file.', '“{folder}”: wrote {n} track files.', wrote, { folder: f.name }));
   }
   // Forget what was written so the next sync rewrites every track — for a folder emptied by hand.
   async function resyncBook(folderId, cs) {
@@ -346,13 +348,13 @@ export default function AudiobookDialog({ onClose }) {
     let list = foldersRef.current;
     for (const id of ids) list = assignBook(list, id, cs, name);
     commitFolders(list);
-    setMsg(`📁 “${name}” added to ${ids.length} folder(s) — Sync now, or the next generation, writes its tracks.`);
+    setMsg('📁 ' + t.n('“{name}” added to {n} folder — Sync now, or the next generation, writes its tracks.', '“{name}” added to {n} folders — Sync now, or the next generation, writes its tracks.', ids.length, { name }));
   }
   function addAllToFolder(f, options) {
     let list = foldersRef.current;
     for (const o of options) list = assignBook(list, f.id, o.cs, o.name);
     commitFolders(list);
-    setMsg(`📁 Added ${options.length} book(s) to “${f.name}”.`);
+    setMsg('📁 ' + t.n('Added {n} book to “{folder}”.', 'Added {n} books to “{folder}”.', options.length, { folder: f.name }));
   }
   function removeAllFromFolder(f) {
     let list = foldersRef.current;
@@ -365,7 +367,7 @@ export default function AudiobookDialog({ onClose }) {
   async function autoSyncBook(cs) {
     for (const f of foldersForBook(foldersRef.current, cs, { auto: true })) {
       if ((await permOf(f)) !== 'granted') {
-        setMsg(`📁 “${f.name}” needs reconnecting (Folders view) before auto-sync can write.`);
+        setMsg('📁 ' + t('“{folder}” needs reconnecting (Folders view) before auto-sync can write.', { folder: f.name }));
         continue;
       }
       syncStopRef.current = false;
@@ -405,7 +407,7 @@ export default function AudiobookDialog({ onClose }) {
       const have = new Set(rows.map((r) => r.checksum));
       setOtherBooks(files.filter((f) => f.checksum && !have.has(f.checksum) && (f.totalWords || 0) > 0)
         .sort((a, b) => (b.lastOpened || 0) - (a.lastOpened || 0)));
-    } catch (e) { setMsg('Could not read the audiobook library: ' + (e?.message || e)); }
+    } catch (e) { setMsg(t('Could not read the audiobook library: {error}', { error: e?.message || e })); }
     setLibBusy(false);
   }
   useEffect(() => { refreshLibrary(); /* eslint-disable-next-line */ }, []);
@@ -415,7 +417,7 @@ export default function AudiobookDialog({ onClose }) {
   // that aren't open. `tabLike` is only what getTocEntries needs; a payload-loaded book has no
   // stored ToC, so it falls back to auto-detection.
   async function resolveBook(cs) {
-    const open = state.tabs.find((t) => !t.lazy && t.doc?.contentChecksum === cs);
+    const open = state.tabs.find((tab) => !tab.lazy && tab.doc?.contentChecksum === cs);
     if (open) return { doc: open.doc, fileName: open.doc.fileName || 'Document', tabLike: open };
     const rec = await loadDocPayload(cs);
     if (!rec?.fullText) return null;
@@ -426,7 +428,7 @@ export default function AudiobookDialog({ onClose }) {
   // Which books are open for READING — only used for a badge and the 'open in a tab' button. The
   // console itself never follows the active tab.
   const openChecksums = useMemo(
-    () => new Set(state.tabs.filter((t) => !t.lazy && t.doc?.contentChecksum).map((t) => t.doc.contentChecksum)),
+    () => new Set(state.tabs.filter((tab) => !tab.lazy && tab.doc?.contentChecksum).map((tab) => tab.doc.contentChecksum)),
     [state.tabs]);
 
   // Drill into one book's chunk editor. Nothing else in the console cares which book this is.
@@ -434,7 +436,7 @@ export default function AudiobookDialog({ onClose }) {
     setLibBusy(true);
     const book = await resolveBook(cs);
     setLibBusy(false);
-    if (!book) { setMsg('That book’s saved text is no longer available — open it once and it will be restored.'); return; }
+    if (!book) { setMsg(t('That book’s saved text is no longer available — open it once and it will be restored.')); return; }
     stopPlay();
     setSel({ checksum: cs, ...book });
     setView('book');
@@ -447,30 +449,30 @@ export default function AudiobookDialog({ onClose }) {
     const top = (li) => clips(li)[0] || null;
     if (kind === 'fill') return list.filter((c) => (c.text || '').trim() && !clips(c.startLine).length);
     if (kind === 'all') return list.filter((c) => (c.text || '').trim() && top(c.startLine)?.source !== 'mic');
-    return list.filter((c) => { const t = top(c.startLine); return t && t.source === 'tts' && t.voiceId !== vid; });
+    return list.filter((c) => { const tp = top(c.startLine); return tp && tp.source === 'tts' && tp.voiceId !== vid; });
   }
 
   // ── queue ──
   // `quiet` is for the bulk buttons: they report once at the end instead of flashing N messages.
   async function enqueue(cs, kind, { start = true, lines = null, quiet = false } = {}) {
     const book = await resolveBook(cs);
-    if (!book) { if (!quiet) setMsg('That book’s saved text is no longer available — open it once and it will be restored.'); return false; }
+    if (!book) { if (!quiet) setMsg(t('That book’s saved text is no longer available — open it once and it will be restored.')); return false; }
     const list = audiobookChunks(book.doc);
     // Stamp the chunk count so the library can show coverage without re-parsing every book.
     await setAudiobookMeta(cs, { chunks: list.length, fileName: book.fileName, words: book.doc.words.length });
     const man = await getAudiobookManifest(cs);
     const targets = lines ? list.filter((c) => lines.includes(c.startLine)) : targetsFor(kind, list, man, voiceId);
-    if (!targets.length) { if (!quiet) { setMsg(`Nothing to do for “${book.fileName}” — that pass matches no chunks.`); refreshLibrary(); } return false; }
+    if (!targets.length) { if (!quiet) { setMsg(t('Nothing to do for “{book}” — that pass matches no chunks.', { book: book.fileName })); refreshLibrary(); } return false; }
     const job = makeJob({
       checksum: cs, fileName: book.fileName, kind, voiceId, voiceLabel: labelVoice(voiceId), lines,
       total: targets.length, charsTotal: totalChars(targets), seq, queuedAt: Date.now(),
     });
     setSeq((n) => n + 1);
     const q = addJob(queueRef.current, job);
-    if (q === queueRef.current) { if (!quiet) setMsg(`“${book.fileName}” is already waiting for that pass.`); return false; }
+    if (q === queueRef.current) { if (!quiet) setMsg(t('“{book}” is already waiting for that pass.', { book: book.fileName })); return false; }
     commitQueue(q);
     queueRef.current = q;
-    if (!quiet) { setMsg(`➕ Queued ${targets.length} chunk(s) of “${book.fileName}” (${labelVoice(voiceId)}).`); refreshLibrary(); }
+    if (!quiet) { setMsg('➕ ' + t.n('Queued {n} chunk of “{book}” ({voice}).', 'Queued {n} chunks of “{book}” ({voice}).', targets.length, { book: book.fileName, voice: labelVoice(voiceId) })); refreshLibrary(); }
     if (start) drainQueue();
     return true;
   }
@@ -484,8 +486,10 @@ export default function AudiobookDialog({ onClose }) {
       if (await enqueue(r.checksum, kind, { start: false, quiet: true })) n++;
     }
     setMsg(n
-      ? `➕ Queued ${kind === 'fill' ? 'a gaps pass' : 'a voice match'} for ${n} book(s) (${labelVoice(voiceId)}).`
-      : 'Nothing to queue — every book already matches that pass or is waiting for it.');
+      ? '➕ ' + (kind === 'fill'
+        ? t.n('Queued a gaps pass for {n} book ({voice}).', 'Queued a gaps pass for {n} books ({voice}).', n, { voice: labelVoice(voiceId) })
+        : t.n('Queued a voice match for {n} book ({voice}).', 'Queued a voice match for {n} books ({voice}).', n, { voice: labelVoice(voiceId) }))
+      : t('Nothing to queue — every book already matches that pass or is waiting for it.'));
     refreshLibrary();
     if (n) drainQueue();
   }
@@ -544,7 +548,7 @@ export default function AudiobookDialog({ onClose }) {
   async function genTitle(sec) {
     const firstLine = sec.chunks[0].startLine;
     const title = (sec.title || '').trim();
-    if (!title) { setMsg('This section has no title text to narrate.'); return; }
+    if (!title) { setMsg(t('This section has no title text to narrate.')); return; }
     setSecBusy(`${firstLine}:title`); setMsg('');
     try {
       const isEl = voiceId.startsWith('el:');
@@ -552,13 +556,13 @@ export default function AudiobookDialog({ onClose }) {
       if (isEl) blob = await elevenSynth(title, voiceId.slice(3), state.global.elevenLabsKey, { modelId: state.global.elevenModel || 'eleven_multilingual_v2' });
       else { const engine = createLocalEngine(); try { blob = await engine.synth(title, voiceId); } finally { engine.dispose(); } }
       await setSectionExtra(checksum, firstLine, 'title', blob, { source: 'tts', voiceId, durationMs: await estMs(blob), titleText: title });
-      setMsg(`🔊 Narrated the title “${title.slice(0, 40)}”.`); refresh();
-    } catch (e) { setMsg('Title narration failed: ' + (e?.message || e)); appendAppLog('audiobook', `section title @ ${firstLine + 1}: ${e?.message || e}`); }
+      setMsg('🔊 ' + t('Narrated the title “{title}”.', { title: title.slice(0, 40) })); refresh();
+    } catch (e) { setMsg(t('Title narration failed: {error}', { error: e?.message || e })); appendAppLog('audiobook', `section title @ ${firstLine + 1}: ${e?.message || e}`); }
     setSecBusy('');
   }
   function openSecWiz(sec, role) {
     const firstLine = sec.chunks[0].startLine;
-    const kindLabel = role === 'intro' ? 'Intro music' : role === 'outro' ? 'Outro music' : 'Section title';
+    const kindLabel = role === 'intro' ? t('Intro music') : role === 'outro' ? t('Outro music') : t('Section title');
     setSecWiz({ firstLine, role, previewText: role === 'title' ? sec.title : '', dlgTitle: `${kindLabel} — ${(sec.title || '').slice(0, 40)}` });
   }
 
@@ -567,7 +571,7 @@ export default function AudiobookDialog({ onClose }) {
   // code path, and a long run keeps going while you look at another book's chunk list.
   function askGenerate(kind) {
     const targets = targetsFor(kind, chunks, manifest, voiceId);
-    if (!targets.length) { setMsg('Nothing matches that — no chunks to (re)generate.'); return; }
+    if (!targets.length) { setMsg(t('Nothing matches that — no chunks to (re)generate.')); return; }
     const secHit = sections.filter((s) => s.chunks.some((c) => targets.includes(c))).map((s) => s.title);
     const words = targets.reduce((n, c) => n + (c.text || '').split(/\s+/).filter(Boolean).length, 0);
     setConfirmJob({ kind, targets, sections: secHit, words });
@@ -581,7 +585,7 @@ export default function AudiobookDialog({ onClose }) {
   async function runOneJob(job) {
     const book = await resolveBook(job.checksum);
     if (!book) {
-      patchJob(job.id, { status: 'error', error: 'saved text unavailable', finishedAt: Date.now() });
+      patchJob(job.id, { status: 'error', error: t('saved text unavailable'), finishedAt: Date.now() });
       appendAppLog('audiobook', `job ${job.fileName}: saved text unavailable, skipped`);
       return;
     }
@@ -605,7 +609,7 @@ export default function AudiobookDialog({ onClose }) {
     // chunk ~50 with "Can't create a session / failed to allocate a buffer". Recycling the worker
     // every batch (and before any retry) frees the heap; OPFS keeps the voice cached.
     const PIPER_BATCH = 16;
-    const engine = isEl ? null : createLocalEngine({ onKokoroProgress: (p) => setMsg(p < 100 ? `Downloading the Kokoro voice model (once, ~90 MB)… ${p}%` : '') });
+    const engine = isEl ? null : createLocalEngine({ onKokoroProgress: (p) => setMsg(p < 100 ? t('Downloading the Kokoro voice model (once, ~90 MB)… {pct}%', { pct: p }) : '') });
     // Any voice, either engine: [voice:…] tags can switch engines mid-chunk.
     let piperForTags = null;
     const synthOne = (text, v) => (String(v).startsWith('el:') ? elevenSynth(text, v.slice(3), key, { modelId }) : (engine || (piperForTags ||= createLocalEngine())).synth(text, v));
@@ -665,9 +669,12 @@ export default function AudiobookDialog({ onClose }) {
     setRuns((prev) => { const next = addRun(prev, rec); updateGlobal({ abRuns: next }); return next; });
     setGen(null);
     if (job.checksum === checksum) refresh();
-    if (!errors.length) setMsg(stopped ? `■ Stopped — ${ok} of ${targets.length} chunk(s) of “${job.fileName}” generated.` : `✓ “${job.fileName}”: generated ${ok} chunk(s) with ${job.voiceLabel}.`);
-    else if (bailed) setMsg(`⚠ “${job.fileName}” stopped after ${CONSEC_ABORT} failures in a row (${ok} generated, ${errors.length} failed): ${reasons}. See Data Management → Diagnostic log.`);
-    else setMsg(`“${job.fileName}”: ${ok} generated, ${errors.length} failed: ${reasons}. See Data Management → Diagnostic log.`);
+    if (!errors.length) {
+      setMsg(stopped
+        ? '■ ' + t.n('Stopped — {ok} of {n} chunk of “{book}” generated.', 'Stopped — {ok} of {n} chunks of “{book}” generated.', targets.length, { ok, book: job.fileName })
+        : '✓ ' + t.n('“{book}”: generated {n} chunk with {voice}.', '“{book}”: generated {n} chunks with {voice}.', ok, { book: job.fileName, voice: job.voiceLabel }));
+    } else if (bailed) setMsg('⚠ ' + t('“{book}” stopped after {max} failures in a row ({ok} generated, {failed} failed): {reasons}. See Data Management → Diagnostic log.', { book: job.fileName, max: CONSEC_ABORT, ok, failed: errors.length, reasons }));
+    else setMsg(t('“{book}”: {ok} generated, {failed} failed: {reasons}. See Data Management → Diagnostic log.', { book: job.fileName, ok, failed: errors.length, reasons }));
     if (errors.length) appendAppLog('audiobook', `${job.fileName}: ${ok} ok, ${errors.length} failed of ${targets.length} (${job.voiceLabel})`);
   }
 
@@ -706,29 +713,35 @@ export default function AudiobookDialog({ onClose }) {
 
   // ── transfer + wipe ──
   async function doExport() {
-    setBusy(true); setMsg('Gathering audiobook clips…');
+    setBusy(true); setMsg(t('Gathering audiobook clips…'));
     try {
       const bundle = await exportAudiobook(checksum, sel.fileName);
-      if (!bundle.clips.length) { setMsg('Nothing to export yet.'); setBusy(false); return; }
+      if (!bundle.clips.length) { setMsg(t('Nothing to export yet.')); setBusy(false); return; }
       const text = JSON.stringify(bundle);
       const safe = (sel.fileName || 'book').replace(/[^\w.-]+/g, '_').slice(0, 40);
-      const res = await saveBlobToFile(new Blob([text], { type: 'application/json' }), `tachyread-audiobook-${safe}.json`, [{ description: 'Tachyread audiobook', accept: { 'application/json': ['.json'] } }]);
-      setMsg(res.canceled ? 'Save canceled.' : `Exported ${bundle.clips.length} clip(s) (${fmtBytes(text.length)})${res.method === 'download' ? ' to your downloads' : ` to ${res.name}`}.`);
-    } catch (e) { setMsg('Export failed: ' + (e?.message || e)); }
+      const res = await saveBlobToFile(new Blob([text], { type: 'application/json' }), `tachyread-audiobook-${safe}.json`, [{ description: t('Tachyread audiobook'), accept: { 'application/json': ['.json'] } }]);
+      setMsg(res.canceled ? t('Save canceled.')
+        : res.method === 'download'
+          ? t.n('Exported {n} clip ({size}) to your downloads.', 'Exported {n} clips ({size}) to your downloads.', bundle.clips.length, { size: fmtBytes(text.length) })
+          : t.n('Exported {n} clip ({size}) to {name}.', 'Exported {n} clips ({size}) to {name}.', bundle.clips.length, { size: fmtBytes(text.length), name: res.name }));
+    } catch (e) { setMsg(t('Export failed: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
   async function doImport() {
     const f = await pickFile('.json,application/json');
     if (!f) return;
-    setBusy(true); setMsg('Reading file…');
+    setBusy(true); setMsg(t('Reading file…'));
     try {
       const r = await importAudiobook(JSON.parse(await readFileText(f)));
       await refresh();
-      setMsg(`Imported ${r.imported} clip(s)${r.skipped ? `, skipped ${r.skipped} already present` : ''}.${r.checksum === checksum ? '' : ' (They belong to a different book.)'}`);
-    } catch (e) { setMsg('Import failed: ' + (e?.message || e)); }
+      setMsg((r.skipped
+        ? t.n('Imported {n} clip, skipped {skipped} already present.', 'Imported {n} clips, skipped {skipped} already present.', r.imported, { skipped: r.skipped })
+        : t.n('Imported {n} clip.', 'Imported {n} clips.', r.imported))
+        + (r.checksum === checksum ? '' : ' ' + t('(They belong to a different book.)')));
+    } catch (e) { setMsg(t('Import failed: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
-  async function doWipe() { await clearAudiobook(checksum); setWipeArm(false); stopPlay(); setMsg('Deleted all audio for this book.'); refresh(); }
+  async function doWipe() { await clearAudiobook(checksum); setWipeArm(false); stopPlay(); setMsg(t('Deleted all audio for this book.')); refresh(); }
 
   const toggleSec = (id) => setCollapsed((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const covered = (secChunks) => secChunks.filter((c) => clipsFor(c.startLine).length).length;
@@ -753,8 +766,8 @@ export default function AudiobookDialog({ onClose }) {
   const mixOf = (secChunks) => narrationMix(secChunks.map((c) => clipsFor(c.startLine)[0] || null));
   // Stacked bar: your recordings, generated voice, nothing yet.
   const mixBar = (m, className = '') => (
-    <div className={`ab-mix ${className}`} role="img" aria-label={`${m.human} by you, ${m.bot} by a generated voice, ${m.none} without audio`}
-      title={`🎤 ${m.human} by you · 🤖 ${m.bot} generated · ${m.none} missing`}>
+    <div className={`ab-mix ${className}`} role="img" aria-label={t('{human} by you, {bot} by a generated voice, {none} without audio', { human: m.human, bot: m.bot, none: m.none })}
+      title={t('🎤 {human} by you · 🤖 {bot} generated · {none} missing', { human: m.human, bot: m.bot, none: m.none })}>
       {m.total > 0 && <>
         <span className="ab-mix-human" style={{ width: `${(m.human / m.total) * 100}%` }} />
         <span className="ab-mix-bot" style={{ width: `${(m.bot / m.total) * 100}%` }} />
@@ -764,12 +777,18 @@ export default function AudiobookDialog({ onClose }) {
   // One chunk's scores, compact: ★ quality · 🎯 accuracy · ✓ completeness · 🗣 voice.
   const scoreCell = (top) => {
     if (!top) return null;
-    if (top.source !== 'mic') return <span className="ab-sc-bot" title="Generated voice">🤖</span>;
+    if (top.source !== 'mic') return <span className="ab-sc-bot" title={t('Generated voice')}>🤖</span>;
     const q = top.quality;
-    if (!q) return <span className="ab-dim" title="Recorded before scoring existed">🎤 —</span>;
+    if (!q) return <span className="ab-dim" title={t('Recorded before scoring existed')}>🎤 —</span>;
     const band = (v) => (v >= 85 ? 'good' : v >= 65 ? 'ok' : 'bad');
     return (
-      <span className="ab-sc" title={`Quality ★${q.score}${q.accuracy != null ? ` · accuracy ${q.accuracy}% (words said that were the text) · completeness ${q.completeness}% (text words said)` : ' · accuracy/completeness need speech recognition while recording'}${q.voice ? ` · voice ${q.voice.overall}` : ''}`}>
+      <span className="ab-sc" title={[
+        t('Quality ★{score}', { score: q.score }),
+        ...(q.accuracy != null
+          ? [t('accuracy {pct}% (words said that were the text)', { pct: q.accuracy }), t('completeness {pct}% (text words said)', { pct: q.completeness })]
+          : [t('accuracy/completeness need speech recognition while recording')]),
+        q.voice ? t('voice {score}', { score: q.voice.overall }) : '',
+      ].filter(Boolean).join(' · ')}>
         <span className={`s${band(q.score)}`}>★{q.score}</span>
         {q.accuracy != null && <span className={`s${band(q.accuracy)}`}>🎯{q.accuracy}</span>}
         {q.completeness != null && <span className={`s${band(q.completeness)}`}>✓{q.completeness}</span>}
@@ -816,7 +835,7 @@ export default function AudiobookDialog({ onClose }) {
     const on = libSort.key === key;
     return (
       <th aria-sort={on ? (libSort.dir > 0 ? 'ascending' : 'descending') : undefined}>
-        <button className="ab-sort" title={title || `Sort by ${label}`}
+        <button className="ab-sort" title={title || t('Sort by {column}', { column: label })}
           onClick={() => setLibSort((s) => ({ key, dir: s.key === key ? -s.dir : (key === 'fileName' ? 1 : -1) }))}>
           {label}{on ? (libSort.dir > 0 ? ' ▴' : ' ▾') : ''}
         </button>
@@ -825,12 +844,12 @@ export default function AudiobookDialog({ onClose }) {
   };
 
   const VIEWS = [
-    ['queue', `📋 Queue${totals.queued + totals.running ? ` (${totals.queued + totals.running})` : ''}`, 'The work list — every book waiting to be narrated'],
-    ['library', `📚 Library${library.length ? ` (${library.length})` : ''}`, 'Every book’s narration coverage, and what to queue next'],
-    ['folders', `📁 Folders${folders.length ? ` (${folders.length})` : ''}`, 'Download folders that receive ready-to-play tracks, kept in sync as narration is generated'],
-    ['stats', '📈 Analytics', 'How generation is actually going: throughput, voices, recent runs'],
+    ['queue', `📋 ${t('Queue')}${totals.queued + totals.running ? ` (${totals.queued + totals.running})` : ''}`, t('The work list — every book waiting to be narrated')],
+    ['library', `📚 ${t('Library')}${library.length ? ` (${library.length})` : ''}`, t('Every book’s narration coverage, and what to queue next')],
+    ['folders', `📁 ${t('Folders')}${folders.length ? ` (${folders.length})` : ''}`, t('Download folders that receive ready-to-play tracks, kept in sync as narration is generated')],
+    ['stats', `📈 ${t('Analytics')}`, t('How generation is actually going: throughput, voices, recent runs')],
     // The editor tab exists only while a book is open IN it — the console has no "current book".
-    ...(sel ? [['book', `📖 ${sel.fileName.length > 20 ? sel.fileName.slice(0, 19) + '…' : sel.fileName}`, `Chunk-by-chunk editor for “${sel.fileName}”`]] : []),
+    ...(sel ? [['book', `📖 ${sel.fileName.length > 20 ? sel.fileName.slice(0, 19) + '…' : sel.fileName}`, t('Chunk-by-chunk editor for “{book}”', { book: sel.fileName })]] : []),
   ];
 
   // The live generation panel — shared by the Queue view and the per-book toolbar so a run reads the
@@ -845,24 +864,24 @@ export default function AudiobookDialog({ onClose }) {
     const cur = gen.current;
     const curMs = cur?.startedAt ? Date.now() - cur.startedAt : 0;
     const health = cur ? chunkHealth({ chunkElapsedMs: curMs, chunkChars: cur.chars, msPerChar }) : 'ok';
-    const PHASE = { synthesizing: '🎙 synthesising', retrying: '↻ retrying after a failure', saving: '💾 saving clip' };
+    const PHASE = { synthesizing: '🎙 ' + t('synthesising'), retrying: '↻ ' + t('retrying after a failure'), saving: '💾 ' + t('saving clip') };
     return (
       <div className={`ab-gen-live gh-${health}`} data-tick={genTick}>
         <div className="abg-line">
-          <b>{fmtEta(eta)}</b> left in “{gen.fileName}” · {Math.round((gen.charsDone / Math.max(1, gen.charsTotal)) * 100)}% of the text
-          {msPerChar > 0 && <> · {Math.round(1000 / msPerChar)} chars/s</>}
+          {t('{eta} left in “{book}”', { eta: fmtEta(eta), book: gen.fileName })} · {t('{pct}% of the text', { pct: Math.round((gen.charsDone / Math.max(1, gen.charsTotal)) * 100) })}
+          {msPerChar > 0 && <> · {t('{rate} chars/s', { rate: Math.round(1000 / msPerChar) })}</>}
         </div>
         {cur && (
           <>
             <div className="abg-line">
-              {PHASE[cur.phase] || cur.phase} · chunk {cur.index + 1}/{gen.total} @ line {cur.line + 1} · {cur.chars} chars · {(curMs / 1000).toFixed(1)}s
+              {PHASE[cur.phase] || cur.phase} · {t('chunk {i}/{total} @ line {line}', { i: cur.index + 1, total: gen.total, line: cur.line + 1 })} · {t('{chars} chars', { chars: cur.chars })} · {(curMs / 1000).toFixed(1)}s
             </div>
             <div className="abg-text" title={cur.preview}>“{cur.preview}”</div>
             {health !== 'ok' && (
               <div className="abg-warn" role="status">
                 {health === 'stalled'
-                  ? '⚠ This chunk is far past its expected time — the voice engine may have stalled. Skip this book or stop the queue; a Piper run recycles its worker on restart.'
-                  : '⏳ Taking longer than this run’s usual pace for a chunk this size.'}
+                  ? '⚠ ' + t('This chunk is far past its expected time — the voice engine may have stalled. Skip this book or stop the queue; a Piper run recycles its worker on restart.')
+                  : '⏳ ' + t('Taking longer than this run’s usual pace for a chunk this size.')}
               </div>
             )}
           </>
@@ -876,16 +895,16 @@ export default function AudiobookDialog({ onClose }) {
   // here never rewrites work already queued.
   function voicePicker() {
     return (
-      <label>Voice
-        <select value={voiceId} onChange={(e) => setVoiceId(e.target.value)} title="Voice used for the next job you queue (offline Piper, or ElevenLabs cloud if a key is set in Audio Settings). Jobs already queued keep the voice they were queued with.">
-          <optgroup label="Offline (Piper)">
+      <label>{t('Voice')}
+        <select value={voiceId} onChange={(e) => setVoiceId(e.target.value)} title={t('Voice used for the next job you queue (offline Piper, or ElevenLabs cloud if a key is set in Audio Settings). Jobs already queued keep the voice they were queued with.')}>
+          <optgroup label={t('Offline (Piper)')}>
             {(voices.length ? voices : (voiceId.startsWith('el:') || isKokoro(voiceId) ? [] : [voiceId])).map((v) => <option key={v} value={v}>{voiceLabel(v)}</option>)}
           </optgroup>
-          <optgroup label="Offline (Kokoro · higher quality · ~90 MB once)">
+          <optgroup label={t('Offline (Kokoro · higher quality · ~90 MB once)')}>
             {KOKORO_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
           </optgroup>
           {elVoices.length > 0 && (
-            <optgroup label="ElevenLabs (cloud · your quota)">
+            <optgroup label={t('ElevenLabs (cloud · your quota)')}>
               {elVoices.map((v) => <option key={v.id} value={`el:${v.id}`}>☁ {v.name}</option>)}
             </optgroup>
           )}
@@ -897,8 +916,8 @@ export default function AudiobookDialog({ onClose }) {
   const canTTS = piperSupported() || elVoices.length > 0;
 
   return (
-    <Dialog title="Audiobook Command Centre" onClose={() => { stopPlay(); onClose(); }} width={960}>
-      <div className="ab-views" role="tablist" aria-label="Audiobook views">
+    <Dialog title={t('Audiobook Command Centre')} onClose={() => { stopPlay(); onClose(); }} width={960}>
+      <div className="ab-views" role="tablist" aria-label={t('Audiobook views')}>
         {VIEWS.map(([id, label, help]) => (
           <button
             key={id}
@@ -912,8 +931,8 @@ export default function AudiobookDialog({ onClose }) {
         {/* The queue keeps running whichever view you are on, so its state belongs in the header. */}
         <span className="grow" />
         {active
-          ? <span className="ab-run-pill" title={`Generating “${active.fileName}”`}>● {active.fileName.slice(0, 22)}</span>
-          : totals.queued > 0 ? <span className="ab-run-pill idle" title="Jobs are waiting — press Start">◌ {totals.queued} waiting</span> : null}
+          ? <span className="ab-run-pill" title={t('Generating “{book}”', { book: active.fileName })}>● {active.fileName.slice(0, 22)}</span>
+          : totals.queued > 0 ? <span className="ab-run-pill idle" title={t('Jobs are waiting — press Start')}>◌ {t.n('{n} waiting', '{n} waiting', totals.queued)}</span> : null}
       </div>
       {msg && <p className="settings-note ab-toolbar-msg">{msg}</p>}
 
@@ -924,51 +943,50 @@ export default function AudiobookDialog({ onClose }) {
             {voicePicker()}
             {active || drainingRef.current
               ? <>
-                  <button className="grab-trash" onClick={stopQueue} title="Stop after the current chunk and leave the rest queued">■ Stop queue</button>
-                  <button onClick={skipCurrent} title="Abandon the book being generated and move on to the next job">⏭ Skip book</button>
+                  <button className="grab-trash" onClick={stopQueue} title={t('Stop after the current chunk and leave the rest queued')}>■ {t('Stop queue')}</button>
+                  <button onClick={skipCurrent} title={t('Abandon the book being generated and move on to the next job')}>⏭ {t('Skip book')}</button>
                 </>
-              : <button className="toggle-on" disabled={!totals.queued || !canTTS} onClick={drainQueue} title="Work through the queue, one book at a time">▶ Start queue</button>}
+              : <button className="toggle-on" disabled={!totals.queued || !canTTS} onClick={drainQueue} title={t('Work through the queue, one book at a time')}>▶ {t('Start queue')}</button>}
             <span className="grab-sep" />
-            <button disabled={!queue.some(isFinished)} onClick={() => commitQueue(clearFinished(queue))} title="Remove finished, stopped and failed jobs from the list">🧹 Clear finished</button>
+            <button disabled={!queue.some(isFinished)} onClick={() => commitQueue(clearFinished(queue))} title={t('Remove finished, stopped and failed jobs from the list')}>🧹 {t('Clear finished')}</button>
           </div>
 
           <div className="ab-queue-stats">
-            <div className="ab-stat"><b>{totals.queued + totals.running}</b><span>job(s) outstanding</span></div>
-            <div className="ab-stat"><b>{(totals.chunks - totals.chunksDone).toLocaleString()}</b><span>chunk(s) to go</span></div>
-            <div className="ab-stat"><b>{queueEta != null ? fmtEta(queueEta) : '—'}</b><span>whole queue{thr.runs ? '' : ' (needs a run first)'}</span></div>
-            <div className="ab-stat"><b>{thr.charsPerSec ? Math.round(thr.charsPerSec) : '—'}</b><span>chars/s measured</span></div>
+            <div className="ab-stat"><b>{totals.queued + totals.running}</b><span>{t.n('job outstanding', 'jobs outstanding', totals.queued + totals.running)}</span></div>
+            <div className="ab-stat"><b>{(totals.chunks - totals.chunksDone).toLocaleString()}</b><span>{t.n('chunk to go', 'chunks to go', totals.chunks - totals.chunksDone)}</span></div>
+            <div className="ab-stat"><b>{queueEta != null ? fmtEta(queueEta) : '—'}</b><span>{thr.runs ? t('whole queue') : t('whole queue (needs a run first)')}</span></div>
+            <div className="ab-stat"><b>{thr.charsPerSec ? Math.round(thr.charsPerSec) : '—'}</b><span>{t('chars/s measured')}</span></div>
           </div>
 
           {genLive()}
 
           {!queue.length ? (
             <p className="settings-note">
-              Nothing queued. Add books from <strong>📚 Library</strong> — you can line up as many as you like and
-              leave them to grind; one generates at a time, and the rest wait their turn.
+              {t('Nothing queued. Add books from 📚 Library — you can line up as many as you like and leave them to grind; one generates at a time, and the rest wait their turn.')}
             </p>
           ) : (
             <div className="ab-scroll">
               <table className="ab-table ab-queue-table">
                 <thead>
                   <tr>
-                    <th title="Status"></th><th>Book</th><th>Pass</th><th>Voice</th><th>Progress</th><th>Chunks</th>
-                    <th>Chars</th><th title="Time left at the measured rate">ETA</th><th>Queued</th><th>Finished</th><th>{anySet(qf) && <button className="ab-clearf" onClick={() => setQf(NO_QF)} title="Clear these filters">✕</button>}</th>
+                    <th title={t('Status')}></th><th>{t('Book')}</th><th>{t('Pass')}</th><th>{t('Voice')}</th><th>{t('Progress')}</th><th>{t('Chunks')}</th>
+                    <th>{t('Chars')}</th><th title={t('Time left at the measured rate')}>{t('ETA')}</th><th>{t('Queued')}</th><th>{t('Finished')}</th><th>{anySet(qf) && <button className="ab-clearf" onClick={() => setQf(NO_QF)} title={t('Clear these filters')}>✕</button>}</th>
                   </tr>
                   <tr className="ab-filter-row">
                     <th>
-                      <select value={qf.status} onChange={(e) => setQf({ ...qf, status: e.target.value })} aria-label="Filter by status">
-                        <option value="all">all</option><option value="queued">◌</option><option value="running">●</option><option value="done">✓</option><option value="error">⚠</option><option value="stopped">■</option>
+                      <select value={qf.status} onChange={(e) => setQf({ ...qf, status: e.target.value })} aria-label={t('Filter by status')}>
+                        <option value="all">{t('all')}</option><option value="queued">◌</option><option value="running">●</option><option value="done">✓</option><option value="error">⚠</option><option value="stopped">■</option>
                       </select>
                     </th>
-                    <th><TextF value={qf.book} onChange={(v) => setQf({ ...qf, book: v })} label="book" /></th>
-                    <th><TextF value={qf.pass} onChange={(v) => setQf({ ...qf, pass: v })} label="pass" /></th>
-                    <th><TextF value={qf.voice} onChange={(v) => setQf({ ...qf, voice: v })} label="voice" /></th>
-                    <th><RangeF value={qf.pct} onChange={(v) => setQf({ ...qf, pct: v })} label="progress %" /></th>
-                    <th><RangeF value={qf.chunks} onChange={(v) => setQf({ ...qf, chunks: v })} label="chunks" /></th>
-                    <th><RangeF value={qf.chars} onChange={(v) => setQf({ ...qf, chars: v })} label="characters" unit="k" /></th>
+                    <th><TextF value={qf.book} onChange={(v) => setQf({ ...qf, book: v })} label={t('book')} /></th>
+                    <th><TextF value={qf.pass} onChange={(v) => setQf({ ...qf, pass: v })} label={t('pass')} /></th>
+                    <th><TextF value={qf.voice} onChange={(v) => setQf({ ...qf, voice: v })} label={t('voice')} /></th>
+                    <th><RangeF value={qf.pct} onChange={(v) => setQf({ ...qf, pct: v })} label={t('progress %')} /></th>
+                    <th><RangeF value={qf.chunks} onChange={(v) => setQf({ ...qf, chunks: v })} label={t('chunks')} /></th>
+                    <th><RangeF value={qf.chars} onChange={(v) => setQf({ ...qf, chars: v })} label={t('characters')} unit="k" /></th>
                     <th />
-                    <th><DateF value={qf.queued} onChange={(v) => setQf({ ...qf, queued: v })} label="Queued" /></th>
-                    <th><DateF value={qf.finished} onChange={(v) => setQf({ ...qf, finished: v })} label="Finished" /></th>
+                    <th><DateF value={qf.queued} onChange={(v) => setQf({ ...qf, queued: v })} label={t('Queued')} /></th>
+                    <th><DateF value={qf.finished} onChange={(v) => setQf({ ...qf, finished: v })} label={t('Finished')} /></th>
                     <th />
                   </tr>
                 </thead>
@@ -976,22 +994,23 @@ export default function AudiobookDialog({ onClose }) {
                   {queue.map((j, i) => {
                     const pctJ = j.charsTotal ? Math.round((j.charsDone / j.charsTotal) * 100) : 0;
                     const tq = (k) => textMatcher(qf[k]).test;
-                    const iso = (t) => (t ? new Date(t).toISOString() : '');
+                    const iso = (ts) => (ts ? new Date(ts).toISOString() : '');
                     if ((qf.status !== 'all' && j.status !== qf.status) || (tq('book') && !tq('book')(j.fileName || ''))
-                      || (tq('pass') && !tq('pass')(j.lines ? `1 chunk @ line ${j.lines[0] + 1}` : JOB_KIND_LABEL[j.kind] || j.kind || ''))
+                      || (tq('pass') && !tq('pass')(j.lines ? t('1 chunk @ line {line}', { line: j.lines[0] + 1 }) : JOB_KIND_LABEL[j.kind] || j.kind || ''))
                       || (tq('voice') && !tq('voice')(j.voiceLabel || '')) || !inRange(pctJ, ...qf.pct) || !inRange(j.total, ...qf.chunks)
                       || !inRange(j.charsTotal, ...qf.chars, 1000) || !inDates(iso(j.queuedAt), ...qf.queued) || !inDates(iso(j.finishedAt), ...qf.finished)) return null;
                     const ICON = { queued: '◌', running: '●', done: '✓', error: '⚠', stopped: '■' };
+                    const STATUS = { queued: t('queued'), running: t('running'), done: t('done'), error: t('error'), stopped: t('stopped') };
                     const fin = isFinished(j);
                     const eta = !fin && thr.msPerChar ? (Math.max(0, j.charsTotal - j.charsDone) * thr.msPerChar) / 1000 : null;
                     const pinned = j.status === 'running';
                     return (
                       <Fragment key={j.id}>
                         <tr className={`st-${j.status}`}>
-                          <td className="ab-st" title={j.status}>{ICON[j.status] || '·'}</td>
+                          <td className="ab-st" title={STATUS[j.status] || j.status}>{ICON[j.status] || '·'}</td>
                           <td className="ab-td-name" title={j.fileName}>{j.fileName}</td>
-                          <td className="ab-td-name">{j.lines ? `1 chunk @ line ${j.lines[0] + 1}` : JOB_KIND_LABEL[j.kind] || j.kind}</td>
-                          <td className="ab-td-name" title={`Voice this job was queued with: ${j.voiceLabel}`}>{j.voiceLabel}</td>
+                          <td className="ab-td-name">{j.lines ? t('1 chunk @ line {line}', { line: j.lines[0] + 1 }) : JOB_KIND_LABEL[j.kind] || j.kind}</td>
+                          <td className="ab-td-name" title={t('Voice this job was queued with: {voice}', { voice: j.voiceLabel })}>{j.voiceLabel}</td>
                           <td className="ab-td-bar"><div className="imp-bar ab-job-bar" title={`${pctJ}%`}><div className="imp-fill" style={{ width: `${pctJ}%` }} /></div>{pctJ}%</td>
                           <td>{j.done}/{j.total}{j.failed > 0 && <> · <span className="ab-job-fail">{j.failed}✗</span></>}</td>
                           <td>{(j.charsDone || 0).toLocaleString()}/{(j.charsTotal || 0).toLocaleString()}</td>
@@ -999,13 +1018,13 @@ export default function AudiobookDialog({ onClose }) {
                           <td>{j.queuedAt ? fmtWhen(j.queuedAt) : '—'}</td>
                           <td>{j.finishedAt ? fmtWhen(j.finishedAt) : '—'}</td>
                           <td className="ab-actions">
-                            <button disabled={i === 0 || pinned} onClick={() => commitQueue(moveJobTo(queue, j.id, 'top'))} title="Do this one next">⤒</button>
-                            <button disabled={i === 0 || pinned} onClick={() => commitQueue(moveJob(queue, j.id, -1))} title="Do this one sooner">↑</button>
-                            <button disabled={i === queue.length - 1 || pinned} onClick={() => commitQueue(moveJob(queue, j.id, 1))} title="Do this one later">↓</button>
-                            <button disabled={i === queue.length - 1 || pinned} onClick={() => commitQueue(moveJobTo(queue, j.id, 'bottom'))} title="Do this one last">⤓</button>
-                            {fin && <button disabled={!canTTS} onClick={() => requeue(j)} title="Queue this pass again — re-planned against what the book has now">↻ Re-queue</button>}
-                            <button onClick={() => openBook(j.checksum)} title="Open this book’s chunk-by-chunk editor">📖</button>
-                            <button className="grab-trash" onClick={() => { if (pinned) skipCurrent(); commitQueue(removeJob(queue, j.id)); }} title={pinned ? 'Abandon this job and drop it from the queue' : 'Remove from the queue'}>✕</button>
+                            <button disabled={i === 0 || pinned} onClick={() => commitQueue(moveJobTo(queue, j.id, 'top'))} title={t('Do this one next')}>⤒</button>
+                            <button disabled={i === 0 || pinned} onClick={() => commitQueue(moveJob(queue, j.id, -1))} title={t('Do this one sooner')}>↑</button>
+                            <button disabled={i === queue.length - 1 || pinned} onClick={() => commitQueue(moveJob(queue, j.id, 1))} title={t('Do this one later')}>↓</button>
+                            <button disabled={i === queue.length - 1 || pinned} onClick={() => commitQueue(moveJobTo(queue, j.id, 'bottom'))} title={t('Do this one last')}>⤓</button>
+                            {fin && <button disabled={!canTTS} onClick={() => requeue(j)} title={t('Queue this pass again — re-planned against what the book has now')}>↻ {t('Re-queue')}</button>}
+                            <button onClick={() => openBook(j.checksum)} title={t('Open this book’s chunk-by-chunk editor')}>📖</button>
+                            <button className="grab-trash" onClick={() => { if (pinned) skipCurrent(); commitQueue(removeJob(queue, j.id)); }} title={pinned ? t('Abandon this job and drop it from the queue') : t('Remove from the queue')}>✕</button>
                           </td>
                         </tr>
                         {j.error && <tr className="ab-err-row"><td></td><td colSpan={10}>⚠ {j.error}</td></tr>}
@@ -1016,7 +1035,7 @@ export default function AudiobookDialog({ onClose }) {
               </table>
             </div>
           )}
-          {!canTTS && <p className="settings-note">No voice engine available: install an offline Piper voice, or add an ElevenLabs key in Audio Settings.</p>}
+          {!canTTS && <p className="settings-note">{t('No voice engine available: install an offline Piper voice, or add an ElevenLabs key in Audio Settings.')}</p>}
         </div>
       )}
 
@@ -1025,53 +1044,53 @@ export default function AudiobookDialog({ onClose }) {
         <div className="ab-view">
           <div className="ab-queue-head">
             {voicePicker()}
-            <input type="search" className="ab-filter" placeholder="Filter books…" aria-label="Filter books by name" value={libQ} onChange={(e) => setLibQ(e.target.value)} />
-            <label className="inline-check" title="Also list every known book that has no narration at all">
-              <input type="checkbox" checked={showNoAudio} onChange={(e) => setShowNoAudio(e.target.checked)} /> No narration yet ({otherBooks.length})
+            <input type="search" className="ab-filter" placeholder={t('Filter books…')} aria-label={t('Filter books by name')} value={libQ} onChange={(e) => setLibQ(e.target.value)} />
+            <label className="inline-check" title={t('Also list every known book that has no narration at all')}>
+              <input type="checkbox" checked={showNoAudio} onChange={(e) => setShowNoAudio(e.target.checked)} /> {t('No narration yet ({n})', { n: otherBooks.length })}
             </label>
             <span className="grow" />
-            <button disabled={!canTTS || !libRows.length} onClick={() => enqueueAll('fill')} title="Queue a gaps pass for every book in the table below — any book, open or not">🎙 Gaps · all ({libRows.length})</button>
-            <button disabled={!canTTS || !libRows.some((r) => !r.noAudio)} onClick={() => enqueueAll('othervoice')} title="Queue a voice-match pass for every narrated book in the table below">🎚 Match · all</button>
-            <button onClick={refreshLibrary} disabled={libBusy} title="Re-read every book's manifest">{libBusy ? '…' : '↻ Refresh'}</button>
+            <button disabled={!canTTS || !libRows.length} onClick={() => enqueueAll('fill')} title={t('Queue a gaps pass for every book in the table below — any book, open or not')}>🎙 {t('Gaps · all ({n})', { n: libRows.length })}</button>
+            <button disabled={!canTTS || !libRows.some((r) => !r.noAudio)} onClick={() => enqueueAll('othervoice')} title={t('Queue a voice-match pass for every narrated book in the table below')}>🎚 {t('Match · all')}</button>
+            <button onClick={refreshLibrary} disabled={libBusy} title={t('Re-read every book’s manifest')}>{libBusy ? '…' : `↻ ${t('Refresh')}`}</button>
           </div>
 
           <div className="ab-queue-stats">
-            <div className="ab-stat"><b>{libTotals.booksStarted}</b><span>book(s) with audio</span></div>
-            <div className="ab-stat"><b>{libTotals.booksComplete}</b><span>fully narrated</span></div>
-            <div className="ab-stat"><b>{fmtBytes(libTotals.bytes)}</b><span>on this device</span></div>
-            <div className="ab-stat"><b>{fmtEta(libTotals.durationMs / 1000)}</b><span>of narration</span></div>
+            <div className="ab-stat"><b>{libTotals.booksStarted}</b><span>{t.n('book with audio', 'books with audio', libTotals.booksStarted)}</span></div>
+            <div className="ab-stat"><b>{libTotals.booksComplete}</b><span>{t('fully narrated')}</span></div>
+            <div className="ab-stat"><b>{fmtBytes(libTotals.bytes)}</b><span>{t('on this device')}</span></div>
+            <div className="ab-stat"><b>{fmtEta(libTotals.durationMs / 1000)}</b><span>{t('of narration')}</span></div>
           </div>
 
-          {!library.length && !showNoAudio && <p className="settings-note">No book has any narration yet. Tick <strong>No narration yet</strong> to list your books and pick one.</p>}
+          {!library.length && !showNoAudio && <p className="settings-note">{t('No book has any narration yet. Tick “No narration yet” to list your books and pick one.')}</p>}
           {(libRows.length > 0 || libQ || anySet(abF)) && (
             <div className="ab-scroll">
               <table className="ab-table ab-lib-table">
                 <thead>
                   <tr>
-                    {sortTh('fileName', 'Book')}
-                    {sortTh('coverage', 'Coverage', 'Sort by share of chunks narrated')}
-                    {sortTh('chunksWithAudio', 'Chunks', 'Sort by chunks with audio')}
-                    {sortTh('clips', 'Clips')}
-                    {sortTh('bytes', 'Size')}
-                    {sortTh('durationMs', 'Length', 'Sort by narration length')}
-                    {sortTh('words', 'Words')}
-                    <th>Voices</th>
-                    <th>Folders</th>
-                    {sortTh('lastAt', 'Last', 'Sort by when audio was last added')}
+                    {sortTh('fileName', t('Book'))}
+                    {sortTh('coverage', t('Coverage'), t('Sort by share of chunks narrated'))}
+                    {sortTh('chunksWithAudio', t('Chunks'), t('Sort by chunks with audio'))}
+                    {sortTh('clips', t('Clips'))}
+                    {sortTh('bytes', t('Size'))}
+                    {sortTh('durationMs', t('Length'), t('Sort by narration length'))}
+                    {sortTh('words', t('Words'))}
+                    <th>{t('Voices')}</th>
+                    <th>{t('Folders')}</th>
+                    {sortTh('lastAt', t('Last'), t('Sort by when audio was last added'))}
                     <th></th>
                   </tr>
                   <tr className="ab-filter-row">
-                    <th><TextF value={libQ} onChange={setLibQ} label="book name" /></th>
-                    <th><RangeF value={abF.coverage} onChange={setAb('coverage')} label="coverage %" /></th>
-                    <th><RangeF value={abF.chunks} onChange={setAb('chunks')} label="chunks with audio" /></th>
-                    <th><RangeF value={abF.clips} onChange={setAb('clips')} label="clips" /></th>
-                    <th><RangeF value={abF.size} onChange={setAb('size')} label="size" unit=" MB" /></th>
-                    <th><RangeF value={abF.length} onChange={setAb('length')} label="length" unit=" min" /></th>
-                    <th><RangeF value={abF.words} onChange={setAb('words')} label="words" unit="k" /></th>
-                    <th><TextF value={abF.voices} onChange={setAb('voices')} label="voices" /></th>
-                    <th><TextF value={abF.folders} onChange={setAb('folders')} label="folders" /></th>
-                    <th><DateF value={abF.last} onChange={setAb('last')} label="Last audio added" /></th>
-                    <th>{(libQ || anySet(abF)) && <button onClick={() => { setLibQ(''); setAbF(NO_ABF); }} title="Clear every column filter">✕</button>}</th>
+                    <th><TextF value={libQ} onChange={setLibQ} label={t('book name')} /></th>
+                    <th><RangeF value={abF.coverage} onChange={setAb('coverage')} label={t('coverage %')} /></th>
+                    <th><RangeF value={abF.chunks} onChange={setAb('chunks')} label={t('chunks with audio')} /></th>
+                    <th><RangeF value={abF.clips} onChange={setAb('clips')} label={t('clips')} /></th>
+                    <th><RangeF value={abF.size} onChange={setAb('size')} label={t('size')} unit=" MB" /></th>
+                    <th><RangeF value={abF.length} onChange={setAb('length')} label={t('length')} unit=" min" /></th>
+                    <th><RangeF value={abF.words} onChange={setAb('words')} label={t('words')} unit="k" /></th>
+                    <th><TextF value={abF.voices} onChange={setAb('voices')} label={t('voices')} /></th>
+                    <th><TextF value={abF.folders} onChange={setAb('folders')} label={t('folders')} /></th>
+                    <th><DateF value={abF.last} onChange={setAb('last')} label={t('Last audio added')} /></th>
+                    <th>{(libQ || anySet(abF)) && <button onClick={() => { setLibQ(''); setAbF(NO_ABF); }} title={t('Clear every column filter')}>✕</button>}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1083,14 +1102,14 @@ export default function AudiobookDialog({ onClose }) {
                       <tr key={r.checksum} className={r.checksum === checksum ? 'current' : ''}>
                         <td className="ab-td-name" title={r.fileName}>
                           <strong>{r.fileName}</strong>
-                          {openChecksums.has(r.checksum) && <span className="ab-lib-tag" title="This book is open in a reading tab">open</span>}
-                          {cpct === 100 && <span className="ab-lib-tag done">complete</span>}
+                          {openChecksums.has(r.checksum) && <span className="ab-lib-tag" title={t('This book is open in a reading tab')}>{t('open')}</span>}
+                          {cpct === 100 && <span className="ab-lib-tag done">{t('complete')}</span>}
                         </td>
-                        <td className="ab-td-bar" title={r.noAudio ? 'No audio yet' : cpct == null ? 'Chunk count unknown until this book is queued or opened' : `${cpct}%`}>
-                          {r.noAudio ? <span className="ab-dim">none</span> : <><div className="imp-bar ab-lib-bar"><div className="imp-fill" style={{ width: `${cpct ?? 0}%` }} /></div>{cpct == null ? '?' : `${cpct}%`}</>}
+                        <td className="ab-td-bar" title={r.noAudio ? t('No audio yet') : cpct == null ? t('Chunk count unknown until this book is queued or opened') : `${cpct}%`}>
+                          {r.noAudio ? <span className="ab-dim">{t('none')}</span> : <><div className="imp-bar ab-lib-bar"><div className="imp-fill" style={{ width: `${cpct ?? 0}%` }} /></div>{cpct == null ? '?' : `${cpct}%`}</>}
                         </td>
                         <td>{r.noAudio ? '—' : `${r.chunksWithAudio} / ${cpct == null ? '?' : r.chunks}`}</td>
-                        <td>{r.noAudio ? '—' : r.clips}{r.mic > 0 && <span title={`${r.mic} recorded by you`}> · 🎤{r.mic}</span>}</td>
+                        <td>{r.noAudio ? '—' : r.clips}{r.mic > 0 && <span title={t.n('{n} recorded by you', '{n} recorded by you', r.mic)}> · 🎤{r.mic}</span>}</td>
                         <td>{r.noAudio ? '—' : fmtBytes(r.bytes)}</td>
                         <td>{r.noAudio ? '—' : fmtEta(r.durationMs / 1000)}</td>
                         <td>{r.words ? r.words.toLocaleString() : '—'}</td>
@@ -1100,21 +1119,21 @@ export default function AudiobookDialog({ onClose }) {
                         <td className="ab-td-name ab-td-folders" title={inFolders.map((f) => f.name).join('\n')}>
                           {inFolders.map((f) => f.name).join(', ') || (folders.length ? '' : '—')}
                           {missing.length > 0 && (
-                            <select value="" aria-label={`Add “${r.fileName}” to a download folder`} title="Add this book to a download folder (or every folder at once)"
+                            <select value="" aria-label={t('Add “{book}” to a download folder', { book: r.fileName })} title={t('Add this book to a download folder (or every folder at once)')}
                               onChange={(e) => { const v = e.target.value; if (v) addToFolders(r.checksum, r.fileName, v === '*' ? missing.map((f) => f.id) : [v]); }}>
                               <option value="">📁 +</option>
-                              {missing.length > 1 && <option value="*">All folders ({missing.length})</option>}
+                              {missing.length > 1 && <option value="*">{t('All folders ({n})', { n: missing.length })}</option>}
                               {missing.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
                             </select>
                           )}
                         </td>
                         <td>{r.lastAt ? fmtWhen(r.lastAt) : '—'}</td>
                         <td className="ab-actions">
-                          <button className={r.noAudio ? 'toggle-on' : ''} disabled={!canTTS} onClick={() => enqueue(r.checksum, 'fill')} title={r.noAudio ? 'Queue the whole book for narration' : 'Queue every chunk that has no audio yet'}>{r.noAudio ? '🎙 Narrate' : '🎙 Gaps'}</button>
-                          <button disabled={!canTTS || r.noAudio} onClick={() => enqueue(r.checksum, 'othervoice')} title="Queue only the chunks whose audio uses a different voice from the one selected">🎚 Match</button>
-                          <button disabled={!canTTS || r.noAudio} onClick={() => enqueue(r.checksum, 'all')} title="Queue a fresh render of every chunk that is not one of your recordings">↻ All</button>
-                          <button onClick={() => openBook(r.checksum)} title="Open this book’s chunk-by-chunk editor: per-chunk clips, your own recordings, section music and export">📖 Chunks</button>
-                          {!openChecksums.has(r.checksum) && <button onClick={() => openRecent(r.checksum)} title="Open this book in a reading tab">📂</button>}
+                          <button className={r.noAudio ? 'toggle-on' : ''} disabled={!canTTS} onClick={() => enqueue(r.checksum, 'fill')} title={r.noAudio ? t('Queue the whole book for narration') : t('Queue every chunk that has no audio yet')}>{r.noAudio ? `🎙 ${t('Narrate')}` : `🎙 ${t('Gaps')}`}</button>
+                          <button disabled={!canTTS || r.noAudio} onClick={() => enqueue(r.checksum, 'othervoice')} title={t('Queue only the chunks whose audio uses a different voice from the one selected')}>🎚 {t('Match')}</button>
+                          <button disabled={!canTTS || r.noAudio} onClick={() => enqueue(r.checksum, 'all')} title={t('Queue a fresh render of every chunk that is not one of your recordings')}>↻ {t('All')}</button>
+                          <button onClick={() => openBook(r.checksum)} title={t('Open this book’s chunk-by-chunk editor: per-chunk clips, your own recordings, section music and export')}>📖 {t('Chunks')}</button>
+                          {!openChecksums.has(r.checksum) && <button onClick={() => openRecent(r.checksum)} title={t('Open this book in a reading tab')}>📂</button>}
                         </td>
                       </tr>
                     );
@@ -1123,7 +1142,7 @@ export default function AudiobookDialog({ onClose }) {
               </table>
             </div>
           )}
-          {(libQ || anySet(abF)) && !libRows.length && <p className="settings-note">No book matches these filters.</p>}
+          {(libQ || anySet(abF)) && !libRows.length && <p className="settings-note">{t('No book matches these filters.')}</p>}
         </div>
       )}
 
@@ -1132,33 +1151,28 @@ export default function AudiobookDialog({ onClose }) {
         <div className="ab-view">
           {!canPickDir ? (
             <p className="settings-note">
-              This browser can’t grant write access to folders (File System Access API). Use a Chromium
-              browser (Chrome / Edge) to sync audiobooks into download folders — the per-book{' '}
-              <strong>Export</strong> still works everywhere.
+              {t('This browser can’t grant write access to folders (File System Access API). Use a Chromium browser (Chrome / Edge) to sync audiobooks into download folders — the per-book Export still works everywhere.')}
             </p>
           ) : (
             <>
               <div className="ab-queue-head">
-                <button className="toggle-on" disabled={!!fsync} onClick={() => pickFolder()}>➕ Add download folder…</button>
+                <button className="toggle-on" disabled={!!fsync} onClick={() => pickFolder()}>➕ {t('Add download folder…')}</button>
                 <span className="settings-note" style={{ margin: 0 }}>
-                  Each book syncs as ready-to-play tracks + a playlist into <em>folder/shelf/book/</em>, where the shelf is its
-                  Trackyread status (Reading, On deck, To read, Finished, Abandoned — or Untracked). Only changed tracks are
-                  rewritten; a status change moves the book on its next sync.
+                  {t('Each book syncs as ready-to-play tracks + a playlist into folder/shelf/book/, where the shelf is its Trackyread status (Reading, On deck, To read, Finished, Abandoned — or Untracked). Only changed tracks are rewritten; a status change moves the book on its next sync.')}
                 </span>
               </div>
 
               {fsync && (
                 <div className="lj-inline">
                   <div className="imp-bar" style={{ flex: '1 1 160px', maxWidth: 320 }}><div className="imp-fill" style={{ width: `${fsync.total ? (fsync.done / fsync.total) * 100 : 0}%` }} /></div>
-                  <span className="settings-note" style={{ margin: 0 }}>📁 {fsync.folder}: “{fsync.book}” track {fsync.done + 1}/{fsync.total} — {fsync.label}…</span>
-                  <button onClick={() => { syncStopRef.current = true; }}>Stop</button>
+                  <span className="settings-note" style={{ margin: 0 }}>📁 {fsync.folder}: {t('“{book}” track {n}/{total} — {label}…', { book: fsync.book, n: fsync.done + 1, total: fsync.total, label: fsync.label })}</span>
+                  <button onClick={() => { syncStopRef.current = true; }}>{t('Stop')}</button>
                 </div>
               )}
 
               {!folders.length && (
                 <p className="settings-note">
-                  No folders yet. Add your phone-sync directory, a NAS share, a cloud-drive folder — each keeps
-                  its own set of books, written as playable tracks the moment generation finishes.
+                  {t('No folders yet. Add your phone-sync directory, a NAS share, a cloud-drive folder — each keeps its own set of books, written as playable tracks the moment generation finishes.')}
                 </p>
               )}
 
@@ -1172,26 +1186,26 @@ export default function AudiobookDialog({ onClose }) {
                 return (
                   <div key={f.id} className="ab-folder">
                     <div className="ab-folder-head">
-                      <span className={`ab-perm p-${st}`} title={st === 'granted' ? 'Connected — this folder can be written' : st === 'missing' ? 'The saved folder handle is gone (moved, deleted, or restored from a backup) — Reconnect picks it again, keeping its books' : 'The browser needs you to re-allow access — press Reconnect'} />
+                      <span className={`ab-perm p-${st}`} title={st === 'granted' ? t('Connected — this folder can be written') : st === 'missing' ? t('The saved folder handle is gone (moved, deleted, or restored from a backup) — Reconnect picks it again, keeping its books') : t('The browser needs you to re-allow access — press Reconnect')} />
                       <strong title={f.name}>📁 {f.name}</strong>
-                      <label className="inline-check" title="After a generation job finishes, write this folder’s copy of that book without being asked">
-                        <input type="checkbox" checked={f.autoSync !== false} onChange={(e) => commitFolders(patchFolder(folders, f.id, { autoSync: e.target.checked }))} /> Auto-sync
+                      <label className="inline-check" title={t('After a generation job finishes, write this folder’s copy of that book without being asked')}>
+                        <input type="checkbox" checked={f.autoSync !== false} onChange={(e) => commitFolders(patchFolder(folders, f.id, { autoSync: e.target.checked }))} /> {t('Auto-sync')}
                       </label>
                       <span className="grow" />
-                      {st !== 'granted' && <button onClick={() => reconnectFolder(f)} title="Re-allow access to this folder">🔓 Reconnect</button>}
-                      <button disabled={!assigned.length || !!fsync} onClick={() => syncFolder(f)} title="Write anything missing or changed, for every book in this folder">⟳ Sync now</button>
-                      <button className="grab-trash" onClick={() => commitFolders(removeFolder(folders, f.id))} title="Forget this folder — files already written stay on disk">✕</button>
+                      {st !== 'granted' && <button onClick={() => reconnectFolder(f)} title={t('Re-allow access to this folder')}>🔓 {t('Reconnect')}</button>}
+                      <button disabled={!assigned.length || !!fsync} onClick={() => syncFolder(f)} title={t('Write anything missing or changed, for every book in this folder')}>⟳ {t('Sync now')}</button>
+                      <button className="grab-trash" onClick={() => commitFolders(removeFolder(folders, f.id))} title={t('Forget this folder — files already written stay on disk')}>✕</button>
                     </div>
                     {assigned.length > 0 && (
                       <table className="ab-table ab-folder-table">
                         <thead>
-                          <tr><th>Book</th><th>Shelf</th><th>Tracks</th><th>Format</th><th>Synced</th><th>{anySet(fldF) && <button className="ab-clearf" onClick={() => setFldF(NO_FF)} title="Clear these filters (they apply to every folder)">✕</button>}</th></tr>
+                          <tr><th>{t('Book')}</th><th>{t('Shelf')}</th><th>{t('Tracks')}</th><th>{t('Format')}</th><th>{t('Synced')}</th><th>{anySet(fldF) && <button className="ab-clearf" onClick={() => setFldF(NO_FF)} title={t('Clear these filters (they apply to every folder)')}>✕</button>}</th></tr>
                           <tr className="ab-filter-row">
-                            <th><TextF value={fldF.book} onChange={(v) => setFldF({ ...fldF, book: v })} label="book" /></th>
-                            <th><TextF value={fldF.shelf} onChange={(v) => setFldF({ ...fldF, shelf: v })} label="shelf" /></th>
-                            <th><RangeF value={fldF.tracks} onChange={(v) => setFldF({ ...fldF, tracks: v })} label="tracks" /></th>
-                            <th><TextF value={fldF.format} onChange={(v) => setFldF({ ...fldF, format: v })} label="format" /></th>
-                            <th><DateF value={fldF.synced} onChange={(v) => setFldF({ ...fldF, synced: v })} label="Synced" /></th>
+                            <th><TextF value={fldF.book} onChange={(v) => setFldF({ ...fldF, book: v })} label={t('book')} /></th>
+                            <th><TextF value={fldF.shelf} onChange={(v) => setFldF({ ...fldF, shelf: v })} label={t('shelf')} /></th>
+                            <th><RangeF value={fldF.tracks} onChange={(v) => setFldF({ ...fldF, tracks: v })} label={t('tracks')} /></th>
+                            <th><TextF value={fldF.format} onChange={(v) => setFldF({ ...fldF, format: v })} label={t('format')} /></th>
+                            <th><DateF value={fldF.synced} onChange={(v) => setFldF({ ...fldF, synced: v })} label={t('Synced')} /></th>
                             <th />
                           </tr>
                         </thead>
@@ -1206,15 +1220,15 @@ export default function AudiobookDialog({ onClose }) {
                             return (
                               <tr key={cs}>
                                 <td className="ab-td-name" title={b.fileName}>📖 {b.fileName}</td>
-                                <td className="ab-td-shelf" title="Sub-folder, from the book’s Trackyread status — a change moves it on the next sync">{b.syncedAt && b.shelf !== live ? `${b.shelf || '—'} → ${live}` : live}</td>
+                                <td className="ab-td-shelf" title={t('Sub-folder, from the book’s Trackyread status — a change moves it on the next sync')}>{b.syncedAt && b.shelf !== live ? `${b.shelf || '—'} → ${live}` : live}</td>
                                 <td>{b.syncedAt ? n : '—'}</td>
                                 <td>{b.syncedAt && b.format ? b.format.toUpperCase() : '—'}</td>
-                                <td>{b.syncedAt ? fmtWhen(b.syncedAt) : 'never'}</td>
+                                <td>{b.syncedAt ? fmtWhen(b.syncedAt) : t('never')}</td>
                                 <td className="ab-actions">
-                                  <button disabled={!!fsync} onClick={() => syncOneBook(f.id, cs)} title="Write anything missing or changed for this book">⟳ Sync</button>
-                                  <button disabled={!!fsync || !b.syncedAt} onClick={() => resyncBook(f.id, cs)} title="Rewrite every track of this book from scratch — for a folder that was emptied by hand">⟲ Rewrite</button>
-                                  <button onClick={() => openBook(cs)} title="Open this book’s chunk-by-chunk editor">📖</button>
-                                  <button className="grab-trash" onClick={() => commitFolders(unassignBook(folders, f.id, cs))} title="Stop syncing this book here — its files stay on disk">✕</button>
+                                  <button disabled={!!fsync} onClick={() => syncOneBook(f.id, cs)} title={t('Write anything missing or changed for this book')}>⟳ {t('Sync')}</button>
+                                  <button disabled={!!fsync || !b.syncedAt} onClick={() => resyncBook(f.id, cs)} title={t('Rewrite every track of this book from scratch — for a folder that was emptied by hand')}>⟲ {t('Rewrite')}</button>
+                                  <button onClick={() => openBook(cs)} title={t('Open this book’s chunk-by-chunk editor')}>📖</button>
+                                  <button className="grab-trash" onClick={() => commitFolders(unassignBook(folders, f.id, cs))} title={t('Stop syncing this book here — its files stay on disk')}>✕</button>
                                 </td>
                               </tr>
                             );
@@ -1232,12 +1246,12 @@ export default function AudiobookDialog({ onClose }) {
                         setFAddQ((q) => ({ ...q, [f.id]: '' }));
                       }}>
                         <input list={`ab-fbooks-${f.id}`} value={fAddQ[f.id] || ''} onChange={(e) => setFAddQ((q) => ({ ...q, [f.id]: e.target.value }))}
-                          placeholder="➕ Add a book to this folder — type to search…" aria-label={`Add a book to ${f.name}`} />
-                        <button type="submit" disabled={!/\[[^\]]+\]$/.test(String(fAddQ[f.id] || '').trim())}>Add</button>
+                          placeholder={'➕ ' + t('Add a book to this folder — type to search…')} aria-label={t('Add a book to {folder}', { folder: f.name })} />
+                        <button type="submit" disabled={!/\[[^\]]+\]$/.test(String(fAddQ[f.id] || '').trim())}>{t('Add')}</button>
                         <datalist id={`ab-fbooks-${f.id}`}>{options.map((o) => <option key={o.cs} value={`${o.name} [${o.cs}]`} />)}</datalist>
                       </form>
-                      <button disabled={!options.length} onClick={() => addAllToFolder(f, options)} title="Add every book not already in this folder">➕ Add all ({options.length})</button>
-                      {assigned.length > 1 && <button className="grab-trash" onClick={() => removeAllFromFolder(f)} title="Stop syncing every book here — files already written stay on disk">✕ Remove all ({assigned.length})</button>}
+                      <button disabled={!options.length} onClick={() => addAllToFolder(f, options)} title={t('Add every book not already in this folder')}>➕ {t('Add all ({n})', { n: options.length })}</button>
+                      {assigned.length > 1 && <button className="grab-trash" onClick={() => removeAllFromFolder(f)} title={t('Stop syncing every book here — files already written stay on disk')}>✕ {t('Remove all ({n})', { n: assigned.length })}</button>}
                     </div>
                   </div>
                 );
@@ -1251,38 +1265,36 @@ export default function AudiobookDialog({ onClose }) {
       {view === 'stats' && (
         <div className="ab-view">
           <div className="ab-queue-stats">
-            <div className="ab-stat"><b>{thr.runs}</b><span>run(s) recorded</span></div>
-            <div className="ab-stat"><b>{thr.charsPerSec ? Math.round(thr.charsPerSec) : '—'}</b><span>chars/s overall</span></div>
-            <div className="ab-stat"><b>{fmtEta(thr.ms / 1000)}</b><span>time spent generating</span></div>
-            <div className="ab-stat"><b>{libTotals.chunksWithAudio.toLocaleString()}</b><span>chunk(s) narrated</span></div>
+            <div className="ab-stat"><b>{thr.runs}</b><span>{t.n('run recorded', 'runs recorded', thr.runs)}</span></div>
+            <div className="ab-stat"><b>{thr.charsPerSec ? Math.round(thr.charsPerSec) : '—'}</b><span>{t('chars/s overall')}</span></div>
+            <div className="ab-stat"><b>{fmtEta(thr.ms / 1000)}</b><span>{t('time spent generating')}</span></div>
+            <div className="ab-stat"><b>{libTotals.chunksWithAudio.toLocaleString()}</b><span>{t.n('chunk narrated', 'chunks narrated', libTotals.chunksWithAudio)}</span></div>
           </div>
 
           {!thr.runs ? (
             <p className="settings-note">
-              No generation runs recorded yet. Once a job finishes, its measured rate lands here and the
-              queue starts giving real estimates instead of a dash.
+              {t('No generation runs recorded yet. Once a job finishes, its measured rate lands here and the queue starts giving real estimates instead of a dash.')}
             </p>
           ) : (
             <>
-              <div className="field-section">Throughput by voice</div>
+              <div className="field-section">{t('Throughput by voice')}</div>
               <p className="settings-note" style={{ marginTop: 0 }}>
-                An offline voice and a cloud voice differ by an order of magnitude, so the queue estimates
-                with the rate for the voice you actually picked rather than a blended average.
+                {t('An offline voice and a cloud voice differ by an order of magnitude, so the queue estimates with the rate for the voice you actually picked rather than a blended average.')}
               </p>
               <table className="ab-table">
                 <thead>
-                  <tr><th>Voice</th><th>Runs</th><th>Chars</th><th>Chars/s</th><th>Generated</th><th>Failed{anySet(vf) && <button className="ab-clearf" onClick={() => setVf(NO_VF)} title="Clear these filters">✕</button>}</th></tr>
+                  <tr><th>{t('Voice')}</th><th>{t('Runs')}</th><th>{t('Chars')}</th><th>{t('Chars/s')}</th><th>{t('Generated')}</th><th>{t('Failed')}{anySet(vf) && <button className="ab-clearf" onClick={() => setVf(NO_VF)} title={t('Clear these filters')}>✕</button>}</th></tr>
                   <tr className="ab-filter-row">
-                    <th><TextF value={vf.voice} onChange={(v) => setVf({ ...vf, voice: v })} label="voice" /></th>
-                    <th><RangeF value={vf.runs} onChange={(v) => setVf({ ...vf, runs: v })} label="runs" /></th>
-                    <th><RangeF value={vf.chars} onChange={(v) => setVf({ ...vf, chars: v })} label="characters" unit="k" /></th>
-                    <th><RangeF value={vf.rate} onChange={(v) => setVf({ ...vf, rate: v })} label="chars per second" /></th>
-                    <th><RangeF value={vf.ok} onChange={(v) => setVf({ ...vf, ok: v })} label="generated" /></th>
-                    <th><RangeF value={vf.failed} onChange={(v) => setVf({ ...vf, failed: v })} label="failed" /></th>
+                    <th><TextF value={vf.voice} onChange={(v) => setVf({ ...vf, voice: v })} label={t('voice')} /></th>
+                    <th><RangeF value={vf.runs} onChange={(v) => setVf({ ...vf, runs: v })} label={t('runs')} /></th>
+                    <th><RangeF value={vf.chars} onChange={(v) => setVf({ ...vf, chars: v })} label={t('characters')} unit="k" /></th>
+                    <th><RangeF value={vf.rate} onChange={(v) => setVf({ ...vf, rate: v })} label={t('chars per second')} /></th>
+                    <th><RangeF value={vf.ok} onChange={(v) => setVf({ ...vf, ok: v })} label={t('generated')} /></th>
+                    <th><RangeF value={vf.failed} onChange={(v) => setVf({ ...vf, failed: v })} label={t('failed')} /></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {byVoice.filter((v) => { const t = textMatcher(vf.voice).test; return (!t || t(labelVoice(v.voice))) && inRange(v.runs, ...vf.runs) && inRange(v.chars, ...vf.chars, 1000) && inRange(v.charsPerSec, ...vf.rate) && inRange(v.ok, ...vf.ok) && inRange(v.failed, ...vf.failed); }).map((v) => {
+                  {byVoice.filter((v) => { const vt = textMatcher(vf.voice).test; return (!vt || vt(labelVoice(v.voice))) && inRange(v.runs, ...vf.runs) && inRange(v.chars, ...vf.chars, 1000) && inRange(v.charsPerSec, ...vf.rate) && inRange(v.ok, ...vf.ok) && inRange(v.failed, ...vf.failed); }).map((v) => {
                     const share = byVoice[0].charsPerSec ? (v.charsPerSec / Math.max(...byVoice.map((x) => x.charsPerSec))) * 100 : 0;
                     return (
                       <tr key={v.voice}>
@@ -1301,20 +1313,20 @@ export default function AudiobookDialog({ onClose }) {
                 </tbody>
               </table>
 
-              <div className="field-section">Recent runs</div>
+              <div className="field-section">{t('Recent runs')}</div>
               <table className="ab-table">
                 <thead>
-                  <tr><th>When</th><th>Book</th><th>Pass</th><th>Voice</th><th>Chunks</th><th>Rate</th><th>{anySet(rf) && <button className="ab-clearf" onClick={() => setRf(NO_RF)} title="Clear these filters">✕</button>}</th></tr>
+                  <tr><th>{t('When')}</th><th>{t('Book')}</th><th>{t('Pass')}</th><th>{t('Voice')}</th><th>{t('Chunks')}</th><th>{t('Rate')}</th><th>{anySet(rf) && <button className="ab-clearf" onClick={() => setRf(NO_RF)} title={t('Clear these filters')}>✕</button>}</th></tr>
                   <tr className="ab-filter-row">
-                    <th><DateF value={rf.when} onChange={(v) => setRf({ ...rf, when: v })} label="Run date" /></th>
-                    <th><TextF value={rf.book} onChange={(v) => setRf({ ...rf, book: v })} label="book" /></th>
-                    <th><TextF value={rf.pass} onChange={(v) => setRf({ ...rf, pass: v })} label="pass" /></th>
-                    <th><TextF value={rf.voice} onChange={(v) => setRf({ ...rf, voice: v })} label="voice" /></th>
-                    <th><RangeF value={rf.chunks} onChange={(v) => setRf({ ...rf, chunks: v })} label="chunks generated" /></th>
-                    <th><RangeF value={rf.rate} onChange={(v) => setRf({ ...rf, rate: v })} label="chars per second" /></th>
+                    <th><DateF value={rf.when} onChange={(v) => setRf({ ...rf, when: v })} label={t('Run date')} /></th>
+                    <th><TextF value={rf.book} onChange={(v) => setRf({ ...rf, book: v })} label={t('book')} /></th>
+                    <th><TextF value={rf.pass} onChange={(v) => setRf({ ...rf, pass: v })} label={t('pass')} /></th>
+                    <th><TextF value={rf.voice} onChange={(v) => setRf({ ...rf, voice: v })} label={t('voice')} /></th>
+                    <th><RangeF value={rf.chunks} onChange={(v) => setRf({ ...rf, chunks: v })} label={t('chunks generated')} /></th>
+                    <th><RangeF value={rf.rate} onChange={(v) => setRf({ ...rf, rate: v })} label={t('chars per second')} /></th>
                     <th>
-                      <select value={rf.status} onChange={(e) => setRf({ ...rf, status: e.target.value })} aria-label="Filter by outcome">
-                        <option value="all">all</option><option value="done">✓</option><option value="stopped">■</option><option value="other">⚠</option>
+                      <select value={rf.status} onChange={(e) => setRf({ ...rf, status: e.target.value })} aria-label={t('Filter by outcome')}>
+                        <option value="all">{t('all')}</option><option value="done">✓</option><option value="stopped">■</option><option value="other">⚠</option>
                       </select>
                     </th>
                   </tr>
@@ -1322,16 +1334,16 @@ export default function AudiobookDialog({ onClose }) {
                 <tbody>
                   {/* Unfiltered: the latest 20. Filtered: searches every logged run (up to 200 shown). */}
                   {[...runs].reverse().filter((r) => {
-                    const t = (k) => textMatcher(rf[k]).test;
+                    const tm = (k) => textMatcher(rf[k]).test;
                     const st = r.status === 'done' || r.status === 'stopped' ? r.status : 'other';
-                    return inDates(r.at ? new Date(r.at).toISOString() : '', ...rf.when) && (!t('book') || t('book')(r.fileName || ''))
-                      && (!t('pass') || t('pass')(r.lines ? '1 chunk' : (JOB_KIND_LABEL[r.kind] || r.kind || ''))) && (!t('voice') || t('voice')(labelVoice(r.voiceId)))
+                    return inDates(r.at ? new Date(r.at).toISOString() : '', ...rf.when) && (!tm('book') || tm('book')(r.fileName || ''))
+                      && (!tm('pass') || tm('pass')(r.lines ? t('1 chunk') : (JOB_KIND_LABEL[r.kind] || r.kind || ''))) && (!tm('voice') || tm('voice')(labelVoice(r.voiceId)))
                       && inRange(r.ok, ...rf.chunks) && inRange(r.ms > 0 ? (r.charsDone / r.ms) * 1000 : null, ...rf.rate) && (rf.status === 'all' || st === rf.status);
                   }).slice(0, anySet(rf) ? 200 : 20).map((r, i) => (
                     <tr key={i}>
                       <td>{fmtWhen(r.at)}</td>
                       <td className="ab-td-name" title={r.fileName}>{r.fileName}</td>
-                      <td>{r.lines ? '1 chunk' : (JOB_KIND_LABEL[r.kind] || r.kind)}</td>
+                      <td>{r.lines ? t('1 chunk') : (JOB_KIND_LABEL[r.kind] || r.kind)}</td>
                       <td className="ab-td-name">{labelVoice(r.voiceId)}</td>
                       <td>{r.ok}/{r.total}{r.failed ? <> · <span className="ab-job-fail">{r.failed}✗</span></> : null}</td>
                       <td>{r.ms > 0 ? `${Math.round((r.charsDone / r.ms) * 1000)}/s` : '—'}</td>
@@ -1343,28 +1355,28 @@ export default function AudiobookDialog({ onClose }) {
             </>
           )}
 
-          <div className="field-section">Storage</div>
+          <div className="field-section">{t('Storage')}</div>
           <p className="settings-note" style={{ marginTop: 0 }}>
-            <strong>{fmtBytes(libTotals.bytes)}</strong> across {libTotals.clips.toLocaleString()} clip(s) in{' '}
-            {libTotals.booksStarted} book(s), in this browser’s storage. There is no file path to open — open a
-            book from <strong>📚 Library</strong> and use its <strong>Record &amp; export</strong> group to save real audio files.
+            {t.n('{size} across {count} clip in {books}, in this browser’s storage.', '{size} across {count} clips in {books}, in this browser’s storage.', libTotals.clips,
+              { size: fmtBytes(libTotals.bytes), count: libTotals.clips.toLocaleString(), books: t.n('{n} book', '{n} books', libTotals.booksStarted) })}{' '}
+            {t('There is no file path to open — open a book from 📚 Library and use its “Record & export” group to save real audio files.')}
           </p>
         </div>
       )}
 
       {/* ─────────── BOOK EDITOR — a drill-down from the Library, not a fixed tab ─────────── */}
       {view === 'book' && !sel && (
-        <p className="settings-note">No book open here. Pick one in <strong>📚 Library</strong> — any book, whether or not it is open in a reading tab.</p>
+        <p className="settings-note">{t('No book open here. Pick one in 📚 Library — any book, whether or not it is open in a reading tab.')}</p>
       )}
       {view === 'book' && sel && (
       <>
       <div className="ab-crumb">
-        <button onClick={() => setView('library')} title="Back to the library list (this book stays open here)">‹ Library</button>
+        <button onClick={() => setView('library')} title={t('Back to the library list (this book stays open here)')}>‹ {t('Library')}</button>
         <strong title={sel.fileName}>{sel.fileName}</strong>
         <span className="grow" />
         <button className={selfMode ? 'toggle-on' : ''} aria-pressed={selfMode} onClick={() => updateGlobal({ abSelfNarrate: !selfMode })}
-          title="Narrating it yourself? Hide the voice-generation controls and lead with recording">🎤 I narrate myself</button>
-        <button onClick={closeBook} title="Close this book’s editor">✕ Close book</button>
+          title={t('Narrating it yourself? Hide the voice-generation controls and lead with recording')}>🎤 {t('I narrate myself')}</button>
+        <button onClick={closeBook} title={t('Close this book’s editor')}>✕ {t('Close book')}</button>
       </div>
       {/* Every action lives in ONE sticky toolbar, so the controls stay reachable however far down
           a 141-section book you have scrolled — previously Delete sat at the very bottom and
@@ -1377,18 +1389,18 @@ export default function AudiobookDialog({ onClose }) {
         return (
           <div className="ab-coverage">
             {totalCovered >= chunks.length && chunks.length
-              ? <span className="ab-cov-done">✓ Fully {selfMode ? 'recorded' : 'generated'} — {chunks.length} chunk(s)</span>
-              : <span><strong>{totalCovered}</strong> / {chunks.length} chunk(s) have audio <strong>({pct}%)</strong></span>}
+              ? <span className="ab-cov-done">✓ {selfMode ? t.n('Fully recorded — {n} chunk', 'Fully recorded — {n} chunks', chunks.length) : t.n('Fully generated — {n} chunk', 'Fully generated — {n} chunks', chunks.length)}</span>
+              : <span>{t.n('{covered} / {n} chunk has audio ({pct}%)', '{covered} / {n} chunks have audio ({pct}%)', chunks.length, { covered: totalCovered, pct })}</span>}
             {mixBar(m, 'ab-cov-bar')}
             <div className="ab-mix-legend">
-              <span><i className="ab-mix-human" /> 🎤 {m.human} by you</span>
-              <span><i className="ab-mix-bot" /> 🤖 {m.bot} generated</span>
-              <span><i /> {m.none} missing</span>
+              <span><i className="ab-mix-human" /> 🎤 {t('{n} by you', { n: m.human })}</span>
+              <span><i className="ab-mix-bot" /> 🤖 {t('{n} generated', { n: m.bot })}</span>
+              <span><i /> {t('{n} missing', { n: m.none })}</span>
               {m.human > 0 && (
-                <span className="ab-mix-avg" title="Averages over your recordings">
-                  · your takes: {m.avg.score != null ? `★${m.avg.score}` : '—'}
-                  {m.avg.accuracy != null && ` · 🎯 ${m.avg.accuracy}% accurate`}
-                  {m.avg.completeness != null && ` · ✓ ${m.avg.completeness}% complete`}
+                <span className="ab-mix-avg" title={t('Averages over your recordings')}>
+                  · {t('your takes:')} {m.avg.score != null ? `★${m.avg.score}` : '—'}
+                  {m.avg.accuracy != null && ` · 🎯 ${t('{pct}% accurate', { pct: m.avg.accuracy })}`}
+                  {m.avg.completeness != null && ` · ✓ ${t('{pct}% complete', { pct: m.avg.completeness })}`}
                   {m.avg.voice != null && ` · 🗣 ${m.avg.voice}`}
                 </span>
               )}
@@ -1399,73 +1411,76 @@ export default function AudiobookDialog({ onClose }) {
 
       {remoteHasMore && (
         <div className="ab-remote">
-          🔊 A more complete audiobook — <strong>{remote.chunks} chunk(s)</strong> — exists
-          {remote.device ? <> on <strong>{remote.device}</strong></> : ' on another device'}. Export it there and Import here to skip regenerating.
+          🔊 {remote.device
+            ? t.n('A more complete audiobook — {n} chunk — exists on {device}.', 'A more complete audiobook — {n} chunks — exists on {device}.', remote.chunks, { device: remote.device })
+            : t.n('A more complete audiobook — {n} chunk — exists on another device.', 'A more complete audiobook — {n} chunks — exists on another device.', remote.chunks)}{' '}
+          {t('Export it there and Import here to skip regenerating.')}
         </div>
       )}
 
       {!selfMode && <details className="ab-group" open>
-        <summary>🎙 Generate narration</summary>
+        <summary>🎙 {t('Generate narration')}</summary>
       {canTTS ? (
         <div className="ab-genbar">
           {voicePicker()}
           {gen ? (
             <>
               <div className="imp-bar" style={{ flex: '1 1 160px', maxWidth: 280 }}><div className="imp-fill" style={{ width: `${gen.charsTotal ? (gen.charsDone / gen.charsTotal) * 100 : 0}%` }} /></div>
-              <span className="settings-note" style={{ margin: 0 }}>Generating {gen.done}/{gen.total}…</span>
-              <button onClick={skipCurrent}>Stop</button>
+              <span className="settings-note" style={{ margin: 0 }}>{t('Generating {done}/{total}…', { done: gen.done, total: gen.total })}</span>
+              <button onClick={skipCurrent}>{t('Stop')}</button>
               {genLive()}
             </>
           ) : (
             <>
-              <button className="toggle-on" onClick={() => askGenerate('fill')} title="Queue every chunk that has no audio yet">🎙 Generate gaps</button>
-              <button onClick={() => askGenerate('all')} title="Queue a fresh render for every non-recorded chunk">↻ Regenerate all</button>
-              <button onClick={() => askGenerate('othervoice')} title="Queue only chunks whose current audio uses a different voice">🎚 Match this voice</button>
+              <button className="toggle-on" onClick={() => askGenerate('fill')} title={t('Queue every chunk that has no audio yet')}>🎙 {t('Generate gaps')}</button>
+              <button onClick={() => askGenerate('all')} title={t('Queue a fresh render for every non-recorded chunk')}>↻ {t('Regenerate all')}</button>
+              <button onClick={() => askGenerate('othervoice')} title={t('Queue only chunks whose current audio uses a different voice')}>🎚 {t('Match this voice')}</button>
             </>
           )}
         </div>
-      ) : <p className="settings-note">Offline Piper voice isn’t available in this browser. Add an ElevenLabs key in Audio Settings to generate in the cloud instead.</p>}
+      ) : <p className="settings-note">{t('Offline Piper voice isn’t available in this browser. Add an ElevenLabs key in Audio Settings to generate in the cloud instead.')}</p>}
       </details>}
 
       <details className="ab-group" key={selfMode ? 'self' : 'gen'} open={selfMode || undefined}>
-        <summary>📖 Record &amp; export</summary>
+        <summary>📖 {t('Record & export')}</summary>
       <div className="ab-genbar">
-        <button className="toggle-on" onClick={() => setReadThru(true)} title="Narrate it yourself in one sitting: read chunk after chunk, pause to advance — each take is trimmed, cleaned and filed automatically">📖 Read it aloud yourself…</button>
-        <button className="toggle-on" onClick={() => setShowExport(true)} disabled={!totalCovered} title="Save the generated narration as standalone audio tracks (WAV/MP3 + playlist) to play on your phone">🎧 Export as audiobook…</button>
-        <button onClick={doExport} disabled={busy || !size.clips} title="Save this book's clips as a Tachyread transfer file for another device">⬆ Transfer file…</button>
-        <button onClick={doImport} disabled={busy} title="Load an exported Tachyread audiobook transfer file">⬇ Import…</button>
+        <button className="toggle-on" onClick={() => setReadThru(true)} title={t('Narrate it yourself in one sitting: read chunk after chunk, pause to advance — each take is trimmed, cleaned and filed automatically')}>📖 {t('Read it aloud yourself…')}</button>
+        <button className="toggle-on" onClick={() => setShowExport(true)} disabled={!totalCovered} title={t('Save the generated narration as standalone audio tracks (WAV/MP3 + playlist) to play on your phone')}>🎧 {t('Export as audiobook…')}</button>
+        <button onClick={doExport} disabled={busy || !size.clips} title={t('Save this book’s clips as a Tachyread transfer file for another device')}>⬆ {t('Transfer file…')}</button>
+        <button onClick={doImport} disabled={busy} title={t('Load an exported Tachyread audiobook transfer file')}>⬇ {t('Import…')}</button>
       </div>
       </details>
 
       {/* Collapse / expand controls — handy for long books; "completed" = fully-generated sections. */}
       <details className="ab-group">
-        <summary>🗂 Sections</summary>
+        <summary>🗂 {t('Sections')}</summary>
       {sections.length > 1 && (() => {
         const doneIds = sections.filter((s) => s.chunks.length && covered(s.chunks) >= s.chunks.length).map((s) => s.id);
         return (
           <div className="ab-sec-tools">
-            <span className="settings-note" style={{ margin: 0 }}>{sections.length} sections</span>
+            <span className="settings-note" style={{ margin: 0 }}>{t.n('{n} section', '{n} sections', sections.length)}</span>
             <span className="grab-sep" />
-            <button onClick={() => setCollapsed(new Set())} disabled={collapsed.size === 0} title="Expand every section">▾ Expand all</button>
-            <button onClick={() => setCollapsed(new Set(sections.map((s) => s.id)))} disabled={collapsed.size >= sections.length} title="Collapse every section">▸ Collapse all</button>
-            <button onClick={() => setCollapsed(new Set(doneIds))} disabled={!doneIds.length} title="Collapse only the fully-generated sections, leaving the ones that still need audio open">✓ Collapse completed{doneIds.length ? ` (${doneIds.length})` : ''}</button>
+            <button onClick={() => setCollapsed(new Set())} disabled={collapsed.size === 0} title={t('Expand every section')}>▾ {t('Expand all')}</button>
+            <button onClick={() => setCollapsed(new Set(sections.map((s) => s.id)))} disabled={collapsed.size >= sections.length} title={t('Collapse every section')}>▸ {t('Collapse all')}</button>
+            <button onClick={() => setCollapsed(new Set(doneIds))} disabled={!doneIds.length} title={t('Collapse only the fully-generated sections, leaving the ones that still need audio open')}>✓ {t('Collapse completed')}{doneIds.length ? ` (${doneIds.length})` : ''}</button>
           </div>
         );
       })()}
       </details>
 
       <details className="ab-group ab-group-danger">
-        <summary>💾 Storage &amp; delete</summary>
+        <summary>💾 {t('Storage & delete')}</summary>
         <p className="settings-note" style={{ margin: 0 }}>
-          {size.clips} clip(s) across {size.chunks} chunk(s) · <strong>{fmtBytes(size.bytes)}</strong> in this browser’s
-          storage (IndexedDB — there’s no file path to open; use <strong>Export</strong> above to save a real file).
+          {t.n('{n} clip across {chunks} · {size} in this browser’s storage (IndexedDB — there’s no file path to open; use Export above to save a real file).',
+            '{n} clips across {chunks} · {size} in this browser’s storage (IndexedDB — there’s no file path to open; use Export above to save a real file).',
+            size.clips, { chunks: t.n('{n} chunk', '{n} chunks', size.chunks), size: fmtBytes(size.bytes) })}
         </p>
         <div className="data-row" style={{ marginTop: 6 }}>
           {!wipeArm
-            ? <button className="grab-trash" disabled={!size.clips} onClick={() => setWipeArm(true)}>🗑 Delete all audio for this book…</button>
+            ? <button className="grab-trash" disabled={!size.clips} onClick={() => setWipeArm(true)}>🗑 {t('Delete all audio for this book…')}</button>
             : <>
-                <button className="grab-trash" onClick={doWipe}>⚠ Confirm — delete {size.clips} clip(s) ({fmtBytes(size.bytes)})</button>
-                <button onClick={() => setWipeArm(false)}>Cancel</button>
+                <button className="grab-trash" onClick={doWipe}>⚠ {t.n('Confirm — delete {n} clip ({size})', 'Confirm — delete {n} clips ({size})', size.clips, { size: fmtBytes(size.bytes) })}</button>
+                <button onClick={() => setWipeArm(false)}>{t('Cancel')}</button>
               </>}
         </div>
       </details>
@@ -1484,7 +1499,7 @@ export default function AudiobookDialog({ onClose }) {
                 <span className={`ab-sec-cov${cov >= tot ? ' full' : ''}`}>{cov}/{tot} · {spct}%</span>
                 {(() => { const m = mixOf(sec.chunks); return <>
                   {mixBar(m, 'ab-sec-bar')}
-                  {m.avg.score != null && <span className="ab-sec-q" title="Average over your recordings in this section">★{m.avg.score}{m.avg.accuracy != null ? ` 🎯${m.avg.accuracy}` : ''}{m.avg.completeness != null ? ` ✓${m.avg.completeness}` : ''}</span>}
+                  {m.avg.score != null && <span className="ab-sec-q" title={t('Average over your recordings in this section')}>★{m.avg.score}{m.avg.accuracy != null ? ` 🎯${m.avg.accuracy}` : ''}{m.avg.completeness != null ? ` ✓${m.avg.completeness}` : ''}</span>}
                 </>; })()}
               </div>
               {open && (() => {
@@ -1498,18 +1513,18 @@ export default function AudiobookDialog({ onClose }) {
                   const busyTitle = isTitle && secBusy === `${firstLine}:title`;
                   return (
                     <div className="ab-slot" key={role}>
-                      <span className="ab-slot-label">{role === 'intro' ? '🎵 Intro' : isTitle ? '🔊 Title' : '🎵 Outro'}</span>
+                      <span className="ab-slot-label">{role === 'intro' ? `🎵 ${t('Intro')}` : isTitle ? `🔊 ${t('Title')}` : `🎵 ${t('Outro')}`}</span>
                       {c ? (
                         <>
-                          <button className={playingKey === pk ? 'toggle-on' : ''} onClick={() => playSec(firstLine, role, c.id)} title={playingKey === pk ? 'Stop' : 'Play'}>{playingKey === pk ? '■' : '▶'}</button>
+                          <button className={playingKey === pk ? 'toggle-on' : ''} onClick={() => playSec(firstLine, role, c.id)} title={playingKey === pk ? t('Stop') : t('Play')}>{playingKey === pk ? '■' : '▶'}</button>
                           <span className="ab-slot-meta">{fmtDur(c.durationMs)}{c.source === 'tts' ? ' · 🤖' : c.source === 'mic' ? ' · 🎤' : ' · 🎵'}</span>
-                          {isTitle && canTts && <button disabled={busyTitle} onClick={() => genTitle(sec)} title="Re-narrate the title with the current voice">{busyTitle ? '…' : '↻'}</button>}
-                          <button className="grab-trash" onClick={() => delSec(firstLine, role)} title="Remove">🗑</button>
+                          {isTitle && canTts && <button disabled={busyTitle} onClick={() => genTitle(sec)} title={t('Re-narrate the title with the current voice')}>{busyTitle ? '…' : '↻'}</button>}
+                          <button className="grab-trash" onClick={() => delSec(firstLine, role)} title={t('Remove')}>🗑</button>
                         </>
                       ) : (
                         <>
-                          {isTitle && canTts && <button disabled={busyTitle} onClick={() => genTitle(sec)} title="Narrate the section title with the current voice">{busyTitle ? '…' : 'Generate'}</button>}
-                          <button onClick={() => openSecWiz(sec, role)} title={isTitle ? 'Record or import a spoken title' : 'Import a music file'}>{isTitle ? 'Record / import…' : 'Add music…'}</button>
+                          {isTitle && canTts && <button disabled={busyTitle} onClick={() => genTitle(sec)} title={t('Narrate the section title with the current voice')}>{busyTitle ? '…' : t('Generate')}</button>}
+                          <button onClick={() => openSecWiz(sec, role)} title={isTitle ? t('Record or import a spoken title') : t('Import a music file')}>{isTitle ? t('Record / import…') : t('Add music…')}</button>
                         </>
                       )}
                     </div>
@@ -1517,7 +1532,7 @@ export default function AudiobookDialog({ onClose }) {
                 };
                 return (
                   <>
-                    <div className="ab-secaudio" title="Audio played at the section boundaries (in the exported audiobook): intro music, a spoken title, then the narration, then outro music.">
+                    <div className="ab-secaudio" title={t('Audio played at the section boundaries (in the exported audiobook): intro music, a spoken title, then the narration, then outro music.')}>
                       {slot('intro')}{slot('title')}{slot('outro')}
                     </div>
                     <table className="history-table ab-table">
@@ -1530,16 +1545,16 @@ export default function AudiobookDialog({ onClose }) {
                       const isPlaying = playingKey === `${li}`;
                       return (
                         <tr key={li}>
-                          <td className="ab-lines">{lineLabel}{readMark(chunk) && <span className="ab-readmark" title={`You've read this chunk as text (${Math.round(readShareOf(chunk) * 100)}%) — it should be familiar`}> 📖</span>}</td>
-                          <td className="ab-preview" title="Click to read the full chunk text" onClick={() => setFullText(chunk)}>{chunk.text.slice(0, 80)}{chunk.text.length > 80 ? '…' : ''}</td>
-                          <td className="ab-voice">{top ? (top.source === 'mic' ? '🎤 you' : (top.voiceId?.startsWith('el:') ? <span title={labelVoice(top.voiceId)}>{labelVoice(top.voiceId)}</span> : <span title={voiceLabel(top.voiceId)}>🤖 {voiceLabel(top.voiceId).split(' · ')[0]}</span>)) : ''}{cl.length > 1 ? <span className="ab-clipcount"> ·{cl.length}</span> : ''}</td>
+                          <td className="ab-lines">{lineLabel}{readMark(chunk) && <span className="ab-readmark" title={t('You’ve read this chunk as text ({pct}%) — it should be familiar', { pct: Math.round(readShareOf(chunk) * 100) })}> 📖</span>}</td>
+                          <td className="ab-preview" title={t('Click to read the full chunk text')} onClick={() => setFullText(chunk)}>{chunk.text.slice(0, 80)}{chunk.text.length > 80 ? '…' : ''}</td>
+                          <td className="ab-voice">{top ? (top.source === 'mic' ? `🎤 ${t('you')}` : (top.voiceId?.startsWith('el:') ? <span title={labelVoice(top.voiceId)}>{labelVoice(top.voiceId)}</span> : <span title={voiceLabel(top.voiceId)}>🤖 {voiceLabel(top.voiceId).split(' · ')[0]}</span>)) : ''}{cl.length > 1 ? <span className="ab-clipcount"> ·{cl.length}</span> : ''}</td>
                           <td className="ab-dur">{top ? fmtDur(top.durationMs) : ''}</td>
                           <td className="ab-scores">{scoreCell(top)}</td>
                           <td className="ab-actions">
-                            {top && <button className={isPlaying ? 'toggle-on' : ''} onClick={() => playClip(li)} title={isPlaying ? 'Stop' : 'Play'}>{isPlaying ? '■' : '▶'}</button>}{' '}
-                            {!selfMode && (piperSupported() || elVoices.length > 0) && <button onClick={() => setConfirmJob({ kind: 'one', targets: [chunk], sections: [sec.title], words: (chunk.text || '').split(/\s+/).filter(Boolean).length })} title="Generate this chunk">Gen</button>}{' '}
-                            <button className={selfMode ? 'toggle-on' : ''} onClick={() => setRecWiz(chunk)} title="Record with your mic or import an audio file for this chunk">🎙 Rec…</button>{' '}
-                            {cl.length > 0 && <button onClick={() => setClipMgr(chunk)} title="Manage the clips for this chunk">Clips ({cl.length})</button>}
+                            {top && <button className={isPlaying ? 'toggle-on' : ''} onClick={() => playClip(li)} title={isPlaying ? t('Stop') : t('Play')}>{isPlaying ? '■' : '▶'}</button>}{' '}
+                            {!selfMode && (piperSupported() || elVoices.length > 0) && <button onClick={() => setConfirmJob({ kind: 'one', targets: [chunk], sections: [sec.title], words: (chunk.text || '').split(/\s+/).filter(Boolean).length })} title={t('Generate this chunk')}>{t('Gen')}</button>}{' '}
+                            <button className={selfMode ? 'toggle-on' : ''} onClick={() => setRecWiz(chunk)} title={t('Record with your mic or import an audio file for this chunk')}>🎙 {t('Rec…')}</button>{' '}
+                            {cl.length > 0 && <button onClick={() => setClipMgr(chunk)} title={t('Manage the clips for this chunk')}>{t('Clips ({n})', { n: cl.length })}</button>}
                           </td>
                         </tr>
                       );
@@ -1562,14 +1577,14 @@ export default function AudiobookDialog({ onClose }) {
         const cons = sessionConsistency(qs);
         return (
           <p className="settings-note" style={{ margin: '2px 0 0' }}>
-            🎙 Narration quality: <strong>★ {avg}</strong> average across {qs.length} recorded take{qs.length === 1 ? '' : 's'}
-            {cons && <> · pace &amp; level <strong>{cons.label.toLowerCase()}</strong></>} — per-take details in each chunk’s clip list.
+            🎙 {t.n('Narration quality: ★ {avg} average across {n} recorded take', 'Narration quality: ★ {avg} average across {n} recorded takes', qs.length, { avg })}
+            {cons && <> · {t('pace & level {level}', { level: t(cons.label).toLowerCase() })}</>} — {t('per-take details in each chunk’s clip list.')}
             {(() => {
               const v = averageVoice(qs.map((q) => q.voice));
               return v && (
-                <span className="ab-voice-sum" title={`SpeechImprover-style voice scores (0–100), averaged over ${v.takes} take(s). Estimates from the audio, not clinical measurements.`}>
-                  <br />🗣 Voice <strong>{v.overall}</strong>: {voiceLine(v)}
-                  {v.weakest && <> · work on <strong>{VOICE_ATTRS[v.weakest][0].toLowerCase()}</strong>: {VOICE_ATTRS[v.weakest][3]}</>}
+                <span className="ab-voice-sum" title={t.n('SpeechImprover-style voice scores (0–100), averaged over {n} take. Estimates from the audio, not clinical measurements.', 'SpeechImprover-style voice scores (0–100), averaged over {n} takes. Estimates from the audio, not clinical measurements.', v.takes)}>
+                  <br />🗣 {t('Voice {score}:', { score: v.overall })} {voiceLine(v)}
+                  {v.weakest && <> · {t('work on {skill}:', { skill: VOICE_ATTRS[v.weakest][0].toLowerCase() })} {VOICE_ATTRS[v.weakest][3]}</>}
                 </span>
               );
             })()}
@@ -1581,22 +1596,23 @@ export default function AudiobookDialog({ onClose }) {
 
       {/* Generate confirmation */}
       {confirmJob && (
-        <Dialog title="Confirm generation" onClose={() => setConfirmJob(null)} width={460}
+        <Dialog title={t('Confirm generation')} onClose={() => setConfirmJob(null)} width={460}
           buttons={<>
             <button className="toggle-on" onClick={() => {
               const j = confirmJob; setConfirmJob(null);
               enqueue(checksum, j.kind, { lines: j.kind === 'one' ? j.targets.map((c) => c.startLine) : null });
-            }}>Queue {confirmJob.targets.length} chunk(s)</button>
-            <button onClick={() => setConfirmJob(null)}>Cancel</button>
+            }}>{t.n('Queue {n} chunk', 'Queue {n} chunks', confirmJob.targets.length)}</button>
+            <button onClick={() => setConfirmJob(null)}>{t('Cancel')}</button>
           </>}>
-          <p>Generate <strong>{confirmJob.targets.length}</strong> chunk(s) (~{confirmJob.words.toLocaleString()} words) with{' '}
-            <strong>{labelVoice(voiceId)}</strong>{confirmJob.kind === 'othervoice' ? ' (replacing other-voice renders)' : ''}.</p>
+          <p>{confirmJob.kind === 'othervoice'
+            ? t.n('Generate {n} chunk (~{words} words) with {voice} (replacing other-voice renders).', 'Generate {n} chunks (~{words} words) with {voice} (replacing other-voice renders).', confirmJob.targets.length, { words: confirmJob.words.toLocaleString(), voice: labelVoice(voiceId) })
+            : t.n('Generate {n} chunk (~{words} words) with {voice}.', 'Generate {n} chunks (~{words} words) with {voice}.', confirmJob.targets.length, { words: confirmJob.words.toLocaleString(), voice: labelVoice(voiceId) })}</p>
           {confirmJob.sections?.length ? (
-            <p className="settings-note" style={{ marginTop: 0 }}>Sections: {confirmJob.sections.slice(0, 8).join(' · ')}{confirmJob.sections.length > 8 ? ` +${confirmJob.sections.length - 8} more` : ''}</p>
+            <p className="settings-note" style={{ marginTop: 0 }}>{t('Sections: {list}', { list: confirmJob.sections.slice(0, 8).join(' · ') + (confirmJob.sections.length > 8 ? ' ' + t('+{n} more', { n: confirmJob.sections.length - 8 }) : '') })}</p>
           ) : null}
           {voiceId.startsWith('el:')
-            ? <p className="settings-note" style={{ color: 'var(--ox-bright, #b0413e)' }}>☁ Sends ~{confirmJob.words.toLocaleString()} words to ElevenLabs — spends your API quota. Existing clips are kept; recordings are never touched.</p>
-            : <p className="settings-note">Runs on-device — budget a few seconds per chunk. Existing clips are kept (a new one is added); recordings are never touched.</p>}
+            ? <p className="settings-note" style={{ color: 'var(--ox-bright, #b0413e)' }}>☁ {t('Sends ~{words} words to ElevenLabs — spends your API quota. Existing clips are kept; recordings are never touched.', { words: confirmJob.words.toLocaleString() })}</p>
+            : <p className="settings-note">{t('Runs on-device — budget a few seconds per chunk. Existing clips are kept (a new one is added); recordings are never touched.')}</p>}
         </Dialog>
       )}
 
@@ -1605,12 +1621,12 @@ export default function AudiobookDialog({ onClose }) {
         (() => {
           const fi = chunks.findIndex((c) => c.startLine === fullText.startLine);
           return (
-            <Dialog title={`Chunk ${fullText.startLine + 1}${fullText.endLine > fullText.startLine ? `–${fullText.endLine + 1}` : ''}`} onClose={() => setFullText(null)} width={560}
+            <Dialog title={t('Chunk {lines}', { lines: `${fullText.startLine + 1}${fullText.endLine > fullText.startLine ? `–${fullText.endLine + 1}` : ''}` })} onClose={() => setFullText(null)} width={560}
               buttons={<>
-                <button disabled={fi <= 0} onClick={() => setFullText(chunks[fi - 1])}>◀ Previous chunk</button>
-                <button disabled={fi < 0 || fi >= chunks.length - 1} onClick={() => setFullText(chunks[fi + 1])}>Next chunk ▶</button>
-                <button onClick={() => { setRecWiz(fullText); setFullText(null); }}>🎙 Record this…</button>
-                <button onClick={() => setFullText(null)}>Close</button>
+                <button disabled={fi <= 0} onClick={() => setFullText(chunks[fi - 1])}>◀ {t('Previous chunk')}</button>
+                <button disabled={fi < 0 || fi >= chunks.length - 1} onClick={() => setFullText(chunks[fi + 1])}>{t('Next chunk')} ▶</button>
+                <button onClick={() => { setRecWiz(fullText); setFullText(null); }}>🎙 {t('Record this…')}</button>
+                <button onClick={() => setFullText(null)}>{t('Close')}</button>
               </>}>
               <ContextPicker n={ctxN} onChange={setCtxN} />
               <ChunkContext chunks={chunks} chunk={fullText} n={ctxN} className="ab-ctx" currentClass="rcw-text" />
@@ -1641,23 +1657,23 @@ export default function AudiobookDialog({ onClose }) {
         };
         const firstOfKind = (i) => i === 0 || cl[i - 1].source !== cl[i].source;
         return (
-          <Dialog title={`Clips — chunk ${li + 1}`} onClose={() => setClipMgr(null)} width={680} buttons={<button onClick={() => setClipMgr(null)}>Close</button>}>
-            <p className="settings-note" style={{ marginTop: 0 }}>The top clip plays. Recordings (🎤) always outrank Piper renders. Reorder or delete stale clips.</p>
+          <Dialog title={t('Clips — chunk {n}', { n: li + 1 })} onClose={() => setClipMgr(null)} width={680} buttons={<button onClick={() => setClipMgr(null)}>{t('Close')}</button>}>
+            <p className="settings-note" style={{ marginTop: 0 }}>{t('The top clip plays. Recordings (🎤) always outrank Piper renders. Reorder or delete stale clips.')}</p>
             {cl.length > 0 && (
               <table className="ab-table ab-clip-table">
                 <thead>
-                  <tr><th>#</th><th>Source</th><th>Wave</th><th>Length</th><th>Size</th><th>Added</th><th title="Narration-quality score for recorded takes">Quality</th><th>{anySet(cf) && <button className="ab-clearf" onClick={() => setCf(NO_CF)} title="Clear these filters">✕</button>}</th></tr>
+                  <tr><th>#</th><th>{t('Source')}</th><th>{t('Wave')}</th><th>{t('Length')}</th><th>{t('Size')}</th><th>{t('Added')}</th><th title={t('Narration-quality score for recorded takes')}>{t('Quality')}</th><th>{anySet(cf) && <button className="ab-clearf" onClick={() => setCf(NO_CF)} title={t('Clear these filters')}>✕</button>}</th></tr>
                   <tr className="ab-filter-row">
-                    <th /><th><TextF value={cf.source} onChange={(v) => setCf({ ...cf, source: v })} label="source / voice" /></th><th />
-                    <th><RangeF value={cf.length} onChange={(v) => setCf({ ...cf, length: v })} label="length" unit=" s" /></th>
-                    <th><RangeF value={cf.size} onChange={(v) => setCf({ ...cf, size: v })} label="size" unit=" KB" /></th>
-                    <th><DateF value={cf.added} onChange={(v) => setCf({ ...cf, added: v })} label="Added" /></th>
-                    <th><RangeF value={cf.quality} onChange={(v) => setCf({ ...cf, quality: v })} label="quality score" /></th><th />
+                    <th /><th><TextF value={cf.source} onChange={(v) => setCf({ ...cf, source: v })} label={t('source / voice')} /></th><th />
+                    <th><RangeF value={cf.length} onChange={(v) => setCf({ ...cf, length: v })} label={t('length')} unit=" s" /></th>
+                    <th><RangeF value={cf.size} onChange={(v) => setCf({ ...cf, size: v })} label={t('size')} unit=" KB" /></th>
+                    <th><DateF value={cf.added} onChange={(v) => setCf({ ...cf, added: v })} label={t('Added')} /></th>
+                    <th><RangeF value={cf.quality} onChange={(v) => setCf({ ...cf, quality: v })} label={t('quality score')} /></th><th />
                   </tr>
                 </thead>
                 <tbody>
                   {cl.map((c, i) => {
-                    const srcLabel = c.source === 'mic' ? '🎤 recording' : (c.voiceId?.startsWith('el:') ? labelVoice(c.voiceId) : `🤖 ${voiceLabel(c.voiceId)}`);
+                    const srcLabel = c.source === 'mic' ? `🎤 ${t('recording')}` : (c.voiceId?.startsWith('el:') ? labelVoice(c.voiceId) : `🤖 ${voiceLabel(c.voiceId)}`);
                     const st = textMatcher(cf.source).test;
                     if ((st && !st(srcLabel)) || !inRange(c.durationMs / 1000, ...cf.length) || !inRange(c.sizeBytes / 1024, ...cf.size)
                       || !inDates(c.createdAt ? new Date(c.createdAt).toISOString() : '', ...cf.added) || !inRange(c.quality?.score, ...cf.quality)) return null;
@@ -1673,18 +1689,24 @@ export default function AudiobookDialog({ onClose }) {
                         {c.quality ? (
                           <span
                             className={`rtw-score s${c.quality.score >= 85 ? 'good' : c.quality.score >= 65 ? 'ok' : 'bad'}`}
-                            title={`${c.quality.wpm != null ? c.quality.wpm + ' wpm · ' : ''}${c.quality.rmsDb} dB RMS · peak ${c.quality.peakDb} dB · volume CV ${c.quality.volumeCv}${c.quality.clippingPct ? ` · clipping ${c.quality.clippingPct}%` : ''}`}
+                            title={[
+                              c.quality.wpm != null ? t('{n} wpm', { n: c.quality.wpm }) : '',
+                              t('{n} dB RMS', { n: c.quality.rmsDb }),
+                              t('peak {n} dB', { n: c.quality.peakDb }),
+                              t('volume CV {n}', { n: c.quality.volumeCv }),
+                              c.quality.clippingPct ? t('clipping {n}%', { n: c.quality.clippingPct }) : '',
+                            ].filter(Boolean).join(' · ')}
                           >★ {c.quality.score}</span>
                         ) : '—'}
-                        {c.quality?.accuracy != null && <span className="ab-voice-badge" title="Accuracy (words said that were the text) · completeness (text words said)"> 🎯{c.quality.accuracy} ✓{c.quality.completeness}</span>}
-                        {c.quality?.voice && <span className="ab-voice-badge" title={`Voice: ${voiceLine(c.quality.voice)}`}> 🗣 {c.quality.voice.overall}</span>}
+                        {c.quality?.accuracy != null && <span className="ab-voice-badge" title={t('Accuracy (words said that were the text) · completeness (text words said)')}> 🎯{c.quality.accuracy} ✓{c.quality.completeness}</span>}
+                        {c.quality?.voice && <span className="ab-voice-badge" title={t('Voice: {details}', { details: voiceLine(c.quality.voice) })}> 🗣 {c.quality.voice.overall}</span>}
                       </td>
                       <td className="ab-actions">
-                        <button className={playingKey === `${li}:${c.id}` ? 'toggle-on' : ''} onClick={() => playClip(li, c.id)} title={playingKey === `${li}:${c.id}` ? 'Stop' : 'Play'}>{playingKey === `${li}:${c.id}` ? '■' : '▶'}</button>
-                        <button disabled={firstOfKind(i)} onClick={() => toFront(c.id)} title="Make this the top clip of its kind">⤒</button>
-                        <button disabled={i === 0 || c.source !== cl[i - 1]?.source} onClick={() => move(c.id, -1)} title="Higher priority">↑</button>
-                        <button disabled={i === cl.length - 1 || c.source !== cl[i + 1]?.source} onClick={() => move(c.id, 1)} title="Lower priority">↓</button>
-                        <button className="grab-trash" onClick={async () => { if (playingKey === `${li}:${c.id}`) stopPlay(); await deleteAudioClipById(checksum, li, c.id); await refresh(); if (clipsFor(li).length === 0) setClipMgr(null); }} title="Delete this clip">🗑</button>
+                        <button className={playingKey === `${li}:${c.id}` ? 'toggle-on' : ''} onClick={() => playClip(li, c.id)} title={playingKey === `${li}:${c.id}` ? t('Stop') : t('Play')}>{playingKey === `${li}:${c.id}` ? '■' : '▶'}</button>
+                        <button disabled={firstOfKind(i)} onClick={() => toFront(c.id)} title={t('Make this the top clip of its kind')}>⤒</button>
+                        <button disabled={i === 0 || c.source !== cl[i - 1]?.source} onClick={() => move(c.id, -1)} title={t('Higher priority')}>↑</button>
+                        <button disabled={i === cl.length - 1 || c.source !== cl[i + 1]?.source} onClick={() => move(c.id, 1)} title={t('Lower priority')}>↓</button>
+                        <button className="grab-trash" onClick={async () => { if (playingKey === `${li}:${c.id}`) stopPlay(); await deleteAudioClipById(checksum, li, c.id); await refresh(); if (clipsFor(li).length === 0) setClipMgr(null); }} title={t('Delete this clip')}>🗑</button>
                       </td>
                     </tr>
                     );
@@ -1692,10 +1714,10 @@ export default function AudiobookDialog({ onClose }) {
                 </tbody>
               </table>
             )}
-            {cl.length === 0 && <p className="settings-note">No clips.</p>}
+            {cl.length === 0 && <p className="settings-note">{t('No clips.')}</p>}
             <div className="data-row" style={{ marginTop: 8 }}>
-              <button className="toggle-on" onClick={() => setRecWiz(clipMgr)}>🎙 Record / import a clip…</button>
-              {cl.length > 0 && <button className="grab-trash" onClick={async () => { stopPlay(); await deleteAudioChunk(checksum, li); await refresh(); setClipMgr(null); }}>Delete all clips for this chunk</button>}
+              <button className="toggle-on" onClick={() => setRecWiz(clipMgr)}>🎙 {t('Record / import a clip…')}</button>
+              {cl.length > 0 && <button className="grab-trash" onClick={async () => { stopPlay(); await deleteAudioChunk(checksum, li); await refresh(); setClipMgr(null); }}>{t('Delete all clips for this chunk')}</button>}
             </div>
           </Dialog>
         );
@@ -1720,7 +1742,7 @@ export default function AudiobookDialog({ onClose }) {
           onClose={() => setReadThru(false)}
           onTake={({ chunk, wpm }) => credit(chunk, wpm)}
           readMark={readMark}
-          onDone={({ saved, skipped }) => { setMsg(`📖 Read-through: ${saved} chunk${saved === 1 ? '' : 's'} recorded${skipped ? `, ${skipped} skipped` : ''}.`); refresh(); }}
+          onDone={({ saved, skipped }) => { setMsg('📖 ' + (skipped ? t.n('Read-through: {n} chunk recorded, {skipped} skipped.', 'Read-through: {n} chunks recorded, {skipped} skipped.', saved, { skipped }) : t.n('Read-through: {n} chunk recorded.', 'Read-through: {n} chunks recorded.', saved))); refresh(); }}
         />
       )}
 
@@ -1730,7 +1752,7 @@ export default function AudiobookDialog({ onClose }) {
           chunk={recWiz}
           chunks={chunks}
           onClose={() => setRecWiz(null)}
-          onSaved={({ recorded } = {}) => { if (recorded) credit(recWiz); setRecWiz(null); setMsg(recorded ? '🎤 Clip saved — counted as read.' : '🎤 Clip saved.'); refresh(); }}
+          onSaved={({ recorded } = {}) => { if (recorded) credit(recWiz); setRecWiz(null); setMsg('🎤 ' + (recorded ? t('Clip saved — counted as read.') : t('Clip saved.'))); refresh(); }}
         />
       )}
 
@@ -1747,7 +1769,7 @@ export default function AudiobookDialog({ onClose }) {
             });
           }}
           onClose={() => setSecWiz(null)}
-          onSaved={() => { setSecWiz(null); setMsg('Section audio saved.'); refresh(); }}
+          onSaved={() => { setSecWiz(null); setMsg(t('Section audio saved.')); refresh(); }}
         />
       )}
     </Dialog>

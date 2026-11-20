@@ -6,6 +6,7 @@ import { ENGLISH_VOICES, defaultVoiceForLang, downloadVoice, isVoiceDownloaded, 
 import { KOKORO_VOICES } from '../features/localTts.js';
 import { elevenVoices, ELEVEN_MODELS } from '../features/elevenLabs.js';
 import { listenStatus, onListenStatus, runListenNow, stopListenRun, runSpeedTest } from '../features/listenAgent.js';
+import { t } from '../i18n.js';
 
 // Audio settings, reachable from the Audio menu: the read-aloud voice + rate (per tab), the
 // speak-along follow mode, and the global auto-stop timer. Ambient sound keeps its own dialog.
@@ -34,7 +35,7 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
   async function verifyEleven() {
     setElStatus('checking'); setElCount(0);
     try { const vs = await elevenVoices(global.elevenLabsKey); setElCount(vs.length); setElStatus('ok'); }
-    catch (e) { setElStatus(e?.message || 'Failed'); }
+    catch (e) { setElStatus(e?.message || t('Failed')); }
   }
 
   // Offline (Piper) voice: which voice, whether its model is downloaded, download progress.
@@ -60,7 +61,7 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
   }
 
   return (
-    <Dialog title="Audio Settings" onClose={onClose} width={540} buttons={<button onClick={onClose}>Close</button>}>
+    <Dialog title={t('Audio Settings')} onClose={onClose} width={540} buttons={<button onClick={onClose}>{t('Close')}</button>}>
       <ProfilesBar
         kind="audio"
         profiles={global.settingsProfiles}
@@ -68,140 +69,133 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
         capture={() => ({ offlineVoice: !!global.offlineVoice, offlineVoiceId: global.offlineVoiceId || '', ttsSpeed: global.ttsSpeed ?? 1, ttsAutoStopMin: global.ttsAutoStopMin || 0, elevenModel: global.elevenModel || 'eleven_multilingual_v2' })}
         apply={(data) => onPatchGlobal(data)}
       />
-      <div className="field-section">Read aloud (TTS)</div>
+      <div className="field-section">{t('Read aloud (TTS)')}</div>
       {piperSupported() && (
         <>
-          <Field label="Offline voice (plays when locked)">
-            <label className="inline-check" title="Use a neural voice that runs on your device and produces real audio — so read-aloud keeps playing with the screen off, unlike the browser's built-in voice which the phone suspends on lock.">
+          <Field label={t('Offline voice (plays when locked)')}>
+            <label className="inline-check" title={t("Use a neural voice that runs on your device and produces real audio — so read-aloud keeps playing with the screen off, unlike the browser's built-in voice which the phone suspends on lock.")}>
               <input
                 type="checkbox"
                 checked={!!global.offlineVoice}
                 onChange={(e) => onPatchGlobal({ offlineVoice: e.target.checked })}
               />
-              Neural voice, works with the screen locked (larger, one-time download)
+              {t('Neural voice, works with the screen locked (larger, one-time download)')}
             </label>
           </Field>
           {global.offlineVoice && (
             <>
-              <Field label="Offline voice model">
+              <Field label={t('Offline voice model')}>
                 <select
                   value={global.offlineVoiceId || ''}
                   onChange={(e) => onPatchGlobal({ offlineVoiceId: e.target.value })}
                 >
-                  <option value="">Auto (matches document language)</option>
+                  <option value="">{t('Auto (matches document language)')}</option>
                   {ENGLISH_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
                 </select>
               </Field>
-              <Field label="Fill gaps with Kokoro">
+              <Field label={t('Fill gaps with Kokoro')}>
                 <select value={global.kokoroLive || ''} onChange={(e) => onPatchGlobal({ kokoroLive: e.target.value })}
-                  title="Chunks you haven't pre-generated are narrated with a Kokoro voice as you reach them (the next one is prepared while the current one plays) and saved, so they're ready next time. Needs a reasonably fast device; the ~90 MB model downloads once.">
-                  <option value="">Off — use the light browser voice for gaps</option>
+                  title={t("Chunks you haven't pre-generated are narrated with a Kokoro voice as you reach them (the next one is prepared while the current one plays) and saved, so they're ready next time. Needs a reasonably fast device; the ~90 MB model downloads once.")}>
+                  <option value="">{t('Off — use the light browser voice for gaps')}</option>
                   {KOKORO_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
                 </select>
               </Field>
-              <Field label="Model">
+              <Field label={t('Model')}>
                 {dlPct >= 0 ? (
-                  <div className="imp-bar" style={{ maxWidth: 220 }} title={`Downloading ${dlPct}%`}>
+                  <div className="imp-bar" style={{ maxWidth: 220 }} title={t('Downloading {pct}%', { pct: dlPct })}>
                     <div className="imp-fill" style={{ width: `${dlPct}%` }} />
                   </div>
                 ) : downloaded ? (
-                  <span className="settings-note" style={{ margin: 0, color: '#2e9d4f' }}>✓ Downloaded — ready offline</span>
+                  <span className="settings-note" style={{ margin: 0, color: '#2e9d4f' }}>✓ {t('Downloaded — ready offline')}</span>
                 ) : (
-                  <button onClick={getModel}>⬇ Download voice (~20–30 MB, once)</button>
+                  <button onClick={getModel}>⬇ {t('Download voice (~20–30 MB, once)')}</button>
                 )}
               </Field>
               <p className="settings-note">
-                The neural voice model downloads once (from HuggingFace) and is cached on this device;
-                after that it works fully offline and keeps playing with the screen locked. Languages
-                without a neural voice fall back to English. Best on a device with a bit of horsepower —
-                synthesis runs on-device, so the first line has a short delay.
+                {t('The neural voice model downloads once (from HuggingFace) and is cached on this device; after that it works fully offline and keeps playing with the screen locked. Languages without a neural voice fall back to English. Best on a device with a bit of horsepower — synthesis runs on-device, so the first line has a short delay.')}
               </p>
             </>
           )}
         </>
       )}
 
-      <div className="field-section">Pocket listening (queue audio across devices)</div>
+      <div className="field-section">{t('Pocket listening (queue audio across devices)')}</div>
       <p className="settings-note">
-        The sync machine renders the next hours of your listen queue with the Kokoro voice above and mirrors
-        them to the sync target (Google Drive’s private app folder, or the Tachyread folder’s <code>sync/listen/</code>);
-        your other devices pull them over Wi-Fi and drop what you’ve heard. Needs a queue (TTS → QUEUE) and
-        Data → Cloud sync set up. Only rendered clips are ever deleted — never your own recordings.
+        {t('The sync machine renders the next hours of your listen queue with the Kokoro voice above and mirrors them to the sync target (Google Drive’s private app folder, or the Tachyread folder’s {path}); your other devices pull them over Wi-Fi and drop what you’ve heard. Needs a queue (TTS → QUEUE) and Data → Cloud sync set up. Only rendered clips are ever deleted — never your own recordings.', { path: 'sync/listen/' })}
       </p>
-      <Field label="Render ahead here">
-        <label className="inline-check"><input type="checkbox" checked={!!global.listenRender} onChange={(e) => onPatchGlobal({ listenRender: e.target.checked })} /> render the window on this device — the sync machine (Trackyread → AI / Cowork) also uploads it; any other device renders for itself only, while charging</label>
+      <Field label={t('Render ahead here')}>
+        <label className="inline-check"><input type="checkbox" checked={!!global.listenRender} onChange={(e) => onPatchGlobal({ listenRender: e.target.checked })} /> {t('render the window on this device — the sync machine (Trackyread → AI / Cowork) also uploads it; any other device renders for itself only, while charging')}</label>
       </Field>
-      <Field label="Pull audio here">
-        <label className="inline-check"><input type="checkbox" checked={!!global.listenPull} onChange={(e) => onPatchGlobal({ listenPull: e.target.checked })} /> fetch the rendered window to this device (Wi-Fi only)</label>
+      <Field label={t('Pull audio here')}>
+        <label className="inline-check"><input type="checkbox" checked={!!global.listenPull} onChange={(e) => onPatchGlobal({ listenPull: e.target.checked })} /> {t('fetch the rendered window to this device (Wi-Fi only)')}</label>
       </Field>
-      <Field label="Hours ahead">
+      <Field label={t('Hours ahead')}>
         <input type="number" min={1} max={48} value={global.listenHours ?? 20} onChange={(e) => onPatchGlobal({ listenHours: Math.max(1, Math.min(48, Number(e.target.value) || 20)) })} style={{ width: 70 }} />
-        <span className="settings-note" style={{ margin: '0 0 0 8px' }}>≈ {Math.round((global.listenHours ?? 20) * 11)} MB at 24 kbps</span>
+        <span className="settings-note" style={{ margin: '0 0 0 8px' }}>{t('≈ {mb} MB at 24 kbps', { mb: Math.round((global.listenHours ?? 20) * 11) })}</span>
       </Field>
-      <Field label="Cloud cap">
+      <Field label={t('Cloud cap')}>
         <input type="number" min={0.25} max={10} step={0.25} value={global.listenCapGb ?? 1} onChange={(e) => onPatchGlobal({ listenCapGb: Math.max(0.25, Math.min(10, Number(e.target.value) || 1)) })} style={{ width: 70 }} /> GB
       </Field>
-      <Field label="Status">
+      <Field label={t('Status')}>
         <span role="status">{ls.text}</span>
-        <button style={{ marginLeft: 8 }} disabled={ls.busy} onClick={() => runListenNow()}>▶ Run now</button>
-        <button style={{ marginLeft: 4 }} disabled={ls.busy} onClick={() => runSpeedTest()} title="How fast Kokoro renders on this device (× real-time) and on which backend — tells you whether this device can render ahead itself">⏱ Speed test</button>
-        {ls.busy && <button style={{ marginLeft: 4 }} onClick={stopListenRun}>■ Stop</button>}
+        <button style={{ marginLeft: 8 }} disabled={ls.busy} onClick={() => runListenNow()}>▶ {t('Run now')}</button>
+        <button style={{ marginLeft: 4 }} disabled={ls.busy} onClick={() => runSpeedTest()} title={t('How fast Kokoro renders on this device (× real-time) and on which backend — tells you whether this device can render ahead itself')}>⏱ {t('Speed test')}</button>
+        {ls.busy && <button style={{ marginLeft: 4 }} onClick={stopListenRun}>■ {t('Stop')}</button>}
       </Field>
 
-      <div className="field-section">ElevenLabs (cloud voice — optional)</div>
-      <Field label="API key">
+      <div className="field-section">{t('ElevenLabs (cloud voice — optional)')}</div>
+      <Field label={t('API key')}>
         <input
           type="password"
           value={global.elevenLabsKey || ''}
           onChange={(e) => { onPatchGlobal({ elevenLabsKey: e.target.value.trim() }); setElStatus(''); }}
-          placeholder="sk_… (from your ElevenLabs account)"
+          placeholder={t('sk_… (from your ElevenLabs account)')}
           style={{ width: '100%' }}
         />
       </Field>
-      <Field label={`Reading-aloud replay: ${(global.replayMins ?? 3) ? `last ${global.replayMins ?? 3} min` : 'off'}`}>
+      <Field label={(global.replayMins ?? 3) ? t('Reading-aloud replay: last {n} min', { n: global.replayMins ?? 3 }) : t('Reading-aloud replay: off')}>
         <input type="range" min={0} max={10} step={0.5} value={global.replayMins ?? 3} onChange={(e) => onPatchGlobal({ replayMins: Number(e.target.value) })}
-          aria-valuetext={(global.replayMins ?? 3) ? `${global.replayMins ?? 3} minutes` : 'off'}
-          title="While reading aloud, keep this much of your voice in memory (oldest overwritten) so the card can play it back. 0 = off. Never saved unless you press Save." style={{ width: '100%' }} />
+          aria-valuetext={(global.replayMins ?? 3) ? t('{n} minutes', { n: global.replayMins ?? 3 }) : t('off')}
+          title={t('While reading aloud, keep this much of your voice in memory (oldest overwritten) so the card can play it back. 0 = off. Never saved unless you press Save.')} style={{ width: '100%' }} />
       </Field>
-      <Field label="Voice profile">
+      <Field label={t('Voice profile')}>
         <select value={global.voiceProfile || 'neutral'} onChange={(e) => onPatchGlobal({ voiceProfile: e.target.value })}
-          title="Used by the voice-quality scores on your own recordings and read-aloud: “depth” is judged against a typical pitch for this voice type">
-          <option value="neutral">Neutral</option>
-          <option value="male">Lower voice (male)</option>
-          <option value="female">Higher voice (female)</option>
+          title={t('Used by the voice-quality scores on your own recordings and read-aloud: “depth” is judged against a typical pitch for this voice type')}>
+          <option value="neutral">{t('Neutral')}</option>
+          <option value="male">{t('Lower voice (male)')}</option>
+          <option value="female">{t('Higher voice (female)')}</option>
         </select>
       </Field>
-      <Field label="Model">
+      <Field label={t('Model')}>
         <select value={global.elevenModel || 'eleven_multilingual_v2'} onChange={(e) => onPatchGlobal({ elevenModel: e.target.value })}>
           {ELEVEN_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>
       </Field>
       <div className="data-row">
         <button onClick={verifyEleven} disabled={!global.elevenLabsKey || elStatus === 'checking'}>
-          {elStatus === 'checking' ? 'Checking…' : 'Verify key & list voices'}
+          {elStatus === 'checking' ? t('Checking…') : t('Verify key & list voices')}
         </button>
-        {elStatus === 'ok' && <span className="settings-note" style={{ margin: 0, color: '#2e9d4f' }}>✓ Connected — {elCount} voice(s). Pick one in the Audiobook Manager.</span>}
+        {elStatus === 'ok' && <span className="settings-note" style={{ margin: 0, color: '#2e9d4f' }}>✓ {t.n('Connected — {n} voice. Pick one in the Audiobook Manager.', 'Connected — {n} voices. Pick one in the Audiobook Manager.', elCount)}</span>}
         {elStatus && elStatus !== 'checking' && elStatus !== 'ok' && <span className="settings-note" style={{ margin: 0, color: '#c0392b' }}>{elStatus}</span>}
       </div>
       <p className="settings-note">
-        Optional, higher-quality voices for <strong>generating an audiobook</strong> (Audio → Audiobook Manager).
-        Unlike the offline voice, this <strong>sends the text to ElevenLabs’ servers</strong> and spends your own
-        API key + quota. The key is stored only on this device and is never synced. Generated clips are cached
-        and then play offline like any other.
+        {t('Optional, higher-quality voices for generating an audiobook (Audio → Audiobook Manager).')}{' '}
+        <strong>{t('Unlike the offline voice, this sends the text to ElevenLabs’ servers and spends your own API key + quota.')}</strong>{' '}
+        {t('The key is stored only on this device and is never synced. Generated clips are cached and then play offline like any other.')}
       </p>
 
-      <div className="field-section">Read aloud (built-in voice)</div>
-      <Field label={`Voice (${voices.length} available)`}>
+      <div className="field-section">{t('Read aloud (built-in voice)')}</div>
+      <Field label={t('Voice ({n} available)', { n: voices.length })}>
         <select value={s.annunciateVoice || ''} onChange={(e) => patch({ annunciateVoice: e.target.value })}>
-          <option value="">(default — matches your document language)</option>
+          <option value="">{t('(default — matches your document language)')}</option>
           {voices.map((v) => (
             <option key={v.name} value={v.name}>
-              {v.name} ({v.lang}){v.localService ? '' : ' — online'}
+              {v.name} ({v.lang}){v.localService ? '' : ` — ${t('online')}`}
             </option>
           ))}
         </select>
       </Field>
-      <Field label="Playback speed">
+      <Field label={t('Playback speed')}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
             type="range"
@@ -212,14 +206,13 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
             onChange={(e) => onPatchGlobal({ ttsSpeed: Number(e.target.value) })}
           />
           <span style={{ fontSize: 12, color: 'var(--status-fg)', minWidth: 40 }}>{(global.ttsSpeed ?? 1).toFixed(2)}×</span>
-          <button type="button" onClick={() => onPatchGlobal({ ttsSpeed: 1 })} title="Reset to normal speed">1×</button>
+          <button type="button" onClick={() => onPatchGlobal({ ttsSpeed: 1 })} title={t('Reset to normal speed')}>1×</button>
         </div>
       </Field>
       <p className="settings-note" style={{ margin: '2px 0 0' }}>
-        Applies to both the built-in and the offline voice; also adjustable live from the
-        <strong> SPEED</strong> control in the controls bar while read-aloud is on.
+        {t('Applies to both the built-in and the offline voice; also adjustable live from the SPEED control in the controls bar while read-aloud is on.')}
       </p>
-      <Field label="Speak-along follow mode">
+      <Field label={t('Speak-along follow mode')}>
         <select
           value={s.ttsFollowMode || (s.firstWordTts ? 'firstWord' : 'off')}
           onChange={(e) => {
@@ -228,32 +221,28 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
             patch({ ttsFollowMode: v, firstWordTts: false, ...(v !== 'off' && s.readAloud ? { readAloud: false } : {}) });
           }}
         >
-          <option value="off">Off</option>
-          <option value="firstWord">First word of each sentence</option>
-          <option value="line">Whole current line</option>
+          <option value="off">{t('Off')}</option>
+          <option value="firstWord">{t('First word of each sentence')}</option>
+          <option value="line">{t('Whole current line')}</option>
         </select>
       </Field>
       <p className="settings-note">
-        Follow mode speaks as you read without driving the pace — a progress marker, not a narrator.
-        Full read-aloud (TTS drives the reading position) toggles from the controls bar.
+        {t('Follow mode speaks as you read without driving the pace — a progress marker, not a narrator. Full read-aloud (TTS drives the reading position) toggles from the controls bar.')}
       </p>
-      <div className="field-section">Background playback</div>
-      <label className="inline-check" title="Holds an audio session while the built-in voice reads, so a screen lock doesn't suspend it. The cost is your phone's audio focus — anything else you're playing gets ducked.">
+      <div className="field-section">{t('Background playback')}</div>
+      <label className="inline-check" title={t("Holds an audio session while the built-in voice reads, so a screen lock doesn't suspend it. The cost is your phone's audio focus — anything else you're playing gets ducked.")}>
         <input
           type="checkbox"
           checked={global.bgKeepAlive !== false}
           onChange={(e) => onPatchGlobal({ bgKeepAlive: e.target.checked })}
         />
-        Keep the built-in voice alive when the screen locks
+        {t('Keep the built-in voice alive when the screen locks')}
       </label>
       <p className="settings-note">
-        This holds an audio session, which takes your phone&rsquo;s audio focus and <strong>ducks other
-        apps&rsquo; sound</strong> while read-aloud runs. Turn it off to leave your music alone — narration
-        will then stop when the screen locks. The offline voice doesn&rsquo;t need it (its real speech
-        already holds the session), and neither does the pre-generated Audiobook.
+        {t('This holds an audio session, which takes your phone’s audio focus and ducks other apps’ sound while read-aloud runs. Turn it off to leave your music alone — narration will then stop when the screen locks. The offline voice doesn’t need it (its real speech already holds the session), and neither does the pre-generated Audiobook.')}
       </p>
-      <div className="field-section">Timers</div>
-      <Field label="Auto-stop reading after (minutes, 0 = never)">
+      <div className="field-section">{t('Timers')}</div>
+      <Field label={t('Auto-stop reading after (minutes, 0 = never)')}>
         <input
           type="number"
           min={0}
@@ -263,9 +252,9 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
         />
       </Field>
       <p className="settings-note">
-        Voice &amp; clap commands (and their custom mappings) now live in <strong>Settings → Biometric
-        Controls</strong>. Toggle listening per tab with <strong>VOICE COMMAND</strong> in the controls bar.
+        {t('Voice & clap commands (and their custom mappings) now live in Settings → Biometric Controls. Toggle listening per tab with VOICE COMMAND in the controls bar.')}
       </p>
+
     </Dialog>
   );
 }

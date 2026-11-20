@@ -13,6 +13,7 @@ import { scoreReading } from '../features/speakAlign.js';
 import { useApp } from '../state/AppContext.jsx';
 import ChunkContext, { ContextPicker, ReadableText, useContextSize } from './ChunkContext.jsx';
 import { setKeepAwake } from '../features/wakeLock.js';
+import { t } from '../i18n.js';
 
 // Read the whole book aloud in ONE sitting: a single mic session, chunk text on screen, and the
 // app does the bookkeeping — trims each take to the speech, shortens mid-take dead air, saves the
@@ -27,10 +28,23 @@ const MAX_TAKE_MIN = 15; // runaway guard: a forgotten mic shouldn't eat RAM for
 
 function micErr(e) {
   const n = e?.name || '';
-  if (n === 'NotAllowedError' || n === 'SecurityError') return 'Microphone blocked — allow mic access for this site, then Start again.';
-  if (n === 'NotFoundError' || n === 'DevicesNotFoundError') return 'No microphone found.';
-  if (n === 'NotReadableError') return 'The microphone is busy in another app. Close it and try again.';
-  return 'Could not open the microphone: ' + (e?.message || e);
+  if (n === 'NotAllowedError' || n === 'SecurityError') return t('Microphone blocked — allow mic access for this site, then Start again.');
+  if (n === 'NotFoundError' || n === 'DevicesNotFoundError') return t('No microphone found.');
+  if (n === 'NotReadableError') return t('The microphone is busy in another app. Close it and try again.');
+  return t('Could not open the microphone: {error}', { error: e?.message || e });
+}
+
+// Coaching tips and the session label come from narrationQuality.js in English (they also go into the
+// cross-app narration log), so they are translated here, where they are shown.
+// i18n-keys: Clipping — back off the mic or lower the input gain. | Very quiet — move closer to the mic or speak up. | A little quiet. | Running hot — a touch more distance. | Volume swings a lot — keep a steady distance and delivery. | Slightly uneven volume. | Very steady | Steady | Uneven
+const WPM_TIPS = [
+  [/^Rushed \((\d+) wpm\) — audiobooks sit near 150\.$/, (wpm) => t('Rushed ({wpm} wpm) — audiobooks sit near 150.', { wpm })],
+  [/^Brisk \((\d+) wpm\)\.$/, (wpm) => t('Brisk ({wpm} wpm).', { wpm })],
+  [/^Slow \((\d+) wpm\) — pick up the pace a little\.$/, (wpm) => t('Slow ({wpm} wpm) — pick up the pace a little.', { wpm })],
+];
+function tipText(tip) {
+  for (const [re, f] of WPM_TIPS) { const m = re.exec(tip); if (m) return f(m[1]); }
+  return t(tip);
 }
 
 export default function ReadThroughWizard({ checksum, docName = '', chunks, isCovered, onClose, onDone, onTake, readMark }) {
@@ -94,9 +108,9 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
         if (liveRef.current.onBreak) return; // break audio is discarded — its words are too
         let fin = '', interim = '';
         for (let i = 0; i < e.results.length; i++) {
-          const t = e.results[i][0].transcript;
-          if (e.results[i].isFinal) fin += t + ' ';
-          else interim += t;
+          const txt = e.results[i][0].transcript;
+          if (e.results[i].isFinal) fin += txt + ' ';
+          else interim += txt;
         }
         // `full` = everything heard for this take (cleared on commit) → live progress + scoring.
         setStt({ final: fin.trim().split(/\s+/).slice(-24).join(' '), interim: interim.trim(), full: `${fin} ${interim}`.trim() });
@@ -124,7 +138,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
   async function start() {
     setErr('');
     const q = sessionQueue(chunks, isCovered, onlyUncovered);
-    if (!q.length) { setErr('Nothing to read — every chunk already has audio.'); return; }
+    if (!q.length) { setErr(t('Nothing to read — every chunk already has audio.')); return; }
     setPhase('requesting');
     let stream;
     try { stream = await getStream(); } catch (e) { setPhase('setup'); setErr(micErr(e)); return; }
@@ -174,7 +188,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
       await w.close();
       setLogNote('');
     } catch (e) {
-      setLogNote('Log write failed: ' + (e?.message || e));
+      setLogNote(t('Log write failed: {error}', { error: e?.message || e }));
     }
   }
 
@@ -251,7 +265,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
       }
       // No speech in the take → stay on this chunk; an accidental Space saves nothing.
     } catch (e) {
-      setErr('Saving failed: ' + (e?.message || e));
+      setErr(t('Saving failed: {error}', { error: e?.message || e }));
     } finally {
       committingRef.current = false;
     }
@@ -325,60 +339,57 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
 
   return (
     <Dialog
-      title="Read the book aloud"
+      title={t('Read the book aloud')}
       onClose={() => { teardownAudio(); (phase === 'done' ? done : onClose)(); }}
       width={760}
       buttons={phase === 'reading'
-        ? <button onClick={() => finish()}>■ Finish session</button>
-        : <button onClick={phase === 'done' ? done : onClose}>Close</button>}
+        ? <button onClick={() => finish()}>■ {t('Finish session')}</button>
+        : <button onClick={phase === 'done' ? done : onClose}>{t('Close')}</button>}
     >
       {phase === 'setup' && (
         <>
           <p className="settings-note">
-            One continuous recording session: the chunk to read is shown big, you read it, pause,
-            and it advances by itself — each take is trimmed to your speech, long mid-take gaps are
-            shortened, and the clip is filed against its chunk. Space also advances, R redoes a
-            fumbled chunk, S skips it, B takes a break (break audio is discarded).
+            {t('One continuous recording session: the chunk to read is shown big, you read it, pause, and it advances by itself — each take is trimmed to your speech, long mid-take gaps are shortened, and the clip is filed against its chunk. Space also advances, R redoes a fumbled chunk, S skips it, B takes a break (break audio is discarded).')}
           </p>
           <label className="inline-check">
             <input type="checkbox" checked={onlyUncovered} onChange={(e) => setOnlyUncovered(e.target.checked)} />
-            <span>Only chunks without audio yet ({uncoveredCount} of {chunks.length})</span>
+            <span>{t('Only chunks without audio yet ({n} of {total})', { n: uncoveredCount, total: chunks.length })}</span>
           </label>
           <div className="field-row">
-            <label>Advance when I pause</label>
+            <label>{t('Advance when I pause')}</label>
             <select value={advanceMode} onChange={(e) => setAdvanceMode(e.target.value)}>
-              <option value="relaxed">After a clear pause (~1.6s)</option>
-              <option value="eager">Quickly (~0.9s) — for steady readers</option>
-              <option value="off">Never — I’ll press Space</option>
+              <option value="relaxed">{t('After a clear pause (~1.6s)')}</option>
+              <option value="eager">{t('Quickly (~0.9s) — for steady readers')}</option>
+              <option value="off">{t('Never — I’ll press Space')}</option>
             </select>
           </div>
           <div className="field-row">
-            <label>Speech training log</label>
+            <label>{t('Speech training log')}</label>
             {logDir
-              ? <span>📁 Logging quality to <b>{logName || logDir.name}</b> — SpeechImprover can watch this folder (change it under Data → Cloud sync).</span>
+              ? <span>📁 {t('Logging quality to {folder} — SpeechImprover can watch this folder (change it under Data → Cloud sync).', { folder: logName || logDir.name })}</span>
               : typeof window.showDirectoryPicker === 'function'
-                ? <button onClick={pickLogDir} title="Each session writes a small JSON quality log to the Tachyread folder's speech/ subfolder; point SpeechImprover at it and narrations count as speech training">📁 Choose the Tachyread folder…</button>
-                : <span className="settings-note" style={{ margin: 0 }}>Folder logging needs a Chromium browser.</span>}
+                ? <button onClick={pickLogDir} title={t("Each session writes a small JSON quality log to the Tachyread folder's speech/ subfolder; point SpeechImprover at it and narrations count as speech training")}>📁 {t('Choose the Tachyread folder…')}</button>
+                : <span className="settings-note" style={{ margin: 0 }}>{t('Folder logging needs a Chromium browser.')}</span>}
           </div>
           {err && <p className="settings-note" style={{ color: 'var(--ox-bright, #b0413e)' }}>{err}</p>}
-          <button className="toggle-on" onClick={start} disabled={phase === 'requesting'}>🎙 Start reading</button>
+          <button className="toggle-on" onClick={start} disabled={phase === 'requesting'}>🎙 {t('Start reading')}</button>
         </>
       )}
 
       {phase === 'reading' && chunk && (
         <>
           <div className="rtw-head">
-            <span>Chunk {qi + 1} / {queue.length}</span>
+            <span>{t('Chunk {n} / {total}', { n: qi + 1, total: queue.length })}</span>
             <span className={`rtw-chip${onBreak ? ' break' : speaking ? ' talk' : ''}`}>
-              {onBreak ? '⏸ On a break — audio discarded' : speaking ? '🗣 Recording you' : '🎙 Listening…'}
+              {onBreak ? `⏸ ${t('On a break — audio discarded')}` : speaking ? `🗣 ${t('Recording you')}` : `🎙 ${t('Listening…')}`}
             </span>
             {speaking && !onBreak && liveLevel && (
               <span className={`rtw-chip lvl-${liveLevel}`}>
-                {liveLevel === 'hot' ? '🔥 Too loud' : liveLevel === 'quiet' ? '🤫 Too quiet' : '✅ Good level'}
+                {liveLevel === 'hot' ? `🔥 ${t('Too loud')}` : liveLevel === 'quiet' ? `🤫 ${t('Too quiet')}` : `✅ ${t('Good level')}`}
               </span>
             )}
-            <span className="settings-note" style={{ margin: 0 }}>{saved} saved · {skipped} skipped</span>
-            {readMark?.(chunk) && <span className="ab-readmark" title="You've read this chunk as text before">📖 read before</span>}
+            <span className="settings-note" style={{ margin: 0 }}>{t('{saved} saved · {skipped} skipped', { saved, skipped })}</span>
+            {readMark?.(chunk) && <span className="ab-readmark" title={t("You've read this chunk as text before")}>📖 {t('read before')}</span>}
             <ContextPicker n={ctxN} onChange={setCtxN} />
           </div>
           <div className="rcw-meter"><div className="rcw-meter-fill" ref={meterRef} /></div>
@@ -386,33 +397,35 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
           <ChunkContext chunks={chunks} chunk={chunk} n={ctxN} className="rtw-ctx" currentClass="rtw-text" dim={onBreak}
             current={<ReadableText text={chunk.text} done={liveRead?.done} upTo={liveRead?.upTo || 0} />} />
           {liveRead && (
-            <div className="rtw-progress" title="From the speech recogniser: words of this chunk said so far">
+            <div className="rtw-progress" title={t('From the speech recogniser: words of this chunk said so far')}>
               <div className="imp-bar"><div className="imp-fill" style={{ width: `${liveRead.completeness}%` }} /></div>
-              <span>{liveRead.completeness}% said · {liveRead.accuracy}% accurate</span>
+              <span>{t('{said}% said · {accuracy}% accurate', { said: liveRead.completeness, accuracy: liveRead.accuracy })}</span>
             </div>
           )}
           {STT && !onBreak && (
-            <div className="rtw-stt" title="What the speech recognizer is hearing — a misread line shows up here before you commit the take">
-              <span className="rtw-stt-tag">🎧 heard</span>
+            <div className="rtw-stt" title={t('What the speech recognizer is hearing — a misread line shows up here before you commit the take')}>
+              <span className="rtw-stt-tag">🎧 {t('heard')}</span>
               {(stt.final || stt.interim)
                 ? <>{stt.final} <i>{stt.interim}</i></>
-                : <span className="rtw-stt-idle">…waiting for speech</span>}
+                : <span className="rtw-stt-idle">{t('…waiting for speech')}</span>}
             </div>
           )}
           <div className="rtw-controls">
-            <button className="toggle-on" onClick={() => commit()} title="Save this chunk's take and move on (Space)">✔ Next chunk</button>
-            <button onClick={redo} title="Discard this chunk's take and read it again (R)">⟲ Redo</button>
-            <button onClick={skip} title="Move on without saving audio for this chunk (S)">⏭ Skip</button>
-            <button onClick={toggleBreak} title="Pause the session — nothing is kept until you resume (B)">{onBreak ? '▶ Resume' : '⏸ Break'}</button>
+            <button className="toggle-on" onClick={() => commit()} title={t("Save this chunk's take and move on (Space)")}>✔ {t('Next chunk')}</button>
+            <button onClick={redo} title={t("Discard this chunk's take and read it again (R)")}>⟲ {t('Redo')}</button>
+            <button onClick={skip} title={t('Move on without saving audio for this chunk (S)')}>⏭ {t('Skip')}</button>
+            <button onClick={toggleBreak} title={t('Pause the session — nothing is kept until you resume (B)')}>{onBreak ? `▶ ${t('Resume')}` : `⏸ ${t('Break')}`}</button>
           </div>
           {lastQ && (
             <div className="rtw-quality">
               <span className={`rtw-score s${lastQ.score >= 85 ? 'good' : lastQ.score >= 65 ? 'ok' : 'bad'}`}>★ {lastQ.score}</span>
-              <span>{lastQ.wpm != null ? `${lastQ.wpm} wpm` : '— wpm'} · {lastQ.rmsDb} dB · steadiness {lastQ.volumeCv}</span>
-              {lastQ.accuracy != null && <span title="Accuracy: words you said that were the text · Completeness: text words you said">· 🎯 {lastQ.accuracy}% accurate · ✓ {lastQ.completeness}% complete</span>}
-              {cleaned >= 500 && <span title="Leading/trailing silence trimmed and long mid-take pauses compressed">· ✂ {(cleaned / 1000).toFixed(1)}s dead air removed</span>}
-              {consistency && <span title="Pace and level consistency across this session's takes">· session {consistency.label} ({consistency.score})</span>}
-              {lastQ.tips.length > 0 && <div className="rtw-tips">{lastQ.tips.join(' ')}</div>}
+              <span>{lastQ.wpm != null
+                ? t('{wpm} wpm · {db} dB · steadiness {cv}', { wpm: lastQ.wpm, db: lastQ.rmsDb, cv: lastQ.volumeCv })
+                : t('— wpm · {db} dB · steadiness {cv}', { db: lastQ.rmsDb, cv: lastQ.volumeCv })}</span>
+              {lastQ.accuracy != null && <span title={t('Accuracy: words you said that were the text · Completeness: text words you said')}>· 🎯 {t('{accuracy}% accurate · ✓ {completeness}% complete', { accuracy: lastQ.accuracy, completeness: lastQ.completeness })}</span>}
+              {cleaned >= 500 && <span title={t('Leading/trailing silence trimmed and long mid-take pauses compressed')}>· ✂ {t('{s}s dead air removed', { s: (cleaned / 1000).toFixed(1) })}</span>}
+              {consistency && <span title={t("Pace and level consistency across this session's takes")}>· {t('session {label} ({score})', { label: t(consistency.label), score: consistency.score })}</span>}
+              {lastQ.tips.length > 0 && <div className="rtw-tips">{lastQ.tips.map(tipText).join(' ')}</div>}
             </div>
           )}
           {(err || logNote) && <p className="settings-note" style={{ color: 'var(--ox-bright, #b0413e)' }}>{err || logNote}</p>}
@@ -421,21 +434,22 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
 
       {phase === 'done' && (
         <>
-          <p><b>Session finished.</b> {saved} chunk{saved === 1 ? '' : 's'} recorded{skipped ? `, ${skipped} skipped` : ''}.</p>
+          <p><b>{t('Session finished.')}</b> {skipped
+            ? t.n('{n} chunk recorded, {skipped} skipped.', '{n} chunks recorded, {skipped} skipped.', saved, { skipped })
+            : t.n('{n} chunk recorded.', '{n} chunks recorded.', saved)}</p>
           {takesRef.current.length > 0 && (
             <p>
-              Average quality <b>★ {Math.round(takesRef.current.reduce((a, t) => a + t.score, 0) / takesRef.current.length)}</b>
-              {consistency && <> · pace &amp; level <b>{consistency.label.toLowerCase()}</b> across the session</>}
-              {deadAirRef.current >= 1000 && <> · ✂ <b>{(deadAirRef.current / 1000).toFixed(1)}s</b> of dead air cleaned automatically</>}
-              {logDir && <> · quality log saved to <b>{logDir.name}</b></>}
+              {t('Average quality')} <b>★ {Math.round(takesRef.current.reduce((a, tk) => a + tk.score, 0) / takesRef.current.length)}</b>
+              {consistency && <> · {t('pace & level {label} across the session', { label: t(consistency.label).toLowerCase() })}</>}
+              {deadAirRef.current >= 1000 && <> · ✂ {t('{s}s of dead air cleaned automatically', { s: (deadAirRef.current / 1000).toFixed(1) })}</>}
+              {logDir && <> · {t('quality log saved to {folder}', { folder: logDir.name })}</>}
             </p>
           )}
           <p className="settings-note">
-            Every take was trimmed to your speech and filed against its chunk — recordings outrank
-            generated audio automatically. Play any chunk in the manager to check a take; Rec… on a
-            chunk re-records just that one.
-            {logDir && ' In SpeechImprover, watch the same folder (Settings → Tachyread narration) to count this as speech training.'}
+            {t('Every take was trimmed to your speech and filed against its chunk — recordings outrank generated audio automatically. Play any chunk in the manager to check a take; Rec… on a chunk re-records just that one.')}
+            {logDir && ` ${t('In SpeechImprover, watch the same folder (Settings → Tachyread narration) to count this as speech training.')}`}
           </p>
+
         </>
       )}
     </Dialog>

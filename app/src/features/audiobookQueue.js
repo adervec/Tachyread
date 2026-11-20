@@ -8,12 +8,13 @@
 //
 // Everything here is pure: queue in, queue out. The runner (AudiobookDialog) owns the audio engine
 // and the clock; this owns the bookkeeping, which is the part worth testing.
+import { t } from '../i18n.js';
 
 // What a pass covers. Mirrors the three buttons the per-book view has always had.
 export const JOB_KINDS = [
-  ['fill', '🎙 Gaps only', 'Every chunk that has no audio yet'],
-  ['all', '↻ Everything', 'A fresh render for every chunk that is not a recording'],
-  ['othervoice', '🎚 Match voice', 'Only chunks whose current audio uses a different voice'],
+  ['fill', t('🎙 Gaps only'), t('Every chunk that has no audio yet')],
+  ['all', t('↻ Everything'), t('A fresh render for every chunk that is not a recording')],
+  ['othervoice', t('🎚 Match voice'), t('Only chunks whose current audio uses a different voice')],
 ];
 export const JOB_KIND_LABEL = Object.fromEntries(JOB_KINDS.map(([k, l]) => [k, l]));
 
@@ -112,17 +113,17 @@ export const runningJob = (queue) => arr(queue).find((j) => j.status === 'runnin
 // running job's REMAINING characters, not its total, so the estimate falls as work lands.
 export function queueTotals(queue) {
   const q = arr(queue);
-  const t = { jobs: q.length, queued: 0, running: 0, done: 0, error: 0, stopped: 0, chunks: 0, chunksDone: 0, charsTotal: 0, charsDone: 0, charsLeft: 0, failed: 0 };
+  const tot = { jobs: q.length, queued: 0, running: 0, done: 0, error: 0, stopped: 0, chunks: 0, chunksDone: 0, charsTotal: 0, charsDone: 0, charsLeft: 0, failed: 0 };
   for (const j of q) {
-    t[j.status] = (t[j.status] || 0) + 1;
-    t.chunks += num(j.total);
-    t.chunksDone += num(j.done);
-    t.charsTotal += num(j.charsTotal);
-    t.charsDone += num(j.charsDone);
-    t.failed += num(j.failed);
-    if (!isFinished(j)) t.charsLeft += Math.max(0, num(j.charsTotal) - num(j.charsDone));
+    tot[j.status] = (tot[j.status] || 0) + 1;
+    tot.chunks += num(j.total);
+    tot.chunksDone += num(j.done);
+    tot.charsTotal += num(j.charsTotal);
+    tot.charsDone += num(j.charsDone);
+    tot.failed += num(j.failed);
+    if (!isFinished(j)) tot.charsLeft += Math.max(0, num(j.charsTotal) - num(j.charsDone));
   }
-  return t;
+  return tot;
 }
 
 // Seconds to finish everything still outstanding, at a measured ms-per-character rate. Returns null

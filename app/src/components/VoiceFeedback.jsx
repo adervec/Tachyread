@@ -6,6 +6,7 @@ import { STRICTNESS, strictnessOf, speakParams } from '../features/speakAlign.js
 import { resizeRing, downsample } from '../features/voice/ringBuffer.js';
 import { encodeWav } from '../features/audiobookExport.js';
 import VideoReplay from './VideoReplay.jsx';
+import { t } from '../i18n.js';
 
 // The reading-aloud card: what the speech recogniser is hearing right now, what it expects next and
 // how far it last moved the text (so a stall is visible, not a mystery), plus optional live
@@ -22,22 +23,22 @@ const POS_KEY = 'tachyread-vf-pos';
 const REPLAY_RATE = 16000;
 // ponytail: module-level so ✕ (which closes the card) doesn't throw away what you just read; reload clears it.
 let ring = null;
-const fmtSecs = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+const fmtSecs = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 const STATUS = {
-  starting: '⏳ Starting…',
-  listening: '🎧 Listening',
-  restarting: '🔁 Reconnecting…',
+  starting: `⏳ ${t('Starting…')}`,
+  listening: `🎧 ${t('Listening')}`,
+  restarting: `🔁 ${t('Reconnecting…')}`,
 };
 // Recogniser errors in plain words, with what to do about them.
 const ERRORS = {
-  'not-allowed': 'Microphone or speech recognition is blocked for this site — allow the mic, then turn reading aloud off and on.',
-  'service-not-allowed': 'The browser’s speech service is switched off. In Edge, turn on Windows Settings → Privacy → Speech → Online speech recognition; Chrome needs to be online.',
-  network: 'Can’t reach the browser’s online speech service — check the connection (and in Edge, Windows “Online speech recognition”).',
-  'audio-capture': 'No microphone found, or another app is holding it.',
-  'language-not-supported': 'This language isn’t supported by the speech recogniser — change it in App Settings → Language.',
-  'bad-grammar': 'The speech recogniser rejected the request.',
-  'no-words': 'It hears you speaking but gets no words back — the browser’s online speech service isn’t answering. Check you’re online; in Edge turn on Windows Settings → Privacy → Speech → Online speech recognition; or try Chrome.',
+  'not-allowed': t('Microphone or speech recognition is blocked for this site — allow the mic, then turn reading aloud off and on.'),
+  'service-not-allowed': t('The browser’s speech service is switched off. In Edge, turn on Windows Settings → Privacy → Speech → Online speech recognition; Chrome needs to be online.'),
+  network: t('Can’t reach the browser’s online speech service — check the connection (and in Edge, Windows “Online speech recognition”).'),
+  'audio-capture': t('No microphone found, or another app is holding it.'),
+  'language-not-supported': t('This language isn’t supported by the speech recogniser — change it in App Settings → Language.'),
+  'bad-grammar': t('The speech recogniser rejected the request.'),
+  'no-words': t('It hears you speaking but gets no words back — the browser’s online speech service isn’t answering. Check you’re online; in Edge turn on Windows Settings → Privacy → Speech → Online speech recognition; or try Chrome.'),
 };
 
 function useDragPos() {
@@ -66,17 +67,17 @@ function Lineup({ info, docWords, wordIndex }) {
   return (
     <div className="vf-lineup">
       <div className="vf-row">
-        <span className="vf-k">Heard</span>
-        <span className="vf-heard" title="What the speech recogniser hears">
+        <span className="vf-k">{t('Heard')}</span>
+        <span className="vf-heard" title={t('What the speech recogniser hears')}>
           {tr?.pairs
             ? tr.pairs.map((p, k) => <span key={k} className={`vf-w ${p.stale ? 'stale' : p.i != null ? 'ok' : 'miss'}`}>{p.w} </span>)
-            : info.heard ? (info.final ? info.heard : <i>{info.heard}</i>) : <span className="vf-dim">…nothing yet — read the highlighted text aloud</span>}
-          {tr?.pairs && !info.final && info.heard && <i className="vf-dim"> (listening…)</i>}
+            : info.heard ? (info.final ? info.heard : <i>{info.heard}</i>) : <span className="vf-dim">{t('…nothing yet — read the highlighted text aloud')}</span>}
+          {tr?.pairs && !info.final && info.heard && <i className="vf-dim"> {t('(listening…)')}</i>}
         </span>
       </div>
       <div className="vf-row">
-        <span className="vf-k">Text</span>
-        <span className="vf-text" title="Green: matched · dim: skipped over · underlined: where you are now">{text}</span>
+        <span className="vf-k">{t('Text')}</span>
+        <span className="vf-text" title={t('Green: matched · dim: skipped over · underlined: where you are now')}>{text}</span>
       </div>
     </div>
   );
@@ -112,7 +113,7 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (dead) { stream.getTracks().forEach((t) => t.stop()); return; }
+        if (dead) { stream.getTracks().forEach((tr) => tr.stop()); return; }
         ctx = new (window.AudioContext || window.webkitAudioContext)();
         const la = createLiveAnalyzer(ctx.sampleRate);
         const an = ctx.createAnalyser();
@@ -150,14 +151,14 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
           setTrend((tr) => [...tr.slice(-(TREND_CAP - 1)), next.overall]);
         }, TICK_MS);
       } catch (e) {
-        setMicErr(e?.name === 'NotAllowedError' ? 'Microphone blocked — voice scores and replay are off.' : `No voice scores / replay: ${e?.message || e}`);
+        setMicErr(e?.name === 'NotAllowedError' ? t('Microphone blocked — voice scores and replay are off.') : t('No voice scores / replay: {error}', { error: e?.message || e }));
       }
     })();
     return () => {
       dead = true;
       clearInterval(timer);
       if (tap) tap.onaudioprocess = null;
-      stream?.getTracks().forEach((t) => t.stop());
+      stream?.getTracks().forEach((tr) => tr.stop());
       ctx?.close().catch(() => {});
     };
   }, [showScores, wordsRef, sessionRef, profile]);
@@ -186,7 +187,7 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
   // eslint-disable-next-line react-hooks/purity -- re-evaluated on each ~0.5 s score update
   const silentService = !info.heard && !info.error && v && voicedSince.current && performance.now() - voicedSince.current > 12000;
   const errKey = info.error || (silentService ? 'no-words' : '');
-  const errText = errKey ? (ERRORS[errKey] || `Speech recognition error: ${errKey}`) : '';
+  const errText = errKey ? (ERRORS[errKey] || t('Speech recognition error: {code}', { code: errKey })) : '';
   const W = 120, H = 22;
   const path = trend.length > 1
     ? trend.map((y, i) => `${i ? 'L' : 'M'}${((i / (trend.length - 1)) * W).toFixed(1)} ${(H - (y / 100) * H).toFixed(1)}`).join(' ')
@@ -194,40 +195,40 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
   // Portalled to <body>: it floats over everything, and the phone layout hides the reading column
   // it would otherwise sit in.
   return createPortal(
-    <div ref={cardRef} className="vf-card" role="region" aria-label="Reading aloud" style={pos ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : undefined}>
+    <div ref={cardRef} className="vf-card" role="region" aria-label={t('Reading aloud')} style={pos ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : undefined}>
       <div className="vf-head">
-        <button type="button" className="vf-grip" aria-label="Move this card (drag, or use the arrow keys)" title="Drag to move"
+        <button type="button" className="vf-grip" aria-label={t('Move this card (drag, or use the arrow keys)')} title={t('Drag to move')}
           onPointerDown={onGripDown} onPointerMove={onGripMove} onPointerUp={onGripUp} onPointerCancel={onGripUp} onKeyDown={onGripKey}>⠿</button>
-        <span className="vf-title">🗣 Reading aloud{showScores && v ? <> · <b>{v.overall}</b></> : ''}</span>
-        {path && open && <svg className="vf-trend" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Overall voice score trend"><path d={path} /></svg>}
-        <button type="button" className="vf-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open} title={open ? 'Collapse' : 'Expand'}>{open ? '▾' : '▸'}</button>
-        <button type="button" className="vf-btn" onClick={onStop} aria-label="Stop reading aloud" title="Stop reading aloud">✕</button>
+        <span className="vf-title">🗣 {t('Reading aloud')}{showScores && v ? <> · <b>{v.overall}</b></> : ''}</span>
+        {path && open && <svg className="vf-trend" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={t('Overall voice score trend')}><path d={path} /></svg>}
+        <button type="button" className="vf-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open} title={open ? t('Collapse') : t('Expand')}>{open ? '▾' : '▸'}</button>
+        <button type="button" className="vf-btn" onClick={onStop} aria-label={t('Stop reading aloud')} title={t('Stop reading aloud')}>✕</button>
       </div>
       <div className={`vf-status${errKey ? ' err' : ''}`} role="status" aria-live="polite">
         {errText || STATUS[info.status] || STATUS.starting}{info.lang ? <span className="vf-lang"> · {info.lang}</span> : ''}
         {info.move && !errKey && <span className={`vf-move${info.move.startsWith('+') ? ' ok' : ''}`}> · {info.move}</span>}
         {info.fillers > 0 && !errKey && (() => {
           const mins = Math.max(1, (Date.now() - (info.since || Date.now())) / 60000); // eslint-disable-line react-hooks/purity
-          return <span className="vf-fillers" title="Filler words heard that aren't in the text (um, uh, er, like, you know…) — kept in the speech log"> · {info.fillers} filler{info.fillers === 1 ? '' : 's'} ({(info.fillers / mins).toFixed(1)}/min)</span>;
+          return <span className="vf-fillers" title={t("Filler words heard that aren't in the text (um, uh, er, like, you know…) — kept in the speech log")}> · {t.n('{n} filler ({rate}/min)', '{n} fillers ({rate}/min)', info.fillers, { rate: (info.fillers / mins).toFixed(1) })}</span>;
         })()}
       </div>
       <Lineup info={info} docWords={docWords} wordIndex={wordIndex} />
       {onTune && (
-        <label className="vf-strict" title="How exactly you must read: forgiving lets misheard and skipped words through; strict needs longer exact runs">
-          <span>Strictness</span>
+        <label className="vf-strict" title={t('How exactly you must read: forgiving lets misheard and skipped words through; strict needs longer exact runs')}>
+          <span>{t('Strictness')}</span>
           <input type="range" min={1} max={STRICTNESS.length - 1} step={1} value={strict ?? 3}
             onChange={(e) => { const { label, ...p } = STRICTNESS[Number(e.target.value)]; onTune(p); }} // eslint-disable-line no-unused-vars
-            aria-valuetext={strict ? STRICTNESS[strict].label : 'custom'} />
-          <span className="vf-strict-v">{strict ? STRICTNESS[strict].label : 'custom (Settings)'}</span>
+            aria-valuetext={strict ? STRICTNESS[strict].label : t('custom')} />
+          <span className="vf-strict-v">{strict ? STRICTNESS[strict].label : t('custom (Settings)')}</span>
         </label>
       )}
       {onTune && open && (
-        <label className="vf-strict" title="Words the text moves past flash — brighter the better they were read; skipped ones flash faint red">
-          <span>Word effect</span>
+        <label className="vf-strict" title={t('Words the text moves past flash — brighter the better they were read; skipped ones flash faint red')}>
+          <span>{t('Word effect')}</span>
           <select value={speakCfg.wordFx || 'glow'} onChange={(e) => onTune({ wordFx: e.target.value })}>
-            <option value="glow">glow</option>
-            <option value="pop">glow + flash perfect</option>
-            <option value="off">off</option>
+            <option value="glow">{t('glow')}</option>
+            <option value="pop">{t('glow + flash perfect')}</option>
+            <option value="off">{t('off')}</option>
           </select>
           <span />
         </label>
@@ -236,21 +237,21 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
       {open && !micErr && (
         <div className="vf-replay">
           {onReplayMins && (
-            <label className="vf-strict vf-replay-len" title="How much of your voice to keep for replay — memory only, oldest overwritten. 0 turns it off and forgets what was kept.">
-              <span>Replay</span>
+            <label className="vf-strict vf-replay-len" title={t('How much of your voice to keep for replay — memory only, oldest overwritten. 0 turns it off and forgets what was kept.')}>
+              <span>{t('Replay')}</span>
               <input type="range" min={0} max={10} step={0.5} value={replayMins} onChange={(e) => onReplayMins(Number(e.target.value))}
-                aria-valuetext={replayMins ? `${replayMins} minutes` : 'off'} />
-              <span className="vf-strict-v">{replayMins ? `${replayMins} min` : 'off'}</span>
+                aria-valuetext={replayMins ? t('{n} minutes', { n: replayMins }) : t('off')} />
+              <span className="vf-strict-v">{replayMins ? t('{m} min', { m: replayMins }) : t('off')}</span>
             </label>
           )}
-          {!!replayMins && <span title={`Your last ${replayMins} minute(s) are kept in memory only, oldest overwritten`}>⏺ last {fmtSecs(kept)} kept</span>}
-          <button type="button" className="vf-btn" disabled={!kept} onClick={makeClip} title="Hear the last few minutes (recording pauses while it plays)">▶ Listen</button>
-          {clip && <a className="vf-btn" href={clip} download={`reading-aloud-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}.wav`} title="Save this replay as a WAV file">💾 Save</a>}
+          {!!replayMins && <span title={t.n('Your last {n} minute is kept in memory only, oldest overwritten', 'Your last {n} minutes are kept in memory only, oldest overwritten', replayMins)}>⏺ {t('last {time} kept', { time: fmtSecs(kept) })}</span>}
+          <button type="button" className="vf-btn" disabled={!kept} onClick={makeClip} title={t('Hear the last few minutes (recording pauses while it plays)')}>▶ {t('Listen')}</button>
+          {clip && <a className="vf-btn" href={clip} download={`reading-aloud-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}.wav`} title={t('Save this replay as a WAV file')}>💾 {t('Save')}</a>}
           {clip && <audio className="vf-audio" src={clip} controls autoPlay
             onPlay={() => { replaying.current = true; }} onPause={() => { replaying.current = false; }} onEnded={() => { replaying.current = false; }} />}
           {onReplayVideo && !!replayMins && (
-            <label className="vf-vidtoggle" title="Also keep the last few minutes of camera video (with sound) to see how you look while reading — memory only, same length as the slider">
-              <input type="checkbox" checked={replayVideo} onChange={(e) => onReplayVideo(e.target.checked)} /> 📹 Video
+            <label className="vf-vidtoggle" title={t('Also keep the last few minutes of camera video (with sound) to see how you look while reading — memory only, same length as the slider')}>
+              <input type="checkbox" checked={replayVideo} onChange={(e) => onReplayVideo(e.target.checked)} /> 📹 {t('Video')}
             </label>
           )}
         </div>
@@ -262,7 +263,7 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
           {v && (
             <div className="vf-bars">
               {Object.entries(VOICE_ATTRS).map(([k, [label]]) => (v.scores[k] == null ? null : (
-                <div key={k} className="vf-bar" title={`${label}: ${v.scores[k]} / 100`}>
+                <div key={k} className="vf-bar" title={t('{label}: {score} / 100', { label, score: v.scores[k] })}>
                   <span className="vf-lbl">{label}</span>
                   <span className="vf-track"><span className="vf-fill" style={{ width: `${v.scores[k]}%` }} /></span>
                   <span className="vf-num">{v.scores[k]}</span>
@@ -270,7 +271,8 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
               )))}
             </div>
           )}
-          {v?.weakest && <div className="vf-note">Work on <b>{VOICE_ATTRS[v.weakest][0].toLowerCase()}</b>: {VOICE_ATTRS[v.weakest][3]}</div>}
+          {v?.weakest && <div className="vf-note">{t('Work on {skill}: {tip}', { skill: VOICE_ATTRS[v.weakest][0].toLowerCase(), tip: VOICE_ATTRS[v.weakest][3] })}</div>}
+
         </>
       )}
     </div>,

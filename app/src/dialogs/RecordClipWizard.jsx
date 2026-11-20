@@ -8,6 +8,7 @@ import { takeQuality } from '../features/narrationQuality.js';
 import { scoreSamples } from '../features/voice/voiceScore.js';
 import { useApp } from '../state/AppContext.jsx';
 import ChunkContext, { ContextPicker, useContextSize } from './ChunkContext.jsx';
+import { t } from '../i18n.js';
 
 const AC = () => new (window.AudioContext || window.webkitAudioContext)();
 const pickMime = () =>
@@ -18,10 +19,10 @@ const fmtS = (sec) => `${(Math.round((sec || 0) * 10) / 10).toFixed(1)}s`;
 // Turn a getUserMedia rejection into something the user can act on (always say what's blocking it).
 function micErr(e) {
   const n = e?.name || '';
-  if (n === 'NotAllowedError' || n === 'SecurityError') return 'Microphone blocked — allow mic access for this site in your browser, then Record again.';
-  if (n === 'NotFoundError' || n === 'DevicesNotFoundError') return 'No microphone found — plug one in (or use Import file instead).';
-  if (n === 'NotReadableError') return 'The microphone is busy in another app. Close it and try again.';
-  return 'Could not open the microphone: ' + (e?.message || e);
+  if (n === 'NotAllowedError' || n === 'SecurityError') return t('Microphone blocked — allow mic access for this site in your browser, then Record again.');
+  if (n === 'NotFoundError' || n === 'DevicesNotFoundError') return t('No microphone found — plug one in (or use Import file instead).');
+  if (n === 'NotReadableError') return t('The microphone is busy in another app. Close it and try again.');
+  return t('Could not open the microphone: {error}', { error: e?.message || e });
 }
 
 // Waveform with a shaded "kept" region. Peaks computed once per buffer; the overlay is a plain div so
@@ -130,7 +131,7 @@ export default function RecordClipWizard({ checksum, chunk, chunks = null, onClo
       // eslint-disable-next-line react-hooks/purity -- event handler, not render (anchors the timer)
       baseMsRef.current = 0; startedAtRef.current = Date.now(); setElapsed(0);
       rec.start(); setPhase('recording'); startTimer(); startMeter();
-    } catch (e) { setPhase('setup'); setErr('Could not start recording: ' + (e?.message || e)); }
+    } catch (e) { setPhase('setup'); setErr(t('Could not start recording: {error}', { error: e?.message || e })); }
   }
   function pauseRec() {
     const rec = recRef.current; if (!rec || rec.state !== 'recording') return;
@@ -145,7 +146,7 @@ export default function RecordClipWizard({ checksum, chunk, chunks = null, onClo
     if (rec.state === 'recording') baseMsRef.current += Date.now() - startedAtRef.current;
     stopTimer(); stopMeter(); setPhase('decoding');
     try { meterSrcRef.current?.disconnect(); } catch { /* */ }
-    try { rec.stop(); } catch (e) { setErr('Stop failed: ' + (e?.message || e)); }
+    try { rec.stop(); } catch (e) { setErr(t('Stop failed: {error}', { error: e?.message || e })); }
   }
 
   async function importFile() {
@@ -165,7 +166,7 @@ export default function RecordClipWizard({ checksum, chunk, chunks = null, onClo
       setDuration(buf.duration); setTrim([0, buf.duration]); setPhase('review');
     } catch (e) {
       origBlobRef.current = null; setBuffer(null);
-      setErr(`Couldn't read that audio (${e?.message || e}). Try a WAV/MP3/WebM/M4A file.`);
+      setErr(t("Couldn't read that audio ({error}). Try a WAV/MP3/WebM/M4A file.", { error: e?.message || e }));
       setPhase('setup');
     }
   }
@@ -215,7 +216,7 @@ export default function RecordClipWizard({ checksum, chunk, chunks = null, onClo
       if (commit) await commit(blob, durationMs);
       else await addAudioClip(checksum, chunk.startLine, blob, { source: 'mic', durationMs, spanEndLine: chunk.endLine, quality: qualityOf(buf, a, b) });
       onSaved?.({ recorded: !importedRef.current });
-    } catch (e) { setErr('Save failed: ' + (e?.message || e)); setPhase('review'); }
+    } catch (e) { setErr(t('Save failed: {error}', { error: e?.message || e })); setPhase('review'); }
   }
 
   function discard() {
@@ -233,39 +234,39 @@ export default function RecordClipWizard({ checksum, chunk, chunks = null, onClo
   }, []);
 
   const lineLabel = chunk ? (chunk.endLine > chunk.startLine ? `${chunk.startLine + 1}–${chunk.endLine + 1}` : `${chunk.startLine + 1}`) : '';
-  const heading = dlgTitle || `Record clip — chunk ${lineLabel}`;
+  const heading = dlgTitle || t('Record clip — chunk {lines}', { lines: lineLabel });
   const subject = previewText != null ? previewText : (chunk?.text || '');
   const setA = (v) => setTrim(([, b]) => [Math.min(v, b - 0.05), b]);
   const setB = (v) => setTrim(([a]) => [a, Math.max(v, a + 0.05)]);
 
   const footer = phase === 'review'
     ? <>
-        <button className="toggle-on" onClick={save}>Save clip</button>
-        <button onClick={discard}>Record again</button>
-        <button onClick={() => { stopPreview(); onClose(); }}>Cancel</button>
+        <button className="toggle-on" onClick={save}>{t('Save clip')}</button>
+        <button onClick={discard}>{t('Record again')}</button>
+        <button onClick={() => { stopPreview(); onClose(); }}>{t('Cancel')}</button>
       </>
-    : <button onClick={() => { stopRec(); onClose(); }}>Cancel</button>;
+    : <button onClick={() => { stopRec(); onClose(); }}>{t('Cancel')}</button>;
 
   return (
     <Dialog title={heading} onClose={() => { stopRec(); onClose(); }} width={600} buttons={footer}>
       {chunk && chunks
         ? <><ContextPicker n={ctxN} onChange={setCtxN} /><ChunkContext chunks={chunks} chunk={chunk} n={ctxN} className="rcw-ctx" currentClass="rcw-text" /></>
         : subject
-        ? <p className="rcw-text" title="What this clip narrates">{subject.slice(0, 220)}{subject.length > 220 ? '…' : ''}</p>
-        : <p className="settings-note" style={{ marginTop: 0 }}>Import a music file (or record) for this slot — trim it before saving.</p>}
+        ? <p className="rcw-text" title={t('What this clip narrates')}>{subject.slice(0, 220)}{subject.length > 220 ? '…' : ''}</p>
+        : <p className="settings-note" style={{ marginTop: 0 }}>{t('Import a music file (or record) for this slot — trim it before saving.')}</p>}
       {err && <p className="rcw-err">⚠ {err}</p>}
 
       {(phase === 'setup' || phase === 'requesting') && (
         <div className="rcw-panel">
           <div className="rcw-controls">
             <button className="rcw-rec" onClick={startRec} disabled={phase === 'requesting'}>
-              {phase === 'requesting' ? '…opening mic' : '● Record'}
+              {phase === 'requesting' ? t('…opening mic') : `● ${t('Record')}`}
             </button>
             <span className="grab-sep" />
-            <button onClick={importFile} disabled={phase === 'requesting'}>📂 Import file…</button>
+            <button onClick={importFile} disabled={phase === 'requesting'}>📂 {t('Import file…')}</button>
           </div>
           <p className="settings-note" style={{ marginBottom: 0 }}>
-            {phase === 'requesting' ? 'Waiting for microphone permission…' : 'Record with your mic, or import an existing audio file (WAV / MP3 / M4A / WebM). You can trim it before saving.'}
+            {phase === 'requesting' ? t('Waiting for microphone permission…') : t('Record with your mic, or import an existing audio file (WAV / MP3 / M4A / WebM). You can trim it before saving.')}
           </p>
         </div>
       )}
@@ -274,41 +275,42 @@ export default function RecordClipWizard({ checksum, chunk, chunks = null, onClo
         <div className="rcw-panel">
           <div className="rcw-recstate">
             <span className={`rcw-dot${phase === 'recording' ? ' live' : ''}`} />
-            <strong>{phase === 'recording' ? 'Recording' : 'Paused'}</strong>
+            <strong>{phase === 'recording' ? t('Recording') : t('Paused')}</strong>
             <span className="rcw-time">{fmtT(elapsed)}</span>
           </div>
-          <div className="rcw-meter" title="Input level"><div ref={meterFillRef} className="rcw-meter-fill" /></div>
+          <div className="rcw-meter" title={t('Input level')}><div ref={meterFillRef} className="rcw-meter-fill" /></div>
           <div className="rcw-controls">
             {phase === 'recording'
-              ? <button onClick={pauseRec}>❚❚ Pause</button>
-              : <button className="toggle-on" onClick={resumeRec}>▶ Resume</button>}
-            <button className="rcw-stop" onClick={stopRec}>■ Stop</button>
+              ? <button onClick={pauseRec}>❚❚ {t('Pause')}</button>
+              : <button className="toggle-on" onClick={resumeRec}>▶ {t('Resume')}</button>}
+            <button className="rcw-stop" onClick={stopRec}>■ {t('Stop')}</button>
           </div>
         </div>
       )}
 
-      {phase === 'decoding' && <p className="settings-note">Decoding audio…</p>}
+      {phase === 'decoding' && <p className="settings-note">{t('Decoding audio…')}</p>}
 
       {(phase === 'review' || phase === 'saving') && buffer && (
         <div className="rcw-panel">
           <Waveform buffer={buffer} trim={trim} />
           <div className="rcw-trim">
-            <label>Start
+            <label>{t('Start')}
               <input type="range" min={0} max={duration} step={0.05} value={trim[0]} onChange={(e) => setA(Number(e.target.value))} />
               <span className="range-val">{fmtS(trim[0])}</span>
             </label>
-            <label>End
+            <label>{t('End')}
               <input type="range" min={0} max={duration} step={0.05} value={trim[1]} onChange={(e) => setB(Number(e.target.value))} />
               <span className="range-val">{fmtS(trim[1])}</span>
             </label>
           </div>
           <div className="rcw-controls">
-            <button className={previewing ? 'toggle-on' : ''} onClick={playPreview}>{previewing ? '■ Stop' : '▶ Preview'}</button>
+            <button className={previewing ? 'toggle-on' : ''} onClick={playPreview}>{previewing ? `■ ${t('Stop')}` : `▶ ${t('Preview')}`}</button>
             <span className="settings-note" style={{ margin: 0 }}>
-              Kept: <strong>{fmtS(trim[1] - trim[0])}</strong> of {fmtS(duration)}
-              {(trim[0] > 0.02 || trim[1] < duration - 0.02) ? ' · saved as trimmed WAV' : ''}
+              {t('Kept: {kept} of {total}', { kept: fmtS(trim[1] - trim[0]), total: fmtS(duration) })}
+              {(trim[0] > 0.02 || trim[1] < duration - 0.02) ? ` · ${t('saved as trimmed WAV')}` : ''}
             </span>
-            {phase === 'saving' && <span className="settings-note" style={{ margin: 0 }}>Saving…</span>}
+            {phase === 'saving' && <span className="settings-note" style={{ margin: 0 }}>{t('Saving…')}</span>}
+
           </div>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { trimSegments, totalMs } from '../features/videoRing.js';
+import { t } from '../i18n.js';
 
 // Camera replay for reading aloud: the last few minutes of you (picture + sound) in memory only, as
 // SEG_MS segments with the oldest dropped. ▶ Watch plays them back to back (recording pauses);
@@ -9,7 +10,7 @@ const SEG_MS = 15000;
 let segs = [];
 
 const pickMime = () => ['video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'].find((m) => window.MediaRecorder?.isTypeSupported?.(m)) || '';
-const fmt = (ms) => { const t = Math.floor(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+const fmt = (ms) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 export default function VideoReplay({ mins }) {
   const [kept, setKept] = useState(() => totalMs(segs));
@@ -56,7 +57,7 @@ export default function VideoReplay({ mins }) {
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: true });
-        if (dead) { stream.getTracks().forEach((t) => t.stop()); return; }
+        if (dead) { stream.getTracks().forEach((tr) => tr.stop()); return; }
         // A recorder started before the camera's first frame can come back empty — wait for one.
         const v = liveRef.current;
         if (v) {
@@ -66,14 +67,14 @@ export default function VideoReplay({ mins }) {
         }
         start();
       } catch (e) {
-        setErr(e?.name === 'NotAllowedError' ? 'Camera blocked — allow it for this site to record video.' : `No camera: ${e?.message || e}`);
+        setErr(e?.name === 'NotAllowedError' ? t('Camera blocked — allow it for this site to record video.') : t('No camera: {error}', { error: e?.message || e }));
       }
     })();
     return () => {
       dead = true;
       clearTimeout(timer);
       if (rec?.state === 'recording') rec.stop(); // its onstop still keeps the final segment
-      stream?.getTracks().forEach((t) => t.stop());
+      stream?.getTracks().forEach((tr) => tr.stop());
     };
   }, []);
 
@@ -109,14 +110,15 @@ export default function VideoReplay({ mins }) {
   return (
     <div className="vf-video">
       {/* tiny live mirror so you know the camera is framing you; muted (no echo) */}
-      <video ref={liveRef} className="vf-live" autoPlay muted playsInline hidden={!!play} aria-label="Live camera" />
-      <span title={`Your last ${mins} minute(s) of video, memory only, oldest dropped (in ${SEG_MS / 1000} s pieces)`}>📹 last {fmt(kept)} kept</span>
-      {!play && <button type="button" className="vf-btn" disabled={!kept} onClick={watch} title="Watch the last few minutes (recording pauses while you watch)">▶ Watch</button>}
-      {!play && kept > 0 && <button type="button" className="vf-btn" onClick={save} title={`Save as ${segs.length} video file(s) — one per ${SEG_MS / 1000} s piece`}>💾 Save</button>}
+      <video ref={liveRef} className="vf-live" autoPlay muted playsInline hidden={!!play} aria-label={t('Live camera')} />
+      <span title={t.n('Your last {n} minute of video, memory only, oldest dropped (in {secs} s pieces)', 'Your last {n} minutes of video, memory only, oldest dropped (in {secs} s pieces)', mins, { secs: SEG_MS / 1000 })}>📹 {t('last {time} kept', { time: fmt(kept) })}</span>
+      {!play && <button type="button" className="vf-btn" disabled={!kept} onClick={watch} title={t('Watch the last few minutes (recording pauses while you watch)')}>▶ {t('Watch')}</button>}
+      {!play && kept > 0 && <button type="button" className="vf-btn" onClick={save} title={t.n('Save as {n} video file — one per {secs} s piece', 'Save as {n} video files — one per {secs} s piece', segs.length, { secs: SEG_MS / 1000 })}>💾 {t('Save')}</button>}
       {play && (
         <>
-          <button type="button" className="vf-btn" onClick={stopWatching}>■ Done</button>
-          <span className="vf-dim">part {play.i + 1}/{play.urls.length}</span>
+          <button type="button" className="vf-btn" onClick={stopWatching}>■ {t('Done')}</button>
+          <span className="vf-dim">{t('part {n}/{total}', { n: play.i + 1, total: play.urls.length })}</span>
+
           <video key={play.i} className="vf-playback" src={play.urls[play.i]} autoPlay controls playsInline
             onEnded={() => (play.i + 1 < play.urls.length ? setPlay({ ...play, i: play.i + 1 }) : stopWatching())} />
         </>

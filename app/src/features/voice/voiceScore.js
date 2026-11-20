@@ -4,6 +4,7 @@
 // speechimprover/src/lib/analysis/attributes.js (commit 4a00776) — keep the two in step.
 // Honest heuristic estimates, not clinical measurements.
 import { analyzeAudioBuffer } from './audioAnalysis.js';
+import { t } from '../../i18n.js';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const up = (v, lo, hi) => (hi === lo ? 50 : clamp(((v - lo) / (hi - lo)) * 100, 0, 100));
@@ -17,14 +18,14 @@ const depthCenter = (profile) => (profile === 'male' ? 115 : profile === 'female
 
 // key → [short label, weight, score(m, profile), one coaching cue]
 export const VOICE_ATTRS = {
-  pace: ['Pace', 1.1, (m) => (m.wpm ? band(m.wpm, 110, 150, 60, 210) : null), 'Aim for ~110–150 wpm aloud: land each phrase’s last consonant, then breathe.'],
-  clarity: ['Clarity', 1.2, (m) => up(m.meanHfRatio, 0.04, 0.18), 'Open the jaw a finger-width and finish every word ending.'],
-  resonantDepth: ['Depth', 0.8, (m, p) => (m.medianF0Hz ? clamp(100 - (m.medianF0Hz / depthCenter(p) - 0.72) * 125, 0, 100) : null), 'Hum “mmm” until the sternum buzzes, then slide into speech keeping it.'],
-  expressiveness: ['Expressive', 1.0, (m) => clamp(((m.f0StdSemitones - 1) / 4.5) * 100, 0, 100), 'Lift the key word of each sentence, let the rest fall.'],
-  nonNasal: ['Non-nasal', 0.8, (m) => clamp(100 - (m.nasalIndex - 1.5) * 13, 25, 100), 'Lift the soft palate as at the start of a yawn; aim sound at the front teeth.'],
-  noUptalk: ['No uptalk', 1.0, (m) => clamp(100 - Math.max(0, m.terminalSlope) * (100 / 6), 0, 100), 'Step the pitch down on the last word of a statement.'],
-  projection: ['Projection', 1.0, (m) => clamp(0.4 * up(m.meanRms, 0.02, 0.12) + 0.6 * up(m.trailingRatio, 0.4, 0.85), 0, 100), 'Keep breath support through the last word — send it to the back wall.'],
-  breath: ['Breath', 0.9, (m) => band(m.silenceRatio, 0.15, 0.45, 0.02, 0.72), 'Breathe low at commas and full stops; refill before you are empty.'],
+  pace: [t('Pace'), 1.1, (m) => (m.wpm ? band(m.wpm, 110, 150, 60, 210) : null), t('Aim for ~110–150 wpm aloud: land each phrase’s last consonant, then breathe.')],
+  clarity: [t('Clarity'), 1.2, (m) => up(m.meanHfRatio, 0.04, 0.18), t('Open the jaw a finger-width and finish every word ending.')],
+  resonantDepth: [t('Depth'), 0.8, (m, p) => (m.medianF0Hz ? clamp(100 - (m.medianF0Hz / depthCenter(p) - 0.72) * 125, 0, 100) : null), t('Hum “mmm” until the sternum buzzes, then slide into speech keeping it.')],
+  expressiveness: [t('Expressive'), 1.0, (m) => clamp(((m.f0StdSemitones - 1) / 4.5) * 100, 0, 100), t('Lift the key word of each sentence, let the rest fall.')],
+  nonNasal: [t('Non-nasal'), 0.8, (m) => clamp(100 - (m.nasalIndex - 1.5) * 13, 25, 100), t('Lift the soft palate as at the start of a yawn; aim sound at the front teeth.')],
+  noUptalk: [t('No uptalk'), 1.0, (m) => clamp(100 - Math.max(0, m.terminalSlope) * (100 / 6), 0, 100), t('Step the pitch down on the last word of a statement.')],
+  projection: [t('Projection'), 1.0, (m) => clamp(0.4 * up(m.meanRms, 0.02, 0.12) + 0.6 * up(m.trailingRatio, 0.4, 0.85), 0, 100), t('Keep breath support through the last word — send it to the back wall.')],
+  breath: [t('Breath'), 0.9, (m) => band(m.silenceRatio, 0.15, 0.45, 0.02, 0.72), t('Breathe low at commas and full stops; refill before you are empty.')],
 };
 
 // Metrics → { scores: {key: 0–100}, overall, weakest: key|null }. Attributes that can't be judged

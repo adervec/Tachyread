@@ -5,22 +5,23 @@
 // network calls would be slow/costly). The key lives on-device and is never synced.
 import { recordApiUsage } from '../state/storage.js';
 import { elevenCost } from './apiPricing.js';
+import { t } from '../i18n.js';
 
 const BASE = 'https://api.elevenlabs.io/v1';
 
 export function elevenConfigured(key) { return !!(key && key.trim()); }
 
 export const ELEVEN_MODELS = [
-  { id: 'eleven_multilingual_v2', label: 'Multilingual v2 — best quality' },
-  { id: 'eleven_turbo_v2_5', label: 'Turbo v2.5 — faster / cheaper' },
-  { id: 'eleven_flash_v2_5', label: 'Flash v2.5 — fastest / cheapest' },
+  { id: 'eleven_multilingual_v2', label: t('Multilingual v2 — best quality') },
+  { id: 'eleven_turbo_v2_5', label: t('Turbo v2.5 — faster / cheaper') },
+  { id: 'eleven_flash_v2_5', label: t('Flash v2.5 — fastest / cheapest') },
 ];
 
 async function errorFrom(r) {
-  if (r.status === 401) return 'Invalid ElevenLabs API key.';
-  if (r.status === 429) return 'ElevenLabs rate limit / quota reached.';
-  try { const e = await r.json(); return (e?.detail?.message || e?.detail || `ElevenLabs error ${r.status}`); }
-  catch { return `ElevenLabs error ${r.status}`; }
+  if (r.status === 401) return t('Invalid ElevenLabs API key.');
+  if (r.status === 429) return t('ElevenLabs rate limit / quota reached.');
+  try { const e = await r.json(); return (e?.detail?.message || e?.detail || t('ElevenLabs error {status}', { status: r.status })); }
+  catch { return t('ElevenLabs error {status}', { status: r.status }); }
 }
 
 // The account's voices → [{ id, name, category }]. Throws on a bad key / network error.

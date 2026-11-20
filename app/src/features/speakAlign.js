@@ -11,16 +11,18 @@
 // Punctuation never matters: text tokens are split on it ("stairs—every" is two words, a lone "—"
 // is nothing), and common sound-alikes / digits are folded together ("two" = "to" = "2").
 
+import { t } from '../i18n.js';
+
 export const SPEAK_DEFAULTS = { window: 10, skip: 3, fuzz: 0.6, minRun: 2, density: 0.4 };
 
 // One "Strictness" slider (on the reading-aloud card) sets all four at once.
 export const STRICTNESS = [
   null,
-  { label: 'very forgiving', window: 14, skip: 5, fuzz: 0.5, minRun: 1, density: 0.3 },
-  { label: 'forgiving', window: 10, skip: 3, fuzz: 0.6, minRun: 2, density: 0.4 },
-  { label: 'balanced', window: 8, skip: 2, fuzz: 0.7, minRun: 2, density: 0.5 },
-  { label: 'strict', window: 6, skip: 1, fuzz: 0.8, minRun: 3, density: 0.65 },
-  { label: 'very strict', window: 4, skip: 0, fuzz: 0.9, minRun: 3, density: 0.8 },
+  { label: t('very forgiving'), window: 14, skip: 5, fuzz: 0.5, minRun: 1, density: 0.3 },
+  { label: t('forgiving'), window: 10, skip: 3, fuzz: 0.6, minRun: 2, density: 0.4 },
+  { label: t('balanced'), window: 8, skip: 2, fuzz: 0.7, minRun: 2, density: 0.5 },
+  { label: t('strict'), window: 6, skip: 1, fuzz: 0.8, minRun: 3, density: 0.65 },
+  { label: t('very strict'), window: 4, skip: 0, fuzz: 0.9, minRun: 3, density: 0.8 },
 ];
 export function strictnessOf(cfg = {}) {
   const c = { ...SPEAK_DEFAULTS, ...cfg };
@@ -47,9 +49,9 @@ function lev(a, b) {
     let diag = prev[0];
     prev[0] = i;
     for (let j = 1; j <= b.length; j++) {
-      const t = prev[j];
+      const pv = prev[j];
       prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
-      diag = t;
+      diag = pv;
     }
   }
   return prev[b.length];

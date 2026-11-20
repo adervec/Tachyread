@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
+import { t } from '../i18n.js';
 
 const STATE_LABEL = {
-  starting: 'starting…', watching: 'watching', away: 'looked away', drowsy: 'drowsy',
-  denied: 'blocked', error: 'error', unsupported: 'no detection', off: '',
+  starting: t('starting…'), watching: t('watching'), away: t('looked away'), drowsy: t('drowsy'),
+  denied: t('blocked'), error: t('error'), unsupported: t('no detection'), off: '',
 };
 
 // Small live self-view shown while a webcam guard is on, so you can confirm framing and see that the
@@ -23,8 +24,9 @@ export default function WebcamPreview({ stream, state, canCalibrate, onCalibrate
         <span className="wpv-dot" />
         <span className="wpv-state">{STATE_LABEL[state] ?? state}</span>
         <span style={{ flex: 1 }} />
-        {canCalibrate && <button title="Calibrate eye detection" onClick={onCalibrate}>⚙</button>}
-        <button title="Hide preview" onClick={onHide}>×</button>
+        {canCalibrate && <button title={t('Calibrate eye detection')} onClick={onCalibrate}>⚙</button>}
+        <button title={t('Hide preview')} onClick={onHide}>×</button>
+
       </div>
     </div>
   );
