@@ -7,6 +7,7 @@
 //   passWpm / passAcc: optional pass marks (0 = none) — a set below them must be redone.
 //
 // Pure: model factories + operations only.
+import { t } from '../i18n.js';
 
 const uid = () => Math.random().toString(36).slice(2);
 
@@ -25,14 +26,14 @@ export function makeStep(partial = {}) {
 }
 
 export function makePlan(name, steps) {
-  return { id: uid(), name: (name || '').trim() || 'New plan', steps: steps && steps.length ? steps : [makeStep()] };
+  return { id: uid(), name: (name || '').trim() || t('New plan'), steps: steps && steps.length ? steps : [makeStep()] };
 }
 
 // A fresh plan copied from an existing one (new ids), so the creator can start from a template.
 export function duplicatePlan(plan, name) {
   return {
     id: uid(),
-    name: name || `${plan?.name || 'Plan'} (copy)`,
+    name: name || t('{name} (copy)', { name: plan?.name || t('Plan') }),
     steps: (plan?.steps || []).map((s) => ({ ...s, id: uid() })),
   };
 }

@@ -1,6 +1,7 @@
 // End-of-run grade fanfares — a short synthesized sound per letter grade (Web Audio, no samples).
 // A/B are bright and rising, C a neutral chime, D a descending eerie "death-whistle" sweep, and F a
 // low fail buzz. All original tones, just chosen to fit the vibe.
+import { t } from '../i18n.js';
 
 export function letterGrade(net) {
   if (net >= 90) return 'A';
@@ -11,11 +12,11 @@ export function letterGrade(net) {
 }
 
 export const GRADE_STATEMENTS = {
-  A: 'Blazing. Untouchable.',
-  B: 'Strong run — hold that pace.',
-  C: 'Solid. A little more next time.',
-  D: 'You’ll get there. Run it back.',
-  F: 'Rough one. Again?',
+  A: t('Blazing. Untouchable.'),
+  B: t('Strong run — hold that pace.'),
+  C: t('Solid. A little more next time.'),
+  D: t('You’ll get there. Run it back.'),
+  F: t('Rough one. Again?'),
 };
 
 export function playGradeSound(grade) {

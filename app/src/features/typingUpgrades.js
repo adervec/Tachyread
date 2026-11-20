@@ -5,6 +5,7 @@
 // ghost). All pure — see typingUpgrades.test.mjs.
 import { newCard, schedule } from '../engine/srs.js';
 import { localDay } from './localDay.js';
+import { t } from '../i18n.js';
 
 // ── consistency ─────────────────────────────────────────────────────────────
 // Keystroke-timing consistency as a percentage: 100 × (1 − coefficient of variation) of the
@@ -131,6 +132,11 @@ export function reviewPassage(words, { max = 60, seed = 0 } = {}) {
 
 // ── per-key / per-finger profile (QWERTY) ───────────────────────────────────
 export const FINGERS = ['L pinky', 'L ring', 'L middle', 'L index', 'R index', 'R middle', 'R ring', 'R pinky'];
+// FINGERS are values (stored, compared); show them through these names.
+export const FINGER_NAMES = {
+  'L pinky': t('Left pinky'), 'L ring': t('Left ring'), 'L middle': t('Left middle'), 'L index': t('Left index'),
+  'R index': t('Right index'), 'R middle': t('Right middle'), 'R ring': t('Right ring'), 'R pinky': t('Right pinky'),
+};
 const FINGER_OF = {};
 const assign = (chars, f) => { for (const c of chars) FINGER_OF[c] = f; };
 assign('`1qaz', 'L pinky'); assign('2wsx', 'L ring'); assign('3edc', 'L middle');

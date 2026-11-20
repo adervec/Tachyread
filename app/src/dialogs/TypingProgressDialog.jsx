@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useSessionState } from '../state/useSessionState.js';
 import Dialog from './Dialog.jsx';
 import { allTypingRuns, clearTypingRuns, getJourneyAi } from '../state/storage.js';
@@ -6,18 +6,28 @@ import { sessionIdOf, reviewText } from '../features/sessionReview.js';
 import { TYPING_MODE_BY_ID } from '../engine/typingModes.js';
 import { fmtDateTime } from '../features/dateFmt.js';
 import { typingWeekly, typingOverall } from '../features/typingStats.js';
-import { typingStreak, aggregateKeys, fingerStats, keyFinger, keyWpm, handSpeed } from '../features/typingUpgrades.js';
+import { typingStreak, aggregateKeys, fingerStats, keyFinger, keyWpm, handSpeed, FINGER_NAMES } from '../features/typingUpgrades.js';
 import { runsCsv } from '../features/typingChallenge.js';
 import { saveTextToFile } from '../features/fileSystem.js';
 import { keyboardRows } from '../features/keyboards.js';
-import { normalizeRuns, difficultyRows, runDifficulty, difficultyLabel } from '../features/typingDifficulty.js';
+import { normalizeRuns, difficultyRows, runDifficulty, difficultyLabel, DIFFICULTY_NAMES, DIFFICULTY_TEXT } from '../features/typingDifficulty.js';
 import { textMatcher, inRange, inDates, anySet } from '../features/tableFilter.js';
 import { TextF, RangeF, DateF } from '../components/ColFilter.jsx';
+import { t } from '../i18n.js';
 
 function fmtDur(ms) {
   const s = Math.round((ms || 0) / 1000);
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
+
+// Fill a translated sentence's {placeholders} with elements, so the emphasis survives translation.
+// Pass a placeholder back as its own value (keep) to leave it for rich() to fill.
+const keep = (...names) => Object.fromEntries(names.map((n) => [n, `{${n}}`]));
+function rich(str, nodes) {
+  return String(str).split(/\{(\w+)\}/g).map((part, i) => (i % 2 ? <Fragment key={i}>{nodes[part] ?? `{${part}}`}</Fragment> : part));
+}
+const fingerName = (f) => (f ? FINGER_NAMES[f] || f : '');
+const deviceName = (d) => (d === 'Mobile' ? t('Mobile') : d === 'Desktop' ? t('Desktop') : d);
 
 function Stat({ v, l }) {
   return (
@@ -37,7 +47,7 @@ function TpChart({ runs }) {
   const net = runs.map((r, i) => `${i ? 'L' : 'M'} ${x(i).toFixed(1)} ${(H - Math.min(1, (r.netWpm || 0) / maxW) * H).toFixed(1)}`).join(' ');
   const acc = runs.map((r, i) => `${i ? 'L' : 'M'} ${x(i).toFixed(1)} ${(H - Math.min(1, (r.accuracy || 0) / 100) * H).toFixed(1)}`).join(' ');
   return (
-    <svg className="tp-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-label="Net WPM and accuracy over runs">
+    <svg className="tp-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-label={t('Net WPM and accuracy over runs')}>
       <path d={net} className="tp-net" />
       <path d={acc} className="tp-acc" />
     </svg>
@@ -67,8 +77,8 @@ function KeyHeatmap({ agg, mode = 'errors' }) {
               ? (w ? { background: slow > 0 ? `color-mix(in srgb, #e0861e ${Math.round(12 + slow * 70)}%, transparent)` : 'color-mix(in srgb, #2e9d4f 18%, transparent)' } : undefined)
               : (rate != null && rate > 0 ? { background: `color-mix(in srgb, #d9534f ${Math.round(12 + heat * 70)}%, transparent)` } : undefined);
             const title = mode === 'speed'
-              ? (w ? `${ch} · ~${Math.round(w)} wpm reach speed (${v.t} timed keystrokes) · ${keyFinger(ch) || ''}` : `${ch} — no timing yet (new runs record it)`)
-              : (v?.n ? `${ch} · ${v.err}/${v.n} errors (${((v.err / v.n) * 100).toFixed(1)}%) · ${keyFinger(ch) || ''}` : `${ch} — not enough data yet`);
+              ? (w ? t.n('{key} · ~{wpm} wpm reach speed ({n} timed keystroke) · {finger}', '{key} · ~{wpm} wpm reach speed ({n} timed keystrokes) · {finger}', v.t, { key: ch, wpm: Math.round(w), finger: fingerName(keyFinger(ch)) }) : t('{key} — no timing yet (new runs record it)', { key: ch }))
+              : (v?.n ? t('{key} · {errors}/{n} errors ({pct}%) · {finger}', { key: ch, errors: v.err, n: v.n, pct: ((v.err / v.n) * 100).toFixed(1), finger: fingerName(keyFinger(ch)) }) : t('{key} — not enough data yet', { key: ch }));
             return (
               <span
                 key={ch}
@@ -134,43 +144,43 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
 
   return (
     <Dialog
-      title="Typing Progress"
+      title={t('Typing Progress')}
       onClose={onClose}
       width={740}
       buttons={
         <>
-          <button onClick={() => saveTextToFile(runsCsv(rawRuns || []), `typing-runs-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv').catch(() => {})} disabled={!rawRuns?.length} title="Every run as a spreadsheet (CSV) — raw numbers, not the adjusted view">⬇ Export CSV</button>
-          <button onClick={clearAll} disabled={!runs?.length}>Clear history</button>
-          <button onClick={onClose}>Close</button>
+          <button onClick={() => saveTextToFile(runsCsv(rawRuns || []), `typing-runs-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv').catch(() => {})} disabled={!rawRuns?.length} title={t('Every run as a spreadsheet (CSV) — raw numbers, not the adjusted view')}>⬇ {t('Export CSV')}</button>
+          <button onClick={clearAll} disabled={!runs?.length}>{t('Clear history')}</button>
+          <button onClick={onClose}>{t('Close')}</button>
         </>
       }
     >
-      {!runs && <p>Loading…</p>}
+      {!runs && <p>{t('Loading…')}</p>}
       {runs && runs.length === 0 && (
-        <p className="settings-note">No typing runs yet. Open a document, then View → Typing Practice and complete a run.</p>
+        <p className="settings-note">{t('No typing runs yet. Open a document, then View → Typing Practice and complete a run.')}</p>
       )}
       {stats && (
         <>
           <div className="tp-summary">
-            <Stat v={stats.best} l={adjust ? 'best adj WPM' : 'best net WPM'} />
-            <Stat v={stats.avgNet} l={adjust ? 'avg adj WPM' : 'avg net WPM'} />
-            <Stat v={`${stats.avgAcc}%`} l="avg accuracy" />
-            <Stat v={stats.n} l="runs" />
-            <Stat v={`🔥 ${stats.streak.days}`} l="day streak" />
-            <Stat v={stats.streak.todayWords.toLocaleString()} l="words today" />
+            <Stat v={stats.best} l={adjust ? t('best adj WPM') : t('best net WPM')} />
+            <Stat v={stats.avgNet} l={adjust ? t('avg adj WPM') : t('avg net WPM')} />
+            <Stat v={`${stats.avgAcc}%`} l={t('avg accuracy')} />
+            <Stat v={stats.n} l={t('runs')} />
+            <Stat v={`🔥 ${stats.streak.days}`} l={t('day streak')} />
+            <Stat v={stats.streak.todayWords.toLocaleString()} l={t('words today')} />
           </div>
 
-          <label className="inline-check" title="Price each run by the keys its text actually demanded — shift, digits and punctuation cost more than home-row prose — and report what that pace is worth on ordinary prose. Scored from the per-key profile every run already stores, so your whole history re-reads.">
+          <label className="inline-check" title={t('Price each run by the keys its text actually demanded — shift, digits and punctuation cost more than home-row prose — and report what that pace is worth on ordinary prose. Scored from the per-key profile every run already stores, so your whole history re-reads.')}>
             <input type="checkbox" checked={adjust} onChange={(e) => setAdjust(e.target.checked)} />
-            <span>Normalise for text difficulty</span>
+            <span>{t('Normalise for text difficulty')}</span>
           </label>
           <p className="settings-note">
             {adjust
-              ? 'WPM below is difficulty-adjusted: 1.00 is ordinary prose, so a numbers drill or a page of quotes and capitals no longer reads as a slump.'
-              : 'Showing raw WPM — it moves with the text as much as with your hands.'}
+              ? t('WPM below is difficulty-adjusted: 1.00 is ordinary prose, so a numbers drill or a page of quotes and capitals no longer reads as a slump.')
+              : t('Showing raw WPM — it moves with the text as much as with your hands.')}
           </p>
 
-          <div className="tp-legend"><span className="tp-lg-net">— {adjust ? 'adjusted' : 'net'} WPM</span> <span className="tp-lg-acc">— accuracy</span></div>
+          <div className="tp-legend"><span className="tp-lg-net">— {adjust ? t('adjusted WPM') : t('net WPM')}</span> <span className="tp-lg-acc">— {t('accuracy')}</span></div>
           <TpChart runs={runs} />
 
           {(() => {
@@ -179,11 +189,16 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
             const sign = (v) => (v > 0 ? `+${v}` : `${v}`);
             return (
               <>
-                <div className="tp-section">Overall progress</div>
+                <div className="tp-section">{t('Overall progress')}</div>
                 <p className="tp-overall">
-                  First {o.n} runs averaged <b>{o.firstNet} WPM</b> · latest {o.n} average <b>{o.lastNet} WPM</b> —{' '}
-                  <b className={o.deltaNet >= 0 ? 'tp-up' : 'tp-down'}>{sign(o.deltaNet)} WPM{o.pctNet != null ? ` (${sign(o.pctNet)}%)` : ''}</b> over {o.spanDays} day{o.spanDays === 1 ? '' : 's'}.
-                  {' '}Accuracy {o.firstAcc}% → {o.lastAcc}% (<b className={o.deltaAcc >= 0 ? 'tp-up' : 'tp-down'}>{sign(o.deltaAcc)} pts</b>).
+                  {rich(t.n('First {runs} runs averaged {first} · latest {runs} average {last} — {delta} over {n} day.', 'First {runs} runs averaged {first} · latest {runs} average {last} — {delta} over {n} days.', o.spanDays, { runs: o.n, ...keep('first', 'last', 'delta') }), {
+                    first: <b>{t('{n} WPM', { n: o.firstNet })}</b>,
+                    last: <b>{t('{n} WPM', { n: o.lastNet })}</b>,
+                    delta: <b className={o.deltaNet >= 0 ? 'tp-up' : 'tp-down'}>{t('{n} WPM', { n: sign(o.deltaNet) })}{o.pctNet != null ? ` (${sign(o.pctNet)}%)` : ''}</b>,
+                  })}
+                  {' '}{rich(t('Accuracy {first}% → {last}% ({delta}).', { first: o.firstAcc, last: o.lastAcc, ...keep('delta') }), {
+                    delta: <b className={o.deltaAcc >= 0 ? 'tp-up' : 'tp-down'}>{t('{n} pts', { n: sign(o.deltaAcc) })}</b>,
+                  })}
                 </p>
               </>
             );
@@ -195,19 +210,19 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
             const sign = (v) => (v > 0 ? `+${v}` : `${v}`);
             return (
               <>
-                <div className="tp-section">Weekly summaries</div>
+                <div className="tp-section">{t('Weekly summaries')}</div>
                 <div className="tp-table-wrap">
                   <table className="tp-table">
                     <thead>
-                      <tr><th>Week</th><th>Runs</th><th>Avg net</th><th>Δ vs prev</th><th>Best</th><th>Avg acc</th><th>Words</th><th>Time{anySet(wf) && <button className="ab-clearf" onClick={() => setWf(NO_WF)} title="Clear these filters">✕</button>}</th></tr>
+                      <tr><th>{t('Week')}</th><th>{t('Runs')}</th><th>{t('Avg net')}</th><th>{t('Δ vs prev')}</th><th>{t('Best')}</th><th>{t('Avg acc')}</th><th>{t('Words')}</th><th>{t('Time')}{anySet(wf) && <button className="ab-clearf" onClick={() => setWf(NO_WF)} title={t('Clear these filters')}>✕</button>}</th></tr>
                       <tr className="ab-filter-row">
-                        <th><DateF value={wf.week} onChange={setW('week')} label="Week starting" /></th>
-                        <th><RangeF value={wf.runs} onChange={setW('runs')} label="runs" /></th>
-                        <th><RangeF value={wf.avg} onChange={setW('avg')} label="average net WPM" /></th>
+                        <th><DateF value={wf.week} onChange={setW('week')} label={t('Week starting')} /></th>
+                        <th><RangeF value={wf.runs} onChange={setW('runs')} label={t('runs')} /></th>
+                        <th><RangeF value={wf.avg} onChange={setW('avg')} label={t('average net WPM')} /></th>
                         <th />
-                        <th><RangeF value={wf.best} onChange={setW('best')} label="best WPM" /></th>
-                        <th><RangeF value={wf.acc} onChange={setW('acc')} label="average accuracy %" /></th>
-                        <th><RangeF value={wf.words} onChange={setW('words')} label="words" unit="k" /></th>
+                        <th><RangeF value={wf.best} onChange={setW('best')} label={t('best WPM')} /></th>
+                        <th><RangeF value={wf.acc} onChange={setW('acc')} label={t('average accuracy %')} /></th>
+                        <th><RangeF value={wf.words} onChange={setW('words')} label={t('words')} unit="k" /></th>
                         <th />
                       </tr>
                     </thead>
@@ -217,7 +232,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                           <td>{w.week} → {w.end}</td>
                           <td>{w.runs}</td>
                           <td>{w.avgNet}</td>
-                          <td className={w.deltaNet == null ? '' : w.deltaNet >= 0 ? 'tp-up' : 'tp-down'}>{w.deltaNet == null ? '—' : `${sign(w.deltaNet)} WPM`}</td>
+                          <td className={w.deltaNet == null ? '' : w.deltaNet >= 0 ? 'tp-up' : 'tp-down'}>{w.deltaNet == null ? '—' : t('{n} WPM', { n: sign(w.deltaNet) })}</td>
                           <td>{w.best}</td>
                           <td>{w.avgAcc}%</td>
                           <td>{w.words.toLocaleString()}</td>
@@ -238,14 +253,14 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
             if (rows.length < 2) return null; // one band is nothing to compare
             return (
               <>
-                <div className="tp-section">By text difficulty</div>
+                <div className="tp-section">{t('By text difficulty')}</div>
                 <div className="tp-table-wrap">
                   <table className="tp-table">
-                    <thead><tr><th>Text</th><th>Runs</th><th>Difficulty</th><th>Raw net</th><th>Adjusted</th><th>Best raw</th><th>Avg acc</th></tr></thead>
+                    <thead><tr><th>{t('Text')}</th><th>{t('Runs')}</th><th>{t('Difficulty')}</th><th>{t('Raw net')}</th><th>{t('Adjusted')}</th><th>{t('Best raw')}</th><th>{t('Avg acc')}</th></tr></thead>
                     <tbody>
                       {rows.map((b) => (
                         <tr key={b.band}>
-                          <td>{b.band}</td>
+                          <td>{DIFFICULTY_NAMES[b.band] || b.band}</td>
                           <td>{b.runs}</td>
                           <td>{b.avgDifficulty.toFixed(2)}×</td>
                           <td>{b.avgNet}</td>
@@ -258,9 +273,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                   </table>
                 </div>
                 <p className="settings-note">
-                  Difficulty is priced per keystroke from the run’s own key profile: home-row letters
-                  are the unit, other letters cost a little more, then punctuation, digits, and
-                  anything needing shift. 1.00× is ordinary prose.
+                  {t('Difficulty is priced per keystroke from the run’s own key profile: home-row letters are the unit, other letters cost a little more, then punctuation, digits, and anything needing shift. 1.00× is ordinary prose.')}
                 </p>
               </>
             );
@@ -271,10 +284,10 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
             if (rows.length < 2) return null; // one keyboard is just the summary above
             return (
               <>
-                <div className="tp-section">By keyboard</div>
+                <div className="tp-section">{t('By keyboard')}</div>
                 <div className="tp-table-wrap">
                   <table className="tp-table">
-                    <thead><tr><th>Keyboard</th><th>Runs</th><th>Avg net</th><th>Best</th><th>Avg acc</th><th>Words</th></tr></thead>
+                    <thead><tr><th>{t('Keyboard')}</th><th>{t('Runs')}</th><th>{t('Avg net')}</th><th>{t('Best')}</th><th>{t('Avg acc')}</th><th>{t('Words')}</th></tr></thead>
                     <tbody>
                       {rows.map((k) => (
                         <tr key={k.id}>
@@ -289,14 +302,14 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                     </tbody>
                   </table>
                 </div>
-                <p className="settings-note">Rename a keyboard in Typing → Typing Settings.</p>
+                <p className="settings-note">{t('Rename a keyboard in Typing → Typing Settings.')}</p>
               </>
             );
           })()}
 
-          <div className="tp-section">Error-prone keys</div>
+          <div className="tp-section">{t('Error-prone keys')}</div>
           <div className="tp-keys">
-            {stats.topErr.length === 0 && <span className="settings-note">No errors recorded — nice.</span>}
+            {stats.topErr.length === 0 && <span className="settings-note">{t('No errors recorded — nice.')}</span>}
             {stats.topErr.map(([k, c]) => (
               <span key={k} className="tp-key">{k === ' ' ? '␣' : k} <b>{c}</b></span>
             ))}
@@ -304,30 +317,34 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
 
           {Object.keys(stats.keyAgg).length > 0 && (
             <>
-              <div className="tp-section">Keyboard heatmap
-                <span className="lj-viewtoggle" role="tablist" aria-label="Heatmap" style={{ marginLeft: 8 }}>
-                  <button className={heatMode === 'errors' ? 'on' : ''} onClick={() => setHeatMode('errors')}>Errors</button>
-                  <button className={heatMode === 'speed' ? 'on' : ''} onClick={() => setHeatMode('speed')}>Speed</button>
+              <div className="tp-section">{t('Keyboard heatmap')}
+                <span className="lj-viewtoggle" role="tablist" aria-label={t('Heatmap')} style={{ marginLeft: 8 }}>
+                  <button className={heatMode === 'errors' ? 'on' : ''} onClick={() => setHeatMode('errors')}>{t('Errors')}</button>
+                  <button className={heatMode === 'speed' ? 'on' : ''} onClick={() => setHeatMode('speed')}>{t('Speed')}</button>
                 </span>
               </div>
               <p className="settings-note" style={{ margin: '0 0 4px' }}>
-                Error rate per key across your runs — the redder, the more that key misfires under
-                your fingers. Pick the matching row drill to work on it.
+                {t('Error rate per key across your runs — the redder, the more that key misfires under your fingers. Pick the matching row drill to work on it.')}
               </p>
               <KeyHeatmap agg={stats.keyAgg} mode={heatMode} />
               {heatMode === 'speed' && (
                 <p className="settings-note" style={{ margin: '4px 0' }}>
                   {stats.hands.L && stats.hands.R
-                    ? <>Left hand ~<b>{Math.round(stats.hands.L)}</b> wpm · right hand ~<b>{Math.round(stats.hands.R)}</b> wpm{Math.abs(stats.hands.L - stats.hands.R) / Math.max(stats.hands.L, stats.hands.R) > 0.1 ? ` — your ${stats.hands.L < stats.hands.R ? 'left' : 'right'} hand is the slower one` : ' — evenly matched'}.</>
-                    : 'Key timing is recorded from now on — type a few runs to fill this in.'}
-                  {' '}Amber keys are slower than your median; 🩹 Weak spots (typing mode list) drills them.
+                    ? rich(Math.abs(stats.hands.L - stats.hands.R) / Math.max(stats.hands.L, stats.hands.R) > 0.1
+                      ? (stats.hands.L < stats.hands.R
+                        ? t('Left hand ~{left} wpm · right hand ~{right} wpm — your left hand is the slower one.', keep('left', 'right'))
+                        : t('Left hand ~{left} wpm · right hand ~{right} wpm — your right hand is the slower one.', keep('left', 'right')))
+                      : t('Left hand ~{left} wpm · right hand ~{right} wpm — evenly matched.', keep('left', 'right')),
+                    { left: <b>{Math.round(stats.hands.L)}</b>, right: <b>{Math.round(stats.hands.R)}</b> })
+                    : t('Key timing is recorded from now on — type a few runs to fill this in.')}
+                  {' '}{t('Amber keys are slower than your median; 🩹 Weak spots (typing mode list) drills them.')}
                 </p>
               )}
               {stats.fingers.length > 0 && (
                 <div className="tp-fingers">
                   {stats.fingers.map((f) => (
-                    <span key={f.finger} className={`tp-finger${f.rate > 0.08 ? ' bad' : ''}`} title={`${f.err} errors in ${f.n} keys`}>
-                      {f.finger}: <b>{(f.rate * 100).toFixed(1)}%</b>
+                    <span key={f.finger} className={`tp-finger${f.rate > 0.08 ? ' bad' : ''}`} title={t('{errors} errors in {n} keys', { errors: f.err, n: f.n })}>
+                      {fingerName(f.finger)}: <b>{(f.rate * 100).toFixed(1)}%</b>
                     </span>
                   ))}
                 </div>
@@ -335,28 +352,28 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
             </>
           )}
 
-          <div className="tp-section">Recent runs</div>
+          <div className="tp-section">{t('Recent runs')}</div>
           <div className="tp-table-wrap">
             <table className="tp-table">
               <thead>
-                <tr><th>When</th><th>Mode</th><th>Device</th><th>Text</th><th>{adjust ? 'Adj' : 'Net'}</th><th>Gross</th><th>Acc</th><th>Consist.</th><th>Words</th><th>Time</th><th title="AI review from the cowork “AI review of typing runs” operation, beside the app's own tier">AI</th><th>Tier{anySet(runF) && <button className="ab-clearf" onClick={() => setRunF(NO_RUNF)} title="Clear these filters">✕</button>}</th></tr>
+                <tr><th>{t('When')}</th><th>{t('Mode')}</th><th>{t('Device')}</th><th>{t('Text')}</th><th>{adjust ? t('Adj') : t('Net')}</th><th>{t('Gross')}</th><th>{t('Acc')}</th><th>{t('Consist.')}</th><th>{t('Words')}</th><th>{t('Time')}</th><th title={t('AI review from the cowork “AI review of typing runs” operation, beside the app’s own tier')}>{t('AI')}</th><th>{t('Tier')}{anySet(runF) && <button className="ab-clearf" onClick={() => setRunF(NO_RUNF)} title={t('Clear these filters')}>✕</button>}</th></tr>
                 <tr className="ab-filter-row">
-                  <th><DateF value={runF.when} onChange={setR('when')} label="Run date" /></th>
-                  <th><TextF value={runF.mode} onChange={setR('mode')} label="mode" /></th>
+                  <th><DateF value={runF.when} onChange={setR('when')} label={t('Run date')} /></th>
+                  <th><TextF value={runF.mode} onChange={setR('mode')} label={t('mode')} /></th>
                   <th>
-                    <select value={runF.device} onChange={(e) => setR('device')(e.target.value)} aria-label="Filter by device">
-                      <option value="all">all</option><option value="Desktop">🖥</option><option value="Mobile">📱</option>
+                    <select value={runF.device} onChange={(e) => setR('device')(e.target.value)} aria-label={t('Filter by device')}>
+                      <option value="all">{t('all')}</option><option value="Desktop">🖥</option><option value="Mobile">📱</option>
                     </select>
                   </th>
-                  <th><RangeF value={runF.text} onChange={setR('text')} label="text difficulty ×" /></th>
-                  <th><RangeF value={runF.net} onChange={setR('net')} label="net WPM" /></th>
-                  <th><RangeF value={runF.gross} onChange={setR('gross')} label="gross WPM" /></th>
-                  <th><RangeF value={runF.acc} onChange={setR('acc')} label="accuracy %" /></th>
-                  <th><RangeF value={runF.cons} onChange={setR('cons')} label="consistency %" /></th>
-                  <th><RangeF value={runF.words} onChange={setR('words')} label="words" /></th>
-                  <th><RangeF value={runF.time} onChange={setR('time')} label="duration" unit=" min" /></th>
+                  <th><RangeF value={runF.text} onChange={setR('text')} label={t('text difficulty ×')} /></th>
+                  <th><RangeF value={runF.net} onChange={setR('net')} label={t('net WPM')} /></th>
+                  <th><RangeF value={runF.gross} onChange={setR('gross')} label={t('gross WPM')} /></th>
+                  <th><RangeF value={runF.acc} onChange={setR('acc')} label={t('accuracy %')} /></th>
+                  <th><RangeF value={runF.cons} onChange={setR('cons')} label={t('consistency %')} /></th>
+                  <th><RangeF value={runF.words} onChange={setR('words')} label={t('words')} /></th>
+                  <th><RangeF value={runF.time} onChange={setR('time')} label={t('duration')} unit={' ' + t('min')} /></th>
                   <th />
-                  <th><TextF value={runF.tier} onChange={setR('tier')} label="tier" /></th>
+                  <th><TextF value={runF.tier} onChange={setR('tier')} label={t('tier')} /></th>
                 </tr>
               </thead>
               <tbody>
@@ -371,9 +388,9 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                   <tr key={i}>
                     <td>{fmtDateTime(r.ts)}{r.pb?.allTime ? ' 🏆' : r.pb?.mode ? ' 🥇' : ''}</td>
                     <td>{r.mode ? (TYPING_MODE_BY_ID[r.mode]?.label || r.mode) : '—'}</td>
-                    <td>{r.device ? <span className={`tp-dev tp-dev-${String(r.device).toLowerCase()}`}>{r.device === 'Mobile' ? '📱' : '🖥'} {r.device}</span> : '—'}</td>
-                    <td title={`${difficultyLabel(runDifficulty(r))} text`}>{runDifficulty(r).toFixed(2)}×</td>
-                    <td title={adjust ? `${r.rawNetWpm} raw` : undefined}>{r.netWpm}</td>
+                    <td>{r.device ? <span className={`tp-dev tp-dev-${String(r.device).toLowerCase()}`}>{r.device === 'Mobile' ? '📱' : '🖥'} {deviceName(r.device)}</span> : '—'}</td>
+                    <td title={DIFFICULTY_TEXT[difficultyLabel(runDifficulty(r))]}>{runDifficulty(r).toFixed(2)}×</td>
+                    <td title={adjust ? t('{n} raw', { n: r.rawNetWpm }) : undefined}>{r.netWpm}</td>
                     <td>{r.grossWpm}</td>
                     <td>{r.accuracy}%</td>
                     <td>{r.consistency != null ? `${r.consistency}%` : '—'}</td>

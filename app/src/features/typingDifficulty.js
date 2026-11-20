@@ -8,6 +8,7 @@
 // typed, so difficulty is derived from history that already exists — no new capture, and old runs
 // score too. It also lowercases when case-sensitivity is off, which is exactly right: if the run
 // never demanded a capital, it never charged you for shift.
+import { t } from '../i18n.js';
 
 // Relative keystroke effort on a QWERTY board. Home row is the unit; everything else is priced
 // against it. ponytail: a flat per-character table, not a bigram/same-finger model — the histogram
@@ -54,6 +55,10 @@ export function runDifficulty(run) {
 
 // What this run's pace is worth on baseline prose — the number to compare across sessions.
 export const adjustedNet = (run) => Math.round((run?.netWpm || 0) * runDifficulty(run));
+
+// The band names below are values (compared and sorted); show them through these.
+export const DIFFICULTY_NAMES = { Easy: t('Easy'), Normal: t('Normal'), Hard: t('Hard'), 'Very hard': t('Very hard') };
+export const DIFFICULTY_TEXT = { Easy: t('Easy text'), Normal: t('Normal text'), Hard: t('Hard text'), 'Very hard': t('Very hard text') };
 
 export function difficultyLabel(d) {
   if (d < 0.95) return 'Easy';

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { getSentenceIndex } from '../document/readerDocument.js';
+import { t } from '../i18n.js';
 
 // Train → Pronunciation Check: read the sentence at your place aloud; a phoneme recogniser (on this
 // device) hears the sounds you made and each word is scored against how it should sound, with the
@@ -26,7 +27,7 @@ export default function PronounceDialog({ tab, onClose }) {
   const [msg, setMsg] = useState('');
   const rec = useRef(null);
   const worker = useRef(null);
-  useEffect(() => () => { worker.current?.terminate(); rec.current?.stream?.getTracks().forEach((t) => t.stop()); }, []);
+  useEffect(() => () => { worker.current?.terminate(); rec.current?.stream?.getTracks().forEach((tr) => tr.stop()); }, []);
   const lang = ESPEAK[(state.global.language || 'en').slice(0, 2)] || 'en-us';
 
   async function start() {
@@ -36,11 +37,11 @@ export default function PronounceDialog({ tab, onClose }) {
       const mr = new MediaRecorder(stream);
       const chunks = [];
       mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      mr.onstop = () => { stream.getTracks().forEach((t) => t.stop()); score(new Blob(chunks, { type: mr.mimeType })); };
+      mr.onstop = () => { stream.getTracks().forEach((tr) => tr.stop()); score(new Blob(chunks, { type: mr.mimeType })); };
       mr.start(250);
       rec.current = { mr, stream };
       setPhase('recording');
-    } catch (e) { setMsg(e?.name === 'NotAllowedError' ? 'Microphone blocked — allow it for this site.' : `No microphone: ${e?.message || e}`); }
+    } catch (e) { setMsg(e?.name === 'NotAllowedError' ? t('Microphone blocked — allow it for this site.') : t('No microphone: {error}', { error: e?.message || e })); }
   }
   const stopRec = () => rec.current?.mr.state === 'recording' && rec.current.mr.stop();
 
@@ -54,7 +55,7 @@ export default function PronounceDialog({ tab, onClose }) {
       const out = await new Promise((resolve, reject) => {
         const id = Math.random();
         worker.current.onmessage = (e) => {
-          if (e.data?.progress != null) { setMsg(`Downloading the pronunciation model (once, ~320 MB)… ${e.data.progress}%`); return; }
+          if (e.data?.progress != null) { setMsg(t('Downloading the pronunciation model (once, ~320 MB)… {pct}%', { pct: e.data.progress })); return; }
           if (e.data?.id !== id) return;
           if (e.data.ok) resolve(e.data); else reject(new Error(e.data.error));
         };
@@ -62,29 +63,29 @@ export default function PronounceDialog({ tab, onClose }) {
       });
       setRes({ ...out.result, words: out.result.words.map((w, i) => ({ ...w, text: words[i] })), heardText: out.heard });
       setMsg('');
-    } catch (e) { setMsg(`Couldn’t score that: ${e?.message || e}`); }
+    } catch (e) { setMsg(t('Couldn’t score that: {error}', { error: e?.message || e })); }
     setPhase('idle');
   }
 
   const cls = (s) => (s >= 85 ? 'good' : s >= 60 ? 'ok' : 'bad');
   return (
-    <Dialog title="Pronunciation check" onClose={onClose} width={640}
+    <Dialog title={t('Pronunciation check')} onClose={onClose} width={640}
       buttons={<>
         {phase === 'recording'
-          ? <button className="toggle-on" onClick={stopRec}>■ Stop &amp; score</button>
-          : <button className="toggle-on" disabled={phase === 'scoring'} onClick={start}>● Record</button>}
-        <button disabled={phase !== 'idle'} onClick={() => { setRes(null); setWi(Math.min(tab.doc.words.length - 1, sent.end + 1)); }}>Next sentence →</button>
-        <button onClick={onClose}>Close</button>
+          ? <button className="toggle-on" onClick={stopRec}>■ {t('Stop & score')}</button>
+          : <button className="toggle-on" disabled={phase === 'scoring'} onClick={start}>● {t('Record')}</button>}
+        <button disabled={phase !== 'idle'} onClick={() => { setRes(null); setWi(Math.min(tab.doc.words.length - 1, sent.end + 1)); }}>{t('Next sentence')} →</button>
+        <button onClick={onClose}>{t('Close')}</button>
       </>}>
-      <p className="settings-note" style={{ marginTop: 0 }}>Press Record, read the sentence aloud, then Stop. Each word is scored by how closely your sounds matched; hover a word for the sounds expected vs heard. Runs on this device.</p>
+      <p className="settings-note" style={{ marginTop: 0 }}>{t('Press Record, read the sentence aloud, then Stop. Each word is scored by how closely your sounds matched; hover a word for the sounds expected vs heard. Runs on this device.')}</p>
       <p className="pron-sentence">
         {res
-          ? res.words.map((w, i) => <span key={i} className={`pron-w ${cls(w.score)}`} title={`${w.score} — expected /${w.expected.join('')}/, heard /${w.heard.join('') || '—'}/`}>{w.text} </span>)
+          ? res.words.map((w, i) => <span key={i} className={`pron-w ${cls(w.score)}`} title={t('{score} — expected /{expected}/, heard /{heard}/', { score: w.score, expected: w.expected.join(''), heard: w.heard.join('') || '—' })}>{w.text} </span>)
           : sent.words.join(' ')}
       </p>
-      {phase === 'recording' && <p className="settings-note" role="status">● Recording… read the sentence, then press Stop.</p>}
-      {phase === 'scoring' && !msg && <p className="settings-note" role="status">Listening to your sounds…</p>}
-      {res && <p className="settings-note"><b>Overall {res.overall}/100</b> · words in red were furthest off — hover them to see which sounds differed.</p>}
+      {phase === 'recording' && <p className="settings-note" role="status">● {t('Recording… read the sentence, then press Stop.')}</p>}
+      {phase === 'scoring' && !msg && <p className="settings-note" role="status">{t('Listening to your sounds…')}</p>}
+      {res && <p className="settings-note"><b>{t('Overall {score}/100', { score: res.overall })}</b> · {t('words in red were furthest off — hover them to see which sounds differed.')}</p>}
       {msg && <p className="settings-note" role="status">{msg}</p>}
     </Dialog>
   );

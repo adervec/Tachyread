@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { pickChunk, scoreRecall, nextDrill, DEFAULT_DRILL } from '../engine/spanDrill.js';
+import { t } from '../i18n.js';
 
 // Tachistoscopic perceptual-span drill: a short horizontal run of words flashes briefly; the reader recalls
 // what they caught in one glance. An adaptive staircase widens the span as they succeed, training how much
@@ -53,38 +54,38 @@ export default function SpanDrillDialog({ doc, onClose }) {
   const acc = rounds ? Math.round((passes / rounds) * 100) : 0;
   return (
     <Dialog
-      title="Span drill — widen what you read per glance"
+      title={t('Span drill — widen what you read per glance')}
       onClose={onClose}
-      buttons={<button onClick={onClose}>Done</button>}
+      buttons={<button onClick={onClose}>{t('Done')}</button>}
     >
       <div className="span-drill">
         <div className="sd-stats">
-          <span>span <b>{span}</b> words</span>
-          <span>flash <b>{flashMs}</b> ms</span>
-          <span>rounds <b>{rounds}</b></span>
-          <span>acc <b>{acc}%</b></span>
-          <span>best <b>{Math.max(bestRef.current, span)}</b></span>
+          <span>{t('span')} <b>{span}</b> {t('words')}</span>
+          <span>{t('flash')} <b>{flashMs}</b> ms</span>
+          <span>{t('rounds')} <b>{rounds}</b></span>
+          <span>{t('acc')} <b>{acc}%</b></span>
+          <span>{t('best')} <b>{Math.max(bestRef.current, span)}</b></span>
         </div>
         <div className="sd-stage">
           {phase === 'ready' && (
             <div className="sd-ready">
-              <p className="settings-note">A short line flashes for a moment. Read it in one glance, then type the words you caught — order doesn’t matter. The span widens as you keep up.</p>
-              <button className="toggle-on" onClick={() => startFlash(span, flashMs)}>Flash ▸</button>
+              <p className="settings-note">{t('A short line flashes for a moment. Read it in one glance, then type the words you caught — order doesn’t matter. The span widens as you keep up.')}</p>
+              <button className="toggle-on" onClick={() => startFlash(span, flashMs)}>{t('Flash')} ▸</button>
             </div>
           )}
           {phase === 'flash' && chunk && <div className="sd-flash">{chunk.words.join(' ')}</div>}
           {phase === 'recall' && (
             <form className="sd-recall" onSubmit={(e) => { e.preventDefault(); submit(); }}>
-              <p className="settings-note">What did you read?</p>
-              <input autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="type the words you saw…" />
-              <button className="toggle-on" type="submit">Check</button>
+              <p className="settings-note">{t('What did you read?')}</p>
+              <input autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={t('type the words you saw…')} />
+              <button className="toggle-on" type="submit">{t('Check')}</button>
             </form>
           )}
           {phase === 'result' && result && (
             <div className={`sd-result ${result.passed ? 'pass' : 'fail'}`}>
-              <div className="sd-verdict">{result.passed ? `✓ ${result.matched}/${result.total} — span up` : `· ${result.matched}/${result.total} — easing off`}</div>
-              <div className="sd-shown">shown: <b>{chunk.words.join(' ')}</b></div>
-              <button className="toggle-on" onClick={next}>Next ▸</button>
+              <div className="sd-verdict">{result.passed ? '✓ ' + t('{matched}/{total} — span up', { matched: result.matched, total: result.total }) : '· ' + t('{matched}/{total} — easing off', { matched: result.matched, total: result.total })}</div>
+              <div className="sd-shown">{t('shown:')} <b>{chunk.words.join(' ')}</b></div>
+              <button className="toggle-on" onClick={next}>{t('Next')} ▸</button>
             </div>
           )}
         </div>

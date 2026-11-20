@@ -4,8 +4,9 @@ import { useApp } from '../state/AppContext.jsx';
 import { newCard, schedule, dueCards, learnedCount } from '../engine/srs.js';
 import { harvestRare, contextAt } from '../engine/vocab.js';
 import { importStardict, listDicts, deleteDict } from '../state/storage.js';
+import { t } from '../i18n.js';
 
-const GRADES = [{ g: 0, label: 'Again' }, { g: 1, label: 'Hard' }, { g: 2, label: 'Good' }, { g: 3, label: 'Easy' }];
+const GRADES = [{ g: 0, label: t('Again') }, { g: 1, label: t('Hard') }, { g: 2, label: t('Good') }, { g: 3, label: t('Easy') }];
 const dictUrl = (w) => `https://www.merriam-webster.com/dictionary/${encodeURIComponent(w)}`;
 
 // Spaced-repetition vocabulary deck. Harvests the rare words from the open document (by surprisal
@@ -35,56 +36,56 @@ export default function VocabDialog({ doc, onClose }) {
   function addManual() {
     const w = addWord.trim();
     if (!w) return;
-    if (deck.some((c) => c.word.toLowerCase() === w.toLowerCase())) { setMsg(`“${w}” is already in the deck.`); return; }
+    if (deck.some((c) => c.word.toLowerCase() === w.toLowerCase())) { setMsg(t('“{word}” is already in the deck.', { word: w })); return; }
     saveDeck([...deck, newCard(w, '', Date.now())]);
-    setAddWord(''); setMsg(`Added “${w}”.`);
+    setAddWord(''); setMsg(t('Added “{word}”.', { word: w }));
   }
   function harvest() {
     const found = harvestRare(doc, deck.map((c) => c.word), 25);
-    if (!found.length) { setMsg(doc ? 'No new rare words found in this document.' : 'Open a document first to harvest words.'); return; }
+    if (!found.length) { setMsg(doc ? t('No new rare words found in this document.') : t('Open a document first to harvest words.')); return; }
     saveDeck([...deck, ...found.map((f) => newCard(f.word, contextAt(doc, f.idx), Date.now()))]);
-    setMsg(`Added ${found.length} rare word(s) from this document.`);
+    setMsg(t.n('Added {n} rare word from this document.', 'Added {n} rare words from this document.', found.length));
   }
   function remove(word) { saveDeck(deck.filter((c) => c.word.toLowerCase() !== word.toLowerCase())); }
 
   return (
     <Dialog
-      title="Vocabulary — drill the rare words you read"
+      title={t('Vocabulary — drill the rare words you read')}
       onClose={onClose}
       buttons={<>
-        <button className={view === 'review' ? 'toggle-on' : ''} onClick={() => setView('review')}>Review ({due.length})</button>
-        <button className={view === 'deck' ? 'toggle-on' : ''} onClick={() => setView('deck')}>Deck ({deck.length})</button>
-        <button onClick={onClose}>Done</button>
+        <button className={view === 'review' ? 'toggle-on' : ''} onClick={() => setView('review')}>{t('Review ({n})', { n: due.length })}</button>
+        <button className={view === 'deck' ? 'toggle-on' : ''} onClick={() => setView('deck')}>{t('Deck ({n})', { n: deck.length })}</button>
+        <button onClick={onClose}>{t('Done')}</button>
       </>}
     >
       <div className="vocab">
         {msg && <p className="settings-note" style={{ marginTop: 0 }}>{msg}</p>}
         <details className="lj-fold vocab-dicts" onToggle={(e) => { if (e.currentTarget.open) refreshDicts(); }}>
-          <summary>📚 Offline dictionaries{dicts?.length ? ` (${dicts.length})` : ''}</summary>
-          <p className="settings-note">Import a StarDict dictionary (pick its .ifo, .idx and .dict or .dict.dz files together) and 📖 Define answers from it first — any language, no network.</p>
-          <input type="file" multiple accept=".ifo,.idx,.dict,.dz" aria-label="StarDict files"
+          <summary>📚 {t('Offline dictionaries')}{dicts?.length ? ` (${dicts.length})` : ''}</summary>
+          <p className="settings-note">{t('Import a StarDict dictionary (pick its .ifo, .idx and .dict or .dict.dz files together) and 📖 Define answers from it first — any language, no network.')}</p>
+          <input type="file" multiple accept=".ifo,.idx,.dict,.dz" aria-label={t('StarDict files')}
             onChange={async (e) => {
               const files = [...(e.target.files || [])]; e.target.value = ''; // copy first — clearing the input empties its live FileList
               if (!files?.length) return;
-              setMsg('Importing dictionary…');
-              try { const d = await importStardict(files); setMsg(`Imported “${d.name}” — ${d.wordcount.toLocaleString()} words.`); refreshDicts(); }
-              catch (err) { setMsg(`Couldn’t import: ${err?.message || err}`); }
+              setMsg(t('Importing dictionary…'));
+              try { const d = await importStardict(files); setMsg(t.n('Imported “{name}” — {count} word.', 'Imported “{name}” — {count} words.', d.wordcount, { name: d.name, count: d.wordcount.toLocaleString() })); refreshDicts(); }
+              catch (err) { setMsg(t('Couldn’t import: {error}', { error: err?.message || err })); }
             }} />
           {(dicts || []).map((d) => (
             <div key={d.id} className="lj-inline">
-              <b>{d.name}</b> <span className="lj-qdim">{d.wordcount.toLocaleString()} words · {(d.bytes / 1048576).toFixed(1)} MB</span>
-              <button className="grab-trash" onClick={async () => { await deleteDict(d.id); refreshDicts(); }} aria-label={`Remove ${d.name}`}>🗑</button>
+              <b>{d.name}</b> <span className="lj-qdim">{t.n('{count} word · {size} MB', '{count} words · {size} MB', d.wordcount, { count: d.wordcount.toLocaleString(), size: (d.bytes / 1048576).toFixed(1) })}</span>
+              <button className="grab-trash" onClick={async () => { await deleteDict(d.id); refreshDicts(); }} aria-label={t('Remove {name}', { name: d.name })}>🗑</button>
             </div>
           ))}
         </details>
         {view === 'review' && (
           <div className="vocab-review">
-            {!card && <div className="vocab-empty">✓ All caught up — {deck.length} word(s), {learned} learned. Add more from the Deck tab.</div>}
+            {!card && <div className="vocab-empty">✓ {t.n('All caught up — {n} word, {learned} learned. Add more from the Deck tab.', 'All caught up — {n} words, {learned} learned. Add more from the Deck tab.', deck.length, { learned })}</div>}
             {card && (
               <div className="vocab-card">
                 <div className="vc-word">{card.word}</div>
                 {!revealed
-                  ? <button className="toggle-on" onClick={() => setRevealed(true)}>Show meaning</button>
+                  ? <button className="toggle-on" onClick={() => setRevealed(true)}>{t('Show meaning')}</button>
                   : (
                     <>
                       {card.context && <div className="vc-context">“…{card.context}…”</div>}
@@ -102,18 +103,18 @@ export default function VocabDialog({ doc, onClose }) {
         {view === 'deck' && (
           <div className="vocab-deck">
             <div className="vd-actions">
-              <button onClick={harvest} title="Scan the open document for rare words and add them">⤓ Harvest from document</button>
-              <input value={addWord} onChange={(e) => setAddWord(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addManual()} placeholder="add a word…" />
-              <button onClick={addManual} disabled={!addWord.trim()}>Add</button>
+              <button onClick={harvest} title={t('Scan the open document for rare words and add them')}>⤓ {t('Harvest from document')}</button>
+              <input value={addWord} onChange={(e) => setAddWord(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addManual()} placeholder={t('add a word…')} />
+              <button onClick={addManual} disabled={!addWord.trim()}>{t('Add')}</button>
             </div>
-            <div className="vd-summary settings-note">{deck.length} word(s) · {due.length} due · {learned} learned</div>
+            <div className="vd-summary settings-note">{t.n('{n} word · {due} due · {learned} learned', '{n} words · {due} due · {learned} learned', deck.length, { due: due.length, learned })}</div>
             <div className="vd-list">
-              {deck.length === 0 && <div className="settings-note">Empty — harvest rare words from a document, or add your own.</div>}
+              {deck.length === 0 && <div className="settings-note">{t('Empty — harvest rare words from a document, or add your own.')}</div>}
               {deck.map((c) => (
                 <div key={c.word} className="vd-row">
                   <a href={dictUrl(c.word)} target="_blank" rel="noopener noreferrer">{c.word}</a>
-                  <span className="vd-meta">{(c.due || 0) <= now ? 'due' : `${Math.max(1, Math.round(((c.due || 0) - now) / 86400000))}d`}{c.reps ? ` · ${c.reps}×` : ''}</span>
-                  <button className="vd-x" onClick={() => remove(c.word)} title="Remove">×</button>
+                  <span className="vd-meta">{(c.due || 0) <= now ? t('due') : t('{n}d', { n: Math.max(1, Math.round(((c.due || 0) - now) / 86400000)) })}{c.reps ? ` · ${c.reps}×` : ''}</span>
+                  <button className="vd-x" onClick={() => remove(c.word)} title={t('Remove')}>×</button>
                 </div>
               ))}
             </div>

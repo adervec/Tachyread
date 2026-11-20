@@ -7,25 +7,26 @@
 
 import { reviewPassage } from '../features/typingUpgrades.js';
 import { coursePassage, COURSE_START } from './keyboardLayouts.js';
+import { t } from '../i18n.js';
 
 // kind: 'doc'  → generated from the open document (needs the reading position; supports "count as read")
 //       'drill'→ self-contained practice text (no reading position)
 export const TYPING_MODES = [
-  { id: 'passage', label: 'Passage', kind: 'doc', desc: 'Type your book from where you are (Monkeytype-style).' },
-  { id: 'commonWords', label: 'Common words', kind: 'drill', desc: 'The most frequent English words — build raw speed.' },
-  { id: 'bigrams', label: 'Bigrams', kind: 'drill', desc: 'The most common English letter pairs (th, he, in…), each typed three times.' },
-  { id: 'trigrams', label: 'Trigrams', kind: 'drill', desc: 'The most common English letter triples (the, and, ing…), each typed three times.' },
-  { id: 'course', label: '🎓 Course', kind: 'drill', desc: 'keybr-style: start with 6 letters, unlock the next when every one is at your target speed.' },
-  { id: 'weakspot', label: '🩹 Weak spots', kind: 'drill', desc: 'Built from your whole history: the words you most often miss or slow on, plus words and letter pairs on your weakest keys.' },
-  { id: 'homeRow', label: 'Home row', kind: 'drill', desc: 'a s d f j k l ; drill.' },
-  { id: 'topRow', label: 'Top row', kind: 'drill', desc: 'q w e r t y u i o p drill.' },
-  { id: 'bottomRow', label: 'Bottom row', kind: 'drill', desc: 'z x c v b n m drill.' },
-  { id: 'numbers', label: 'Numbers & symbols', kind: 'drill', desc: 'Number-row and symbol accuracy.' },
-  { id: 'gibberish', label: 'Gibberish', kind: 'drill', desc: 'Random characters from the whole keyboard — no words to lean on.' },
-  { id: 'quotes', label: 'Quotes', kind: 'drill', desc: 'Type a short literary quote.' },
+  { id: 'passage', label: t('Passage'), kind: 'doc', desc: t('Type your book from where you are (Monkeytype-style).') },
+  { id: 'commonWords', label: t('Common words'), kind: 'drill', desc: t('The most frequent English words — build raw speed.') },
+  { id: 'bigrams', label: t('Bigrams'), kind: 'drill', desc: t('The most common English letter pairs (th, he, in…), each typed three times.') },
+  { id: 'trigrams', label: t('Trigrams'), kind: 'drill', desc: t('The most common English letter triples (the, and, ing…), each typed three times.') },
+  { id: 'course', label: '🎓 ' + t('Course'), kind: 'drill', desc: t('keybr-style: start with 6 letters, unlock the next when every one is at your target speed.') },
+  { id: 'weakspot', label: '🩹 ' + t('Weak spots'), kind: 'drill', desc: t('Built from your whole history: the words you most often miss or slow on, plus words and letter pairs on your weakest keys.') },
+  { id: 'homeRow', label: t('Home row'), kind: 'drill', desc: t('a s d f j k l ; drill.') },
+  { id: 'topRow', label: t('Top row'), kind: 'drill', desc: t('q w e r t y u i o p drill.') },
+  { id: 'bottomRow', label: t('Bottom row'), kind: 'drill', desc: t('z x c v b n m drill.') },
+  { id: 'numbers', label: t('Numbers & symbols'), kind: 'drill', desc: t('Number-row and symbol accuracy.') },
+  { id: 'gibberish', label: t('Gibberish'), kind: 'drill', desc: t('Random characters from the whole keyboard — no words to lean on.') },
+  { id: 'quotes', label: t('Quotes'), kind: 'drill', desc: t('Type a short literary quote.') },
   // Amphetype-style review: drill the words the LAST run was missed/slow on (one click from the
   // results screen). Needs `reviewWords` in buildPassage opts; falls back to common words without.
-  { id: 'review', label: '🎯 Review misses', kind: 'drill', desc: 'Drill the words you missed or slowed on in your last run.' },
+  { id: 'review', label: '🎯 ' + t('Review misses'), kind: 'drill', desc: t('Drill the words you missed or slowed on in your last run.') },
 ];
 
 export const TYPING_MODE_BY_ID = Object.fromEntries(TYPING_MODES.map((m) => [m.id, m]));
@@ -63,7 +64,7 @@ const LOWER = 'abcdefghijklmnopqrstuvwxyz';
 
 // Most frequent English letter n-grams inside words (cross-word ones like "nth"/"oft" left out).
 const BIGRAMS = 'th he in er an re on at en nd ti es or te of ed is it al ar st to nt ng se ha as ou io le ve co me de hi ri ro ic ne ea ra ce li ch ll be ma si om ur'.split(' ');
-const TRIGRAMS = 'the and ing ion ent her for tha ter tio ere ate ati hat est all ver his ith ers res are ons rea ear was sta thi tin ted con men pro com per ess ive int ound ight'.split(' ').filter((t) => t.length === 3);
+const TRIGRAMS = 'the and ing ion ent her for tha ter tio ere ate ati hat est all ver his ith ers res are ons rea ear was sta thi tin ted con men pro com per ess ive int ound ight'.split(' ').filter((g) => g.length === 3);
 
 // Weak-spot drill: missed words twice each, words on your weak keys (from the open book first, then
 // common words), and those keys' bigrams three times — shuffled. Without history: common words.

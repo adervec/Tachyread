@@ -10,6 +10,7 @@
 //      Slovenian one, but not two QWERTYs apart. Free, no prompt, Chromium only.
 // Neither is guaranteed, so detection only decides which entry is *preselected* — the list is the
 // user's, and they can rename entries or pick another.
+import { t } from '../i18n.js';
 
 const HOME = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU', 'KeyI', 'KeyO', 'KeyP',
   'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyZ', 'KeyX', 'KeyC', 'KeyV', 'Semicolon', 'Quote'];
@@ -34,7 +35,7 @@ export function layoutId(entries) {
 export function layoutLabel(entries) {
   const get = (c) => (entries.get?.(c) ?? entries[c] ?? '');
   const top = HOME.slice(0, 6).map(get).join('');
-  return top.trim() ? `${top.toUpperCase()} keyboard` : 'Keyboard';
+  return top.trim() ? t('{layout} keyboard', { layout: top.toUpperCase() }) : t('Keyboard');
 }
 
 // ── catalog ────────────────────────────────────────────────────────────────────────────────────
@@ -65,7 +66,7 @@ export function keyboardRows(runs, list) {
   }
   const rows = [...by.entries()].map(([id, rs]) => ({
     id,
-    label: labelFor(list, id) || rs.find((r) => r.keyboardLabel)?.keyboardLabel || (id === 'unknown' ? 'Unrecorded' : id),
+    label: labelFor(list, id) || rs.find((r) => r.keyboardLabel)?.keyboardLabel || (id === 'unknown' ? t('Unrecorded') : id),
     runs: rs.length,
     avgNet: Math.round(rs.reduce((a, r) => a + (r.netWpm || 0), 0) / rs.length),
     best: Math.max(...rs.map((r) => r.netWpm || 0)),
@@ -87,7 +88,7 @@ export const hidSupported = () => typeof navigator !== 'undefined' && !!navigato
 export async function detectKeyboard() {
   try {
     const [device] = (await navigator.hid?.getDevices?.()) || [];
-    if (device) return { id: hidId(device), label: device.productName || 'Linked keyboard' };
+    if (device) return { id: hidId(device), label: device.productName || t('Linked keyboard') };
   } catch { /* no HID, or blocked by permissions policy */ }
   try {
     const map = await navigator.keyboard?.getLayoutMap?.();
@@ -102,5 +103,5 @@ export async function detectKeyboard() {
 export async function linkKeyboard() {
   if (!hidSupported()) return null;
   const [device] = await navigator.hid.requestDevice({ filters: [] });
-  return device ? { id: hidId(device), label: device.productName || 'Linked keyboard' } : null;
+  return device ? { id: hidId(device), label: device.productName || t('Linked keyboard') } : null;
 }

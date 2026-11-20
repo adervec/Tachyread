@@ -19,6 +19,7 @@ import { currentSession, sessionStats, bookForecast } from '../features/typingSe
 import { splitRun, splitsFor } from '../features/typingSplits.js';
 import { typingEyeColor } from '../features/avatarMood.js';
 import Avatar from './Avatar.jsx';
+import { t } from '../i18n.js';
 
 const DEFAULT_SOUNDS = {
   charCorrect: 'off', charWrong: 'off', wordPerfect: 'click', wordCorrected: 'wood', wordError: 'hiss',
@@ -35,7 +36,9 @@ function sameChar(a, b, caseSensitive) {
 }
 
 
-// Net-WPM tiers from the Typing Speed Field Guide.
+// Net-WPM tiers from the Typing Speed Field Guide. The English value is stored with the run;
+// it is translated only where it is shown.
+// i18n-keys: Exceptional | Advanced | Fast | Proficient | Average | Improving | Beginner
 function netTier(net) {
   if (net >= 110) return 'Exceptional';
   if (net >= 90) return 'Advanced';
@@ -193,11 +196,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       <span className="tt-txt">
         <span className="tt-lbl">{label}</span>
         <select
-          className="tt-pick" value={sounds[k]} disabled={locked} aria-label={`${label} sound`}
+          className="tt-pick" value={sounds[k]} disabled={locked} aria-label={t('{label} sound', { label })}
           onChange={(e) => { setSound(k, e.target.value); if (e.target.value !== 'off') playLineSound(e.target.value, volume); }}
         >
-          <option value="off">off</option>
-          {TYPING_SOUNDS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          <option value="off">{t('off')}</option>
+          {TYPING_SOUNDS.map((o) => <option key={o.id} value={o.id}>{t(o.label)}</option>)}
         </select>
       </span>
     </div>
@@ -327,7 +330,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   const penaltyTimer = useRef(0);
   // Stop-on-error "pain": a refused key flashes the passage (and, at 'strong', shakes the word and
   // buzzes a phone). painAt remounts the flash so repeated mistakes restart it rather than stack.
-  const painFx = cfg.painFx || 'subtle';
+  const painFx = cfg.painFx || 'subtle'; // shown through t(painFx) — i18n-keys: off | subtle | strong
   const [painAt, setPainAt] = useState(0);
   function pain() {
     if (painFx === 'off') return;
@@ -402,11 +405,11 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       if (e.key.length !== 1 && e.key !== 'Backspace') return;
       const el = inputRef.current;
       if (!el || document.activeElement === el) return;
-      const t = e.target;
-      if (t?.closest?.('.dialog')) return;
-      const tag = t?.tagName;
-      if (tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) return;
-      if (tag === 'INPUT' && !['checkbox', 'radio', 'range', 'color', 'button'].includes(t.type)) return;
+      const tgt = e.target;
+      if (tgt?.closest?.('.dialog')) return;
+      const tag = tgt?.tagName;
+      if (tag === 'TEXTAREA' || tag === 'SELECT' || tgt?.isContentEditable) return;
+      if (tag === 'INPUT' && !['checkbox', 'radio', 'range', 'color', 'button'].includes(tgt.type)) return;
       if (tag === 'BUTTON' && (e.key === ' ' || e.key === 'Enter')) return; // keyboard button activation stays
       el.focus();
     };
@@ -577,9 +580,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     const lines = linesRef.current;
     const anchor = activeRef.current?.querySelector('.caret-anchor');
     if (!caret || !lines || !anchor) return;
-    const t = lines.style.transform || '';
-    const my = /translateY\((-?\d+(?:\.\d+)?)px\)/.exec(t);
-    const mx = /translate\((-?\d+(?:\.\d+)?)px/.exec(t); // ticker's horizontal slide
+    const tf = lines.style.transform || '';
+    const my = /translateY\((-?\d+(?:\.\d+)?)px\)/.exec(tf);
+    const mx = /translate\((-?\d+(?:\.\d+)?)px/.exec(tf); // ticker's horizontal slide
     const shiftY = my ? parseFloat(my[1]) : 0;
     const shiftX = mx ? parseFloat(mx[1]) : 0;
     const fs = parseFloat(getComputedStyle(lines).fontSize) || 26;
@@ -648,6 +651,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   function beginCountdown() {
     resetRunState();
     setPhase('countdown');
+    // shown through t() — 'Set' is shown as 'Get set' (the plain word is the verb elsewhere) — i18n-keys: Ready | Get set | Go!
     setCount('Ready');
     focus();
     countTimers.current = [
@@ -871,7 +875,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   async function copyChallenge() {
     const code = encodeChallenge({ mode: gameMode, runMode: mode, limit, seed, wpm: summary?.netWpm || 0 });
     const url = `${window.location.origin}${window.location.pathname}#challenge=${code}`;
-    try { await navigator.clipboard.writeText(url); setShareMsg('Challenge link copied.'); }
+    try { await navigator.clipboard.writeText(url); setShareMsg(t('Challenge link copied.')); }
     catch { setShareMsg(url); } // clipboard blocked: show it to copy by hand
   }
 
@@ -1018,25 +1022,27 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
     secs: m.secs,
   };
   const progressLabel =
-    mode === 'words' ? `${stats.current.words} / ${limit} words`
-      : mode === 'endless' ? `${live.secs.toFixed(0)}s · endless`
-        : `${live.secs.toFixed(0)} / ${limit}s`;
+    mode === 'words' ? t('{n} / {limit} words', { n: stats.current.words, limit })
+      : mode === 'endless' ? t('{secs}s · endless', { secs: live.secs.toFixed(0) })
+        : t('{secs} / {limit}s', { secs: live.secs.toFixed(0), limit });
 
   // ── Options sidebar: toggle tiles — always visible, LOCKED (not hidden) while a run is live ──
   const locked = phase === 'running' || phase === 'countdown';
   const sideVisible = !plan;
   // Cycles: punctuation shown → hidden → dim auto-skipped ghosts; case match → any-case →
   // all-lowercase → lowercase-but-capitals-shown. Display-only states never change the required typing.
-  const punctState = !noSpecial ? 'shown' : wantGhosts ? 'ghosts 👻' : 'hidden';
+  const punctState = !noSpecial ? t('shown') : wantGhosts ? `${t('ghosts')} 👻` : t('hidden');
   const cyclePunct = () => patchCfg(!noSpecial
     ? { noSpecial: true, ghostSpecials: false }
     : !wantGhosts ? { noSpecial: true, ghostSpecials: true } : { noSpecial: false, ghostSpecials: false });
-  const caseState = !lowercase ? (caseSensitive ? 'match case' : 'any case') : wantCaps ? 'lower · Aa shown' : 'lowercase';
+  const caseState = !lowercase ? (caseSensitive ? t('match case') : t('any case')) : wantCaps ? t('lower · Aa shown') : t('lowercase');
   const cycleCase = () => patchCfg(!lowercase && caseSensitive ? { caseFold: true }
     : !lowercase ? { lowercase: true, caseFold: false, showCaps: false }
       : !wantCaps ? { lowercase: true, showCaps: true }
         : { lowercase: false, caseFold: false, showCaps: false });
-  const paceState = paceMode === 'off' ? 'off' : paceMode === 'last' ? 'last run' : paceMode === 'pb' ? 'personal best' : `custom · ${cfg.paceWpm ?? 60} wpm`;
+  const paceState = paceMode === 'off' ? t('off') : paceMode === 'last' ? t('last run') : paceMode === 'pb' ? t('personal best') : t('custom · {wpm} wpm', { wpm: cfg.paceWpm ?? 60 });
+  // A plan's pass marks, e.g. "40 wpm & 95%".
+  const passMarks = plan ? [plan.passWpm > 0 && t('{n} wpm', { n: plan.passWpm }), plan.passAcc > 0 && `${plan.passAcc}%`].filter(Boolean).join(' & ') : '';
   const cyclePace = () => patchCfg({ pace: { off: 'last', last: 'pb', pb: 'custom', custom: 'off' }[paceMode] || 'off' });
 
   return (
@@ -1053,17 +1059,17 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         autoComplete="off"
         spellCheck={false}
         inputMode="text"
-        aria-label="Typing run input"
+        aria-label={t('Typing run input')}
       />
 
       {plan && (
         <div className="tr-plan-bar">
-          📋 {plan.name} · Step {plan.step}/{plan.steps} · Set {plan.set}/{plan.sets}
-          {(plan.passWpm > 0 || plan.passAcc > 0) && <> · pass mark {[plan.passWpm > 0 && `${plan.passWpm} wpm`, plan.passAcc > 0 && `${plan.passAcc}%`].filter(Boolean).join(' & ')}</>}
+          📋 {plan.name} · {t('Step {step}/{steps} · Set {set}/{sets}', { step: plan.step, steps: plan.steps, set: plan.set, sets: plan.sets })}
+          {(plan.passWpm > 0 || plan.passAcc > 0) && <> · {t('pass mark {marks}', { marks: passMarks })}</>}
         </div>
       )}
       {challenge && (
-        <div className="tr-plan-bar">🔗 Challenge{challenge.wpm ? ` — beat ${challenge.wpm} wpm (the 👻 ghost runs at their pace)` : ''}</div>
+        <div className="tr-plan-bar">🔗 {challenge.wpm ? t('Challenge — beat {wpm} wpm (the 👻 ghost runs at their pace)', { wpm: challenge.wpm }) : t('Challenge')}</div>
       )}
 
       <div className="tr-bar">
@@ -1074,7 +1080,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             // gray beginner → green → cyan → blue → purple → gold → fire at 110+.
             const eye = typingEyeColor(live.net);
             return (
-              <div className="tr-avatar" title={`Eye colour = how impressive the pace is (consensus WPM tiers) — currently ${eye.tier}`}>
+              <div className="tr-avatar" title={t('Eye colour = how impressive the pace is (consensus WPM tiers) — currently {tier}', { tier: t(eye.tier) })}>
                 <Avatar
                   forceSvg size={52}
                   wpm={Math.max(200, live.net * 4)}
@@ -1089,17 +1095,17 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               </div>
             );
           })()}
-          <Stat v={live.net} l="net wpm" hero />
-          <div className="tr-stat tr-sprint" title="Net WPM over just the last few seconds — how fast this sprint is, inside the longer run">
+          <Stat v={live.net} l={t('net wpm')} hero />
+          <div className="tr-stat tr-sprint" title={t('Net WPM over just the last few seconds — how fast this sprint is, inside the longer run')}>
             <span className="tr-v">{phase === 'running' ? Math.round(sprint) : '—'}</span>
-            <span className="tr-l">{sprintSecs}s wpm</span>
+            <span className="tr-l">{t('{n}s wpm', { n: sprintSecs })}</span>
             <input type="range" min={2} max={15} step={1} value={sprintSecs} onChange={(e) => patchCfg({ sprintSecs: Number(e.target.value) })}
-              aria-label="Sprint window (seconds)" aria-valuetext={`${sprintSecs} seconds`} />
+              aria-label={t('Sprint window (seconds)')} aria-valuetext={t.n('{n} second', '{n} seconds', sprintSecs)} />
           </div>
-          <Stat v={live.gross} l="gross wpm" />
-          <Stat v={`${live.acc}%`} l="accuracy" />
-          <Stat v={progressLabel} l="run" />
-          {phase === 'running' && paceWpmVal > 0 && <Stat v={paceWpmVal} l="👻 pace" />}
+          <Stat v={live.gross} l={t('gross wpm')} />
+          <Stat v={`${live.acc}%`} l={t('accuracy')} />
+          <Stat v={progressLabel} l={t('run')} />
+          {phase === 'running' && paceWpmVal > 0 && <Stat v={paceWpmVal} l={`👻 ${t('pace')}`} />}
         </div>
         <div className="tr-controls">
           {!plan && (
@@ -1107,15 +1113,15 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               <select
                 value={gameMode}
                 disabled={locked}
-                title="Typing mode — Passage types your book; the rest are drills"
+                title={t('Typing mode — Passage types your book; the rest are drills')}
                 onChange={(e) => { setGameMode(e.target.value); if (e.target.value !== 'review') patchCfg({ mode: e.target.value }); reattempt(); }}
               >
                 {TYPING_MODES.filter((tm) => tm.id !== 'review' || reviewRef.current.length > 0).map((tm) => <option key={tm.id} value={tm.id}>{tm.label}</option>)}
               </select>
               <select value={mode} disabled={locked} onChange={(e) => { setMode(e.target.value); patchCfg({ runMode: e.target.value }); }}>
-                <option value="seconds">Seconds</option>
-                <option value="words">Words</option>
-                <option value="endless">Endless</option>
+                <option value="seconds">{t('Seconds')}</option>
+                <option value="words">{t('Words')}</option>
+                <option value="endless">{t('Endless')}</option>
               </select>
               {mode !== 'endless' && (
                 <input type="number" min={1} max={9999} value={limit}
@@ -1124,13 +1130,13 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               )}
             </>
           )}
-          {phase === 'idle' && <button className="toggle-on" onClick={beginCountdown} title="Start the run (Ready·Set·Go)">▶ Start</button>}
+          {phase === 'idle' && <button className="toggle-on" onClick={beginCountdown} title={t('Start the run (Ready·Set·Go)')}>▶ {t('Start')}</button>}
           {phase === 'running' && wordBackOnly && (
-            <button onPointerDown={(e) => e.preventDefault()} onClick={clearWord} title="Wipe the word you're on (same as Ctrl+Backspace)">⌫ word</button>
+            <button onPointerDown={(e) => e.preventDefault()} onClick={clearWord} title={t("Wipe the word you're on (same as Ctrl+Backspace)")}>⌫ {t('word')}</button>
           )}
           {phase === 'running'
-            ? <button className="toggle-on" onClick={endRun}>■ End run</button>
-            : <button onClick={() => onExitDiscard?.(discardCreditWi())} title="Close typing — anything you typed still counts as read; only the reading position stays put">{plan ? 'Exit plan' : 'Discard'}</button>}
+            ? <button className="toggle-on" onClick={endRun}>■ {t('End run')}</button>
+            : <button onClick={() => onExitDiscard?.(discardCreditWi())} title={t('Close typing — anything you typed still counts as read; only the reading position stays put')}>{plan ? t('Exit plan') : t('Discard')}</button>}
         </div>
       </div>
 
@@ -1143,7 +1149,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           ? Math.max(0, Math.min(1, (mode === 'seconds' ? frac : pacePos / passage.length)))
           : null;
         return (
-          <div className="tr-progress" title={`${progressLabel} — ${Math.round(frac * 100)}% complete`}>
+          <div className="tr-progress" title={t('{label} — {pct}% complete', { label: progressLabel, pct: Math.round(frac * 100) })}>
             <div className="tr-progress-fill" style={{ width: `${frac * 100}%` }} />
             {ghost != null && mode !== 'seconds' && <span className="tr-progress-ghost" style={{ left: `${ghost * 100}%` }} aria-hidden="true" />}
             <span className="tr-progress-label">{progressLabel} · {Math.round(frac * 100)}%</span>
@@ -1164,134 +1170,134 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           const book = isDocMode && doc?.words?.length ? bookForecast({ totalWords: doc.words.length, throughWord: wi, avgNet: sess?.avgNet || live.net }) : null;
           const fmtMin = (min) => (min >= 60 ? `${Math.floor(min / 60)}h ${min % 60}m` : `${min}m`);
           return (
-            <aside className="tr-side tr-side-info" aria-label="Book and session progress">
+            <aside className="tr-side tr-side-info" aria-label={t('Book and session progress')}>
               {book && (
                 <>
-                  <div className="tt-group">📖 This book</div>
-                  <div className="tr-info-bar" title={`${book.pct}% of the document typed through`}>
+                  <div className="tt-group">📖 {t('This book')}</div>
+                  <div className="tr-info-bar" title={t('{pct}% of the document typed through', { pct: book.pct })}>
                     <div className="tr-info-fill" style={{ width: `${Math.min(100, book.pct)}%` }} />
                   </div>
-                  <div className="tr-info-row"><b>{book.pct}%</b> · word {book.through.toLocaleString()} of {doc.words.length.toLocaleString()}</div>
-                  <div className="tr-info-row">{book.left.toLocaleString()} words left{book.etaMin != null && <> · ~<b>{fmtMin(book.etaMin)}</b> at this pace</>}</div>
+                  <div className="tr-info-row"><b>{book.pct}%</b> · {t('word {n} of {total}', { n: book.through.toLocaleString(), total: doc.words.length.toLocaleString() })}</div>
+                  <div className="tr-info-row">{t.n('{count} word left', '{count} words left', book.left, { count: book.left.toLocaleString() })}{book.etaMin != null && <> · {t('~{time} at this pace', { time: fmtMin(book.etaMin) })}</>}</div>
                 </>
               )}
-              <div className="tt-group">⏱ This sitting</div>
+              <div className="tt-group">⏱ {t('This sitting')}</div>
               {sess ? (
                 <>
-                  <div className="tr-info-row"><b>{sess.runs}</b> run{sess.runs === 1 ? '' : 's'} · <b>{sess.words.toLocaleString()}</b> words · {fmtMin(Math.max(1, Math.round(sess.ms / 60000)))}</div>
-                  <div className="tr-info-row">avg <b>{sess.avgNet}</b> wpm · best <b>{sess.best}</b> · {sess.avgAcc}% acc</div>
-                  {sessRuns.length === 0 && <div className="tr-info-row dim">First run of this sitting</div>}
-                  {todayCount > sessRuns.length && <div className="tr-info-row dim">{todayCount} run{todayCount === 1 ? '' : 's'} today across sittings</div>}
+                  <div className="tr-info-row">{t.n('{n} run', '{n} runs', sess.runs)} · {t.n('{count} word', '{count} words', sess.words, { count: sess.words.toLocaleString() })} · {fmtMin(Math.max(1, Math.round(sess.ms / 60000)))}</div>
+                  <div className="tr-info-row">{t('avg {avg} wpm · best {best} · {acc}% acc', { avg: sess.avgNet, best: sess.best, acc: sess.avgAcc })}</div>
+                  {sessRuns.length === 0 && <div className="tr-info-row dim">{t('First run of this sitting')}</div>}
+                  {todayCount > sessRuns.length && <div className="tr-info-row dim">{t.n('{n} run today across sittings', '{n} runs today across sittings', todayCount)}</div>}
                 </>
-              ) : <div className="tr-info-row dim">Warming up…</div>}
+              ) : <div className="tr-info-row dim">{t('Warming up…')}</div>}
             </aside>
           );
         })()}
         {sideVisible && !locked && (
-          <aside className="tr-side" aria-label="Typing options">
-            <label className="tr-theme" title="Typing's own look, the same for every typing run — or follow the document the text came from">
-              <span>🎨 Theme</span>
-              <select value={cfg.theme || ''} onChange={(e) => patchCfg({ theme: e.target.value })} aria-label="Typing theme">
-                <option value="">Same as the document</option>
-                {THEME_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+          <aside className="tr-side" aria-label={t('Typing options')}>
+            <label className="tr-theme" title={t("Typing's own look, the same for every typing run — or follow the document the text came from")}>
+              <span>🎨 {t('Theme')}</span>
+              <select value={cfg.theme || ''} onChange={(e) => patchCfg({ theme: e.target.value })} aria-label={t('Typing theme')}>
+                <option value="">{t('Same as the document')}</option>
+                {THEME_NAMES.map((n) => <option key={n} value={n}>{t(n)}</option>)}
               </select>
             </label>
-            <div className="tt-group">Text</div>
-            <Tile icon="#" label="Punctuation" state={punctState} on={noSpecial} onClick={cyclePunct} disabled={locked}
-              title="Cycle: shown → hidden → dim auto-skipped ghosts. Ghosts are never required — but typing one anyway is accepted, never an error." />
-            <Tile icon="Aa" label="Case" state={caseState} on={lowercase || !caseSensitive} onClick={cycleCase} disabled={locked}
-              title="Cycle: match case (capitals must be typed) → any case → all lowercase → lowercase but capitals SHOWN. Lowercase modes are inherently case-agnostic." />
+            <div className="tt-group">{t('Text')}</div>
+            <Tile icon="#" label={t('Punctuation')} state={punctState} on={noSpecial} onClick={cyclePunct} disabled={locked}
+              title={t('Cycle: shown → hidden → dim auto-skipped ghosts. Ghosts are never required — but typing one anyway is accepted, never an error.')} />
+            <Tile icon="Aa" label={t('Case')} state={caseState} on={lowercase || !caseSensitive} onClick={cycleCase} disabled={locked}
+              title={t('Cycle: match case (capitals must be typed) → any case → all lowercase → lowercase but capitals SHOWN. Lowercase modes are inherently case-agnostic.')} />
             {isDocMode && (
-              <Tile icon="¶" label="Line breaks" state={cfg.showBreaks ? 'book layout' : 'flowing wall'} on={!!cfg.showBreaks}
+              <Tile icon="¶" label={t('Line breaks')} state={cfg.showBreaks ? t('book layout') : t('flowing wall')} on={!!cfg.showBreaks}
                 onClick={() => patchCfg({ showBreaks: !cfg.showBreaks })} disabled={locked || oneWord || !!cfg.ticker}
-                title="Show the book's own line and paragraph breaks — visual only, the words you type are identical" />
+                title={t("Show the book's own line and paragraph breaks — visual only, the words you type are identical")} />
             )}
-            <Tile icon="⌨" label="Keyboard" state={showKeyboard ? 'shown' : 'hidden'} on={showKeyboard}
+            <Tile icon="⌨" label={t('Keyboard')} state={showKeyboard ? t('shown') : t('hidden')} on={showKeyboard}
               onClick={() => patchCfg({ showKeyboard: !showKeyboard })} disabled={locked}
-              title="Show an on-screen keyboard that lights up the next key" />
-            <Tile icon="🔀" label="Layout" state={LAYOUTS[layout].label} on={layout !== 'qwerty'}
+              title={t('Show an on-screen keyboard that lights up the next key')} />
+            <Tile icon="🔀" label={t('Layout')} state={LAYOUTS[layout].label} on={layout !== 'qwerty'}
               onClick={() => patchCfg({ layout: { qwerty: 'colemak', colemak: 'dvorak', dvorak: 'qwerty' }[layout] })} disabled={locked}
-              title="Practise another layout on your QWERTY keyboard — each physical key types that layout's letter (QWERTY → Colemak → Dvorak)" />
+              title={t("Practise another layout on your QWERTY keyboard — each physical key types that layout's letter (QWERTY → Colemak → Dvorak)")} />
             {gameMode === 'course' && (
-              <Tile icon="🎓" label="Course target" state={`${courseTarget} wpm · ${courseLevel} letters`} on
+              <Tile icon="🎓" label={t('Course target')} state={t('{wpm} wpm · {n} letters', { wpm: courseTarget, n: courseLevel })} on
                 onClick={() => patchCfg({ courseTarget: { 25: 35, 35: 45, 45: 60, 60: 25 }[courseTarget] || 35 })} disabled={locked}
-                title="Speed every unlocked letter must reach before the next unlocks (25 → 35 → 45 → 60 wpm)" />
+                title={t('Speed every unlocked letter must reach before the next unlocks (25 → 35 → 45 → 60 wpm)')} />
             )}
-            <Tile icon="📟" label="Ticker" state={cfg.ticker ? 'single line' : 'off'} on={!!cfg.ticker}
+            <Tile icon="📟" label={t('Ticker')} state={cfg.ticker ? t('single line') : t('off')} on={!!cfg.ticker}
               onClick={() => patchCfg({ ticker: !cfg.ticker })} disabled={locked || oneWord}
-              title="Show the passage as one horizontal ticker line — the active word holds a fixed point while committed words stream off to the left" />
-            <Tile icon="👁" label="Read-ahead" state={readAhead == null ? 'all words' : readAhead === 0 ? 'current only' : `next ${readAhead}`} on={readAhead != null}
+              title={t('Show the passage as one horizontal ticker line — the active word holds a fixed point while committed words stream off to the left')} />
+            <Tile icon="👁" label={t('Read-ahead')} state={readAhead == null ? t('all words') : readAhead === 0 ? t('current only') : t('next {n}', { n: readAhead })} on={readAhead != null}
               onClick={() => patchCfg({ readAhead: readAhead == null ? 3 : readAhead === 0 ? null : readAhead - 1 })} disabled={locked}
-              title="Only show this many words past the one you're typing — trains reading ahead while you type (all → 3 → 2 → 1 → current only)" />
-            <Tile icon="🧠" label="Memory" state={memoryMode ? 'on' : 'off'} on={memoryMode}
+              title={t("Only show this many words past the one you're typing — trains reading ahead while you type (all → 3 → 2 → 1 → current only)")} />
+            <Tile icon="🧠" label={t('Memory')} state={memoryMode ? t('on') : t('off')} on={memoryMode}
               onClick={() => patchCfg({ memoryMode: !memoryMode })} disabled={locked}
-              title="The word you're typing vanishes as soon as you start it — glance, then type it from memory" />
-            <div className="tt-group">Discipline</div>
-            <Tile icon="①" label="One word" state={oneWord ? 'on' : 'off'} on={oneWord}
+              title={t("The word you're typing vanishes as soon as you start it — glance, then type it from memory")} />
+            <div className="tt-group">{t('Discipline')}</div>
+            <Tile icon="①" label={t('One word')} state={oneWord ? t('on') : t('off')} on={oneWord}
               onClick={() => patchCfg({ oneWord: !oneWord })} disabled={locked}
-              title="One word at a time — each word must be typed perfectly to advance" />
-            <Tile icon="🛑" label="Stop on error" state={stopOnError ? 'on' : 'off'} on={stopOnError}
+              title={t('One word at a time — each word must be typed perfectly to advance')} />
+            <Tile icon="🛑" label={t('Stop on error')} state={stopOnError ? t('on') : t('off')} on={stopOnError}
               onClick={() => patchCfg({ stopOnError: !stopOnError })} disabled={locked}
-              title="A wrong key is refused (it still costs an error), and space only commits a complete word — the classic accuracy-discipline mode" />
+              title={t('A wrong key is refused (it still costs an error), and space only commits a complete word — the classic accuracy-discipline mode')} />
             {stopOnError && (
-              <Tile icon="💢" label="Pain effect" state={painFx} on={painFx !== 'off'} disabled={locked}
+              <Tile icon="💢" label={t('Pain effect')} state={t(painFx)} on={painFx !== 'off'} disabled={locked}
                 onClick={() => patchCfg({ painFx: painFx === 'off' ? 'subtle' : painFx === 'subtle' ? 'strong' : 'off' })}
-                title="Cycle off → subtle → strong: a refused key flashes the passage red; strong also shakes the word and vibrates phones" />
+                title={t('Cycle off → subtle → strong: a refused key flashes the passage red; strong also shakes the word and vibrates phones')} />
             )}
-            <Tile icon="🔧" label="Fix errors" state={fixErrors ? 'on' : 'off'} on={fixErrors}
+            <Tile icon="🔧" label={t('Fix errors')} state={fixErrors ? t('on') : t('off')} on={fixErrors}
               onClick={() => patchCfg({ fixErrors: !fixErrors, ...(fixErrors ? {} : { confidence: false }) })} disabled={locked}
-              title="Mistakes land on screen and backspace works, but space won't advance until the word is typed exactly right — repair before you move on" />
-            <Tile icon="⌫" label="No backspace" state={confidence ? 'on' : 'off'} on={confidence}
+              title={t("Mistakes land on screen and backspace works, but space won't advance until the word is typed exactly right — repair before you move on")} />
+            <Tile icon="⌫" label={t('No backspace')} state={confidence ? t('on') : t('off')} on={confidence}
               onClick={() => patchCfg({ confidence: !confidence, ...(confidence ? {} : { fixErrors: false, wordBackOnly: false }) })} disabled={locked}
-              title="Confidence mode — backspace is disabled entirely; errors cost accuracy, not time" />
-            <Tile icon="⌫w" label="Word backspace only" state={wordBackOnly ? 'on' : 'off'} on={wordBackOnly}
+              title={t('Confidence mode — backspace is disabled entirely; errors cost accuracy, not time')} />
+            <Tile icon="⌫w" label={t('Word backspace only')} state={wordBackOnly ? t('on') : t('off')} on={wordBackOnly}
               onClick={() => patchCfg({ wordBackOnly: !wordBackOnly, ...(wordBackOnly ? {} : { confidence: false }) })} disabled={locked}
-              title="Plain Backspace is off; Ctrl+Backspace (Option+Backspace on a Mac, or the ⌫ word key) wipes the whole word so you retype it. Needs a keyboard shortcut or the on-screen key." />
-            <Tile icon="🙈" label="Blind" state={blind ? 'on' : 'off'} on={blind}
+              title={t('Plain Backspace is off; Ctrl+Backspace (Option+Backspace on a Mac, or the ⌫ word key) wipes the whole word so you retype it. Needs a keyboard shortcut or the on-screen key.')} />
+            <Tile icon="🙈" label={t('Blind')} state={blind ? t('on') : t('off')} on={blind}
               onClick={() => patchCfg({ blind: !blind })} disabled={locked}
-              title="No per-character verdicts while you type — trust your fingers and let the numbers tell the tale at the end" />
+              title={t('No per-character verdicts while you type — trust your fingers and let the numbers tell the tale at the end')} />
             <Tile
-              icon="💥" label="Setback" state={penaltyWords ? `−${penaltyWords} word${penaltyWords > 1 ? 's' : ''}` : 'off'}
+              icon="💥" label={t('Setback')} state={penaltyWords ? t.n('−{n} word', '−{n} words', penaltyWords) : t('off')}
               on={penaltyWords > 0} disabled={locked}
               onClick={() => patchCfg({ penaltyWords: { 0: 1, 1: 3, 3: 5 }[penaltyWords] ?? 0 })}
-              title="Mistakes ERASE progress: a word still wrong when you commit it knocks you back and you retype your way forward (fixing it before space is fine). Click to cycle off → 1 → 3 → 5 words." />
-            <div className="tt-group">Extras</div>
-            <Tile icon="🏁" label="Race voice" state={raceVoice ? 'on' : 'off'} on={raceVoice}
+              title={t('Mistakes ERASE progress: a word still wrong when you commit it knocks you back and you retype your way forward (fixing it before space is fine). Click to cycle off → 1 → 3 → 5 words.')} />
+            <div className="tt-group">{t('Extras')}</div>
+            <Tile icon="🏁" label={t('Race voice')} state={raceVoice ? t('on') : t('off')} on={raceVoice}
               onClick={() => patchCfg({ raceVoice: !raceVoice })} disabled={locked}
-              title="The TTS voice reads the passage aloud; if it passes the word you're typing, you're caught. Lower the read-aloud rate in Settings to make it easier." />
-            <Tile icon="👻" label="Pace ghost" state={paceState} on={paceMode !== 'off'} onClick={cyclePace} disabled={locked}
-              title="A marker moves through the passage at a steady speed (your last run, your best, or a custom WPM) — try to stay ahead of it. Click to cycle." />
+              title={t("The TTS voice reads the passage aloud; if it passes the word you're typing, you're caught. Lower the read-aloud rate in Settings to make it easier.")} />
+            <Tile icon="👻" label={t('Pace ghost')} state={paceState} on={paceMode !== 'off'} onClick={cyclePace} disabled={locked}
+              title={t('A marker moves through the passage at a steady speed (your last run, your best, or a custom WPM) — try to stay ahead of it. Click to cycle.')} />
             {paceMode === 'custom' && (
               <input className="tt-wpm" type="number" min={10} max={400} value={cfg.paceWpm ?? 60} disabled={locked}
                 onChange={(e) => patchCfg({ paceWpm: Math.max(10, Math.min(400, Number(e.target.value) || 60)) })}
-                title="Pace ghost speed (WPM)" aria-label="Pace ghost speed (WPM)" />
+                title={t('Pace ghost speed (WPM)')} aria-label={t('Pace ghost speed (WPM)')} />
             )}
-            <Tile icon="📋" label="Error log" state={cfg.errorLog ? 'on' : 'off'} on={!!cfg.errorLog}
+            <Tile icon="📋" label={t('Error log')} state={cfg.errorLog ? t('on') : t('off')} on={!!cfg.errorLog}
               onClick={() => patchCfg({ errorLog: !cfg.errorLog })} disabled={locked}
-              title="A separate area listing every error entry as it happens — the target word vs what you actually typed" />
-            <div className="tt-group">Sound</div>
-            <div className="tt-tile tt-vol" title="Master volume for the typing sound effects">
+              title={t('A separate area listing every error entry as it happens — the target word vs what you actually typed')} />
+            <div className="tt-group">{t('Sound')}</div>
+            <div className="tt-tile tt-vol" title={t('Master volume for the typing sound effects')}>
               <span className="tt-ico" aria-hidden="true">{volume > 0 ? '🔊' : '🔇'}</span>
               <span className="tt-txt">
-                <span className="tt-lbl">Volume</span>
+                <span className="tt-lbl">{t('Volume')}</span>
                 <input
-                  type="range" min={0} max={1} step={0.05} value={volume} aria-label="Sound volume"
+                  type="range" min={0} max={1} step={0.05} value={volume} aria-label={t('Sound volume')}
                   onChange={(e) => patchCfg({ soundVolume: Number(e.target.value) })}
                 />
               </span>
             </div>
-            {soundRow('⌨', 'Key ✓', 'charCorrect')}
-            {soundRow('✗', 'Key ✗', 'charWrong')}
-            {soundRow('✔', 'Word ✓', 'wordPerfect')}
-            {soundRow('🩹', 'Word fixed', 'wordCorrected')}
-            {soundRow('⚠', 'Word ✗', 'wordError')}
-            {isDocMode && soundRow('↩', 'Line ✓', 'linePerfect')}
-            {isDocMode && soundRow('•', 'Sentence ✓', 'sentencePerfect')}
-            {isDocMode && soundRow('¶', 'Paragraph ✓', 'paragraphPerfect')}
+            {soundRow('⌨', t('Key ✓'), 'charCorrect')}
+            {soundRow('✗', t('Key ✗'), 'charWrong')}
+            {soundRow('✔', t('Word ✓'), 'wordPerfect')}
+            {soundRow('🩹', t('Word fixed'), 'wordCorrected')}
+            {soundRow('⚠', t('Word ✗'), 'wordError')}
+            {isDocMode && soundRow('↩', t('Line ✓'), 'linePerfect')}
+            {isDocMode && soundRow('•', t('Sentence ✓'), 'sentencePerfect')}
+            {isDocMode && soundRow('¶', t('Paragraph ✓'), 'paragraphPerfect')}
             {mode === 'seconds' && (
-              <Tile icon="⏱" label="Countdown tick" state={tickClock ? 'on' : 'off'} on={tickClock} disabled={locked}
+              <Tile icon="⏱" label={t('Countdown tick')} state={tickClock ? t('on') : t('off')} on={tickClock} disabled={locked}
                 onClick={() => patchCfg({ tickClock: !tickClock })}
-                title="Ticking clock that speeds up in the final seconds" />
+                title={t('Ticking clock that speeds up in the final seconds')} />
             )}
           </aside>
         )}
@@ -1301,12 +1307,12 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       {/* The passage hides on the done screen so the results (chart included) get the room —
           otherwise they overflow beneath the bottom dock, which also swallows chart hovers. */}
       <div className={`tr-viewport${ticker ? ' ticker-vp' : ''}`} style={{ display: phase === 'done' ? 'none' : undefined, ...(settings.fontFamily ? { fontFamily: settings.fontFamily } : null) }}>
-        {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{count}</div>}
-        {escArmed && phase === 'running' && <div className="tr-esc-hint" role="status">Esc again to end the run</div>}
-        {capsOn && !escArmed && <div className="tr-esc-hint tr-caps" role="status">⇪ Caps Lock is on</div>}
-        {hotBlocked && phase === 'running' && !escArmed && <div className="tr-esc-hint" role="status">Shortcut ignored while you’re typing — pause a moment to use it</div>}
+        {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{t(count === 'Set' ? 'Get set' : count)}</div>}
+        {escArmed && phase === 'running' && <div className="tr-esc-hint" role="status">{t('Esc again to end the run')}</div>}
+        {capsOn && !escArmed && <div className="tr-esc-hint tr-caps" role="status">⇪ {t('Caps Lock is on')}</div>}
+        {hotBlocked && phase === 'running' && !escArmed && <div className="tr-esc-hint" role="status">{t('Shortcut ignored while you’re typing — pause a moment to use it')}</div>}
         {painAt > 0 && stopOnError && phase === 'running' && <div className={`tr-pain ${painFx}`} key={painAt} aria-hidden="true" />}
-        {penalty && <div className="tr-penalty" role="status" key={penalty.at}>💥 −{penalty.n} word{penalty.n > 1 ? 's' : ''}</div>}
+        {penalty && <div className="tr-penalty" role="status" key={penalty.at}>💥 {t.n('−{n} word', '−{n} words', penalty.n)}</div>}
         <div className={`tr-cursor${phase === 'running' ? '' : ' waiting'}`} ref={caretRef} style={{ opacity: phase === 'done' ? 0 : 1 }} />
         <div className={`tr-lines${oneWord ? ' one-word' : ''}${blind ? ' blind' : ''}${ticker ? ' ticker' : ''}`} ref={linesRef}>
           {/* Sliced, not just skipped inside the loop: a long run's passage is now thousands of
@@ -1373,13 +1379,13 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
         {showKeyboard && phase !== 'done' && !blind && <OnScreenKeyboard layout={layout} next={(passage[pos] || '')[buf.length] ?? ' '} />}
       </div>
       {gameMode === 'course' && phase !== 'done' && (
-        <div className="tr-course" aria-label="Course letters">
+        <div className="tr-course" aria-label={t('Course letters')}>
           {[...COURSE_ORDER].map((ch, i) => <span key={ch} className={i < courseLevel ? (i === courseLevel - 1 ? 'focus' : 'on') : 'off'}>{ch}</span>)}
-          <span className="lj-qdim"> · unlock at {courseTarget} wpm & 95% on every letter</span>
+          <span className="lj-qdim"> · {t('unlock at {wpm} wpm & 95% on every letter', { wpm: courseTarget })}</span>
         </div>
       )}
 
-      {phase === 'idle' && <div className="tr-hint">Just start typing — the run begins on your first letter (or press ▶ Start for a Ready·Set·Go). It ends at your limit, on “End run”, or after 5s idle. Esc discards.</div>}
+      {phase === 'idle' && <div className="tr-hint">{t('Just start typing — the run begins on your first letter (or press ▶ Start for a Ready·Set·Go). It ends at your limit, on “End run”, or after 5s idle. Esc discards.')}</div>}
 
       {/* Error log: every imperfect commit as target → typed, wrong/missed chars marked. Live while
           running (hidden in blind mode until the end), and kept on the done screen for review. */}
@@ -1389,9 +1395,9 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           .filter((e) => !e.perfect);
         return (
           <div className="tr-errlog">
-            <div className="tr-errlog-head">📋 Errors · {entries.length}</div>
+            <div className="tr-errlog-head">📋 {t('Errors · {n}', { n: entries.length })}</div>
             {entries.length === 0
-              ? <div className="tr-errlog-empty">none yet — clean so far</div>
+              ? <div className="tr-errlog-empty">{t('none yet — clean so far')}</div>
               : (
                 <div className="tr-errlog-list">
                   {entries.map((e) => {
@@ -1405,7 +1411,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                             <span key={j} className={j < e.target.length && charOk(ch, e.target[j]) ? 'trc correct' : 'trc wrong'}>{ch}</span>
                           ))}
                           {e.typed.length < e.target.length && <span className="trc missed">{e.target.slice(e.typed.length)}</span>}
-                          {fixed && <span className="tr-err-fixed">(corrected)</span>}
+                          {fixed && <span className="tr-err-fixed">{t('(corrected)')}</span>}
                         </span>
                       </div>
                     );
@@ -1426,35 +1432,36 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
           )}
           {summary.raced && (
             <div className={`tr-race-result${summary.caught ? ' caught' : ''}`}>
-              {summary.caught ? '🔊 The voice caught you!' : '🏁 You outran the voice!'}
+              {summary.caught ? `🔊 ${t('The voice caught you!')}` : `🏁 ${t('You outran the voice!')}`}
             </div>
           )}
           {summary.course && (
             <div className={`tr-pb${summary.course.unlock ? '' : ' tr-course-wait'}`} role="status">
-              {summary.course.unlock ? `🔓 New letter unlocked: “${summary.course.next}”`
-                : !summary.course.accuracyOk ? `🎓 Keep going — accuracy needs 95% to unlock the next letter`
-                  : `🎓 Keep going — under ${courseTarget} wpm on: ${summary.course.slow.join(' ')}`}
+              {summary.course.unlock ? `🔓 ${t('New letter unlocked: “{letter}”', { letter: summary.course.next })}`
+                : !summary.course.accuracyOk ? `🎓 ${t('Keep going — accuracy needs 95% to unlock the next letter')}`
+                  : `🎓 ${t('Keep going — under {wpm} wpm on: {letters}', { wpm: courseTarget, letters: summary.course.slow.join(' ') })}`}
             </div>
           )}
           {(summary.pb?.allTime || summary.pb?.mode) && (
             <div className="tr-pb">
-              {summary.pb.allTime ? '🏆 New all-time personal best!' : `🥇 New personal best for ${TYPING_MODE_BY_ID[summary.mode]?.label || 'this mode'}!`}
+              {summary.pb.allTime ? `🏆 ${t('New all-time personal best!')}`
+                : `🥇 ${TYPING_MODE_BY_ID[summary.mode]?.label ? t('New personal best for {mode}!', { mode: TYPING_MODE_BY_ID[summary.mode].label }) : t('New personal best for this mode!')}`}
             </div>
           )}
           <div className="tr-results-head">
-            <strong>{summary.netWpm} net WPM</strong> · {summary.grossWpm} gross · {summary.accuracy}% acc
-            {summary.consistency != null ? ` · ${summary.consistency}% consistency` : ''} · {summary.tier}
+            <strong>{t('{n} net WPM', { n: summary.netWpm })}</strong> · {t('{n} gross', { n: summary.grossWpm })} · {t('{n}% acc', { n: summary.accuracy })}
+            {summary.consistency != null ? ` · ${t('{n}% consistency', { n: summary.consistency })}` : ''} · {t(summary.tier)}
           </div>
           {summary.words > 0 && (
             <div className="tr-word-outcomes">
-              {summary.perfect} perfect · {summary.corrected || 0} fixed · {summary.words - summary.perfect - (summary.corrected || 0)} wrong
+              {t('{perfect} perfect · {fixed} fixed · {wrong} wrong', { perfect: summary.perfect, fixed: summary.corrected || 0, wrong: summary.words - summary.perfect - (summary.corrected || 0) })}
             </div>
           )}
           {(() => {
             const stk = typingStreak(pastRunsRef.current || [], Date.now());
             return stk.days > 0 && (
               <div className="tr-streak">
-                🔥 {stk.days}-day typing streak · {stk.todayWords.toLocaleString()} words today
+                🔥 {t('{days}-day typing streak · {words} words today', { days: stk.days, words: stk.todayWords.toLocaleString() })}
               </div>
             );
           })()}
@@ -1465,33 +1472,33 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             {plan ? (
               <>
                 {!passesMarks(plan, summary) && (
-                  <span className="tr-pass-fail" role="status">Below the pass mark ({[plan.passWpm > 0 && `${plan.passWpm} wpm`, plan.passAcc > 0 && `${plan.passAcc}%`].filter(Boolean).join(' & ')}) — redo the set to move on</span>
+                  <span className="tr-pass-fail" role="status">{t('Below the pass mark ({marks}) — redo the set to move on', { marks: passMarks })}</span>
                 )}
-                <button className={passesMarks(plan, summary) ? '' : 'toggle-on'} onClick={beginCountdown}>↻ Redo set</button>
-                <button className={passesMarks(plan, summary) ? 'toggle-on' : ''} disabled={!passesMarks(plan, summary)} onClick={onPlanNext}>{plan.step >= plan.steps && plan.set >= plan.sets ? '🏁 Finish plan' : 'Next set →'}</button>
-                <button onClick={onPlanExit}>Exit plan</button>
+                <button className={passesMarks(plan, summary) ? '' : 'toggle-on'} onClick={beginCountdown}>↻ {t('Redo set')}</button>
+                <button className={passesMarks(plan, summary) ? 'toggle-on' : ''} disabled={!passesMarks(plan, summary)} onClick={onPlanNext}>{plan.step >= plan.steps && plan.set >= plan.sets ? `🏁 ${t('Finish plan')}` : `${t('Next set')} →`}</button>
+                <button onClick={onPlanExit}>{t('Exit plan')}</button>
               </>
             ) : (
               <>
                 {moreAhead && (
-                  <button className="toggle-on" onClick={nextRun} title="New run starting where this one ended">Onward →</button>
+                  <button className="toggle-on" onClick={nextRun} title={t('New run starting where this one ended')}>{t('Onward')} →</button>
                 )}
                 {summary.problemWords?.length >= 3 && (
                   <button
                     onClick={() => { reviewRef.current = summary.problemWords; setGameMode('review'); reattempt(); }}
-                    title="A quick drill built from this run's missed and unusually slow words"
+                    title={t("A quick drill built from this run's missed and unusually slow words")}
                   >
-                    🎯 Drill the misses ({summary.problemWords.length})
+                    🎯 {t('Drill the misses ({n})', { n: summary.problemWords.length })}
                   </button>
                 )}
-                <button className={moreAhead ? '' : 'toggle-on'} onClick={stageRun} title="Re-type the exact same passage (starts when you type)">↻ Reattempt</button>
+                <button className={moreAhead ? '' : 'toggle-on'} onClick={stageRun} title={t('Re-type the exact same passage (starts when you type)')}>↻ {t('Reattempt')}</button>
                 {!isDocMode && gameMode !== 'review' && (mode === 'seconds' || mode === 'words') && (
-                  <button onClick={copyChallenge} title="Copy a link to this exact drill — whoever opens it races a ghost at your speed">🔗 Challenge link</button>
+                  <button onClick={copyChallenge} title={t('Copy a link to this exact drill — whoever opens it races a ghost at your speed')}>🔗 {t('Challenge link')}</button>
                 )}
                 {isDocMode && (
-                  <button onClick={continueExit} title="Close typing and move the reading position past what you typed (Esc)">Continue (count as read)</button>
+                  <button onClick={continueExit} title={t('Close typing and move the reading position past what you typed (Esc)')}>{t('Continue (count as read)')}</button>
                 )}
-                <button onClick={() => onExitDiscard?.(discardCreditWi())} title={isDocMode ? 'Close typing — the typed words still count as read; only the reading position stays put' : undefined}>{isDocMode ? 'Discard' : 'Exit'}</button>
+                <button onClick={() => onExitDiscard?.(discardCreditWi())} title={isDocMode ? t('Close typing — the typed words still count as read; only the reading position stays put') : undefined}>{isDocMode ? t('Discard') : t('Exit')}</button>
               </>
             )}
           </div>
@@ -1501,8 +1508,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
       {sessionRuns && sessionRuns.length > 0 && (
         <div className="tr-runs-wrap">
           <table className="tr-runs">
-            <caption>🏁 Runs this session</caption>
-            <thead><tr><th>#</th><th>Time</th><th>Net</th><th>Gross</th><th>Acc</th><th>Grade</th><th>Words</th><th>Errors</th><th>Length</th><th>Mode</th></tr></thead>
+            <caption>🏁 {t('Runs this session')}</caption>
+            <thead><tr><th>#</th><th>{t('Time')}</th><th>{t('Net')}</th><th>{t('Gross')}</th><th>{t('Acc')}</th><th>{t('Grade')}</th><th>{t('Words')}</th><th>{t('Errors')}</th><th>{t('Length')}</th><th>{t('Mode')}</th></tr></thead>
             <tbody>
               {sessionRuns.map((r, i) => ({ r, n: i + 1 })).reverse().map(({ r, n }) => (
                 <tr key={n}>
@@ -1514,7 +1521,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                   <td>{r.grade || '—'}</td>
                   <td>{r.words ?? '—'}</td>
                   <td>{r.errors ?? '—'}</td>
-                  <td>{r.durationMs ? `${Math.round(r.durationMs / 1000)}s` : '—'}</td>
+                  <td>{r.durationMs ? t('{n}s', { n: Math.round(r.durationMs / 1000) }) : '—'}</td>
                   <td>{r.mode || '—'}</td>
                 </tr>
               ))}
@@ -1541,7 +1548,7 @@ function OnScreenKeyboard({ layout, next }) {
           {[...row].map((ch, c) => <span key={c} className={`tr-osk-key${k && k.row === r && k.col === c ? ' next' : ''}${r === 1 && (c === 3 || c === 6) ? ' home' : ''}`}>{ch}</span>)}
         </div>
       ))}
-      <div className="tr-osk-row"><span className={`tr-osk-key space${k?.space ? ' next' : ''}`}>space</span></div>
+      <div className="tr-osk-row"><span className={`tr-osk-key space${k?.space ? ' next' : ''}`}>{t('space')}</span></div>
     </div>
   );
 }
@@ -1577,19 +1584,19 @@ function RunSplits({ trend, secs }) {
   const [n, setN] = useState(options[0] || 2);
   const sp = options.length ? splitRun(trend, options.includes(n) ? n : options[0]) : null;
   if (!sp) return null;
-  const name = { 2: 'Halves', 3: 'Thirds', 4: 'Quarters' };
+  const name = { 2: t('Halves'), 3: t('Thirds'), 4: t('Quarters') };
   return (
     <div className="tr-splits">
       <div className="tr-splits-head">
         {options.map((k) => (
           <button key={k} type="button" className={k === n ? 'toggle-on' : ''} aria-pressed={k === n} onClick={() => setN(k)}>{name[k]}</button>
         ))}
-        <span className={`tr-split-diff g-${sp.diffGrade}`} title="Pace held: last part's net WPM against the first's. Within 5% (or faster) is an A.">
-          Pace held <b>{sp.diffGrade}</b> ({sp.diffPct > 0 ? '+' : ''}{sp.diffPct}%)
+        <span className={`tr-split-diff g-${sp.diffGrade}`} title={t("Pace held: last part's net WPM against the first's. Within 5% (or faster) is an A.")}>
+          {t('Pace held')} <b>{sp.diffGrade}</b> ({sp.diffPct > 0 ? '+' : ''}{sp.diffPct}%)
         </span>
       </div>
       <table className="tr-splits-table">
-        <thead><tr><th>Part</th><th>Net</th><th>Gross</th><th>Acc</th><th>Grade</th></tr></thead>
+        <thead><tr><th>{t('Part')}</th><th>{t('Net')}</th><th>{t('Gross')}</th><th>{t('Acc')}</th><th>{t('Grade')}</th></tr></thead>
         <tbody>
           {sp.parts.map((p, i) => (
             <tr key={i}><td>{i + 1}</td><td>{p.net}</td><td>{p.gross}</td><td>{p.acc}%</td><td className={`g-${p.grade}`}>{p.grade}</td></tr>
@@ -1616,7 +1623,7 @@ function RunChart({ trend: raw, sprintSecs = 5 }) {
   const ih = H - PAD.t - PAD.b;
   const maxT = trend[trend.length - 1].t || 1;
   const maxW = Math.max(60, ...trend.map((p) => Math.max(p.gross || 0, p.net || 0, p.burst || 0, p.sprint))) * 1.06;
-  const x = (t) => PAD.l + (t / maxT) * iw;
+  const x = (sec) => PAD.l + (sec / maxT) * iw;
   const yW = (v) => PAD.t + ih - Math.min(1, Math.max(0, v) / maxW) * ih;
   const yA = (v) => PAD.t + ih - (Math.min(100, v) / 100) * ih;
   const path = (key, yFn) => trend.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)} ${yFn(p[key] || 0).toFixed(1)}`).join(' ');
@@ -1627,9 +1634,9 @@ function RunChart({ trend: raw, sprintSecs = 5 }) {
   function onMove(e) {
     const r = svgRef.current?.getBoundingClientRect();
     if (!r) return;
-    const t = ((e.clientX - r.left) / r.width * W - PAD.l) / iw * maxT;
+    const at = ((e.clientX - r.left) / r.width * W - PAD.l) / iw * maxT;
     let best = 0;
-    for (let i = 1; i < trend.length; i++) if (Math.abs(trend[i].t - t) < Math.abs(trend[best].t - t)) best = i;
+    for (let i = 1; i < trend.length; i++) if (Math.abs(trend[i].t - at) < Math.abs(trend[best].t - at)) best = i;
     setHover(best);
   }
   const h = hover != null ? trend[hover] : null;
@@ -1650,8 +1657,8 @@ function RunChart({ trend: raw, sprintSecs = 5 }) {
             <text className="trch-label" x={PAD.l - 6} y={yW(v) + 3} textAnchor="end">{v}</text>
           </g>
         ))}
-        <text className="trch-label" x={PAD.l} y={H - 6}>0s</text>
-        <text className="trch-label" x={W - PAD.r} y={H - 6} textAnchor="end">{Math.round(maxT)}s</text>
+        <text className="trch-label" x={PAD.l} y={H - 6}>{t('{n}s', { n: 0 })}</text>
+        <text className="trch-label" x={W - PAD.r} y={H - 6} textAnchor="end">{t('{n}s', { n: Math.round(maxT) })}</text>
         <path d={path('burst', yW)} className="trend-burst" />
         <path d={path('gross', yW)} className="trend-gross" />
         <path d={path('net', yW)} className="trend-net" />
@@ -1668,12 +1675,12 @@ function RunChart({ trend: raw, sprintSecs = 5 }) {
         )}
       </svg>
       <div className="tr-chart-legend">
-        <span className="lg lg-net">effective {h ? Math.round(h.net) : ''}</span>
-        <span className="lg lg-gross">raw {h ? Math.round(h.gross) : ''}</span>
-        <span className="lg lg-sprint" title="Net WPM over the trailing window set by the slider above">{sprintSecs}s sprint {h ? Math.round(h.sprint) : ''}</span>
-        <span className="lg lg-burst">burst {h ? Math.round(h.burst || 0) : ''}</span>
-        <span className="lg lg-acc">accuracy {h ? `${h.acc.toFixed(0)}%` : ''}</span>
-        <span className="lg lg-t">{h ? `at ${h.t.toFixed(1)}s` : 'hover to inspect'}</span>
+        <span className="lg lg-net">{t('effective')} {h ? Math.round(h.net) : ''}</span>
+        <span className="lg lg-gross">{t('raw')} {h ? Math.round(h.gross) : ''}</span>
+        <span className="lg lg-sprint" title={t('Net WPM over the trailing window set by the slider above')}>{t('{n}s sprint', { n: sprintSecs })} {h ? Math.round(h.sprint) : ''}</span>
+        <span className="lg lg-burst">{t('burst')} {h ? Math.round(h.burst || 0) : ''}</span>
+        <span className="lg lg-acc">{t('accuracy')} {h ? `${h.acc.toFixed(0)}%` : ''}</span>
+        <span className="lg lg-t">{h ? t('at {n}s', { n: h.t.toFixed(1) }) : t('hover to inspect')}</span>
       </div>
     </div>
   );
@@ -1692,7 +1699,7 @@ function Trend({ trend: raw, sprintSecs = 5 }) {
       .map((p, i) => `${i ? 'L' : 'M'} ${((p.t / maxT) * W).toFixed(1)} ${(H - Math.min(1, p[key] / scaleMax) * H).toFixed(1)}`)
       .join(' ');
   return (
-    <svg className="tr-trend" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" title="WPM · effective WPM · accuracy">
+    <svg className="tr-trend" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" title={t('WPM · effective WPM · accuracy')}>
       <path d={line('gross', maxW)} className="trend-gross" />
       <path d={line('net', maxW)} className="trend-net" />
       <path d={line('sprint', maxW)} className="trend-sprint" />

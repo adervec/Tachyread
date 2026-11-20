@@ -4,6 +4,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { createRecognizer, speechRecognitionSupported } from '../features/speechRecognition.js';
 import { countWords, netWpm, formatElapsed } from '../engine/dictation.js';
 import { getLanguage } from '../state/languages.js';
+import { t } from '../i18n.js';
 
 // Dictation throughput — put spoken output on the same footing as the typing / Flow Writer track.
 // Speech (Web Speech API) fills a transcript; net WPM = words / active minutes. The transcript is an
@@ -59,8 +60,8 @@ export default function DictationDialog({ onClose }) {
       },
       onError: (e) => {
         if (e === 'not-allowed' || e === 'service-not-allowed')
-          setErr('Microphone blocked — allow mic access to dictate (you can still type/paste below).');
-        else if (e !== 'no-speech' && e !== 'aborted') setErr(`Speech error: ${e}`);
+          setErr(t('Microphone blocked — allow mic access to dictate (you can still type/paste below).'));
+        else if (e !== 'no-speech' && e !== 'aborted') setErr(t('Speech error: {error}', { error: e }));
       },
     });
     if (r) {
@@ -89,49 +90,48 @@ export default function DictationDialog({ onClose }) {
 
   return (
     <Dialog
-      title="Dictation — speak to write"
+      title={t('Dictation — speak to write')}
       onClose={() => { stop(); onClose(); }}
       width={600}
-      buttons={<button onClick={() => { stop(); onClose(); }}>Close</button>}
+      buttons={<button onClick={() => { stop(); onClose(); }}>{t('Close')}</button>}
     >
       <div className="dict-stats">
         <div className="dict-wpm">
           <b>{wpm}</b>
-          <span>net WPM</span>
+          <span>{t('net WPM')}</span>
         </div>
         <div className="dict-meta">
-          <div><b>{words}</b> words</div>
-          <div><b>{formatElapsed(elapsed)}</b> active</div>
-          <div><b>{best}</b> best WPM</div>
+          <div><b>{words}</b> {t('words')}</div>
+          <div><b>{formatElapsed(elapsed)}</b> {t('active')}</div>
+          <div><b>{best}</b> {t('best WPM')}</div>
         </div>
       </div>
 
       <div className="dict-controls">
         {recording ? (
-          <button className="dict-rec on" onClick={stop}>■ Stop</button>
+          <button className="dict-rec on" onClick={stop}>■ {t('Stop')}</button>
         ) : (
-          <button className="dict-rec" onClick={start}>● {elapsed > 0 ? 'Resume' : 'Start'}</button>
+          <button className="dict-rec" onClick={start}>● {elapsed > 0 ? t('Resume') : t('Start')}</button>
         )}
-        <button onClick={clearAll} disabled={!transcript && elapsed === 0}>Clear</button>
+        <button onClick={clearAll} disabled={!transcript && elapsed === 0}>{t('Clear')}</button>
         <button
           onClick={() => navigator.clipboard?.writeText(transcript).catch(() => {})}
           disabled={!transcript}
         >
-          Copy
+          {t('Copy')}
         </button>
-        {recording && <span className="dict-live">● listening{interim ? `: ${interim}` : '…'}</span>}
+        {recording && <span className="dict-live">● {interim ? t('listening: {text}', { text: interim }) : t('listening…')}</span>}
       </div>
 
       {!supported && (
         <p className="settings-note">
-          Voice input needs a Chromium browser (Chrome/Edge) with the Web Speech API. You can still
-          type or paste below to measure throughput.
+          {t('Voice input needs a Chromium browser (Chrome/Edge) with the Web Speech API. You can still type or paste below to measure throughput.')}
         </p>
       )}
       {err && <p className="settings-note" style={{ color: 'var(--danger, #c0392b)' }}>{err}</p>}
 
       {(hasBlocks || interim) && (
-        <div className="dict-blocks" aria-label="Dictated text, coloured by recording block">
+        <div className="dict-blocks" aria-label={t('Dictated text, coloured by recording block')}>
           {blocks.map((b, i) =>
             b ? <span key={i} className={`dict-block c${i % 6}`}>{b} </span> : null
           )}
@@ -142,21 +142,18 @@ export default function DictationDialog({ onClose }) {
       <textarea
         className="dict-transcript"
         value={transcript}
-        placeholder="Your dictation appears here. Speak after pressing Start (or type/paste to test)."
+        placeholder={t('Your dictation appears here. Speak after pressing Start (or type/paste to test).')}
         onChange={(e) => setTranscript(e.target.value)}
         rows={7}
       />
       {hasBlocks && (
         <p className="settings-note" style={{ marginTop: 4 }}>
-          The coloured view above shows each Start→Stop recording block in its own hue — the editable
-          box below is the raw text (used for the word count and Copy).
+          {t('The coloured view above shows each Start→Stop recording block in its own hue — the editable box below is the raw text (used for the word count and Copy).')}
         </p>
       )}
 
       <p className="settings-note" style={{ marginTop: 6 }}>
-        Net WPM counts words over active (recording) time, pauses included — the honest output rate.
-        Recognition uses your browser&rsquo;s Web Speech API — in Chrome and Edge the audio is sent to
-        the browser maker&rsquo;s servers to transcribe; this app itself uploads nothing.
+        {t('Net WPM counts words over active (recording) time, pauses included — the honest output rate. Recognition uses your browser’s Web Speech API — in Chrome and Edge the audio is sent to the browser maker’s servers to transcribe; this app itself uploads nothing.')}
       </p>
     </Dialog>
   );
