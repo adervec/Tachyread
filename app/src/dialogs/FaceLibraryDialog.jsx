@@ -110,7 +110,7 @@ export default function FaceLibraryDialog({ onClose }) {
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
         <span style={{ fontSize: 11, color: 'var(--status-fg)' }}>{t('Preview WPM')}</span>
         <input type="range" min={0} max={Math.round(FACE_WPM_MAX * 1.2)} step={10} value={wpm} onChange={(e) => setWpm(Number(e.target.value))} style={{ flex: 1 }} />
-        <span style={{ width: 96, textAlign: 'right' }} title={t('Tier {tier} of 7 — the face is fully lit at {max} wpm sustained', { tier: faceTier(wpm), max: FACE_WPM_MAX })}>
+        <span style={{ width: 96, textAlign: 'end' }} title={t('Tier {tier} of 7 — the face is fully lit at {max} wpm sustained', { tier: faceTier(wpm), max: FACE_WPM_MAX })}>
           {wpm} · {t(FACE_TIER_LABELS[faceTier(wpm)])}
         </span>
       </div>

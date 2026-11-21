@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Calibrates the hand-gesture scroll joystick: learns your rest / top / bottom palm heights so
 // scroll speed maps to your comfortable range at your seating distance. Drives the live gesture
@@ -49,7 +49,7 @@ export default function HandCalibrationDialog({ monitor, onSave, onClose }) {
       {phase === 'bottom' && <Step text={t('Now lower it to your comfortable lowest point…')} remain={remain} />}
       {phase === 'done' && result && (
         <p className="tw-detected">
-          ✓ {t('Calibrated — rest {rest}, top {top}, bottom {bottom}.', { rest: result.centerY.toFixed(2), top: result.topY.toFixed(2), bottom: result.bottomY.toFixed(2) })}
+          ✓ {t('Calibrated — rest {rest}, top {top}, bottom {bottom}.', { rest: fmtNum(result.centerY, 2, 2), top: fmtNum(result.topY, 2, 2), bottom: fmtNum(result.bottomY, 2, 2) })}
           {' '}{t('Open palm above rest scrolls up, below scrolls down; a wave toggles play/pause.')}
         </p>
       )}

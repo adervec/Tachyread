@@ -54,6 +54,10 @@ export function printHtml(sections, { title = t('Tachyread — Help') } = {}) {
 // One slide per section: a poster (the section's screenshot if provided, else a themed title card),
 // the key points, and spoken narration via speechSynthesis. Auto-advances when narration ends (with a
 // timed fallback if speech is unavailable/blocked). Fully self-contained — no external requests.
+// The exported pages speak the reader's language (and direction): taken from the app's own page.
+const pageLang = () => (typeof document !== 'undefined' && document.documentElement.lang) || 'en';
+const pageDir = () => (typeof document !== 'undefined' && document.documentElement.dir) || 'ltr';
+
 export function slideshowHtml(sections, { title = t('Tachyread — Guided Tour') } = {}) {
   const slides = (sections || []).map((s) => ({
     title: titleText(s.title),
@@ -66,7 +70,7 @@ export function slideshowHtml(sections, { title = t('Tachyread — Guided Tour')
   // The page's own button labels (the script swaps Play / Pause), embedded the same safe way.
   const labels = JSON.stringify({ play: `▶ ${t('Play')}`, pause: `⏸ ${t('Pause')}` }).replace(/</g, '\\u003c');
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  return `<!doctype html><html lang="${esc(pageLang())}" dir="${esc(pageDir())}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <style>
   * { box-sizing: border-box; }

@@ -4,7 +4,7 @@
 // entry list, so it works for auto-detected and hand-edited contents alike.
 //
 // Pure: entries in, facts out. The renderer picks which facts to show.
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // [id, label] — the chooser's order is the order details render in.
 export const HEADING_DETAIL_ITEMS = [
@@ -72,7 +72,7 @@ const fmtMin = (mins) => {
   const h = Math.floor(mins / 60);
   return `${h}h ${Math.round(mins % 60)}m`;
 };
-const compact = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+const compact = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${fmtNum(n / 1000, 1, 1)}k` : String(n));
 
 // The chips to render under a heading, in catalog order. `readerIdx` drives the progress chip.
 export function headingDetailChips(meta, ids, { wpm = 250, readerIdx = 0 } = {}) {
@@ -89,7 +89,7 @@ export function headingDetailChips(meta, ids, { wpm = 250, readerIdx = 0 } = {})
         if (meta.words > 0 && wpm > 0) out.push({ id, text: `⏱ ${fmtMin(meta.words / wpm)}` });
         break;
       case 'pct':
-        if (meta.pctOfBook > 0) out.push({ id, text: '💯 ' + t('{pct}% of book', { pct: meta.pctOfBook.toFixed(1) }) });
+        if (meta.pctOfBook > 0) out.push({ id, text: '💯 ' + t('{pct}% of book', { pct: fmtNum(meta.pctOfBook, 1, 1) }) });
         break;
       case 'progress': {
         if (meta.words <= 0) break;

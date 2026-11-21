@@ -7,7 +7,7 @@ import { createReadingTracker, READ_SRC_INFO } from '../engine/readingTracker.js
 import { sectionChecksum } from '../document/sectionHash.js';
 import { readerDocFromText } from '../document/readerDocument.js';
 import { textSignature, signatureSimilarity, similarityTier } from '../features/textSimilarity.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Detailed annotated progress popup. Pulls everything the reading tracker knows into one view:
 //   • WHAT was read   — the coverage strip (read this session / earlier / unread / excluded).
@@ -219,7 +219,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
     if (!rect || !total) return;
     const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const wi = Math.round(frac * (total - 1));
-    setPendingJump({ wi, label: t('{pct}% · word {n}', { pct: ((wi / total) * 100).toFixed(1), n: (wi + 1).toLocaleString() }) });
+    setPendingJump({ wi, label: t('{pct}% · word {n}', { pct: fmtNum((wi / total) * 100, 1, 1), n: fmtNum(wi + 1) }) });
   }
   const stageJump = (wi, label) => { if (onJumpWord) setPendingJump({ wi, label }); };
 
@@ -402,7 +402,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
     const rs = tracker.rangeStats(a, b);
     const li = (doc.wordToLine?.[a] || 0) + 1;
     const sec = sectionAt(a);
-    const pct = ((a / total) * 100).toFixed(1);
+    const pct = fmtNum((a / total) * 100, 1, 1);
     const state = coverClass(hover.col);
     const stateLabel = { 'pd-cv-session': t('read this session'), 'pd-cv-history': t('read earlier'), 'pd-cv-unread': t('not read'), 'pd-cv-skip': t('excluded (won’t count)') }[state];
     tip = { a, b, li, sec, pct, rs, stateLabel };
@@ -443,14 +443,14 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
             </div>
           )}
           <div className="pd-cards">
-            {card(`${(coverage * 100).toFixed(1)}%`, t('book read'), t('Coverage (flagged front/back matter excluded)'))}
-            {card(readCount.toLocaleString(), t('of {total} words', { total: total.toLocaleString() }), t('Unique words marked read across all sessions'))}
+            {card(`${fmtNum(coverage * 100, 1, 1)}%`, t('book read'), t('Coverage (flagged front/back matter excluded)'))}
+            {card(fmtNum(readCount), t('of {total} words', { total: fmtNum(total) }), t('Unique words marked read across all sessions'))}
             {card(recentWpm || '—', t('reading now (wpm)'), t('Eyes pace over the last 30s'))}
             {card(sessionWpm || '—', t('session wpm'), t('New words read per active minute this session'))}
             {card(lifetimeWpm || '—', t('lifetime wpm'), t('New words read per active minute, all sessions'))}
             {card(fmtDuration(sessionActiveMs), t('active this session'), t('Lifetime active: {time}', { time: fmtDuration(lifetimeActiveMs) }))}
-            {card(reg.count, t('regressions · {rate}/100', { rate: reg.ratePer100.toFixed(1) }), t('Backward re-reads this session'))}
-            {card(steadiness(cv), t('pace'), t('Pace variability (CV {cv}) — lower is steadier', { cv: cv.toFixed(2) }))}
+            {card(reg.count, t('regressions · {rate}/100', { rate: fmtNum(reg.ratePer100, 1, 1) }), t('Backward re-reads this session'))}
+            {card(steadiness(cv), t('pace'), t('Pace variability (CV {cv}) — lower is steadier', { cv: fmtNum(cv, 2, 2) }))}
           </div>
 
           <div className="field-section">{t('Annotated progress · height & colour = pace · click to jump (asks to confirm)')}</div>
@@ -513,7 +513,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
                 {sections.map((s, i) => {
                   const skipped = secSkipFrac(s) >= 0.5;
                   return (
-                    <div key={i} className={`pd-sec-row${selSecs.has(i) ? ' pd-sec-sel' : ''}${skipped ? ' pd-sec-skipped' : ''}`} style={{ paddingLeft: 8 + (s.level || 0) * 14 }}
+                    <div key={i} className={`pd-sec-row${selSecs.has(i) ? ' pd-sec-sel' : ''}${skipped ? ' pd-sec-skipped' : ''}`} style={{ paddingInlineStart: 8 + (s.level || 0) * 14 }}
                       title={onJumpWord ? t('Click to jump to this section (asks to confirm)') : s.title}
                       onClick={() => stageJump(s.start, s.title)}>
                       <input
@@ -546,7 +546,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
                     {paceSel === 'custom' && <input className="pd-pace-num" type="number" min="30" max="2000" value={customWpm} onChange={(e) => setCustomWpm(e.target.value)} title={t('Words per minute')} />}
                     <button className="toggle-on" disabled={!remainderWords || !effWpm} onClick={markSelectedReadAtPace}
                       title={t('Mark the unread words in these sections read, crediting the time at this pace')}>
-                      ✓ {t('Mark read')}{remainderWords ? ` · ${t('+{n} words @ {wpm} wpm', { n: remainderWords.toLocaleString(), wpm: effWpm })}` : ''}
+                      ✓ {t('Mark read')}{remainderWords ? ` · ${t('+{n} words @ {wpm} wpm', { n: fmtNum(remainderWords), wpm: effWpm })}` : ''}
                     </button>
                   </div>
                   <div className="pd-secbar-row">
@@ -557,7 +557,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
                       ? <button onClick={() => setUnreadArm(true)} title={t('Clear the read coverage of these sections')}>↩ {t('Mark unread…')}</button>
                       : (
                         <>
-                          <button className="grab-trash" onClick={markSelectedUnread}>⚠ {t.n('Confirm — clear {count} read word', 'Confirm — clear {count} read words', selWords, { count: selWords.toLocaleString() })}</button>
+                          <button className="grab-trash" onClick={markSelectedUnread}>⚠ {t.n('Confirm — clear {count} read word', 'Confirm — clear {count} read words', selWords, { count: fmtNum(selWords) })}</button>
                           <button onClick={() => setUnreadArm(false)}>{t('Cancel')}</button>
                         </>
                       ))}
@@ -594,7 +594,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
                           <button className="toggle-on" disabled={!readSel.size} onClick={() => setReadArm(true)}>✓ {t('Mark {n} as read here…', { n: readSel.size })}</button>
                         ) : (
                           <>
-                            <button className="grab-trash" onClick={markSelectedRead}>⚠ {t.n('Confirm — mark {count} word read', 'Confirm — mark {count} words read', readWordsToAdd, { count: readWordsToAdd.toLocaleString() })}</button>
+                            <button className="grab-trash" onClick={markSelectedRead}>⚠ {t.n('Confirm — mark {count} word read', 'Confirm — mark {count} words read', readWordsToAdd, { count: fmtNum(readWordsToAdd) })}</button>
                             <button onClick={() => setReadArm(false)}>{t('Cancel')}</button>
                           </>
                         )}
@@ -634,7 +634,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
                           <button className="toggle-on" disabled={!carrySel.size} onClick={() => setCarryArm(true)}>⇄ {t.n('Carry over {n} section…', 'Carry over {n} sections…', carrySel.size)}</button>
                         ) : (
                           <>
-                            <button className="grab-trash" onClick={carryOver}>⚠ {t.n('Confirm — mark {count} word read', 'Confirm — mark {count} words read', carryWords, { count: carryWords.toLocaleString() })}</button>
+                            <button className="grab-trash" onClick={carryOver}>⚠ {t.n('Confirm — mark {count} word read', 'Confirm — mark {count} words read', carryWords, { count: fmtNum(carryWords) })}</button>
                             <button onClick={() => setCarryArm(false)}>{t('Cancel')}</button>
                           </>
                         )}
@@ -709,7 +709,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
                 <div key={i} className="pd-day-row pd-sess-row" title={onJumpWord ? t('Click to jump to where this session started (asks to confirm)') : ''}
                   onClick={() => stageJump(s.minW, t('session start ({when})', { when: fmtWhen(s.startTs) }))}>
                   <span className="pd-day-date">{fmtWhen(s.startTs)}</span>
-                  <span className="pd-sess-range">{((s.minW / total) * 100).toFixed(0)}–{((s.maxW / total) * 100).toFixed(0)}%</span>
+                  <span className="pd-sess-range">{fmtNum((s.minW / total) * 100, 0, 0)}–{fmtNum((s.maxW / total) * 100, 0, 0)}%</span>
                   <span className="pd-sess-paras">{s.paras} ¶</span>
                   <span className="pd-day-time">{fmtDuration(s.endTs - s.startTs)}</span>
                 </div>
@@ -726,7 +726,7 @@ export default function ProgressDetailDialog({ tab, storedChecksum, onJumpWord, 
                 <div key={d.date} className="pd-day-row">
                   <span className="pd-day-date">{d.date}</span>
                   <span className="pd-day-bar"><i style={{ width: `${Math.round((d.words / maxDayWords) * 100)}%` }} /></span>
-                  <span className="pd-day-words">{t('{words} words', { words: d.words.toLocaleString() })}</span>
+                  <span className="pd-day-words">{t('{words} words', { words: fmtNum(d.words) })}</span>
                   <span className="pd-day-time">{fmtDuration(d.ms)}</span>
                 </div>
               ))}

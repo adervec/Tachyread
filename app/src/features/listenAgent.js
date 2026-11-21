@@ -7,7 +7,7 @@ import { getJourneyAi, getDeviceId } from '../state/storage.js';
 import { syncRole } from './coworkActions.js';
 import { listenBooks, renderWindow, pushWindow, pullWindow, pruneHeard } from './listenCloud.js';
 import { createLocalEngine, blobDurationMs } from './localTts.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // A device that isn't the sync machine may still render its own window locally (nothing uploaded)
 // — only while charging, since WASM Kokoro can take hours. No Battery API → allowed.
@@ -28,7 +28,7 @@ export async function runSpeedTest() {
     const ms = await blobDurationMs(await engine.synth(SPEED_TEXT, voice));
     const rtf = ms / (performance.now() - t0);
     const dev = engine.kokoroDevice() || 'wasm';
-    const x = rtf.toFixed(1);
+    const x = fmtNum(rtf, 1, 1);
     setStatus({ text: rtf < 1 ? t('Kokoro here: {x}× real-time on {dev} — slower than playback; let the sync machine render and pull here', { x, dev })
       : rtf < 3 ? t('Kokoro here: {x}× real-time on {dev} — usable for rendering while charging', { x, dev })
       : t('Kokoro here: {x}× real-time on {dev} — fine for rendering ahead', { x, dev }) });
@@ -67,7 +67,7 @@ export async function runListenNow() {
         if (!machine) notes.push(t('rendered {made} for this device (not the sync machine — nothing uploaded)', { made }));
         else {
           const r = await pushWindow(await listenBooks(g.listenQueue), cfg, { hours, capBytes, voice: g.kokoroLive, device: g.deviceName || '', onProgress: (p) => setStatus({ text: t('uploading {done}/{total}', { done: p.uploaded, total: p.total }) }) });
-          notes.push(t('rendered {made}, uploaded {uploaded}, removed {removed} · cloud window {chunks} chunks, {mb} MB', { made, uploaded: r.uploaded, removed: r.removed, chunks: r.chunks, mb: (r.bytes / 1e6).toFixed(0) }));
+          notes.push(t('rendered {made}, uploaded {uploaded}, removed {removed} · cloud window {chunks} chunks, {mb} MB', { made, uploaded: r.uploaded, removed: r.removed, chunks: r.chunks, mb: fmtNum(r.bytes / 1e6, 0, 0) }));
         }
       }
     }

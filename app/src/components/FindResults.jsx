@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 import { contextLines } from '../document/findText.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Highlight every case-insensitive occurrence of `q` in `text`.
 function highlight(text, q) {
@@ -47,7 +47,7 @@ export default function FindResults({ doc, results, query, showSection = true, s
                 <td className="find-num">{r.seq}</td>
                 <td className="find-num">{r.lineIndex + 1}</td>
                 <td className="find-num">{r.wordIndex >= 0 ? r.wordIndex + 1 : '—'}</td>
-                <td className="find-num">{r.pct.toFixed(1)}%</td>
+                <td className="find-num">{fmtNum(r.pct, 1, 1)}%</td>
                 {seqRange && <td className="find-seq" title={inSeq(r) ? t('In sequence') : t('Out of sequence — would break the entry order')}>{inSeq(r) ? '✓' : '⚠'}</td>}
                 {showSection && <td className="find-sec" title={r.section}>{r.section || '—'}</td>}
                 {showRead && <td className="find-read" title={r.read ? t('Already read') : t('Not yet read')}>{r.read ? '✓' : ''}</td>}

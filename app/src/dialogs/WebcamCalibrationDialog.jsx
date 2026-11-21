@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Calibrates the eyes-open vs eyes-shut threshold for the current user, so doze / attention detection
 // is robust across faces, glasses and lighting. Drives the live monitor (passed in) through an open
@@ -48,8 +48,8 @@ export default function WebcamCalibrationDialog({ monitor, onSave, onClose }) {
       {phase === 'closed' && <Step text={t('Now gently close your eyes…')} remain={remain} />}
       {phase === 'done' && result && (
         <p className="tw-detected">✓ {result.closed != null
-            ? t('Calibrated — eyes-shut threshold set to {threshold} (open ≈ {open}, shut ≈ {shut}).', { threshold: result.threshold.toFixed(2), open: result.open?.toFixed(2), shut: result.closed.toFixed(2) })
-            : t('Calibrated — eyes-shut threshold set to {threshold} (open ≈ {open}).', { threshold: result.threshold.toFixed(2), open: result.open?.toFixed(2) })}</p>
+            ? t('Calibrated — eyes-shut threshold set to {threshold} (open ≈ {open}, shut ≈ {shut}).', { threshold: fmtNum(result.threshold, 2, 2), open: result.open != null ? fmtNum(result.open, 2, 2) : result.open, shut: fmtNum(result.closed, 2, 2) })
+            : t('Calibrated — eyes-shut threshold set to {threshold} (open ≈ {open}).', { threshold: fmtNum(result.threshold, 2, 2), open: result.open != null ? fmtNum(result.open, 2, 2) : result.open })}</p>
       )}
       {phase === 'unsupported' && (
         <p className="settings-note">

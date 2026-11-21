@@ -9,8 +9,8 @@ import { useApp } from '../state/AppContext.jsx';
 import { scanMiscategorized, applyRecat, recatSummary } from '../features/journeyRecat.js';
 import { forgettingScan, driftingScan } from '../features/journeyForgetting.js';
 import { bookCovers, bookCoverSrc, addCover, removeCover, setMaster, coverId, coverSpecToSvg, proceduralCover, coverPromptFor, parseCoverSpec } from '../features/bookCovers.js';
-import { fmtDateTime } from '../features/dateFmt.js';
-import { t } from '../i18n.js';
+import { fmtDate, fmtDateTime } from '../features/dateFmt.js';
+import { t, fmtNum } from '../i18n.js';
 import {
   getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef, saveLibraryRef,
   getJourneyAi, saveJourneyAi, exportLibraryData, importLibraryData, librarySize, clearLibrary,
@@ -111,10 +111,10 @@ function TypeSplit({ books }) {
           {rows.map((r) => (
             <tr key={r.key}>
               <td>{r.label}</td>
-              <td>{r.total.toLocaleString()}</td>
-              <td>{r.finished.toLocaleString()}</td>
-              <td>{r.words ? `${(r.words / 1e6).toFixed(2)}M` : '—'}</td>
-              <td>{r.pages ? r.pages.toLocaleString() : '—'}</td>
+              <td>{fmtNum(r.total)}</td>
+              <td>{fmtNum(r.finished)}</td>
+              <td>{r.words ? `${fmtNum(r.words / 1e6, 2, 2)}M` : '—'}</td>
+              <td>{r.pages ? fmtNum(r.pages) : '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -218,16 +218,16 @@ function TodayCard({ books, goals, dayAgg, fileStats, bindMap, linkedIds, openCh
         </span>
       </div>
       <div className="lj-qstats">
-        <div className="ab-stat"><b>{ts.words.toLocaleString()}</b><span>{ts.aloudWords ? t('words today ({n} aloud)', { n: ts.aloudWords.toLocaleString() }) : t('words today')}</span></div>
+        <div className="ab-stat"><b>{fmtNum(ts.words)}</b><span>{ts.aloudWords ? t('words today ({n} aloud)', { n: fmtNum(ts.aloudWords) }) : t('words today')}</span></div>
         <div className="ab-stat"><b>{fmtMin(ts.secs)}</b><span>{t('active reading')}</span></div>
         <div className="ab-stat"><b>{ts.wpm ?? '—'}</b><span>{pace.wpm ? t('wpm today · usually ~{wpm}', { wpm: pace.wpm }) : t('wpm today')}</span></div>
         <div className="ab-stat" title={t('Your recent words per day (last ~6 weeks, recent days weighted most)')}>
-          <b>{usual ? `${Math.round((ts.words / usual) * 100)}%` : '—'}</b><span>{usual ? t('of your usual ~{n}/day', { n: usual.toLocaleString() }) : t('of a usual day (no history yet)')}</span>
+          <b>{usual ? `${Math.round((ts.words / usual) * 100)}%` : '—'}</b><span>{usual ? t('of your usual ~{n}/day', { n: fmtNum(usual) }) : t('of a usual day (no history yet)')}</span>
           {usual ? <Bar pct={bar(ts.words, usual)} label={t('Today against your usual day')} /> : null}
         </div>
         {need != null && (
           <div className="ab-stat" title={t("What's left of this year's words goal, spread over the days left (today included)")}>
-            <b>{ts.words >= need ? '✓' : (need - ts.words).toLocaleString()}</b><span>{ts.words >= need ? t("words goal: today's ~{n} done", { n: need.toLocaleString() }) : t("words to go for today's goal share (~{n})", { n: need.toLocaleString() })}</span>
+            <b>{ts.words >= need ? '✓' : fmtNum(need - ts.words)}</b><span>{ts.words >= need ? t("words goal: today's ~{n} done", { n: fmtNum(need) }) : t("words to go for today's goal share (~{n})", { n: fmtNum(need) })}</span>
             <Bar cls={ts.words >= need ? 'fin' : ''} pct={bar(ts.words, need)} label={t("Today against the words goal's daily share")} />
           </div>
         )}
@@ -237,7 +237,7 @@ function TodayCard({ books, goals, dayAgg, fileStats, bindMap, linkedIds, openCh
           {ts.files.slice(0, 8).map((f) => (
             <div key={f.cs} className="lj-today-row">
               <button className="link-btn" onClick={() => (f.book ? onOpenBook(f.book.id) : onOpenFile(f.cs))} title={f.book ? t('Open in Library') : t('Open the file')}>{f.book?.title || f.name}</button>
-              <span className="lj-qdim">{t('{n} words · {time}', { n: f.words.toLocaleString(), time: fmtMin(f.secs) })}</span>
+              <span className="lj-qdim">{t('{n} words · {time}', { n: fmtNum(f.words), time: fmtMin(f.secs) })}</span>
               <Bar pct={f.coverage} label={t('{pct}% of the book read', { pct: Math.round(f.coverage * 100) })} /><span className="lj-cand-pct">{Math.round(f.coverage * 100)}%</span>
               {!openChecksums.includes(f.cs) && <button onClick={() => onOpenFile(f.cs)} title={t('Continue reading')}>▶</button>}
             </div>
@@ -262,7 +262,7 @@ function TodayCard({ books, goals, dayAgg, fileStats, bindMap, linkedIds, openCh
 
 // Yearly WORDS goal, beside the books one (stored in the same synced goals ref as "<year>-words").
 // Counts reading the app recorded this year plus off-app finishes (books with no linked document).
-const fmtWords = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
+const fmtWords = (n) => (n >= 1e6 ? `${fmtNum(n / 1e6, n >= 1e7 ? 0 : 1, n >= 1e7 ? 0 : 1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
 function WordsGoalCard({ books, goals, dayAgg, linkedIds, onSetGoal }) {
   const now = useMemo(() => Date.now(), []); // eslint-disable-line react-hooks/purity
   const year = new Date(now).getFullYear();
@@ -278,7 +278,7 @@ function WordsGoalCard({ books, goals, dayAgg, linkedIds, onSetGoal }) {
         <>
           <div className="lj-goal-head">
             <b>{t('{year} words goal', { year: g.year })}</b>
-            <span title={t('{app} read in the app + {off} from books finished elsewhere', { app: g.appWords.toLocaleString(), off: g.offApp.toLocaleString() })}>{t('{read} of {target} words', { read: g.read.toLocaleString(), target: g.target.toLocaleString() })}</span>
+            <span title={t('{app} read in the app + {off} from books finished elsewhere', { app: fmtNum(g.appWords), off: fmtNum(g.offApp) })}>{t('{read} of {target} words', { read: fmtNum(g.read), target: fmtNum(g.target) })}</span>
             <span className={`lj-goal-badge ${g.read >= g.target ? 'won' : g.onTrack ? 'on' : 'off'}`}>
               {g.read >= g.target ? `🏆 ${t('goal hit!')}` : g.onTrack ? `✓ ${t('on track')}` : `⚠ ${t('behind pace')}`}
             </span>
@@ -292,7 +292,7 @@ function WordsGoalCard({ books, goals, dayAgg, linkedIds, onSetGoal }) {
           <p className="settings-note lj-goal-note">
             {g.read >= g.target
               ? t('Done with {n} days to spare — raise the bar?', { n: g.daysLeft })
-              : t('{remaining} to go · need ~{perDay} words/day · current pace projects {projected} by year-end', { remaining: fmtWords(g.remaining), perDay: (g.needPerDay ?? 0).toLocaleString(), projected: g.projected != null ? fmtWords(g.projected) : '—' })}
+              : t('{remaining} to go · need ~{perDay} words/day · current pace projects {projected} by year-end', { remaining: fmtWords(g.remaining), perDay: fmtNum(g.needPerDay ?? 0), projected: g.projected != null ? fmtWords(g.projected) : '—' })}
             {' · '}{g.offApp ? t('{app} read in the app + {off} finished elsewhere', { app: fmtWords(g.appWords), off: fmtWords(g.offApp) }) : t('{app} read in the app', { app: fmtWords(g.appWords) })}
           </p>
         </>
@@ -874,10 +874,10 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               <div className="rh-stat-grid">
                 <Stat v={stats.total} l={t('books')} />
                 <Stat v={stats.finished} l={t('finished')} sub={stats.abandoned ? t('{reading} reading · {abandoned} abandoned', { reading: stats.reading, abandoned: stats.abandoned }) : t('{reading} reading', { reading: stats.reading })} />
-                <Stat v={stats.queue} l={t('on deck')} sub={t('{n} to read', { n: stats.toread.toLocaleString() })} />
+                <Stat v={stats.queue} l={t('on deck')} sub={t('{n} to read', { n: fmtNum(stats.toread) })} />
                 <Stat v={stats.fiction} l={t('fiction')} sub={t('{n} non-fiction', { n: stats.nonfiction })} />
-                <Stat v={stats.words ? (stats.words / 1e6).toFixed(1) + 'M' : '0'} l={t('words read')} />
-                <Stat v={stats.pages ? stats.pages.toLocaleString() : '0'} l={t('pages read')} />
+                <Stat v={stats.words ? fmtNum(stats.words / 1e6, 1, 1) + 'M' : '0'} l={t('words read')} />
+                <Stat v={stats.pages ? fmtNum(stats.pages) : '0'} l={t('pages read')} />
               </div>
               <label className="inline-check" title={t('Break the totals out by long-form vs short-form/articles vs AI-generated content')}>
                 <input type="checkbox" checked={!!global?.ljSplitTypes} onChange={(e) => onPatch?.({ ljSplitTypes: e.target.checked })} /> {t('Split by content type')}
@@ -1409,7 +1409,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               )}
 
               <div className="rh-section-h">{t('Storage')}</div>
-              <p className="settings-note">{size ? t('{n} books · ~{mb} MB on this device.', { n: size.books.toLocaleString(), mb: (size.bytes / 1024 / 1024).toFixed(2) }) : ''} {t('The tracker is excluded from the local full backup — it moves via these exports and (once set up) its own cloud file.')}</p>
+              <p className="settings-note">{size ? t('{n} books · ~{mb} MB on this device.', { n: fmtNum(size.books), mb: fmtNum(size.bytes / 1024 / 1024, 2, 2) }) : ''} {t('The tracker is excluded from the local full backup — it moves via these exports and (once set up) its own cloud file.')}</p>
               <button className="lj-danger" onClick={wipe}>{t('Delete tracker from this device…')}</button>
             </div>
           )}
@@ -2026,7 +2026,7 @@ function ArchetypeView({ books }) {
   const allTime = useMemo(() => currentArchetype(finished), [finished]);
   const trend = useMemo(() => archetypeTrend(dated, windowDays, now), [dated, windowDays, now]);
   const present = [...new Set(trend.map((p) => p.archetypeId).filter(Boolean))];
-  const winLabel = windowDays >= 365 ? t('{n} yr', { n: (windowDays / 365).toFixed(windowDays % 365 ? 1 : 0) }) : t('{n} mo', { n: Math.round(windowDays / 30) });
+  const winLabel = windowDays >= 365 ? t('{n} yr', { n: fmtNum(windowDays / 365, windowDays % 365 ? 1 : 0, windowDays % 365 ? 1 : 0) }) : t('{n} mo', { n: Math.round(windowDays / 30) });
 
   if (finished.length < 3) return <p className="settings-note">{t('Mark at least 3 books finished to reveal your Reader Archetype.')}</p>;
   return (
@@ -2260,9 +2260,9 @@ function QueuesDashboard({ queues, books, wpm, pace, fileStats, csOf, onPick, on
       <div className="lj-qstats">
         <div className="ab-stat"><b>{total.queues}</b><span>{t('queues')}</span></div>
         <div className="ab-stat"><b>{total.done} / {total.count}</b><span>{t('books finished')}</span><Bar pct={total.count ? total.done / total.count : 0} label={t('{done} of {total} finished', { done: total.done, total: total.count })} /></div>
-        <div className="ab-stat"><b>{total.wordsLeft.toLocaleString()}</b><span>{t('words left of {total}', { total: total.wordsTotal.toLocaleString() })}</span><Bar pct={total.wordsTotal ? 1 - total.wordsLeft / total.wordsTotal : 0} /></div>
+        <div className="ab-stat"><b>{fmtNum(total.wordsLeft)}</b><span>{t('words left of {total}', { total: fmtNum(total.wordsTotal) })}</span><Bar pct={total.wordsTotal ? 1 - total.wordsLeft / total.wordsTotal : 0} /></div>
         <div className="ab-stat"><b>{t('{n} h', { n: total.hoursLeft })}</b><span>{t('left at {wpm} wpm', { wpm })}</span></div>
-        <div className="ab-stat" title={t('Everything left, read at your recent pace (last ~6 weeks, recent days weighted most)')}><b>{total.eta || '—'}</b><span>{total.eta ? t('all done at ~{n} words/day', { n: pace.wordsPerDay.toLocaleString() }) : t('needs some recent reading')}</span></div>
+        <div className="ab-stat" title={t('Everything left, read at your recent pace (last ~6 weeks, recent days weighted most)')}><b>{total.eta || '—'}</b><span>{total.eta ? t('all done at ~{n} words/day', { n: fmtNum(pace.wordsPerDay) }) : t('needs some recent reading')}</span></div>
         <div className="ab-stat"><b>{t('{n} h', { n: total.hoursSpent })}</b><span>{t('spent so far')}</span></div>
       </div>
       <div className="lj-inline lj-qdash-tools">
@@ -2311,7 +2311,7 @@ function QueuesDashboard({ queues, books, wpm, pace, fileStats, csOf, onPick, on
                 </td>
                 <td><Bar cls="fin" pct={st.count ? st.done / st.count : 0} label={t('{done} of {total} finished', { done: st.done, total: st.count })} /><span className="lj-cand-pct lj-qdash-n">{st.done}/{st.count}</span></td>
                 <td><Bar pct={st.pctWords / 100} /><span className="lj-cand-pct">{st.pctWords}%</span></td>
-                <td title={t('{n} words', { n: st.wordsLeft.toLocaleString() })}><span className="lj-qdash-left"><i style={{ width: `${(st.wordsLeft / maxLeft) * 100}%` }} /></span>{Math.round(st.wordsLeft / 1000)}k</td>
+                <td title={t('{n} words', { n: fmtNum(st.wordsLeft) })}><span className="lj-qdash-left"><i style={{ width: `${(st.wordsLeft / maxLeft) * 100}%` }} /></span>{Math.round(st.wordsLeft / 1000)}k</td>
                 <td>{t('{n} h', { n: st.hoursLeft })}</td>
                 <td>{st.eta || '—'}</td>
                 <td title={t('{n} of {total} books have a linked document', { n: linked.count, total: st.count })}>{linked.count
@@ -2444,11 +2444,11 @@ function NamedQueue({ queue, others = [], paths = {}, stacked = true, onLayout, 
           </div>
           <div className="lj-qstats">
             <div className="ab-stat"><b>{st.done} / {st.count}</b><span>{t('finished')}</span><Bar pct={st.done / st.count} label={t('{done} of {total} finished', { done: st.done, total: st.count })} /></div>
-            <div className="ab-stat"><b>{st.pctWords}%</b><span>{t('of {n} words read', { n: st.wordsTotal.toLocaleString() })}</span><Bar pct={st.pctWords / 100} /></div>
+            <div className="ab-stat"><b>{st.pctWords}%</b><span>{t('of {n} words read', { n: fmtNum(st.wordsTotal) })}</span><Bar pct={st.pctWords / 100} /></div>
             <div className="ab-stat"><b>{avail} / {st.count}</b><span>{t('files available')}{counts.unsearched ? ` · ${t('{n} not searched', { n: counts.unsearched })}` : ''}{counts.missing ? ` · ${t('{n} missing', { n: counts.missing })}` : ''}</span><Bar cls="files" pct={avail / st.count} label={t('{done} of {total} files available', { done: avail, total: st.count })} /></div>
             <div className="ab-stat"><b>{t('{n} h', { n: st.hoursLeft })}</b><span>{t('left at {wpm} wpm', { wpm })}</span></div>
             <div className="ab-stat" title={t('Projected finish if read in order at your recent pace — the last ~6 weeks of reading, recent days weighted most (days off count too)')}>
-              <b>{st.eta || '—'}</b><span>{st.eta ? t('ETA at ~{n} words/day lately', { n: st.wordsPerDay.toLocaleString() }) : t('ETA needs some recent reading')}</span>
+              <b>{st.eta || '—'}</b><span>{st.eta ? t('ETA at ~{n} words/day lately', { n: fmtNum(st.wordsPerDay) }) : t('ETA needs some recent reading')}</span>
             </div>
             <div className="ab-stat"><b>{t('{n} h', { n: st.hoursSpent })}</b><span>{st.readingWpm ? t('spent · ~{wpm} wpm on these', { wpm: st.readingWpm }) : t('spent')}</span></div>
           </div>
@@ -2523,7 +2523,7 @@ function NamedQueue({ queue, others = [], paths = {}, stacked = true, onLayout, 
                     <td title={c.author}>{c.author}</td>
                     <td title={c.genre}>{c.genre}</td>
                     <td>{c.type}</td>
-                    <td title={t('{n} words', { n: words.toLocaleString() })}>{words ? `${Math.round(words / 1000)}k` : '—'}{estHours(b, wpm) != null ? <span className="lj-qdim"> · {t('{n} h', { n: estHours(b, wpm) })}</span> : ''}</td>
+                    <td title={t('{n} words', { n: fmtNum(words) })}>{words ? `${Math.round(words / 1000)}k` : '—'}{estHours(b, wpm) != null ? <span className="lj-qdim"> · {t('{n} h', { n: estHours(b, wpm) })}</span> : ''}</td>
                     <td><Bar pct={p} cls={isFin ? 'fin' : ''} /><span className="lj-cand-pct">{pctTxt(p)}</span></td>
                     <td>{isFin ? (b.finishTime || '✓') : st.etaById[b.id] || '—'}</td>
                     <td title={c.folder}>{c.folder}</td>
@@ -2581,7 +2581,7 @@ function QueueCandidates({ queue, queues, books, dirs = [], paths, setPaths, wpm
     // A walk that read every folder to the end and still missed a file: its remembered path is stale.
     rememberPaths(r.paths, r.complete ? wanted.map((w) => w.cs).filter((cs) => !r.paths[cs]) : []);
     setPaths(foundPaths());
-    const foundMsg = { found: r.found, total: wanted.length, scanned: r.scanned.toLocaleString() };
+    const foundMsg = { found: r.found, total: wanted.length, scanned: fmtNum(r.scanned) };
     setIndexing(ask || r.found ? (r.skipped
       ? t.n('Found {found} of {total} linked files ({scanned} entries looked at) · {n} folder needs permission — use Find folders.', 'Found {found} of {total} linked files ({scanned} entries looked at) · {n} folders need permission — use Find folders.', r.skipped, foundMsg)
       : t('Found {found} of {total} linked files ({scanned} entries looked at).', foundMsg)) : '');
@@ -2990,7 +2990,7 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
                     <Fragment key={r.cs}>
                       <tr className={`${r.state ? `st-${r.state}` : ''} ${!r.state && r.target === 'skip' ? 'skip' : ''}`.trim()}>
                         <td className="lj-bulk-name" title={r.fileName}>{r.title}</td>
-                        <td>{r.words ? r.words.toLocaleString() : '—'}</td>
+                        <td>{r.words ? fmtNum(r.words) : '—'}</td>
                         <td>{Math.round(r.coverage * 100)}%</td>
                         <td>{r.state
                           ? <span className={`lj-tier t-${r.state}`} title={r.outcome || ''}>{r.state === 'busy' ? `⟳ ${t('working…')}` : r.state === 'linked' ? `✓ ${t('linked')}` : r.state === 'created' ? `✓ ${t('created')}` : `✕ ${t('failed')}`}</span>
@@ -3062,7 +3062,7 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
             const m = mappedFor(sec);
             const book = m ? books.find((b) => b.id === m[0]) : null;
             return (
-              <div key={sec.start} className="lj-anth-row" style={{ paddingLeft: 8 + sec.level * 14 }}>
+              <div key={sec.start} className="lj-anth-row" style={{ paddingInlineStart: 8 + sec.level * 14 }}>
                 <span className="lj-anth-title">{sec.title}</span>
                 <span className="lj-series-bar" title={t('{pct}% of this section read', { pct: Math.round(sec.frac * 100) })}><i style={{ width: `${sec.frac * 100}%` }} /></span>
                 <span className="lj-anth-pct">{Math.round(sec.frac * 100)}%</span>
@@ -3133,7 +3133,7 @@ function TimelineView({ books }) {
           <span className="lj-replay-count">{cur.n}</span>
           <span className="settings-note">{t('books finished by {date}', { date: cur.date })}</span>
           <div className="lj-replay-book"><b>{cur.title}</b><em>{cur.author} · {cur.genre}</em></div>
-          <div className="settings-note">{t('{words}M words · {pages} pages cumulatively', { words: (cur.words / 1e6).toFixed(2), pages: cur.pages.toLocaleString() })}</div>
+          <div className="settings-note">{t('{words}M words · {pages} pages cumulatively', { words: fmtNum(cur.words / 1e6, 2, 2), pages: fmtNum(cur.pages) })}</div>
         </div>
         <svg className="lj-growth" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
           <path className="lj-growth-line" d={path} />
@@ -3199,7 +3199,7 @@ function YearWrap({ books, years }) {
       </div>
       <div className="rh-stat-grid">
         <Stat v={w.books} l={t('finished')} sub={t('{fiction} fiction · {nonfiction} non-fiction', { fiction: w.fiction, nonfiction: w.nonfiction })} />
-        <Stat v={w.pages ? w.pages.toLocaleString() : '—'} l={t('pages')} sub={w.words ? t('{n}M words', { n: (w.words / 1e6).toFixed(1) }) : null} />
+        <Stat v={w.pages ? fmtNum(w.pages) : '—'} l={t('pages')} sub={w.words ? t('{n}M words', { n: fmtNum(w.words / 1e6, 1, 1) }) : null} />
         <Stat v={w.topGenre ? w.topGenre[0] : '—'} l={t('top genre')} sub={w.topGenre ? t('{n} book(s)', { n: w.topGenre[1] }) : null} />
         <Stat v={w.topAuthor ? w.topAuthor[0] : '—'} l={t('top author')} sub={w.topAuthor ? t('{n} book(s)', { n: w.topAuthor[1] }) : null} />
         {w.avgRating != null && <Stat v={`★${w.avgRating}`} l={t('avg rating')} sub={w.avgDifficulty ? t('avg difficulty {n}', { n: w.avgDifficulty }) : null} />}
@@ -3230,7 +3230,7 @@ function WeeklySummaries({ books, dayAgg, ai }) {
             <div key={w.week} className="lj-weekly">
               <div className="lj-weekly-head">
                 <b>{w.start} → {w.end}</b>
-                {w.words > 0 && <em>{t('{n} words', { n: w.words.toLocaleString() })} · {t.n('{n} day', '{n} days', w.daysActive)}{w.wpm ? ` · ${t('{n} WPM', { n: w.wpm })}` : ''}</em>}
+                {w.words > 0 && <em>{t('{n} words', { n: fmtNum(w.words) })} · {t.n('{n} day', '{n} days', w.daysActive)}{w.wpm ? ` · ${t('{n} WPM', { n: w.wpm })}` : ''}</em>}
                 {w.finished.length > 0 && <em>✅ {w.finished.length}</em>}
                 {d && <span className="lj-weekly-ai" title={t("Written by the cowork AI from this week's numbers")}>✨ {t('AI')}</span>}
               </div>
@@ -3264,7 +3264,7 @@ function AnalyticsView({ books, dayAgg = [], ai = null, splitTypes = false, onSp
       {pace.length === 0 ? <p className="settings-note">{t('No dated finishes.')}</p> : (
         <div className="lj-bars">
           {pace.map((p) => (
-            <div key={p.year} className="lj-bar" title={`${t('{year}: {books} books · {pages} pages', { year: p.year, books: p.books, pages: p.pages.toLocaleString() })}${p.avgDifficulty ? ` · ${t('avg difficulty {n}', { n: p.avgDifficulty })}` : ''}${p.avgRating ? ` · ${t('avg ★{n}', { n: p.avgRating })}` : ''}`}>
+            <div key={p.year} className="lj-bar" title={`${t('{year}: {books} books · {pages} pages', { year: p.year, books: p.books, pages: fmtNum(p.pages) })}${p.avgDifficulty ? ` · ${t('avg difficulty {n}', { n: p.avgDifficulty })}` : ''}${p.avgRating ? ` · ${t('avg ★{n}', { n: p.avgRating })}` : ''}`}>
               <span className="lj-bar-fill" style={{ height: `${(p.books / maxBooks) * 100}%` }}><i>{p.books}</i></span>
               <em>{String(p.year).slice(2)}</em>
             </div>
@@ -3763,8 +3763,8 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
         <div className="settings-note" role="status">
           ⏳ {t.n('{n} scheduled reply is waiting for your review:', '{n} scheduled replies are waiting for your review:', ai.pendingReplies.length)}
           {ai.pendingReplies.map((p) => (
-            <button key={p.hash} disabled={busy} style={{ marginLeft: 6 }} onClick={async () => { await stageReply(p.text, p.ops, `${p.source} · ${new Date(p.at).toLocaleString()}`); persistAi(unparkReply(ai, p.hash)); }}>
-              {t('Review {ops} ({date})', { ops: p.ops.map((id) => COWORK_OPS[id]?.label || id).join(' + '), date: new Date(p.at).toLocaleDateString() })}
+            <button key={p.hash} disabled={busy} style={{ marginInlineStart: 6 }} onClick={async () => { await stageReply(p.text, p.ops, `${p.source} · ${new Date(p.at).toLocaleString()}`); persistAi(unparkReply(ai, p.hash)); }}>
+              {t('Review {ops} ({date})', { ops: p.ops.map((id) => COWORK_OPS[id]?.label || id).join(' + '), date: fmtDate(p.at) })}
             </button>
           ))}
         </div>

@@ -5,7 +5,7 @@ import { autoDetectToc, isMatterTitle, sectionSpan } from '../document/toc.js';
 import { detectTocRegion, parsePrintedToc, buildFromParsed, finalizeEntries, joinRegion, autoSplitSquashed, parseManualToc, outOfSequence, seqWindow, autoLocateRemaining , fuzzyFindLines } from '../document/tocWizard.js';
 import { findInDoc } from '../document/findText.js';
 import FindResults from '../components/FindResults.jsx';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 const TIER_SYM = ['◆', '▸', '▹', '·', '·', '·']; // per-level glyph shown next to the explicit L-number
 
@@ -204,7 +204,7 @@ export default function TocWizard({ tab, onApply, onClose }) {
                   <div key={li} className={`tw-pl${ent ? ' entry' : ''}${line.isEmpty ? ' blank' : ''}`}>
                     <span className="tw-pl-n">{li + 1}</span>
                     {ent ? (
-                      <span className="tw-pl-t"><b style={{ marginLeft: (ent.indent || 0) }}>{ent.title}</b>{ent.page != null && <span className="tw-pl-pg"> · {t('p.{page}', { page: ent.page })}</span>}</span>
+                      <span className="tw-pl-t"><b style={{ marginInlineStart: (ent.indent || 0) }}>{ent.title}</b>{ent.page != null && <span className="tw-pl-pg"> · {t('p.{page}', { page: ent.page })}</span>}</span>
                     ) : (
                       <span className="tw-pl-t tw-pl-skip">{line.isEmpty ? '·' : line.text.trim() || '·'}</span>
                     )}
@@ -280,7 +280,7 @@ export default function TocWizard({ tab, onApply, onClose }) {
                   <button className="tw-rev-lvl" title={t('Demote a tier (indent)')} onClick={() => bump(i, 1)}>⇥</button>
                   <input className="tw-rev-title" value={c.title} onChange={(e) => setTitle(i, e.target.value)} />
                   {c.matched
-                    ? <span className={`tw-rev-pos${badSeq ? ' bad' : ''}`} title={badSeq ? t('Line {line} — out of sequence', { line }) : t('Line {line}', { line })}>{pct.toFixed(1)}%</span>
+                    ? <span className={`tw-rev-pos${badSeq ? ' bad' : ''}`} title={badSeq ? t('Line {line} — out of sequence', { line }) : t('Line {line}', { line })}>{fmtNum(pct, 1, 1)}%</span>
                     : <input className="tw-rev-line" type="number" min={1} placeholder={t('line #')} onChange={(e) => assignLine(i, e.target.value)} title={t('Type the line where this section starts')} />}
                   <button className="tw-rev-find" title={t('Find this section in the text')} onClick={() => { setFindFor(i); setFindQuery(c.title || ''); }}>🔍</button>
                   <label className="tw-rev-skip" title={t('Exclude this section from the completion %')}>

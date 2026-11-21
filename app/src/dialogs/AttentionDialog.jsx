@@ -3,7 +3,7 @@ import Dialog from './Dialog.jsx';
 import {
   attentionScore, attentionLabel, attentionBreakdown, attentionAdvice, DEFAULT_ATTENTION,
 } from '../engine/attention.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Attention Check — a behavioral, on-device read on whether you are still locked in, computed from
 // regression bursts, recent comprehension answers, and pace instability. This is the license-clean,
@@ -27,7 +27,7 @@ export default function AttentionDialog({ tab, recentScores = [], onClose }) {
   const rows = [
     { key: 'regression', name: t('Regression bursts'), pen: bd.regression, detail: t('{n} in last {secs}s', { n: recentRegressions, secs: Math.round(DEFAULT_ATTENTION.regWindowMs / 1000) }) },
     { key: 'comprehension', name: t('Comprehension'), pen: bd.comprehension, detail: recentScores.length >= 2 ? t('{pct}% recent', { pct: Math.round((1 - bd.comprehension) * 100) }) : t('no recent checks') },
-    { key: 'pace', name: t('Pace stability'), pen: bd.pace, detail: paceCv > 0 ? `CV ${paceCv.toFixed(2)}` : t('no recent pace') },
+    { key: 'pace', name: t('Pace stability'), pen: bd.pace, detail: paceCv > 0 ? `CV ${fmtNum(paceCv, 2, 2)}` : t('no recent pace') },
   ];
 
   return (

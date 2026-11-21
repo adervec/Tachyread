@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { mapLayout, allEdges, neighbourhood, treeComponents, treeLayout, libraryTree, genreHue, EDGE_KINDS, MAP_R } from '../features/bookGraph.js';
 import { readStatus, STATUS_LABEL, recommender, pubYear } from '../features/journeyLibrary.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // The Tech Tree tab, rebuilt for big libraries (thousands of books). Four views over the same data:
 //   Overview      — genre → subgenre sunburst: what the library is made of, and where you've read
@@ -191,7 +191,7 @@ function Overview({ books, onDrill }) {
           return (G.subs || []).map((s) => { const w = (Math.PI * 2) * (s.count / Math.max(1, G.count)); const m = sa + w / 2; sa += w; return w > 0.18 ? <text key={s.name} x={Math.cos(m) * 228} y={Math.sin(m) * 228} className="tt-sun-label" textAnchor="middle" dominantBaseline="middle">{short(s.name === '—' ? t('(none)') : groupName(s.name), 14)}</text> : null; });
         })()}
         <circle r={G ? 0 : 76} className="tt-sun-hub" onClick={() => setZoom(null)} />
-        {!G && <text className="tt-sun-center" textAnchor="middle" y="-6">{data.total.toLocaleString()}</text>}
+        {!G && <text className="tt-sun-center" textAnchor="middle" y="-6">{fmtNum(data.total)}</text>}
         {!G && <text className="tt-sun-center-sub" textAnchor="middle" y="16">{t('{pct}% finished', { pct: pct(data.read, data.total) })}</text>}
       </svg>
       <div className="tt-genre-list">
@@ -202,7 +202,7 @@ function Overview({ books, onDrill }) {
             {(G ? G.subs : data.genres).map((x) => (
               <tr key={x.name} onClick={() => (G ? onDrill(G.name === 'Other genres' ? 'all' : G.name, x.name === 'Other' ? '' : x.name) : setZoom(x.name))} className="tt-row">
                 <td><i className="tt-dot" style={{ background: genreHue(G ? G.name : x.name) }} /> {groupName(x.name)}</td>
-                <td>{x.count.toLocaleString()}</td>
+                <td>{fmtNum(x.count)}</td>
                 <td>{pct(x.read, x.count)}%</td>
                 <td><span className="lj-pbar"><i style={{ width: `${pct(x.read, x.count)}%` }} /></span></td>
               </tr>
@@ -302,7 +302,7 @@ function MapCanvas({ books, edges, passes, filterKey, focus, onPick, onOpen }) {
     const liveWedge = new Set(), liveSub = new Set();
     for (const n of layout.nodes) if (visible.has(n.id)) { liveWedge.add(n.wedge); liveSub.add(`${n.wedge}|${n.subgenre}`); }
     if (k * MAP_R > 450) for (const s of layout.subs) if (liveSub.has(`${s.genre}|${s.name}`)) label(`${groupName(s.name)} · ${s.count}`, sx(s.x), sy(s.y), 'italic 11px sans-serif', 'rgba(200,210,230,0.75)', true);
-    for (const g of layout.genres) if (liveWedge.has(g.name)) label(t('{name} · {count} ({read} read)', { name: groupName(g.name), count: g.count.toLocaleString(), read: g.read }), sx(g.x), sy(g.y), 'bold 12px sans-serif', genreHue(g.name), true);
+    for (const g of layout.genres) if (liveWedge.has(g.name)) label(t('{name} · {count} ({read} read)', { name: groupName(g.name), count: fmtNum(g.count), read: g.read }), sx(g.x), sy(g.y), 'bold 12px sans-serif', genreHue(g.name), true);
   };
   const schedule = () => { if (!raf.current) raf.current = requestAnimationFrame(draw); };
 
@@ -361,7 +361,7 @@ function MapCanvas({ books, edges, passes, filterKey, focus, onPick, onOpen }) {
         <button onClick={() => { cam.current = { ...cam.current, k: cam.current.k / 1.4 }; schedule(); }} aria-label={t('Zoom out')}>－</button>
         <button onClick={() => { fitAll(); schedule(); }} title={t('Whole library')}>⤢</button>
       </div>
-      <div className="tt-map-hint">{hint || t('{n} books · drag to pan, scroll to zoom · click a book for its card, double-click for its neighbourhood · faint = not read yet, ringed = reading', { n: visible.size.toLocaleString() })}</div>
+      <div className="tt-map-hint">{hint || t('{n} books · drag to pan, scroll to zoom · click a book for its card, double-click for its neighbourhood · faint = not read yet, ringed = reading', { n: fmtNum(visible.size) })}</div>
     </div>
   );
 }

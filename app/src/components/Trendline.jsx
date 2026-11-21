@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useIsCompact } from '../state/device.js';
 import { fmtDateTime } from '../features/dateFmt.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Mountain-graph progress bar: an area chart of recorded reading pace across the whole book.
 // Filled columns are colored by state — read this session, read in a prior session, or
@@ -99,7 +99,7 @@ export default function Trendline({ tab, onPeek, peekIdx = -1 }) {
     }
     tip = {
       x: hover.tipX,
-      pct: ((wi / total) * 100).toFixed(1),
+      pct: fmtNum((wi / total) * 100, 1, 1),
       wpm: read && col.wpm > 0 ? Math.round(col.wpm) : null,
       when: read && when ? fmtDateTime(when) : null,
       read,

@@ -79,7 +79,7 @@ export default function OpdsDialog({ onClose }) {
             <button onClick={() => setStack(stack.slice(0, -1))}>← {t('Back')}</button>
             <b>{feed?.title || '…'}</b>
             {tpl && (
-              <form className="lj-inline" onSubmit={(ev) => { ev.preventDefault(); if (q.trim()) setStack([...stack, fillSearch(tpl, q.trim())]); }} style={{ marginLeft: 'auto' }}>
+              <form className="lj-inline" onSubmit={(ev) => { ev.preventDefault(); if (q.trim()) setStack([...stack, fillSearch(tpl, q.trim())]); }} style={{ marginInlineStart: 'auto' }}>
                 <input value={q} onChange={(ev) => setQ(ev.target.value)} placeholder={t('Search this catalogue')} aria-label={t('Search this catalogue')} />
                 <button type="submit" disabled={!q.trim()}>{t('Search')}</button>
               </form>

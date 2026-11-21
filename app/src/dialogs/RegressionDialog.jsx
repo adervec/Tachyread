@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Dialog from './Dialog.jsx';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Regression Report — surfaces this session's backward saccades (re-reads) over already-read text.
 // Regressions are a normal, comprehension-driven part of reading, so the goal is NOT zero: it is to
@@ -59,7 +59,7 @@ export default function RegressionDialog({ tab, onJumpWord, onClose }) {
           <span>{t('longer (re-analysis)')}</span>
         </div>
         <div className="reg-card">
-          <b>{stats.ratePer100.toFixed(1)}</b>
+          <b>{fmtNum(stats.ratePer100, 1, 1)}</b>
           <span>{t('per 100 words read')}</span>
         </div>
       </div>

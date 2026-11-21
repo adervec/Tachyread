@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { recordSpark, getSpark, sparkBuckets, sparkPoints, SPARK_MAX_WPM } from '../features/wpmSpark.js';
 import { fmtDate } from '../features/dateFmt.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 function fmtDuration(ms) {
   const s = Math.floor((ms || 0) / 1000);
@@ -165,7 +165,7 @@ export default function ReadingStats({ tab, autoStopAt = 0, omit = null }) {
       {show.coverage && (
         <div className="dash-stat">
           <span className="dash-num">
-            {(coverage * 100).toFixed(1)}<span className="dash-of">%</span>
+            {fmtNum(coverage * 100, 1, 1)}<span className="dash-of">%</span>
           </span>
           <span className="dash-label">{t('Book read · {time} active', { time: fmtDuration(activeMs) })}</span>
         </div>
@@ -190,9 +190,9 @@ export default function ReadingStats({ tab, autoStopAt = 0, omit = null }) {
       )}
       {(show.pct || show.today || show.regressions || show.steadiness) && (
         <div className="dash-stat dash-stat-row">
-          {show.pct && <span className="dash-mini">{t('{pct}% through', { pct: total ? ((idx / total) * 100).toFixed(1) : '0.0' })}</span>}
-          {show.today && <span className="dash-mini">{t('{n} today', { n: today.toLocaleString() })}</span>}
-          {show.regressions && reg && <span className="dash-mini" title={t('Backward re-reads this session')}>↩ {reg.count} ({reg.ratePer100.toFixed(1)}/100)</span>}
+          {show.pct && <span className="dash-mini">{t('{pct}% through', { pct: fmtNum(total ? (idx / total) * 100 : 0, 1, 1) })}</span>}
+          {show.today && <span className="dash-mini">{t('{n} today', { n: fmtNum(today, 0) })}</span>}
+          {show.regressions && reg && <span className="dash-mini" title={t('Backward re-reads this session')}>↩ {reg.count} ({fmtNum(reg.ratePer100, 1, 1)}/100)</span>}
           {show.steadiness && <span className="dash-mini" title={t('Pace variability — lower is steadier')}>{steadiness(cv)}</span>}
         </div>
       )}

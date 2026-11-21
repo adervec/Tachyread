@@ -12,7 +12,7 @@ import { bookFromOpenedDoc } from '../features/trackyreadAdd.js';
 import { bookCoverSrc, proceduralCover } from '../features/bookCovers.js';
 import { bookCoverUrl } from '../features/openLibrary.js';
 import { presenceByChecksum, presenceLabel } from '../features/presence.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Short labels for the dialog tabs (menus use longer "…" titles). Fallback is the raw kind.
 const PANEL_LABELS = {
@@ -343,7 +343,7 @@ export default function TabBar() {
             onDragLeave={() => setDropId((d) => (d === tab.id ? null : d))}
             onDrop={(e) => { e.preventDefault(); if (dragId.current && dragId.current !== tab.id) reorderTabs(dragId.current, tab.id); dragId.current = null; setDropId(null); }}
             onDragEnd={() => { dragId.current = null; setDropId(null); }}
-            title={`${named ? (cs === masterOf(named) ? t('{group} — {file} (master)', { group: named.name, file: fileName }) : `${named.name} — ${fileName}`) : (tab.lazy ? t('{file} — tap to load', { file: fileName }) : fileName)}\n${t('{pct}% of the text read (completion, not position)', { pct: pct.toFixed(1) })}`}
+            title={`${named ? (cs === masterOf(named) ? t('{group} — {file} (master)', { group: named.name, file: fileName }) : `${named.name} — ${fileName}`) : (tab.lazy ? t('{file} — tap to load', { file: fileName }) : fileName)}\n${t('{pct}% of the text read (completion, not position)', { pct: fmtNum(pct, 1, 1) })}`}
           >
             {tiles && (
               <img

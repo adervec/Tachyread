@@ -13,6 +13,14 @@ export function t(key, params) {
   const f = shared();
   return f?.t ? f.t(key, params) : interp(key, params);
 }
+// A number the reader sees (house standard 20: no toFixed / bare toLocaleString in the UI): through
+// the shared appFont.fmt, in the reader's language. `max` / `min` fraction digits.
+export function fmtNum(n, max = 2, min = 0) {
+  const f = shared()?.fmt;
+  if (f) return f.number(Number(n) || 0, { max, min });
+  return (Number(n) || 0).toLocaleString('en', { maximumFractionDigits: max, minimumFractionDigits: min });
+}
+
 t.n = (one, other, n, params) => {
   const f = shared();
   return f?.t?.n ? f.t.n(one, other, n, params) : interp(n === 1 ? one : other, { n, ...params });

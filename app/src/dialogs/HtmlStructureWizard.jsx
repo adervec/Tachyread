@@ -4,7 +4,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { tagHtmlForPicking, docFromHtmlRange, htmlRangeChildIdxs, collectLinks, contentHtmlOf, buildDocFromPages } from '../document/parsers.js';
 import { fetchPageText } from '../features/webGrab.js';
 import { attachChecksum } from '../document/readerDocument.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Interactive fallback for when the auto content-root heuristic grabs the wrong region of an HTML
 // page (a preface / site chrome, missing the real text). The page renders in a sandboxed iframe; you
@@ -119,7 +119,7 @@ export default function HtmlStructureWizard({ html, fileName = t('Web page'), so
       if (!doc.words.length) { setBusy(false); return; }
       await attachChecksum(doc);
       await openDoc(doc);
-      setStatus(t.n('Opened “{name}” from the chosen region ({count} word).', 'Opened “{name}” from the chosen region ({count} words).', doc.words.length, { name: doc.fileName, count: doc.words.length.toLocaleString() }));
+      setStatus(t.n('Opened “{name}” from the chosen region ({count} word).', 'Opened “{name}” from the chosen region ({count} words).', doc.words.length, { name: doc.fileName, count: fmtNum(doc.words.length) }));
       onClose();
     } catch (e) { setBusy(false); setStatus(t('Could not open that region: {error}', { error: e?.message || e })); }
   }
@@ -157,7 +157,7 @@ export default function HtmlStructureWizard({ html, fileName = t('Web page'), so
       doc.sourceUrl = sourceUrl;
       await attachChecksum(doc);
       await openDoc(doc);
-      const words = doc.words.length.toLocaleString();
+      const words = fmtNum(doc.words.length);
       setStatus(errors.length
         ? t.n('Opened “{name}” — stitched {n} linked page, {failed} failed ({words} words).', 'Opened “{name}” — stitched {n} linked pages, {failed} failed ({words} words).', pages.length, { name: doc.fileName, failed: errors.length, words })
         : t.n('Opened “{name}” — stitched {n} linked page ({words} words).', 'Opened “{name}” — stitched {n} linked pages ({words} words).', pages.length, { name: doc.fileName, words }));
@@ -211,7 +211,7 @@ export default function HtmlStructureWizard({ html, fileName = t('Web page'), so
           {chain.map((el) => {
             const idx = idxOf(el);
             return (
-              <button key={idx} className={`hsw-crumb${idx === startIdx ? ' on' : ''}`} onClick={() => setSingle(idx)} title={t.n('{count} word', '{count} words', wordsOf(el), { count: wordsOf(el).toLocaleString() })}>
+              <button key={idx} className={`hsw-crumb${idx === startIdx ? ' on' : ''}`} onClick={() => setSingle(idx)} title={t.n('{count} word', '{count} words', wordsOf(el), { count: fmtNum(wordsOf(el)) })}>
                 {elLabel(el)}
               </button>
             );
@@ -236,7 +236,7 @@ export default function HtmlStructureWizard({ html, fileName = t('Web page'), so
                 title={c.sample}
               >
                 <span className="hsw-cand-tag">{label(c)}</span>
-                <span className="hsw-cand-words">{t.n('{count} word', '{count} words', c.words, { count: c.words.toLocaleString() })}</span>
+                <span className="hsw-cand-words">{t.n('{count} word', '{count} words', c.words, { count: fmtNum(c.words) })}</span>
                 <span className="hsw-cand-sample">{c.sample}</span>
               </button>
             ))}
@@ -244,7 +244,7 @@ export default function HtmlStructureWizard({ html, fileName = t('Web page'), so
           <div className="field-section">{t('Extraction preview')} {isRange ? `· ${t.n('{n} block', '{n} blocks', rangeIdxs.length)}` : ''}</div>
           {preview ? (
             <div className="hsw-extract">
-              <div className="hsw-extract-stat">{t.n('{count} word', '{count} words', preview.words, { count: preview.words.toLocaleString() })}{preview.toc ? ` · ${t.n('{n} heading', '{n} headings', preview.toc)}` : ''}</div>
+              <div className="hsw-extract-stat">{t.n('{count} word', '{count} words', preview.words, { count: fmtNum(preview.words) })}{preview.toc ? ` · ${t.n('{n} heading', '{n} headings', preview.toc)}` : ''}</div>
               <div className="hsw-extract-lines">
                 {preview.lines.map((l, i) => <div key={i}>{l || ' '}</div>)}
                 {preview.words > 0 && <div className="settings-note">…</div>}

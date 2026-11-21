@@ -4,7 +4,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { newCard, schedule, dueCards, learnedCount } from '../engine/srs.js';
 import { harvestRare, contextAt } from '../engine/vocab.js';
 import { importStardict, listDicts, deleteDict } from '../state/storage.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 const GRADES = [{ g: 0, label: t('Again') }, { g: 1, label: t('Hard') }, { g: 2, label: t('Good') }, { g: 3, label: t('Easy') }];
 const dictUrl = (w) => `https://www.merriam-webster.com/dictionary/${encodeURIComponent(w)}`;
@@ -68,12 +68,12 @@ export default function VocabDialog({ doc, onClose }) {
               const files = [...(e.target.files || [])]; e.target.value = ''; // copy first — clearing the input empties its live FileList
               if (!files?.length) return;
               setMsg(t('Importing dictionary…'));
-              try { const d = await importStardict(files); setMsg(t.n('Imported “{name}” — {count} word.', 'Imported “{name}” — {count} words.', d.wordcount, { name: d.name, count: d.wordcount.toLocaleString() })); refreshDicts(); }
+              try { const d = await importStardict(files); setMsg(t.n('Imported “{name}” — {count} word.', 'Imported “{name}” — {count} words.', d.wordcount, { name: d.name, count: fmtNum(d.wordcount) })); refreshDicts(); }
               catch (err) { setMsg(t('Couldn’t import: {error}', { error: err?.message || err })); }
             }} />
           {(dicts || []).map((d) => (
             <div key={d.id} className="lj-inline">
-              <b>{d.name}</b> <span className="lj-qdim">{t.n('{count} word · {size} MB', '{count} words · {size} MB', d.wordcount, { count: d.wordcount.toLocaleString(), size: (d.bytes / 1048576).toFixed(1) })}</span>
+              <b>{d.name}</b> <span className="lj-qdim">{t.n('{count} word · {size} MB', '{count} words · {size} MB', d.wordcount, { count: fmtNum(d.wordcount), size: fmtNum(d.bytes / 1048576, 1, 1) })}</span>
               <button className="grab-trash" onClick={async () => { await deleteDict(d.id); refreshDicts(); }} aria-label={t('Remove {name}', { name: d.name })}>🗑</button>
             </div>
           ))}

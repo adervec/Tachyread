@@ -20,7 +20,7 @@ export default function DisclaimerDialog({ onClose }) {
         <p
           style={{
             background: 'rgba(220, 60, 60, 0.12)',
-            borderLeft: '3px solid #d9534f',
+            borderInlineStart: '3px solid #d9534f',
             padding: '10px 12px',
             borderRadius: 6,
             lineHeight: 1.45,

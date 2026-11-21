@@ -14,7 +14,7 @@ import { backupToProvider, restoreFromProvider, syncWithProvider } from '../feat
 import { getRoot, pickRoot, forgetRoot, subDirLabel, folderSupported } from '../features/tachyFolder.js';
 import { getSyncStamps } from '../state/storage.js';
 import { compressAllClips } from '../features/clipCodec.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Where each kind of data goes and when it last moved — the honest answer to "is it syncing?".
 // Book files and audio have no cloud copy at all today; saying so beats letting people assume.
@@ -55,7 +55,7 @@ const STORE_LABELS = {
   focusSessions: t('Focus sessions'), audiobook: t('Audiobook clips'), audiobookManifest: t('Audiobook index'),
   global: t('Settings & session'), fsHandles: t('Saved folder handles'),
 };
-const fmtMB = (chars) => (chars >= 1048576 ? `${(chars / 1048576).toFixed(chars >= 1073741824 ? 0 : 1)} MB` : `${Math.max(1, Math.round(chars / 1024))} KB`);
+const fmtMB = (chars) => (chars >= 1048576 ? `${fmtNum(chars / 1048576, chars >= 1073741824 ? 0 : 1, chars >= 1073741824 ? 0 : 1)} MB` : `${Math.max(1, Math.round(chars / 1024))} KB`);
 // Buffer many small writes into ~1 MB pieces (the file writer is slow per call).
 function bufferedWriter(sink) {
   let buf = '';
@@ -217,7 +217,7 @@ export default function DataDialog({ onClose }) {
       const total = Object.values(sizes).reduce((sum, x) => sum + x.count, 0);
       const bytes = Object.values(sizes).reduce((sum, x) => sum + x.bytes, 0);
       setExportInfo({ total, bytes, sizes });
-      const vals = { count: total.toLocaleString(), size: fmtMB(bytes), file: where };
+      const vals = { count: fmtNum(total), size: fmtMB(bytes), file: where };
       setMsg(where
         ? t.n('Backed up {count} record ({size}) to {file}.', 'Backed up {count} records ({size}) to {file}.', total, vals)
         : t.n('Backed up {count} record ({size}) to your downloads.', 'Backed up {count} records ({size}) to your downloads.', total, vals));
@@ -258,7 +258,7 @@ export default function DataDialog({ onClose }) {
     setBusy(true); setMsg(t('Restoring…'));
     try {
       const r = importFile
-        ? await importBackupStream(blobLines(importFile), { replace: true, onProgress: (n) => setMsg(t.n('Restoring… {count} record', 'Restoring… {count} records', n, { count: n.toLocaleString() })) })
+        ? await importBackupStream(blobLines(importFile), { replace: true, onProgress: (n) => setMsg(t.n('Restoring… {count} record', 'Restoring… {count} records', n, { count: fmtNum(n) })) })
         : await importAllData(JSON.parse(importText), { replace: true });
       setMsg(t.n('Restored {n} record — reloading…', 'Restored {n} records — reloading…', r.written));
       setTimeout(() => window.location.reload(), 1000);
@@ -294,12 +294,12 @@ export default function DataDialog({ onClose }) {
             {t('Below is what’s here now.')}
           </p>
           <table className="history-table">
-            <thead><tr><th>{t('Stored data')}</th><th style={{ textAlign: 'right' }}>{t('Records')}</th></tr></thead>
+            <thead><tr><th>{t('Stored data')}</th><th style={{ textAlign: 'end' }}>{t('Records')}</th></tr></thead>
             <tbody>
               {STORE_ORDER.map((k) => (
-                <tr key={k}><td>{STORE_LABELS[k] || k}</td><td style={{ textAlign: 'right' }}>{counts ? (counts[k] || 0).toLocaleString() : '…'}</td></tr>
+                <tr key={k}><td>{STORE_LABELS[k] || k}</td><td style={{ textAlign: 'end' }}>{counts ? fmtNum(counts[k] || 0) : '…'}</td></tr>
               ))}
-              <tr><td><strong>{t('Total')}</strong></td><td style={{ textAlign: 'right' }}><strong>{counts ? totalRecords.toLocaleString() : '…'}</strong></td></tr>
+              <tr><td><strong>{t('Total')}</strong></td><td style={{ textAlign: 'end' }}><strong>{counts ? fmtNum(totalRecords) : '…'}</strong></td></tr>
             </tbody>
           </table>
           <div className="data-row">
@@ -326,7 +326,7 @@ export default function DataDialog({ onClose }) {
           {exportInfo && (
             <p className="settings-note data-sizes" title={t('Approximate size of each part of the backup')}>
               {t('What’s in it: {list}', { list: Object.entries(exportInfo.sizes).filter(([, x]) => x.count).sort((a, b) => b[1].bytes - a[1].bytes)
-                .map(([k, x]) => `${STORE_LABELS[k] || k} ${fmtMB(x.bytes)} (${x.count.toLocaleString()})`).join(' · ') })}
+                .map(([k, x]) => `${STORE_LABELS[k] || k} ${fmtMB(x.bytes)} (${fmtNum(x.count)})`).join(' · ') })}
             </p>
           )}
 
@@ -456,7 +456,7 @@ export default function DataDialog({ onClose }) {
           {CLEARABLE.map((c) => (
             <div key={c.store} className="data-row">
               <button onClick={() => clearOne(c.store, c.done)} disabled={busy || !(counts && counts[c.store])}>{c.label}</button>
-              <span className="settings-note" style={{ margin: 0 }}>{counts ? t.n('{count} record', '{count} records', counts[c.store] || 0, { count: (counts[c.store] || 0).toLocaleString() }) : ''}</span>
+              <span className="settings-note" style={{ margin: 0 }}>{counts ? t.n('{count} record', '{count} records', counts[c.store] || 0, { count: fmtNum(counts[c.store] || 0) }) : ''}</span>
             </div>
           ))}
 
@@ -472,7 +472,7 @@ export default function DataDialog({ onClose }) {
               <button className="grab-trash" onClick={() => setWipeArm(true)} disabled={busy}>🗑 {t('Delete everything…')}</button>
             ) : (
               <>
-                <button className="grab-trash" onClick={wipeEverything} disabled={busy}>⚠ {t.n('Confirm — delete everything ({count} record)', 'Confirm — delete everything ({count} records)', totalRecords, { count: totalRecords.toLocaleString() })}</button>
+                <button className="grab-trash" onClick={wipeEverything} disabled={busy}>⚠ {t.n('Confirm — delete everything ({count} record)', 'Confirm — delete everything ({count} records)', totalRecords, { count: fmtNum(totalRecords) })}</button>
                 <button onClick={() => setWipeArm(false)} disabled={busy}>{t('Cancel')}</button>
               </>
             )}

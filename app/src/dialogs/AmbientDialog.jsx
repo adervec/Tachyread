@@ -61,7 +61,7 @@ export default function AmbientDialog({ onClose }) {
             onChange={(e) => changeVolume(Number(e.target.value))}
             style={{ width: 200 }}
           />
-          <span className="settings-note" style={{ marginLeft: 8 }}>{t('capped low on purpose')}</span>
+          <span className="settings-note" style={{ marginInlineStart: 8 }}>{t('capped low on purpose')}</span>
         </div>
       </div>
 

@@ -6,7 +6,7 @@ import {
   clampCursorSize, CURSOR_MIN_SIZE, CURSOR_MAX_SIZE, DEFAULT_CURSOR_COLOR, DEFAULT_CURSOR_SIZE,
 } from '../features/cursors.js';
 import { TRAIL_MODES, clampTrailMs, TRAIL_MIN_MS, TRAIL_MAX_MS } from '../features/cursorTrail.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 const TRAIL_LABELS = { off: t('Off'), fade: t('Fade (comet tail)'), seismograph: t('Seismograph (draws as text scrolls under it)') };
 
@@ -132,7 +132,7 @@ export default function CursorManagerDialog({ tab, onClose }) {
                     type="range" min={TRAIL_MIN_MS} max={TRAIL_MAX_MS} step={100}
                     value={clampTrailMs(s.cursorTrailMs)} onChange={(e) => setTab({ cursorTrailMs: clampTrailMs(e.target.value) })}
                   />
-                  <span className="range-val">{(clampTrailMs(s.cursorTrailMs) / 1000).toFixed(1)}s</span>
+                  <span className="range-val">{fmtNum(clampTrailMs(s.cursorTrailMs) / 1000, 1, 1)}s</span>
                 </div>
               </div>
               <p className="settings-note">

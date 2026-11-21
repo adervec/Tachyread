@@ -13,7 +13,7 @@ import { keyboardRows } from '../features/keyboards.js';
 import { normalizeRuns, difficultyRows, runDifficulty, difficultyLabel, DIFFICULTY_NAMES, DIFFICULTY_TEXT } from '../features/typingDifficulty.js';
 import { textMatcher, inRange, inDates, anySet } from '../features/tableFilter.js';
 import { TextF, RangeF, DateF } from '../components/ColFilter.jsx';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 function fmtDur(ms) {
   const s = Math.round((ms || 0) / 1000);
@@ -78,7 +78,7 @@ function KeyHeatmap({ agg, mode = 'errors' }) {
               : (rate != null && rate > 0 ? { background: `color-mix(in srgb, #d9534f ${Math.round(12 + heat * 70)}%, transparent)` } : undefined);
             const title = mode === 'speed'
               ? (w ? t.n('{key} · ~{wpm} wpm reach speed ({n} timed keystroke) · {finger}', '{key} · ~{wpm} wpm reach speed ({n} timed keystrokes) · {finger}', v.t, { key: ch, wpm: Math.round(w), finger: fingerName(keyFinger(ch)) }) : t('{key} — no timing yet (new runs record it)', { key: ch }))
-              : (v?.n ? t('{key} · {errors}/{n} errors ({pct}%) · {finger}', { key: ch, errors: v.err, n: v.n, pct: ((v.err / v.n) * 100).toFixed(1), finger: fingerName(keyFinger(ch)) }) : t('{key} — not enough data yet', { key: ch }));
+              : (v?.n ? t('{key} · {errors}/{n} errors ({pct}%) · {finger}', { key: ch, errors: v.err, n: v.n, pct: fmtNum((v.err / v.n) * 100, 1, 1), finger: fingerName(keyFinger(ch)) }) : t('{key} — not enough data yet', { key: ch }));
             return (
               <span
                 key={ch}
@@ -126,7 +126,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
     const n = runs.length;
     const best = Math.max(...runs.map((r) => r.netWpm || 0));
     const avgNet = Math.round(runs.reduce((a, r) => a + (r.netWpm || 0), 0) / n);
-    const avgAcc = (runs.reduce((a, r) => a + (r.accuracy || 0), 0) / n).toFixed(1);
+    const avgAcc = fmtNum(runs.reduce((a, r) => a + (r.accuracy || 0), 0) / n, 1, 1);
     const errAgg = {};
     for (const r of runs) for (const [k, c] of Object.entries(r.errorKeys || {})) errAgg[k] = (errAgg[k] || 0) + c;
     const topErr = Object.entries(errAgg).sort((a, b) => b[1] - a[1]).slice(0, 14);
@@ -167,7 +167,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
             <Stat v={`${stats.avgAcc}%`} l={t('avg accuracy')} />
             <Stat v={stats.n} l={t('runs')} />
             <Stat v={`🔥 ${stats.streak.days}`} l={t('day streak')} />
-            <Stat v={stats.streak.todayWords.toLocaleString()} l={t('words today')} />
+            <Stat v={fmtNum(stats.streak.todayWords)} l={t('words today')} />
           </div>
 
           <label className="inline-check" title={t('Price each run by the keys its text actually demanded — shift, digits and punctuation cost more than home-row prose — and report what that pace is worth on ordinary prose. Scored from the per-key profile every run already stores, so your whole history re-reads.')}>
@@ -235,7 +235,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                           <td className={w.deltaNet == null ? '' : w.deltaNet >= 0 ? 'tp-up' : 'tp-down'}>{w.deltaNet == null ? '—' : t('{n} WPM', { n: sign(w.deltaNet) })}</td>
                           <td>{w.best}</td>
                           <td>{w.avgAcc}%</td>
-                          <td>{w.words.toLocaleString()}</td>
+                          <td>{fmtNum(w.words)}</td>
                           <td>{fmtDur(w.ms)}</td>
                         </tr>
                       ))}
@@ -262,7 +262,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                         <tr key={b.band}>
                           <td>{DIFFICULTY_NAMES[b.band] || b.band}</td>
                           <td>{b.runs}</td>
-                          <td>{b.avgDifficulty.toFixed(2)}×</td>
+                          <td>{fmtNum(b.avgDifficulty, 2, 2)}×</td>
                           <td>{b.avgNet}</td>
                           <td className={b.avgAdj >= b.avgNet ? 'tp-up' : 'tp-down'}>{b.avgAdj}</td>
                           <td>{b.best}</td>
@@ -296,7 +296,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                           <td>{k.avgNet}</td>
                           <td>{k.best}</td>
                           <td>{k.avgAcc}%</td>
-                          <td>{k.words.toLocaleString()}</td>
+                          <td>{fmtNum(k.words)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -318,7 +318,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
           {Object.keys(stats.keyAgg).length > 0 && (
             <>
               <div className="tp-section">{t('Keyboard heatmap')}
-                <span className="lj-viewtoggle" role="tablist" aria-label={t('Heatmap')} style={{ marginLeft: 8 }}>
+                <span className="lj-viewtoggle" role="tablist" aria-label={t('Heatmap')} style={{ marginInlineStart: 8 }}>
                   <button className={heatMode === 'errors' ? 'on' : ''} onClick={() => setHeatMode('errors')}>{t('Errors')}</button>
                   <button className={heatMode === 'speed' ? 'on' : ''} onClick={() => setHeatMode('speed')}>{t('Speed')}</button>
                 </span>
@@ -344,7 +344,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                 <div className="tp-fingers">
                   {stats.fingers.map((f) => (
                     <span key={f.finger} className={`tp-finger${f.rate > 0.08 ? ' bad' : ''}`} title={t('{errors} errors in {n} keys', { errors: f.err, n: f.n })}>
-                      {fingerName(f.finger)}: <b>{(f.rate * 100).toFixed(1)}%</b>
+                      {fingerName(f.finger)}: <b>{fmtNum(f.rate * 100, 1, 1)}%</b>
                     </span>
                   ))}
                 </div>
@@ -389,7 +389,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                     <td>{fmtDateTime(r.ts)}{r.pb?.allTime ? ' 🏆' : r.pb?.mode ? ' 🥇' : ''}</td>
                     <td>{r.mode ? (TYPING_MODE_BY_ID[r.mode]?.label || r.mode) : '—'}</td>
                     <td>{r.device ? <span className={`tp-dev tp-dev-${String(r.device).toLowerCase()}`}>{r.device === 'Mobile' ? '📱' : '🖥'} {deviceName(r.device)}</span> : '—'}</td>
-                    <td title={DIFFICULTY_TEXT[difficultyLabel(runDifficulty(r))]}>{runDifficulty(r).toFixed(2)}×</td>
+                    <td title={DIFFICULTY_TEXT[difficultyLabel(runDifficulty(r))]}>{fmtNum(runDifficulty(r), 2, 2)}×</td>
                     <td title={adjust ? t('{n} raw', { n: r.rawNetWpm }) : undefined}>{r.netWpm}</td>
                     <td>{r.grossWpm}</td>
                     <td>{r.accuracy}%</td>

@@ -4,7 +4,7 @@ import { allFiles } from '../state/storage.js';
 import { MAX_REAL_WPM } from '../engine/readingTracker.js';
 import { fmtDate } from '../features/dateFmt.js';
 import { parseDay } from '../features/localDay.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 function fmtTime(secs) {
   if (!secs) return t('{s}s', { s: 0 });
@@ -20,7 +20,7 @@ function fmtTime(secs) {
 function OpenFileCard({ tab, active }) {
   if (tab.lazy || !tab.tracker) {
     const s = tab.settings || {};
-    const pct = s.totalWords ? ((s.wordIndex / s.totalWords) * 100).toFixed(0) : '0';
+    const pct = s.totalWords ? fmtNum((s.wordIndex / s.totalWords) * 100, 0, 0) : '0';
     return (
       <div className={`stat-file-card${active ? ' active' : ''}`}>
         <div className="stat-file-name">{tab.fileName || s.fileName || t('Untitled')}{active ? ' ·' : ''} <span className="settings-note">{t('not loaded — {pct}% ({n} words in)', { pct, n: s.wordIndex || 0 })}</span></div>
@@ -35,7 +35,7 @@ function OpenFileCard({ tab, active }) {
         <tbody>
           <tr>
             <td>{t('Coverage')}</td>
-            <td>{t('{pct}% ({read} / {total} words)', { pct: (tr.coverage() * 100).toFixed(1), read: tr.readCount, total: tr.wordCount })}</td>
+            <td>{t('{pct}% ({read} / {total} words)', { pct: fmtNum(tr.coverage() * 100, 1, 1), read: tr.readCount, total: tr.wordCount })}</td>
           </tr>
           <tr>
             <td>{t('This session')}</td>

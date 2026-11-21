@@ -6,7 +6,7 @@ import { STRICTNESS, strictnessOf, speakParams } from '../features/speakAlign.js
 import { resizeRing, downsample } from '../features/voice/ringBuffer.js';
 import { encodeWav } from '../features/audiobookExport.js';
 import VideoReplay from './VideoReplay.jsx';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // The reading-aloud card: what the speech recogniser is hearing right now, what it expects next and
 // how far it last moved the text (so a stall is visible, not a mystery), plus optional live
@@ -209,7 +209,7 @@ export default function VoiceFeedback({ info = {}, docWords = [], wordIndex = 0,
         {info.move && !errKey && <span className={`vf-move${info.move.startsWith('+') ? ' ok' : ''}`}> · {info.move}</span>}
         {info.fillers > 0 && !errKey && (() => {
           const mins = Math.max(1, (Date.now() - (info.since || Date.now())) / 60000); // eslint-disable-line react-hooks/purity
-          return <span className="vf-fillers" title={t("Filler words heard that aren't in the text (um, uh, er, like, you know…) — kept in the speech log")}> · {t.n('{n} filler ({rate}/min)', '{n} fillers ({rate}/min)', info.fillers, { rate: (info.fillers / mins).toFixed(1) })}</span>;
+          return <span className="vf-fillers" title={t("Filler words heard that aren't in the text (um, uh, er, like, you know…) — kept in the speech log")}> · {t.n('{n} filler ({rate}/min)', '{n} fillers ({rate}/min)', info.fillers, { rate: fmtNum(info.fillers / mins, 1, 1) })}</span>;
         })()}
       </div>
       <Lineup info={info} docWords={docWords} wordIndex={wordIndex} />

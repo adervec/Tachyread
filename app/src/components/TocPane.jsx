@@ -2,18 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getLineIndex } from '../document/readerDocument.js';
 import { fmtDateTime } from '../features/dateFmt.js';
 import { autoDetectToc, getTocEntries, buildTocTree, sectionSpan, currentChapter, mergeSkipRanges } from '../document/toc.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Optional stat columns (the name column is always shown). `get` receives a per-row context.
 const STAT_COLUMNS = [
   { key: 'startLine', label: t('Ln'), title: t('Starts at line'), get: (c) => c.startLine },
   { key: 'startWord', label: t('Wd'), title: t('Starts at word'), get: (c) => c.startWord },
-  { key: 'startPct', label: '@%', title: t('Starts at % of document'), get: (c) => `${c.startPct.toFixed(1)}%` },
+  { key: 'startPct', label: '@%', title: t('Starts at % of document'), get: (c) => `${fmtNum(c.startPct, 1, 1)}%` },
   { key: 'lenLines', label: t('∑Ln'), title: t('Lines in this section'), get: (c) => c.lenLines },
   { key: 'lenWords', label: t('∑Wd'), title: t('Words in this section'), get: (c) => c.lenWords },
-  { key: 'lenPct', label: t('%Doc'), title: t('Portion of the document'), get: (c) => `${c.lenPct.toFixed(1)}%` },
-  { key: 'childPct', label: t('Σ%ch'), title: t('Summed % size of immediate children'), get: (c) => (c.childPct != null ? `${c.childPct.toFixed(1)}%` : '—') },
-  { key: 'pctRead', label: t('Read'), title: t('Percent of this section read'), get: (c) => `${(c.readFrac * 100).toFixed(1)}%` },
+  { key: 'lenPct', label: t('%Doc'), title: t('Portion of the document'), get: (c) => `${fmtNum(c.lenPct, 1, 1)}%` },
+  { key: 'childPct', label: t('Σ%ch'), title: t('Summed % size of immediate children'), get: (c) => (c.childPct != null ? `${fmtNum(c.childPct, 1, 1)}%` : '—') },
+  { key: 'pctRead', label: t('Read'), title: t('Percent of this section read'), get: (c) => `${fmtNum(c.readFrac * 100, 1, 1)}%` },
   { key: 'wpm', label: 'WPM', title: t('Average reading pace in this section'), get: (c) => (c.wpm ? c.wpm : '—') },
   { key: 'started', label: t('Started'), title: t('When you first reached this section'), get: (c) => fmtTs(c.started) },
   { key: 'completed', label: t('Done'), title: t('When this section was fully read'), get: (c) => fmtTs(c.completed) },

@@ -2,7 +2,7 @@
 // silence when there's nothing to report.
 import assert from 'node:assert/strict';
 import { dailyWords, activitySummary } from './activitySummary.js';
-import { fmtDate } from './dateFmt.js';
+import { localDay as fmtDate } from './localDay.js';
 
 const now = new Date(2026, 7, 12, 15, 0, 0).getTime(); // local mid-afternoon — no midnight edges
 const day = (i) => fmtDate(now - i * 86400000);

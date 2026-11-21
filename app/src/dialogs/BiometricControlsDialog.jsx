@@ -531,7 +531,7 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
             value={Math.round((eye.cueVolume ?? 1) * 100)}
             onChange={(e) => patchEye({ cueVolume: Number(e.target.value) / 100 })}
           />
-          <button style={{ marginLeft: 6 }} onClick={() => cueRef.current.play('enter', eye.cueVolume ?? 1)}>{t('Test')} ♪</button>
+          <button style={{ marginInlineStart: 6 }} onClick={() => cueRef.current.play('enter', eye.cueVolume ?? 1)}>{t('Test')} ♪</button>
         </Field>
       )}
       {/* Live meter: the hold you're doing right now and which window it's in. Without it, tuning
@@ -613,7 +613,7 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
       </button>
       {!eyeRows.length && (
         <button
-          style={{ marginTop: 6, marginLeft: 6 }}
+          style={{ marginTop: 6, marginInlineStart: 6 }}
           title={t('A sane starting set you can edit')}
           onClick={() => setEyeRows([
             { kind: 'blink', minMs: 600, maxMs: 1000, commandId: 'playPause', on: true },

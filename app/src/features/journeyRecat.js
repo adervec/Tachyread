@@ -13,7 +13,7 @@
 // Pure; see journeyRecat.test.mjs.
 
 import { CONTENT_TYPES, contentType } from './journeyLibrary.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Roughly where short-form ends and a book begins. A "short story" of 90k words is a novel; a
 // "novel" of 900 words is an article or a poem.
@@ -76,19 +76,19 @@ const RULES = [
     id: 'too-short-for-long',
     to: 'short',
     test: (b) => contentType(b) === 'long' && words(b) > 0 && words(b) < SHORT_MAX_WORDS && words(b) >= TINY_WORDS,
-    why: (b) => t('{words} words is short-form length', { words: words(b).toLocaleString() }),
+    why: (b) => t('{words} words is short-form length', { words: fmtNum(words(b)) }),
   },
   {
     id: 'tiny-for-long',
     to: 'article',
     test: (b) => contentType(b) === 'long' && words(b) > 0 && words(b) < TINY_WORDS,
-    why: (b) => t('only {words} words', { words: words(b).toLocaleString() }),
+    why: (b) => t('only {words} words', { words: fmtNum(words(b)) }),
   },
   {
     id: 'too-long-for-short',
     to: 'long',
     test: (b) => (contentType(b) === 'short' || contentType(b) === 'article') && words(b) >= LONG_MIN_WORDS,
-    why: (b) => t('{words} words is book length', { words: words(b).toLocaleString() }),
+    why: (b) => t('{words} words is book length', { words: fmtNum(words(b)) }),
   },
 ];
 

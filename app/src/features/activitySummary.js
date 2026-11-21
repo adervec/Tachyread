@@ -1,13 +1,13 @@
 // One line for the splash screen: how much reading happened lately and which way it's heading.
 // Terse and factual by design — numbers and a direction, no cheering and no guilt. Aggregates the
 // same per-file dailyHistory the Statistics dialog uses ({ date: 'YYYY-MM-DD' local, wordsRead }).
-import { fmtDate } from './dateFmt.js';
-import { t } from '../i18n.js';
+import { localDay } from './localDay.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Words per LOCAL day over the trailing `days`, index 0 = today. Missing days are zero.
 export function dailyWords(files, days = 14, now = Date.now()) {
   const keys = [];
-  for (let i = 0; i < days; i++) keys.push(fmtDate(now - i * 86400000));
+  for (let i = 0; i < days; i++) keys.push(localDay(now - i * 86400000)); // a day KEY, compared with stored days
   const byDay = new Map(keys.map((k) => [k, 0]));
   for (const f of files || []) {
     for (const e of f?.dailyHistory || []) {
@@ -17,7 +17,7 @@ export function dailyWords(files, days = 14, now = Date.now()) {
   return keys.map((k) => byDay.get(k));
 }
 
-const compact = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+const compact = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${fmtNum(n / 1000, 1, 1)}k` : String(n));
 
 // The line itself, or null when there's nothing to say (a fresh install shouldn't open with a zero).
 export function activitySummary(files, now = Date.now()) {

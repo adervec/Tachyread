@@ -13,7 +13,7 @@ import { scoreReading } from '../features/speakAlign.js';
 import { useApp } from '../state/AppContext.jsx';
 import ChunkContext, { ContextPicker, ReadableText, useContextSize } from './ChunkContext.jsx';
 import { setKeepAwake } from '../features/wakeLock.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Read the whole book aloud in ONE sitting: a single mic session, chunk text on screen, and the
 // app does the bookkeeping — trims each take to the speech, shortens mid-take dead air, saves the
@@ -423,7 +423,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
                 ? t('{wpm} wpm · {db} dB · steadiness {cv}', { wpm: lastQ.wpm, db: lastQ.rmsDb, cv: lastQ.volumeCv })
                 : t('— wpm · {db} dB · steadiness {cv}', { db: lastQ.rmsDb, cv: lastQ.volumeCv })}</span>
               {lastQ.accuracy != null && <span title={t('Accuracy: words you said that were the text · Completeness: text words you said')}>· 🎯 {t('{accuracy}% accurate · ✓ {completeness}% complete', { accuracy: lastQ.accuracy, completeness: lastQ.completeness })}</span>}
-              {cleaned >= 500 && <span title={t('Leading/trailing silence trimmed and long mid-take pauses compressed')}>· ✂ {t('{s}s dead air removed', { s: (cleaned / 1000).toFixed(1) })}</span>}
+              {cleaned >= 500 && <span title={t('Leading/trailing silence trimmed and long mid-take pauses compressed')}>· ✂ {t('{s}s dead air removed', { s: fmtNum(cleaned / 1000, 1, 1) })}</span>}
               {consistency && <span title={t("Pace and level consistency across this session's takes")}>· {t('session {label} ({score})', { label: t(consistency.label), score: consistency.score })}</span>}
               {lastQ.tips.length > 0 && <div className="rtw-tips">{lastQ.tips.map(tipText).join(' ')}</div>}
             </div>
@@ -441,7 +441,7 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
             <p>
               {t('Average quality')} <b>★ {Math.round(takesRef.current.reduce((a, tk) => a + tk.score, 0) / takesRef.current.length)}</b>
               {consistency && <> · {t('pace & level {label} across the session', { label: t(consistency.label).toLowerCase() })}</>}
-              {deadAirRef.current >= 1000 && <> · ✂ {t('{s}s of dead air cleaned automatically', { s: (deadAirRef.current / 1000).toFixed(1) })}</>}
+              {deadAirRef.current >= 1000 && <> · ✂ {t('{s}s of dead air cleaned automatically', { s: fmtNum(deadAirRef.current / 1000, 1, 1) })}</>}
               {logDir && <> · {t('quality log saved to {folder}', { folder: logDir.name })}</>}
             </p>
           )}

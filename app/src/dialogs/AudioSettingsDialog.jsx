@@ -6,7 +6,7 @@ import { ENGLISH_VOICES, defaultVoiceForLang, downloadVoice, isVoiceDownloaded, 
 import { KOKORO_VOICES } from '../features/localTts.js';
 import { elevenVoices, ELEVEN_MODELS } from '../features/elevenLabs.js';
 import { listenStatus, onListenStatus, runListenNow, stopListenRun, runSpeedTest } from '../features/listenAgent.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Audio settings, reachable from the Audio menu: the read-aloud voice + rate (per tab), the
 // speak-along follow mode, and the global auto-stop timer. Ambient sound keeps its own dialog.
@@ -138,9 +138,9 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
       </Field>
       <Field label={t('Status')}>
         <span role="status">{ls.text}</span>
-        <button style={{ marginLeft: 8 }} disabled={ls.busy} onClick={() => runListenNow()}>▶ {t('Run now')}</button>
-        <button style={{ marginLeft: 4 }} disabled={ls.busy} onClick={() => runSpeedTest()} title={t('How fast Kokoro renders on this device (× real-time) and on which backend — tells you whether this device can render ahead itself')}>⏱ {t('Speed test')}</button>
-        {ls.busy && <button style={{ marginLeft: 4 }} onClick={stopListenRun}>■ {t('Stop')}</button>}
+        <button style={{ marginInlineStart: 8 }} disabled={ls.busy} onClick={() => runListenNow()}>▶ {t('Run now')}</button>
+        <button style={{ marginInlineStart: 4 }} disabled={ls.busy} onClick={() => runSpeedTest()} title={t('How fast Kokoro renders on this device (× real-time) and on which backend — tells you whether this device can render ahead itself')}>⏱ {t('Speed test')}</button>
+        {ls.busy && <button style={{ marginInlineStart: 4 }} onClick={stopListenRun}>■ {t('Stop')}</button>}
       </Field>
 
       <div className="field-section">{t('ElevenLabs (cloud voice — optional)')}</div>
@@ -205,7 +205,7 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
             value={global.ttsSpeed ?? 1}
             onChange={(e) => onPatchGlobal({ ttsSpeed: Number(e.target.value) })}
           />
-          <span style={{ fontSize: 12, color: 'var(--status-fg)', minWidth: 40 }}>{(global.ttsSpeed ?? 1).toFixed(2)}×</span>
+          <span style={{ fontSize: 12, color: 'var(--status-fg)', minWidth: 40 }}>{fmtNum(global.ttsSpeed ?? 1, 2, 2)}×</span>
           <button type="button" onClick={() => onPatchGlobal({ ttsSpeed: 1 })} title={t('Reset to normal speed')}>1×</button>
         </div>
       </Field>

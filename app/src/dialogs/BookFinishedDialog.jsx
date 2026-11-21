@@ -8,7 +8,7 @@ import { queueBooks, nextInQueue } from '../features/readingQueues.js';
 import { getSearchDirs } from '../features/fileLocator.js';
 import { fileWhere, openBookFile } from '../features/openBook.js';
 import { localDay } from '../features/localDay.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 function fmtTime(secs) {
   if (!secs) return t('{s}s', { s: 0 });
@@ -183,7 +183,7 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
       <div className="field-section">{tab.doc.fileName}</div>
       <table className="history-table" style={{ marginBottom: 12 }}>
         <tbody>
-          <tr><td>{t('Book read (coverage)')}</td><td>{t('{pct}% ({read} / {total} words)', { pct: coverage.toFixed(1), read: readCount, total: tab.doc.words.length })}</td></tr>
+          <tr><td>{t('Book read (coverage)')}</td><td>{t('{pct}% ({read} / {total} words)', { pct: fmtNum(coverage, 1, 1), read: readCount, total: tab.doc.words.length })}</td></tr>
           <tr><td>{t('Total active reading time')}</td><td>{fmtTime(activeSecs)}</td></tr>
           <tr><td>{t('Effective reading speed')}</td><td>{t('{n} WPM', { n: effWpm })}</td></tr>
           <tr><td>{t('Times finished before')}</td><td>{completions.length}</td></tr>
@@ -250,7 +250,7 @@ export default function BookFinishedDialog({ tab, onPatch, onClose }) {
 
       {coverage < 90 && (
         <p className="settings-note">
-          {t('Note: you’ve read {pct}% of the book by coverage. Sections you skipped aren’t counted as read.', { pct: coverage.toFixed(1) })}
+          {t('Note: you’ve read {pct}% of the book by coverage. Sections you skipped aren’t counted as read.', { pct: fmtNum(coverage, 1, 1) })}
         </p>
       )}
     </Dialog>

@@ -19,7 +19,7 @@ import { currentSession, sessionStats, bookForecast } from '../features/typingSe
 import { splitRun, splitsFor } from '../features/typingSplits.js';
 import { typingEyeColor } from '../features/avatarMood.js';
 import Avatar from './Avatar.jsx';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 const DEFAULT_SOUNDS = {
   charCorrect: 'off', charWrong: 'off', wordPerfect: 'click', wordCorrected: 'wood', wordError: 'hiss',
@@ -1023,8 +1023,8 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
   };
   const progressLabel =
     mode === 'words' ? t('{n} / {limit} words', { n: stats.current.words, limit })
-      : mode === 'endless' ? t('{secs}s · endless', { secs: live.secs.toFixed(0) })
-        : t('{secs} / {limit}s', { secs: live.secs.toFixed(0), limit });
+      : mode === 'endless' ? t('{secs}s · endless', { secs: fmtNum(live.secs, 0, 0) })
+        : t('{secs} / {limit}s', { secs: fmtNum(live.secs, 0, 0), limit });
 
   // ── Options sidebar: toggle tiles — always visible, LOCKED (not hidden) while a run is live ──
   const locked = phase === 'running' || phase === 'countdown';
@@ -1103,7 +1103,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
               aria-label={t('Sprint window (seconds)')} aria-valuetext={t.n('{n} second', '{n} seconds', sprintSecs)} />
           </div>
           <Stat v={live.gross} l={t('gross wpm')} />
-          <Stat v={`${live.acc}%`} l={t('accuracy')} />
+          <Stat v={`${fmtNum(m.acc, 1, 1)}%`} l={t('accuracy')} />
           <Stat v={progressLabel} l={t('run')} />
           {phase === 'running' && paceWpmVal > 0 && <Stat v={paceWpmVal} l={`👻 ${t('pace')}`} />}
         </div>
@@ -1177,14 +1177,14 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
                   <div className="tr-info-bar" title={t('{pct}% of the document typed through', { pct: book.pct })}>
                     <div className="tr-info-fill" style={{ width: `${Math.min(100, book.pct)}%` }} />
                   </div>
-                  <div className="tr-info-row"><b>{book.pct}%</b> · {t('word {n} of {total}', { n: book.through.toLocaleString(), total: doc.words.length.toLocaleString() })}</div>
-                  <div className="tr-info-row">{t.n('{count} word left', '{count} words left', book.left, { count: book.left.toLocaleString() })}{book.etaMin != null && <> · {t('~{time} at this pace', { time: fmtMin(book.etaMin) })}</>}</div>
+                  <div className="tr-info-row"><b>{book.pct}%</b> · {t('word {n} of {total}', { n: fmtNum(book.through, 0), total: fmtNum(doc.words.length, 0) })}</div>
+                  <div className="tr-info-row">{t.n('{count} word left', '{count} words left', book.left, { count: fmtNum(book.left, 0) })}{book.etaMin != null && <> · {t('~{time} at this pace', { time: fmtMin(book.etaMin) })}</>}</div>
                 </>
               )}
               <div className="tt-group">⏱ {t('This sitting')}</div>
               {sess ? (
                 <>
-                  <div className="tr-info-row">{t.n('{n} run', '{n} runs', sess.runs)} · {t.n('{count} word', '{count} words', sess.words, { count: sess.words.toLocaleString() })} · {fmtMin(Math.max(1, Math.round(sess.ms / 60000)))}</div>
+                  <div className="tr-info-row">{t.n('{n} run', '{n} runs', sess.runs)} · {t.n('{count} word', '{count} words', sess.words, { count: fmtNum(sess.words, 0) })} · {fmtMin(Math.max(1, Math.round(sess.ms / 60000)))}</div>
                   <div className="tr-info-row">{t('avg {avg} wpm · best {best} · {acc}% acc', { avg: sess.avgNet, best: sess.best, acc: sess.avgAcc })}</div>
                   {sessRuns.length === 0 && <div className="tr-info-row dim">{t('First run of this sitting')}</div>}
                   {todayCount > sessRuns.length && <div className="tr-info-row dim">{t.n('{n} run today across sittings', '{n} runs today across sittings', todayCount)}</div>}
@@ -1306,7 +1306,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
 
       {/* The passage hides on the done screen so the results (chart included) get the room —
           otherwise they overflow beneath the bottom dock, which also swallows chart hovers. */}
-      <div className={`tr-viewport${ticker ? ' ticker-vp' : ''}`} style={{ display: phase === 'done' ? 'none' : undefined, ...(settings.fontFamily ? { fontFamily: settings.fontFamily } : null) }}>
+      <div dir="auto" className={`tr-viewport${ticker ? ' ticker-vp' : ''}`} style={{ display: phase === 'done' ? 'none' : undefined, ...(settings.fontFamily ? { fontFamily: settings.fontFamily } : null) }}>
         {phase === 'countdown' && <div className="tr-countdown" key={count} aria-live="assertive">{t(count === 'Set' ? 'Get set' : count)}</div>}
         {escArmed && phase === 'running' && <div className="tr-esc-hint" role="status">{t('Esc again to end the run')}</div>}
         {capsOn && !escArmed && <div className="tr-esc-hint tr-caps" role="status">⇪ {t('Caps Lock is on')}</div>}
@@ -1461,7 +1461,7 @@ export default function TypingRun({ tab, onPatch, onExitDiscard, onExitContinue,
             const stk = typingStreak(pastRunsRef.current || [], Date.now());
             return stk.days > 0 && (
               <div className="tr-streak">
-                🔥 {t('{days}-day typing streak · {words} words today', { days: stk.days, words: stk.todayWords.toLocaleString() })}
+                🔥 {t('{days}-day typing streak · {words} words today', { days: stk.days, words: fmtNum(stk.todayWords, 0) })}
               </div>
             );
           })()}
@@ -1543,7 +1543,7 @@ function OnScreenKeyboard({ layout, next }) {
   return (
     <div className="tr-osk" aria-hidden="true">
       {rows.map((row, r) => (
-        <div key={r} className="tr-osk-row" style={{ paddingLeft: r * 14 }}>
+        <div key={r} className="tr-osk-row" style={{ paddingInlineStart: r * 14 }}>
           {r === 2 && <span className={`tr-osk-key wide${k?.shift ? ' next' : ''}`}>⇧</span>}
           {[...row].map((ch, c) => <span key={c} className={`tr-osk-key${k && k.row === r && k.col === c ? ' next' : ''}${r === 1 && (c === 3 || c === 6) ? ' home' : ''}`}>{ch}</span>)}
         </div>
@@ -1679,8 +1679,8 @@ function RunChart({ trend: raw, sprintSecs = 5 }) {
         <span className="lg lg-gross">{t('raw')} {h ? Math.round(h.gross) : ''}</span>
         <span className="lg lg-sprint" title={t('Net WPM over the trailing window set by the slider above')}>{t('{n}s sprint', { n: sprintSecs })} {h ? Math.round(h.sprint) : ''}</span>
         <span className="lg lg-burst">{t('burst')} {h ? Math.round(h.burst || 0) : ''}</span>
-        <span className="lg lg-acc">{t('accuracy')} {h ? `${h.acc.toFixed(0)}%` : ''}</span>
-        <span className="lg lg-t">{h ? t('at {n}s', { n: h.t.toFixed(1) }) : t('hover to inspect')}</span>
+        <span className="lg lg-acc">{t('accuracy')} {h ? `${fmtNum(h.acc, 0, 0)}%` : ''}</span>
+        <span className="lg lg-t">{h ? t('at {n}s', { n: fmtNum(h.t, 1, 1) }) : t('hover to inspect')}</span>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@
 // list rates and change over time / by plan — the dashboard labels the figures "estimated". Pure;
 // see apiPricing.demo.mjs.
 import { localDay } from './localDay.js';
+import { fmtNum } from '../i18n.js';
 
 // USD per MILLION tokens (input / output).
 export const ANTHROPIC_PRICES = {
@@ -56,5 +57,5 @@ export function summarizeUsage(entries) {
   return s;
 }
 
-export const fmtUsd = (n) => (n >= 0.005 ? '$' + n.toFixed(2) : n > 0 ? '<$0.01' : '$0.00');
-export const fmtTokens = (n) => (n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n || 0));
+export const fmtUsd = (n) => (n >= 0.005 ? '$' + fmtNum(n, 2, 2) : n > 0 ? '<$0.01' : '$0.00');
+export const fmtTokens = (n) => (n >= 1e6 ? fmtNum(n / 1e6, 2, 2) + 'M' : n >= 1e3 ? fmtNum(n / 1e3, 1, 1) + 'k' : String(n || 0));

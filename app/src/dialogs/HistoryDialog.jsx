@@ -7,10 +7,10 @@ import { useApp } from '../state/AppContext.jsx';
 import { allFiles, allDocMeta, allFocusSessions, getBinding, setBinding, getLibraryBooks } from '../state/storage.js';
 import { fmtDate } from '../features/dateFmt.js';
 import { MAX_REAL_WPM } from '../engine/readingTracker.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────────────────────
-function fmtInt(n) { return (Math.round(n) || 0).toLocaleString(); }
+function fmtInt(n) { return fmtNum(Math.round(n) || 0); }
 function fmtDur(secs) {
   const s = Math.max(0, Math.round(secs || 0));
   const h = Math.floor(s / 3600);
@@ -365,7 +365,7 @@ export function HistoryView({ onOpenBook, onLinkFile } = {}) {
                 <>
                   <div className="rh-section-h">{t('Focus & attention')}</div>
                   <div className="rh-stat-grid">
-                    <Stat v={`${focusAgg.focusPct.toFixed(0)}%`} l={t('focus')} sub={t('eyes on the page')} />
+                    <Stat v={`${fmtNum(focusAgg.focusPct, 0, 0)}%`} l={t('focus')} sub={t('eyes on the page')} />
                     <Stat v={fmtInt(focusAgg.distractions)} l={t('distractions')} />
                     <Stat v={fmtDur(focusAgg.watchedSecs)} l={t('watched')} />
                     <Stat v={focusAgg.sessions} l={t('tracked sessions')} />

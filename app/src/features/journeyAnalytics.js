@@ -4,7 +4,7 @@
 
 import { readStatus, finishMs, recommender, bookRating } from './journeyLibrary.js';
 import { localDay, parseDay, mondayOf } from './localDay.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 const yearOf = (b) => { const ms = finishMs(b); return ms == null ? null : new Date(ms).getFullYear(); };
 const monthOf = (b) => { const ms = finishMs(b); return ms == null ? null : new Date(ms).getMonth() + 1; };
@@ -221,7 +221,7 @@ export function weeklySummaries(days, books, { weeks = 8, now = Date.now() } = {
     const parts = [];
     if (words > 0) {
       const time = hrs ? t('{h}h {m}m', { h: hrs, m: mins }) : t('{m}m', { m: mins });
-      const vals = { words: words.toLocaleString(), time, wpm };
+      const vals = { words: fmtNum(words), time, wpm };
       parts.push(wpm
         ? t.n('Read {words} words in {time} across {n} day (≈{wpm} WPM effective).', 'Read {words} words in {time} across {n} days (≈{wpm} WPM effective).', daysActive, vals)
         : t.n('Read {words} words in {time} across {n} day.', 'Read {words} words in {time} across {n} days.', daysActive, vals));

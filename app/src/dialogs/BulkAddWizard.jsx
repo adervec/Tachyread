@@ -4,7 +4,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { planBulkAdd, extCounts, selectableRows, SUPPORTED_EXTS } from '../features/bulkAdd.js';
 import { allFiles, getBinding } from '../state/storage.js';
 import { trackFiles } from '../features/bulkTrack.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 const MAX_ROWS = 400; // ponytail: cap the rendered checklist; the FULL selection is still added
 
@@ -12,7 +12,7 @@ function fmtSize(n) {
   if (!n) return '';
   if (n < 1024) return `${n} B`;
   if (n < 1048576) return `${Math.round(n / 1024)} KB`;
-  return `${(n / 1048576).toFixed(1)} MB`;
+  return `${fmtNum(n / 1048576, 1, 1)} MB`;
 }
 
 // Bulk-add: pick a folder (subfolders included), filter to a format, and either OPEN every new file

@@ -7,9 +7,9 @@ import { saveBlobToFile } from '../features/fileSystem.js';
 import {
   planTracks, trackFileName, buildM3u, encodeWav, buildId3v2, estimateBytes, fmtDuration, sanitizeFilename, orderSectionItems, buildSubtitles,
 } from '../features/audiobookExport.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
-const fmtBytes = (b) => (b >= 1073741824 ? `${(b / 1073741824).toFixed(2)} GB` : b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+const fmtBytes = (b) => (b >= 1073741824 ? `${fmtNum(b / 1073741824, 2, 2)} GB` : b >= 1048576 ? `${fmtNum(b / 1048576, 1, 1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 const MAX_CHAPTER_MS = 30 * 60000; // split a chapter longer than this into parts, even in chapter mode
 
 // Assemble one track's clips into a single audio Blob. mp3 → concatenate the ElevenLabs mp3 blobs

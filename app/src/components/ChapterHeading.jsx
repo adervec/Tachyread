@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getTocEntries, currentChapter } from '../document/toc.js';
 import { sectionChain, barsForMode, DEFAULT_SECTION_BAR_MODE } from '../features/sectionBars.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 function fmtDur(secs) {
   if (!isFinite(secs) || secs < 0) return '—';
@@ -40,7 +40,7 @@ function SectionBar({ sec, pct, pages, title, depth, nested, labelled }) {
       className={`ch-bar-row${nested ? ' ch-bar-nested' : ''}`}
       style={{
         '--ch-depth': depth,
-        ...(nested ? { marginLeft: `${sec.offset * 100}%`, width: `${sec.extent * 100}%` } : null),
+        ...(nested ? { marginInlineStart: `${sec.offset * 100}%`, width: `${sec.extent * 100}%` } : null),
       }}
     >
       <span className="ch-bar-name" title={title}>{sec.title || t('Level {n}', { n: sec.level + 1 })}</span>
@@ -94,7 +94,7 @@ export default function ChapterHeading({ tab, onJumpWord, visibleRef, barMode = 
     return raw > 1 && raw <= MAX_SEGMENTS ? raw : 0;
   };
   const barTitleFor = (sec) => {
-    const p = (sec.progress * 100).toFixed(1);
+    const p = fmtNum(sec.progress * 100, 1, 1);
     const raw = pageWords > 0 && sec.words > 0 ? Math.ceil(sec.words / pageWords) : 0;
     const name = sec.title || t('Section');
     return raw > 1
@@ -128,12 +128,12 @@ export default function ChapterHeading({ tab, onJumpWord, visibleRef, barMode = 
             labelled={barMode === 'parallel' || barMode === 'nested'}
           />
         )) : (
-          <div className="ch-bar" title={t('{pct}% through this section', { pct })}>
+          <div className="ch-bar" title={t('{pct}% through this section', { pct: fmtNum(chapter.progress * 100, 1, 1) })}>
             <div className="ch-fill" style={{ width: `${pct}%` }} />
           </div>
         )}
       </div>
-      <span className="ch-pct">{bars.length ? (bars[bars.length - 1].progress * 100).toFixed(1) : pct}%</span>
+      <span className="ch-pct">{fmtNum((bars.length ? bars[bars.length - 1].progress : chapter.progress) * 100, 1, 1)}%</span>
       <span className="ch-times" title={t('Time spent in this section · ETA to finish · estimated total')}>
         <span title={t('Time spent in this section')}>⏱ {spentSecs != null ? fmtDur(spentSecs) : '—'}</span>
         <span title={t('Estimated time to finish this section')}>→ {fmtDur(etaSecs)}</span>

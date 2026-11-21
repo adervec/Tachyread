@@ -9,7 +9,7 @@
 // unlinked" rather than a guess: a wrong link the user accepts is worse than a file left for later.
 import { bookWordCount } from './readingTime.js';
 import { bookFromOpenedDoc } from './trackyreadAdd.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 const STOP = new Set('the a an and or of in on at to for by with from vol volume edition ed part complete works novel ebook txt epub pdf md html'.split(' '));
 export function tokensOf(s) {
@@ -36,7 +36,7 @@ export function tierOf(score, fileWords, book) {
   if (score < WEAK) return { tier: 'none', why: t('no book title comes close') };
   const bw = bookWordCount(book);
   if (bw > 0 && fileWords > 0 && (fileWords < bw * 0.25 || fileWords > bw * 4)) {
-    return { tier: 'weak', why: t('the title fits, but the file is {file} words and the book about {book}', { file: fileWords.toLocaleString(), book: bw.toLocaleString() }) };
+    return { tier: 'weak', why: t('the title fits, but the file is {file} words and the book about {book}', { file: fmtNum(fileWords), book: fmtNum(bw) }) };
   }
   if (score >= STRONG) return { tier: 'strong', why: t('{pct}% of the title words match', { pct: Math.round(score * 100) }) };
   return { tier: 'weak', why: t('only {pct}% of the title words match', { pct: Math.round(score * 100) }) };

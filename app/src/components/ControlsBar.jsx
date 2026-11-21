@@ -9,7 +9,7 @@ import { lastCountableWord } from '../document/toc.js';
 import { playButtonView } from '../features/playButtonMode.js';
 import { getLibraryRef } from '../state/storage.js';
 import { liveQueues } from '../features/readingQueues.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Compact gap for the ghost verdict — "1m 30s" reads at a glance where "00:01:30" doesn't.
 function fmtGap(secs) {
@@ -141,7 +141,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
             {onJumpToGap && <button className="jump-current-btn" title={t('Jump to the first unread word (skipped sections excluded). Click again from there to hop to the next read/unread boundary — backfill the patchy sections. (G)')} aria-label={t('Jump to first unread gap')} onClick={onJumpToGap}>🩹<kbd className="key-hint">G</kbd></button>}
           </>
         )}
-        <div className="progress-meta" title={skipRanges.length ? t('Percent of the countable book read (flagged front/back matter excluded)') : t('Percent of the book actually read')}>📖 {coverage.toFixed(1)}%{skipRanges.length ? '*' : ''}</div>
+        <div className="progress-meta" title={skipRanges.length ? t('Percent of the countable book read (flagged front/back matter excluded)') : t('Percent of the book actually read')}>📖 {fmtNum(coverage, 1, 1)}%{skipRanges.length ? '*' : ''}</div>
         <div className="progress-meta" title={t('Estimated time remaining at your measured pace')}>⏱ {formatTime(secs)}</div>
         {/* Pace-ghost race: how far ahead of (or behind) the auto-speed marker you are, and a
             one-tap restart. The ghost also restarts itself when you go idle or jump. */}

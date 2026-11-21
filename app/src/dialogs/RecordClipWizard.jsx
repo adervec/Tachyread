@@ -8,14 +8,14 @@ import { takeQuality } from '../features/narrationQuality.js';
 import { scoreSamples } from '../features/voice/voiceScore.js';
 import { useApp } from '../state/AppContext.jsx';
 import ChunkContext, { ContextPicker, useContextSize } from './ChunkContext.jsx';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 const AC = () => new (window.AudioContext || window.webkitAudioContext)();
 const pickMime = () =>
   (MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
     : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '');
 const fmtT = (ms) => { const s = Math.max(0, ms) / 1000; const m = Math.floor(s / 60); return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`; };
-const fmtS = (sec) => `${(Math.round((sec || 0) * 10) / 10).toFixed(1)}s`;
+const fmtS = (sec) => `${fmtNum(Math.round((sec || 0) * 10) / 10, 1, 1)}s`;
 // Turn a getUserMedia rejection into something the user can act on (always say what's blocking it).
 function micErr(e) {
   const n = e?.name || '';

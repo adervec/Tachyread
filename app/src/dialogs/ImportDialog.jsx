@@ -1,5 +1,5 @@
 import Dialog from './Dialog.jsx';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Import wizard: live phase + progress bar while a document parses, then a summary card showing
 // what was detected (words, sections, TOC) with suggested next steps — so it's always clear the
@@ -34,7 +34,7 @@ export default function ImportDialog({ imp, onClose, onAction }) {
       buttons={<button className="toggle-on" onClick={onClose}>▶ {t('Start reading')}</button>}
     >
       <ul className="imp-summary">
-        <li>✓ {t('{words} words · {lines} lines', { words: (imp.words ?? 0).toLocaleString(), lines: (imp.lines ?? 0).toLocaleString() })}</li>
+        <li>✓ {t('{words} words · {lines} lines', { words: fmtNum(imp.words ?? 0), lines: fmtNum(imp.lines ?? 0) })}</li>
         <li>{imp.hasSource ? `✓ ${t.n('Original source view available ({n} section, synced to your position)', 'Original source view available ({n} sections, synced to your position)', imp.sections)}` : `· ${t('No original-layout view for this format (plain text)')}`}</li>
         <li>{tocLine}</li>
       </ul>

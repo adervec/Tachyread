@@ -5,7 +5,7 @@ import Trendline from './Trendline.jsx';
 import { WpmSparkline } from './ReadingStats.jsx';
 import { goalFraction, computeGoalStatus } from '../engine/goals.js';
 import { MODES } from '../engine/readingMode.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 function fmtDur(ms) {
   const s = Math.floor((ms || 0) / 1000);
@@ -47,7 +47,7 @@ function renderWidget(id, { tab, wpm, lineProgress, readingMode, nowMs }) {
       case 'coverage': {
         const cov = tracker ? tracker.coverageExcluding(settings.skipRanges) : 0;
         const active = tracker ? tracker.sessionActiveMs : 0;
-        return <div className="dash-stat"><span className="dash-num">{(cov * 100).toFixed(1)}<span className="dash-of">%</span></span><span className="dash-label">{t('Book read · {time} active', { time: fmtDur(active) })}</span></div>;
+        return <div className="dash-stat"><span className="dash-num">{fmtNum(cov * 100, 1, 1)}<span className="dash-of">%</span></span><span className="dash-label">{t('Book read · {time} active', { time: fmtDur(active) })}</span></div>;
       }
       case 'eta': {
         const recent = tracker ? tracker.recentWpm() : 0;
@@ -70,7 +70,7 @@ function renderWidget(id, { tab, wpm, lineProgress, readingMode, nowMs }) {
       case 'position':
         return <div className="dash-stat dash-stat-row"><span className="dash-mini">{t('Word {n}/{total}', { n: idx + 1, total })}</span><span className="dash-mini">{t('Line {n}/{total}', { n: (doc.wordToLine[idx] || 0) + 1, total: doc.lines.length })}</span></div>;
       case 'pct':
-        return <div className="dash-stat"><span className="dash-num">{total ? ((idx / total) * 100).toFixed(1) : '0.0'}<span className="dash-of">%</span></span><span className="dash-label">{t('Through the book')}</span></div>;
+        return <div className="dash-stat"><span className="dash-num">{fmtNum(total ? (idx / total) * 100 : 0, 1, 1)}<span className="dash-of">%</span></span><span className="dash-label">{t('Through the book')}</span></div>;
       case 'spark':
         return <div className="dash-stat focus-spark"><WpmSparkline tabId={tab.id} /><span className="dash-label">{t('WPM · last 8 min')}</span></div>;
       case 'trendline':

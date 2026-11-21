@@ -67,7 +67,7 @@ export default function ApiUsageDialog({ onClose }) {
 
           <div className="field-section">{t('By model')}</div>
           <table className="history-table au-table">
-            <thead><tr><th>{t('Model')}</th><th>{t('Calls')}</th><th>{t('In')}</th><th>{t('Out / chars')}</th><th style={{ textAlign: 'right' }}>{t('Est.')}</th></tr></thead>
+            <thead><tr><th>{t('Model')}</th><th>{t('Calls')}</th><th>{t('In')}</th><th>{t('Out / chars')}</th><th style={{ textAlign: 'end' }}>{t('Est.')}</th></tr></thead>
             <tbody>
               {Object.entries(s.byModel).sort((a, b) => b[1].cost - a[1].cost).map(([model, m]) => (
                 <tr key={model}>
@@ -75,7 +75,7 @@ export default function ApiUsageDialog({ onClose }) {
                   <td>{m.calls}</td>
                   <td>{m.provider === 'elevenlabs' ? '—' : fmtTokens(m.inTokens)}</td>
                   <td>{m.provider === 'elevenlabs' ? t('{chars} chars', { chars: fmtTokens(m.chars) }) : fmtTokens(m.outTokens)}</td>
-                  <td style={{ textAlign: 'right' }}>{fmtUsd(m.cost)}</td>
+                  <td style={{ textAlign: 'end' }}>{fmtUsd(m.cost)}</td>
                 </tr>
               ))}
             </tbody>

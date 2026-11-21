@@ -5,7 +5,7 @@
 //   AbsoluteWords/…    reach an absolute word / line / percent position.
 //   RelativeWords/…    advance N words / lines / percent from where the goal was set.
 //   ActiveTime         spend N active minutes reading (no fixed document position).
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // The goal type as the reader sees it (the type values themselves stay as stored).
 export const GOAL_TYPE_LABELS = {
@@ -89,19 +89,19 @@ export function computeGoalStatus(tab, goal) {
   if (goal.type === 'Section') {
     if (!(goal.end > goal.start)) return t('Set a section goal from the TOC');
     const pct = Math.max(0, Math.min(100, ((idx - goal.start) / (goal.end - goal.start)) * 100));
-    return t('{section} — {pct}% (finish)', { section: goal.label || t('Section'), pct: pct.toFixed(1) });
+    return t('{section} — {pct}% (finish)', { section: goal.label || t('Section'), pct: fmtNum(pct, 1, 1) });
   }
   const value = Number(goal.value);
   if (!isFinite(value) || value <= 0) return t('Set a value to begin');
   switch (goal.type) {
     case 'AbsoluteWords':
-      return t('{done} / {value} words ({pct}%)', { done: idx, value, pct: ((idx / value) * 100).toFixed(1) });
+      return t('{done} / {value} words ({pct}%)', { done: idx, value, pct: fmtNum((idx / value) * 100, 1, 1) });
     case 'AbsoluteLines': {
       const cl = tab.doc.wordToLine[idx] + 1 || 0;
       return t('{done} / {value} lines', { done: cl, value });
     }
     case 'AbsolutePercent':
-      return t('{pct}% / {value}%', { pct: ((idx / total) * 100).toFixed(1), value });
+      return t('{pct}% / {value}%', { pct: fmtNum((idx / total) * 100, 1, 1), value });
     case 'RelativeWords':
       return t('{done} / {value} words (from start)', { done: idx - (goal.baseline || 0), value });
     case 'RelativeLines': {
@@ -110,7 +110,7 @@ export function computeGoalStatus(tab, goal) {
     }
     case 'RelativePercent': {
       const delta = ((idx - (goal.baseline || 0)) / total) * 100;
-      return t('{pct}% / {value}%', { pct: delta.toFixed(1), value });
+      return t('{pct}% / {value}%', { pct: fmtNum(delta, 1, 1), value });
     }
     case 'ActiveTime':
       return t('{done} / {value} min', { done: Math.round((tab.tracker?.sessionActiveMs || 0) / 60000), value });

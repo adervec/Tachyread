@@ -16,7 +16,7 @@ import CrosshairOverlay from './CrosshairOverlay.jsx';
 import { beelineMix } from '../features/beeline.js';
 import DefinePopup from './DefinePopup.jsx';
 import { contextAt } from '../engine/vocab.js';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 
 // Reading-pointer feature archived for now (not useful). Flip to true to restore it, and uncomment
 // its Settings section in dialogs/SettingsDialog.jsx.
@@ -398,7 +398,7 @@ function Row({ index, style, ariaAttributes, doc, dsettings, ctx, onJumpWord, pr
       {showSep && (
         <div className="percent-separator">
           <hr />
-          <span>{((index / doc.lines.length) * 100).toFixed(1)}%</span>
+          <span>{fmtNum((index / doc.lines.length) * 100, 1, 1)}%</span>
           <hr />
         </div>
       )}

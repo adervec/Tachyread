@@ -4,7 +4,7 @@ import { textMatcher, inRange, inDates, anySet } from '../features/tableFilter.j
 import { TextF, RangeF, DateF } from '../components/ColFilter.jsx';
 import { totalChars, chunkChars, etaSeconds, chunkHealth, fmtEta, previewText } from '../features/ttsProgress.js';
 import Dialog from './Dialog.jsx';
-import { t } from '../i18n.js';
+import { t, fmtNum } from '../i18n.js';
 // narrationQuality's consistency label stays English (it is written to the narration log); shown via t() — i18n-keys: Very steady | Steady | Uneven
 import { fmtDateTime } from '../features/dateFmt.js';
 import { useApp } from '../state/AppContext.jsx';
@@ -42,8 +42,8 @@ import { bookTracker, chunkRange, creditNarration, textReadShare } from '../feat
 
 // Rough clip duration from the blob: mp3 (~128 kbps, ElevenLabs) vs 16-bit 22.05 kHz WAV (Piper).
 const estMs = blobDurationMs;
-const fmtBytes = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
-const fmtDur = (ms) => `${(Math.round((ms || 0) / 100) / 10).toFixed(1)}s`;
+const fmtBytes = (b) => (b >= 1048576 ? `${fmtNum(b / 1048576, 1, 1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+const fmtDur = (ms) => `${fmtNum(Math.round((ms || 0) / 100) / 10, 1, 1)}s`;
 const fmtWhen = (ts) => (ts ? fmtDateTime(ts) : '—');
 
 // Remove what an earlier sync wrote at <root>/<shelf>/<album> (no shelf = the pre-shelf flat layout):
@@ -874,7 +874,7 @@ export default function AudiobookDialog({ onClose }) {
         {cur && (
           <>
             <div className="abg-line">
-              {PHASE[cur.phase] || cur.phase} · {t('chunk {i}/{total} @ line {line}', { i: cur.index + 1, total: gen.total, line: cur.line + 1 })} · {t('{chars} chars', { chars: cur.chars })} · {(curMs / 1000).toFixed(1)}s
+              {PHASE[cur.phase] || cur.phase} · {t('chunk {i}/{total} @ line {line}', { i: cur.index + 1, total: gen.total, line: cur.line + 1 })} · {t('{chars} chars', { chars: cur.chars })} · {fmtNum(curMs / 1000, 1, 1)}s
             </div>
             <div className="abg-text" title={cur.preview}>“{cur.preview}”</div>
             {health !== 'ok' && (
@@ -953,7 +953,7 @@ export default function AudiobookDialog({ onClose }) {
 
           <div className="ab-queue-stats">
             <div className="ab-stat"><b>{totals.queued + totals.running}</b><span>{t.n('job outstanding', 'jobs outstanding', totals.queued + totals.running)}</span></div>
-            <div className="ab-stat"><b>{(totals.chunks - totals.chunksDone).toLocaleString()}</b><span>{t.n('chunk to go', 'chunks to go', totals.chunks - totals.chunksDone)}</span></div>
+            <div className="ab-stat"><b>{fmtNum(totals.chunks - totals.chunksDone)}</b><span>{t.n('chunk to go', 'chunks to go', totals.chunks - totals.chunksDone)}</span></div>
             <div className="ab-stat"><b>{queueEta != null ? fmtEta(queueEta) : '—'}</b><span>{thr.runs ? t('whole queue') : t('whole queue (needs a run first)')}</span></div>
             <div className="ab-stat"><b>{thr.charsPerSec ? Math.round(thr.charsPerSec) : '—'}</b><span>{t('chars/s measured')}</span></div>
           </div>
@@ -1013,7 +1013,7 @@ export default function AudiobookDialog({ onClose }) {
                           <td className="ab-td-name" title={t('Voice this job was queued with: {voice}', { voice: j.voiceLabel })}>{j.voiceLabel}</td>
                           <td className="ab-td-bar"><div className="imp-bar ab-job-bar" title={`${pctJ}%`}><div className="imp-fill" style={{ width: `${pctJ}%` }} /></div>{pctJ}%</td>
                           <td>{j.done}/{j.total}{j.failed > 0 && <> · <span className="ab-job-fail">{j.failed}✗</span></>}</td>
-                          <td>{(j.charsDone || 0).toLocaleString()}/{(j.charsTotal || 0).toLocaleString()}</td>
+                          <td>{fmtNum(j.charsDone || 0)}/{fmtNum(j.charsTotal || 0)}</td>
                           <td>{eta != null ? fmtEta(eta) : '—'}</td>
                           <td>{j.queuedAt ? fmtWhen(j.queuedAt) : '—'}</td>
                           <td>{j.finishedAt ? fmtWhen(j.finishedAt) : '—'}</td>
@@ -1112,7 +1112,7 @@ export default function AudiobookDialog({ onClose }) {
                         <td>{r.noAudio ? '—' : r.clips}{r.mic > 0 && <span title={t.n('{n} recorded by you', '{n} recorded by you', r.mic)}> · 🎤{r.mic}</span>}</td>
                         <td>{r.noAudio ? '—' : fmtBytes(r.bytes)}</td>
                         <td>{r.noAudio ? '—' : fmtEta(r.durationMs / 1000)}</td>
-                        <td>{r.words ? r.words.toLocaleString() : '—'}</td>
+                        <td>{r.words ? fmtNum(r.words) : '—'}</td>
                         <td className="ab-td-name" title={r.voices.map((v) => `${labelVoice(v.voice)} ×${v.n}`).join('\n')}>
                           {r.voices.slice(0, 2).map((v) => labelVoice(v.voice)).join(', ')}{r.voices.length > 2 ? ` +${r.voices.length - 2}` : ''}{!r.voices.length && '—'}
                         </td>
@@ -1268,7 +1268,7 @@ export default function AudiobookDialog({ onClose }) {
             <div className="ab-stat"><b>{thr.runs}</b><span>{t.n('run recorded', 'runs recorded', thr.runs)}</span></div>
             <div className="ab-stat"><b>{thr.charsPerSec ? Math.round(thr.charsPerSec) : '—'}</b><span>{t('chars/s overall')}</span></div>
             <div className="ab-stat"><b>{fmtEta(thr.ms / 1000)}</b><span>{t('time spent generating')}</span></div>
-            <div className="ab-stat"><b>{libTotals.chunksWithAudio.toLocaleString()}</b><span>{t.n('chunk narrated', 'chunks narrated', libTotals.chunksWithAudio)}</span></div>
+            <div className="ab-stat"><b>{fmtNum(libTotals.chunksWithAudio)}</b><span>{t.n('chunk narrated', 'chunks narrated', libTotals.chunksWithAudio)}</span></div>
           </div>
 
           {!thr.runs ? (
@@ -1300,7 +1300,7 @@ export default function AudiobookDialog({ onClose }) {
                       <tr key={v.voice}>
                         <td className="ab-td-name">{labelVoice(v.voice)}</td>
                         <td>{v.runs}</td>
-                        <td>{v.chars.toLocaleString()}</td>
+                        <td>{fmtNum(v.chars)}</td>
                         <td>
                           <span className="ab-rate">{Math.round(v.charsPerSec)}</span>
                           <span className="ab-rate-bar"><span style={{ width: `${share}%` }} /></span>
@@ -1358,7 +1358,7 @@ export default function AudiobookDialog({ onClose }) {
           <div className="field-section">{t('Storage')}</div>
           <p className="settings-note" style={{ marginTop: 0 }}>
             {t.n('{size} across {count} clip in {books}, in this browser’s storage.', '{size} across {count} clips in {books}, in this browser’s storage.', libTotals.clips,
-              { size: fmtBytes(libTotals.bytes), count: libTotals.clips.toLocaleString(), books: t.n('{n} book', '{n} books', libTotals.booksStarted) })}{' '}
+              { size: fmtBytes(libTotals.bytes), count: fmtNum(libTotals.clips), books: t.n('{n} book', '{n} books', libTotals.booksStarted) })}{' '}
             {t('There is no file path to open — open a book from 📚 Library and use its “Record & export” group to save real audio files.')}
           </p>
         </div>
@@ -1605,13 +1605,13 @@ export default function AudiobookDialog({ onClose }) {
             <button onClick={() => setConfirmJob(null)}>{t('Cancel')}</button>
           </>}>
           <p>{confirmJob.kind === 'othervoice'
-            ? t.n('Generate {n} chunk (~{words} words) with {voice} (replacing other-voice renders).', 'Generate {n} chunks (~{words} words) with {voice} (replacing other-voice renders).', confirmJob.targets.length, { words: confirmJob.words.toLocaleString(), voice: labelVoice(voiceId) })
-            : t.n('Generate {n} chunk (~{words} words) with {voice}.', 'Generate {n} chunks (~{words} words) with {voice}.', confirmJob.targets.length, { words: confirmJob.words.toLocaleString(), voice: labelVoice(voiceId) })}</p>
+            ? t.n('Generate {n} chunk (~{words} words) with {voice} (replacing other-voice renders).', 'Generate {n} chunks (~{words} words) with {voice} (replacing other-voice renders).', confirmJob.targets.length, { words: fmtNum(confirmJob.words), voice: labelVoice(voiceId) })
+            : t.n('Generate {n} chunk (~{words} words) with {voice}.', 'Generate {n} chunks (~{words} words) with {voice}.', confirmJob.targets.length, { words: fmtNum(confirmJob.words), voice: labelVoice(voiceId) })}</p>
           {confirmJob.sections?.length ? (
             <p className="settings-note" style={{ marginTop: 0 }}>{t('Sections: {list}', { list: confirmJob.sections.slice(0, 8).join(' · ') + (confirmJob.sections.length > 8 ? ' ' + t('+{n} more', { n: confirmJob.sections.length - 8 }) : '') })}</p>
           ) : null}
           {voiceId.startsWith('el:')
-            ? <p className="settings-note" style={{ color: 'var(--ox-bright, #b0413e)' }}>☁ {t('Sends ~{words} words to ElevenLabs — spends your API quota. Existing clips are kept; recordings are never touched.', { words: confirmJob.words.toLocaleString() })}</p>
+            ? <p className="settings-note" style={{ color: 'var(--ox-bright, #b0413e)' }}>☁ {t('Sends ~{words} words to ElevenLabs — spends your API quota. Existing clips are kept; recordings are never touched.', { words: fmtNum(confirmJob.words) })}</p>
             : <p className="settings-note">{t('Runs on-device — budget a few seconds per chunk. Existing clips are kept (a new one is added); recordings are never touched.')}</p>}
         </Dialog>
       )}
