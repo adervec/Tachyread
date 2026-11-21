@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { t } from '../i18n.js';
 
 // Calibrates the hand-gesture scroll joystick: learns your rest / top / bottom palm heights so
 // scroll speed maps to your comfortable range at your seating distance. Drives the live gesture
@@ -34,36 +35,32 @@ export default function HandCalibrationDialog({ monitor, onSave, onClose }) {
   }
 
   return (
-    <Dialog title="Calibrate hand-gesture scrolling" onClose={onClose} width={480} buttons={<button onClick={onClose}>Close</button>}>
+    <Dialog title={t('Calibrate hand-gesture scrolling')} onClose={onClose} width={480} buttons={<button onClick={onClose}>{t('Close')}</button>}>
       {phase === 'intro' && (
         <>
           <p className="settings-note">
-            This learns your palm's rest, top and bottom heights so the scroll joystick fits your
-            reach: holding your open palm above rest scrolls up, below scrolls down — farther means
-            faster. Keep your open palm facing the camera through three short steps.
+            {t("This learns your palm's rest, top and bottom heights so the scroll joystick fits your reach: holding your open palm above rest scrolls up, below scrolls down — farther means faster. Keep your open palm facing the camera through three short steps.")}
           </p>
-          <button className="dict-rec" onClick={run}>● Start calibration</button>
+          <button className="dict-rec" onClick={run}>● {t('Start calibration')}</button>
         </>
       )}
-      {phase === 'rest' && <Step text="Hold your open palm where it naturally rests…" remain={remain} />}
-      {phase === 'top' && <Step text="Now raise it to your comfortable highest point…" remain={remain} />}
-      {phase === 'bottom' && <Step text="Now lower it to your comfortable lowest point…" remain={remain} />}
+      {phase === 'rest' && <Step text={t('Hold your open palm where it naturally rests…')} remain={remain} />}
+      {phase === 'top' && <Step text={t('Now raise it to your comfortable highest point…')} remain={remain} />}
+      {phase === 'bottom' && <Step text={t('Now lower it to your comfortable lowest point…')} remain={remain} />}
       {phase === 'done' && result && (
         <p className="tw-detected">
-          ✓ Calibrated — rest {result.centerY.toFixed(2)}, top {result.topY.toFixed(2)}, bottom {result.bottomY.toFixed(2)}.
-          Open palm above rest scrolls up, below scrolls down; a wave toggles play/pause.
+          ✓ {t('Calibrated — rest {rest}, top {top}, bottom {bottom}.', { rest: result.centerY.toFixed(2), top: result.topY.toFixed(2), bottom: result.bottomY.toFixed(2) })}
+          {' '}{t('Open palm above rest scrolls up, below scrolls down; a wave toggles play/pause.')}
         </p>
       )}
       {phase === 'failed' && (
         <p className="settings-note">
-          Couldn’t read a steady hand in one of the steps (or top/bottom weren’t clearly above and
-          below rest). Make sure your open palm is visible to the camera and try again.
+          {t('Couldn’t read a steady hand in one of the steps (or top/bottom weren’t clearly above and below rest). Make sure your open palm is visible to the camera and try again.')}
         </p>
       )}
       {phase === 'unsupported' && (
         <p className="settings-note">
-          The gesture monitor isn’t running — turn on <strong>Hand gestures</strong> in Application
-          Settings first (needs a camera and a WebGL browser), then try again.
+          {t('The gesture monitor isn’t running — turn on Hand gestures in Application Settings first (needs a camera and a WebGL browser), then try again.')}
         </p>
       )}
     </Dialog>

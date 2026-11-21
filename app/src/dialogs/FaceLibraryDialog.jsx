@@ -5,8 +5,11 @@ import FacePreview from '../components/FacePreview.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { FACE_STYLES } from '../components/faceDecor3d.js';
 import { FACE_WPM_MAX, FACE_TIER_LABELS, faceTier } from '../engine/faceExpression.js';
+import { t } from '../i18n.js';
 
 const ART_STYLES = ['Cartoon', 'Flat', 'Sketch', 'Neon', 'Watercolor', 'Pastel'];
+// Art styles, face styles (SettingsDialog's list) and the WPM tier labels are shown through t(): i18n-keys: Cartoon | Flat | Sketch | Neon | Watercolor | Pastel
+// i18n-keys: warming up | slow | building | average | brisk | fast | very fast | exceptional
 
 // Avatar Library: browse every procedural face style, preview how it animates across the
 // WPM range, choose an art style, and assign faces to the (up to 3) reader slots.
@@ -19,8 +22,8 @@ export default function FaceLibraryDialog({ onClose }) {
 
   if (!activeTab) {
     return (
-      <Dialog title="Avatar Library" onClose={onClose} width={680}>
-        <p>Open a document first to configure reader avatars.</p>
+      <Dialog title={t('Avatar Library')} onClose={onClose} width={680}>
+        <p>{t('Open a document first to configure reader avatars.')}</p>
       </Dialog>
     );
   }
@@ -41,14 +44,14 @@ export default function FaceLibraryDialog({ onClose }) {
 
   return (
     <Dialog
-      title="Avatar Library"
+      title={t('Avatar Library')}
       onClose={onClose}
       width={760}
-      buttons={<button onClick={onClose}>Close</button>}
+      buttons={<button onClick={onClose}>{t('Close')}</button>}
     >
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
         <label>
-          Show avatars{' '}
+          {t('Show avatars')}{' '}
           <input
             type="checkbox"
             checked={!!s.showEyes}
@@ -56,7 +59,7 @@ export default function FaceLibraryDialog({ onClose }) {
           />
         </label>
         <label>
-          Avatars{' '}
+          {t('Avatars')}{' '}
           <input
             type="number"
             min={1}
@@ -66,8 +69,8 @@ export default function FaceLibraryDialog({ onClose }) {
             onChange={(e) => patchSettings(activeTab.id, { faceCount: Math.max(1, Math.min(3, Number(e.target.value))) })}
           />
         </label>
-        <label title="Floating cartoon-glove hands beside each avatar, tinted to match it — they mirror your biometric controls (gestures, joystick, claps, voice) and move with the current activity">
-          🤚 Floating hands{' '}
+        <label title={t('Floating cartoon-glove hands beside each avatar, tinted to match it — they mirror your biometric controls (gestures, joystick, claps, voice) and move with the current activity')}>
+          🤚 {t('Floating hands')}{' '}
           <input
             type="checkbox"
             checked={!!s.avatarHands}
@@ -75,19 +78,19 @@ export default function FaceLibraryDialog({ onClose }) {
           />
         </label>
         <label>
-          Art style{' '}
+          {t('Art style')}{' '}
           <select value={art} onChange={(e) => setArtStyle(e.target.value)}>
             {ART_STYLES.map((a) => (
-              <option key={a}>{a}</option>
+              <option key={a} value={a}>{t(a)}</option>
             ))}
           </select>
         </label>
         <label>
-          Editing slot{' '}
+          {t('Editing slot')}{' '}
           <select value={slot} onChange={(e) => setSlot(Number(e.target.value))}>
             {Array.from({ length: faceCount }, (_, i) => (
               <option key={i} value={i}>
-                Face {i + 1} ({styles[i]})
+                {t('Face {n} ({style})', { n: i + 1, style: t(styles[i]) })}
               </option>
             ))}
           </select>
@@ -99,16 +102,16 @@ export default function FaceLibraryDialog({ onClose }) {
         <div style={{ textAlign: 'center' }}>
           <FacePreview faceStyle={styles[slot]} artStyle={art} wpm={wpm} size={184} />
           <div style={{ fontSize: 12, color: 'var(--status-fg)', marginTop: 4 }}>
-            Avatar {slot + 1}: {styles[slot]}
+            {t('Avatar {n}: {style}', { n: slot + 1, style: t(styles[slot]) })}
           </div>
         </div>
       </div>
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-        <span style={{ fontSize: 11, color: 'var(--status-fg)' }}>Preview WPM</span>
+        <span style={{ fontSize: 11, color: 'var(--status-fg)' }}>{t('Preview WPM')}</span>
         <input type="range" min={0} max={Math.round(FACE_WPM_MAX * 1.2)} step={10} value={wpm} onChange={(e) => setWpm(Number(e.target.value))} style={{ flex: 1 }} />
-        <span style={{ width: 96, textAlign: 'right' }} title={`Tier ${faceTier(wpm)} of 7 — the face is fully lit at ${FACE_WPM_MAX} wpm sustained`}>
-          {wpm} · {FACE_TIER_LABELS[faceTier(wpm)]}
+        <span style={{ width: 96, textAlign: 'right' }} title={t('Tier {tier} of 7 — the face is fully lit at {max} wpm sustained', { tier: faceTier(wpm), max: FACE_WPM_MAX })}>
+          {wpm} · {t(FACE_TIER_LABELS[faceTier(wpm)])}
         </span>
       </div>
 
@@ -119,7 +122,7 @@ export default function FaceLibraryDialog({ onClose }) {
             <button
               key={style}
               onClick={() => assign(style)}
-              title={`Assign ${style} to avatar slot ${slot + 1}`}
+              title={t('Assign {style} to avatar slot {n}', { style: t(style), n: slot + 1 })}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -132,7 +135,7 @@ export default function FaceLibraryDialog({ onClose }) {
               }}
             >
               <FaceSVG wpm={wpm} lineProgress={0.5} faceStyle={style} artStyle={art} size={72} />
-              <span style={{ fontSize: 11 }}>{style}</span>
+              <span style={{ fontSize: 11 }}>{t(style)}</span>
             </button>
           );
         })}

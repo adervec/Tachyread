@@ -3,13 +3,15 @@
 // optional glow that tracks the live reading WPM (the same idea as the reader faces' pace glow).
 // Display-only: it paints over the video element; detection never sees it. Pure — see eyeFx.test.mjs.
 
+import { t } from '../i18n.js';
+
 export const EYE_FX_STYLES = [
-  ['glow', '🔆 Glow orbs'],
-  ['ring', '◯ Rings'],
-  ['star', '✦ Stars'],
-  ['heart', '♥ Hearts'],
-  ['laser', '― Laser bars'],
-  ['emoji', '😀 Custom emoji'],
+  ['glow', `🔆 ${t('Glow orbs')}`],
+  ['ring', `◯ ${t('Rings')}`],
+  ['star', `✦ ${t('Stars')}`],
+  ['heart', `♥ ${t('Hearts')}`],
+  ['laser', `― ${t('Laser bars')}`],
+  ['emoji', `😀 ${t('Custom emoji')}`],
 ];
 export const EYE_FX_STYLE_IDS = EYE_FX_STYLES.map(([id]) => id);
 

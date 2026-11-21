@@ -3,6 +3,7 @@ import Dialog from './Dialog.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { EXERCISES, DEFAULT_IDS, MIN_MINUTES, MAX_MINUTES, buildPlan, planSeconds, TAU } from '../engine/eyeWarmup.js';
 import { createGazeTracker, fitGazeModel, applyGazeModel, createSmoother, averageCalibSamples, poseDrift, POSE_DRIFT_WARN } from '../features/eyeTracking.js';
+import { t } from '../i18n.js';
 
 // Guided eye-warmup routine before a reading session: smooth pursuit (sweeps, figure-eight,
 // orbits), saccade drills (jumps, corner darts), peripheral flashes, an accommodation pulse,
@@ -41,16 +42,16 @@ function cross(ctx, x, y, s, color) {
   ctx.restore();
 }
 
-// One frame of the active exercise. w/h in CSS pixels; t = seconds into the exercise.
-function drawExercise(ctx, w, h, ex, t) {
-  const u = Math.min(t / ex.dur, 1);
+// One frame of the active exercise. w/h in CSS pixels; secs = seconds into the exercise.
+function drawExercise(ctx, w, h, ex, secs) {
+  const u = Math.min(secs / ex.dur, 1);
   ctx.fillStyle = `rgba(8, 11, 18, ${ex.fade})`; // trail fade, not a clear
   ctx.fillRect(0, 0, w, h);
 
   const pad = 26;
   const px = (x) => pad + x * (w - 2 * pad);
   const py = (y) => pad + y * (h - 2 * pad);
-  const d = ex.sample(t, u, ex.dur);
+  const d = ex.sample(secs, u, ex.dur);
 
   if (ex.kind === 'dot') {
     glowDot(ctx, px(d.x), py(d.y), 9, ex.color);
@@ -116,7 +117,7 @@ function drawExercise(ctx, w, h, ex, t) {
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = '13px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(d.near ? 'near — let them merge' : 'far — drift apart', cx, h - 27);
+    ctx.fillText(d.near ? t('near — let them merge') : t('far — drift apart'), cx, h - 27);
   } else if (ex.kind === 'blink') {
     const cx = w / 2, cy = h / 2;
     const openH = 1 - d.close; // 1 open, 0 shut
@@ -136,7 +137,7 @@ function drawExercise(ctx, w, h, ex, t) {
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.font = '600 17px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('blink', cx, cy + Math.min(w, h) * 0.24);
+      ctx.fillText(t('blink'), cx, cy + Math.min(w, h) * 0.24);
     }
   } else if (ex.kind === 'rest') {
     const cx = w / 2, cy = h / 2;
@@ -153,7 +154,7 @@ function drawExercise(ctx, w, h, ex, t) {
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = '13px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(d.inhale ? 'breathe in…' : 'breathe out…', cx, h - 28);
+    ctx.fillText(d.inhale ? t('breathe in…') : t('breathe out…'), cx, h - 28);
   }
 
   // countdown + per-exercise progress bar (solid patch behind the digits — the trail
@@ -163,7 +164,7 @@ function drawExercise(ctx, w, h, ex, t) {
   ctx.fillStyle = 'rgba(255,255,255,0.5)';
   ctx.font = '600 14px system-ui, sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText(String(Math.max(Math.ceil(ex.dur - t), 0)), w - 12, 22);
+  ctx.fillText(String(Math.max(Math.ceil(ex.dur - secs), 0)), w - 12, 22);
   ctx.fillStyle = ex.color;
   ctx.fillRect(0, h - 3, u * w, 3);
   // The sample the caller can score gaze against — only the kinds with a single, unambiguous
@@ -214,9 +215,9 @@ const CALIB_POINTS = [
   [0.5, 0.1], [0.9, 0.5], [0.5, 0.9], [0.1, 0.5],
 ];
 const GAZE_LABEL = {
-  off: 'camera off', starting: 'starting the camera…', tracking: 'tracking',
-  denied: 'camera permission denied', unsupported: 'no camera / face model on this device',
-  error: 'camera or calibration failed',
+  off: t('camera off'), starting: t('starting the camera…'), tracking: t('tracking'),
+  denied: t('camera permission denied'), unsupported: t('no camera / face model on this device'),
+  error: t('camera or calibration failed'),
 };
 const SETTLE_MS = 600;   // time to move your eyes to the new target before we start believing it
 const SAMPLE_MS = 900;   // time spent collecting features for that target
@@ -422,7 +423,7 @@ export default function EyeWarmupDialog({ onClose }) {
       if (cal) { // calibration owns the stage while it runs
         lastEx = -1;
         drawCalib(ctx, rect.width, rect.height, CALIB_POINTS[cal.i], cal.progress || 0, !!cal.sampling,
-          `Look straight at the dot — ${cal.i + 1} / ${CALIB_POINTS.length}`);
+          t('Look straight at the dot — {n} / {total}', { n: cal.i + 1, total: CALIB_POINTS.length }));
         return;
       }
       if (run.phase !== 'run' || !routine.length) {
@@ -525,7 +526,7 @@ export default function EyeWarmupDialog({ onClose }) {
   const ex = plan[Math.min(exIndex, Math.max(0, plan.length - 1))];
   const planMin = Math.round(planSeconds(plan) / 60 * 10) / 10;
   return (
-    <Dialog title="Eye warmup — loosen up before you read" onClose={onClose} width={760}>
+    <Dialog title={t('Eye warmup — loosen up before you read')} onClose={onClose} width={760}>
       <div className="eye-warmup">
         {phase === 'run' && (
           <div className="ew-chips">
@@ -535,9 +536,9 @@ export default function EyeWarmupDialog({ onClose }) {
                 className={`ew-chip${i === exIndex ? ' active' : ''}${i < exIndex ? ' done' : ''}`}
                 style={i === exIndex ? { borderColor: e.color, color: e.color } : undefined}
                 onClick={() => jumpTo(i)}
-                title={`${e.tip} (${e.dur}s)`}
+                title={t('{tip} ({secs}s)', { tip: t(e.tip), secs: e.dur })}
               >
-                {e.name}
+                {t(e.name)}
               </button>
             ))}
           </div>
@@ -552,21 +553,21 @@ export default function EyeWarmupDialog({ onClose }) {
               muted
               playsInline
               autoPlay
-              title={faceSeen ? 'Face found' : 'No face detected — centre yourself in the frame'}
+              title={faceSeen ? t('Face found') : t('No face detected — centre yourself in the frame')}
             />
           )}
           {/* The setup panel covers the stage, and calibration needs the stage — step aside for it. */}
           {phase === 'idle' && !calib && (
             <div className="ew-overlay ew-setup">
-              <p className="settings-note">Pick your drills and length. Keep your head still; let only your eyes move.</p>
+              <p className="settings-note">{t('Pick your drills and length. Keep your head still; let only your eyes move.')}</p>
               <label className="ew-slider">
-                <span>Total time: <b>{minutes} min</b> <span className="settings-note">({selected.length} drill{selected.length === 1 ? '' : 's'} · ~{planMin} min)</span></span>
+                <span>{t('Total time: {n} min', { n: minutes })} <span className="settings-note">({t.n('{n} drill', '{n} drills', selected.length)} · {t('~{n} min', { n: planMin })})</span></span>
                 <input type="range" min={MIN_MINUTES} max={MAX_MINUTES} step={1} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} />
               </label>
               <div className="ew-picker">
                 {GROUPS.map((g) => (
                   <div key={g.name} className="ew-picker-group">
-                    <div className="ew-picker-head">{g.name}</div>
+                    <div className="ew-picker-head">{t(g.name)}</div>
                     <div className="ew-picker-items">
                       {g.items.map((e) => (
                         <button
@@ -574,9 +575,9 @@ export default function EyeWarmupDialog({ onClose }) {
                           className={`ew-pick${selected.includes(e.id) ? ' on' : ''}`}
                           style={selected.includes(e.id) ? { borderColor: e.color } : undefined}
                           onClick={() => toggle(e.id)}
-                          title={e.tip}
+                          title={t(e.tip)}
                         >
-                          {selected.includes(e.id) ? '◉' : '○'} {e.name}
+                          {selected.includes(e.id) ? '◉' : '○'} {t(e.name)}
                         </button>
                       ))}
                     </div>
@@ -585,57 +586,57 @@ export default function EyeWarmupDialog({ onClose }) {
               </div>
               <div className="ew-gaze">
                 <div className="ew-gaze-head">
-                  👁 Eye tracking <span className="ew-beta">beta</span>
+                  👁 {t('Eye tracking')} <span className="ew-beta">{t('beta')}</span>
                   <span className={`ew-gaze-dot st-${gazeState === 'tracking' && !faceSeen ? 'noface' : gazeState}`} />
                   <span className="settings-note">
-                    {gazeState === 'tracking' ? (faceSeen ? 'face found' : 'no face — sit in frame') : (GAZE_LABEL[gazeState] || gazeState)}
+                    {gazeState === 'tracking' ? (faceSeen ? t('face found') : t('no face — sit in frame')) : (GAZE_LABEL[gazeState] || gazeState)}
                   </span>
                 </div>
-                <div className="ew-gaze-actions" title="Watches your eyes with the front camera to show where you're looking and score how well you follow each drill. Runs entirely on this device — nothing is recorded or uploaded.">
+                <div className="ew-gaze-actions" title={t('Watches your eyes with the front camera to show where you’re looking and score how well you follow each drill. Runs entirely on this device — nothing is recorded or uploaded.')}>
                   {gazeState === 'off' || gazeState === 'denied' || gazeState === 'error' || gazeState === 'unsupported'
-                    ? <button onClick={startGaze}>Turn on camera</button>
-                    : <button onClick={stopGaze}>Turn off camera</button>}
+                    ? <button onClick={startGaze}>{t('Turn on camera')}</button>
+                    : <button onClick={stopGaze}>{t('Turn off camera')}</button>}
                   <button
                     disabled={gazeState !== 'tracking' || !!calib}
                     onClick={() => setCalib({ i: 0, samples: [] })}
-                    title="Look at each dot in turn — about 15 seconds. Sit as you normally read; the fit is learnt for that position."
+                    title={t('Look at each dot in turn — about 15 seconds. Sit as you normally read; the fit is learnt for that position.')}
                   >
-                    {model ? 'Recalibrate ⌖' : 'Calibrate ⌖'}
+                    {model ? t('Recalibrate') : t('Calibrate')} ⌖
                   </button>
                   {model && (
-                    <span className="settings-note" title="Average miss on the calibration points themselves — lower is better.">
-                      calibrated · fit ±{Math.round((model.rms || 0) * 100)}%
+                    <span className="settings-note" title={t('Average miss on the calibration points themselves — lower is better.')}>
+                      {t('calibrated · fit ±{pct}%', { pct: Math.round((model.rms || 0) * 100) })}
                     </span>
                   )}
                 </div>
                 {model && drift > POSE_DRIFT_WARN && (
-                  <span className="ew-drift" title="The map is learnt for one head position. Sit back where you calibrated, or calibrate again from here.">
-                    ⚠ head has moved since calibration
+                  <span className="ew-drift" title={t('The map is learnt for one head position. Sit back where you calibrated, or calibrate again from here.')}>
+                    ⚠ {t('head has moved since calibration')}
                   </span>
                 )}
-                <p className="settings-note">Shows where you&apos;re looking and scores your follow. All on-device — nothing is recorded or uploaded.</p>
+                <p className="settings-note">{t('Shows where you’re looking and scores your follow. All on-device — nothing is recorded or uploaded.')}</p>
               </div>
               <div className="ew-setup-actions">
-                <button className="toggle-on" disabled={!plan.length} onClick={begin}>Begin warmup ▸</button>
-                <button onClick={() => setSelected(DEFAULT_IDS)}>Reset to default set</button>
+                <button className="toggle-on" disabled={!plan.length} onClick={begin}>{t('Begin warmup')} ▸</button>
+                <button onClick={() => setSelected(DEFAULT_IDS)}>{t('Reset to default set')}</button>
               </div>
             </div>
           )}
           {phase === 'done' && (
             <div className="ew-overlay">
-              <p className="settings-note">Done — eyes warm. Happy reading.</p>
+              <p className="settings-note">{t('Done — eyes warm. Happy reading.')}</p>
               {score && score.frames > 30 && (
                 <>
                   <p className="ew-score">
-                    👁 On target <b>{Math.round((score.hits / score.frames) * 100)}%</b> of the tracked drills
-                    <span className="settings-note"> · the map behind shows where your eyes spent the routine</span>
+                    👁 {t('On target {pct}% of the tracked drills', { pct: Math.round((score.hits / score.frames) * 100) })}
+                    <span className="settings-note"> · {t('the map behind shows where your eyes spent the routine')}</span>
                   </p>
                   <div className="ew-per-drill">
                     {Object.entries(score.per || {}).filter(([, v]) => v.frames > 15).map(([id, v]) => {
                       const pct = Math.round((v.hits / v.frames) * 100);
                       return (
-                        <span key={id} className="ew-drill-score" title={`${v.hits} of ${v.frames} tracked frames on target`}>
-                          {v.name}
+                        <span key={id} className="ew-drill-score" title={t('{hits} of {frames} tracked frames on target', { hits: v.hits, frames: v.frames })}>
+                          {t(v.name)}
                           <b style={{ color: pct >= 70 ? '#7dff8a' : pct >= 40 ? '#ffd54f' : '#ff8a8a' }}> {pct}%</b>
                         </span>
                       );
@@ -644,22 +645,22 @@ export default function EyeWarmupDialog({ onClose }) {
                 </>
               )}
               <div className="ew-setup-actions">
-                <button className="toggle-on" onClick={() => jumpTo(0)}>Again ↻</button>
-                <button onClick={() => setPhase('idle')}>Change drills ⚙</button>
+                <button className="toggle-on" onClick={() => jumpTo(0)}>{t('Again')} ↻</button>
+                <button onClick={() => setPhase('idle')}>{t('Change drills')} ⚙</button>
               </div>
             </div>
           )}
         </div>
         {phase === 'run' && ex && (
           <div className="ew-controls">
-            <span className="ew-tip">{ex.tip}</span>
+            <span className="ew-tip">{t(ex.tip)}</span>
             <span className="grow" />
             {model && gazeState === 'tracking' && (
-              <span className="ew-live-score" title="How much of the tracked drills your gaze spent on the target">👁 {liveScore}%</span>
+              <span className="ew-live-score" title={t('How much of the tracked drills your gaze spent on the target')}>👁 {liveScore}%</span>
             )}
-            <button onClick={() => setPhase('idle')}>⚙ Setup</button>
-            <button onClick={() => setPaused((p) => !p)}>{paused ? 'Resume ▸' : 'Pause ⏸'}</button>
-            <button onClick={() => (exIndex + 1 >= plan.length ? finish() : jumpTo(exIndex + 1))}>Skip ▸</button>
+            <button onClick={() => setPhase('idle')}>⚙ {t('Setup')}</button>
+            <button onClick={() => setPaused((p) => !p)}>{paused ? `${t('Resume')} ▸` : `${t('Pause')} ⏸`}</button>
+            <button onClick={() => (exIndex + 1 >= plan.length ? finish() : jumpTo(exIndex + 1))}>{t('Skip')} ▸</button>
           </div>
         )}
       </div>

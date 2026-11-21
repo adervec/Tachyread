@@ -1,4 +1,5 @@
 import { faceExpression, lidPoints, browPoints, mouthPath, irisColor, RIG } from '../engine/faceExpression.js';
+import { t } from '../i18n.js';
 
 // Procedural animated reader face (2D SVG). This is the original flat renderer, kept as a
 // graceful fallback for the WebGL 3D face (see Face.jsx / FaceHead.jsx) and used for the
@@ -626,7 +627,7 @@ export default function FaceSVG({
       viewBox={`0 0 ${RIG.W} ${RIG.H}`}
       style={{ width: w, height: size }}
       role="img"
-      aria-label={`${faceStyle} reader avatar`}
+      aria-label={t('{style} reader avatar', { style: t(faceStyle) })}
     >
       {d.bg}
       {/* Sclera */}

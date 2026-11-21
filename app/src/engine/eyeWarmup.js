@@ -140,6 +140,22 @@ function rest(t) {
 // fade = per-frame trail persistence (lower alpha ⇒ longer glow trail). `dur` doubles as the drill's
 // default WEIGHT when the routine is scaled to a target total (see buildPlan). `group` buckets drills
 // in the picker. `default: false` drills are available but off unless the user opts in.
+// Drill names, groups and tips are shown through t() in EyeWarmupDialog. i18n-keys: Pursuit | Saccades | Vision | Focus | Rest
+// i18n-keys: Sweeps | Vertical Sweeps | Figure Eight | Orbits | Spiral | Free Bounce | Saccades | Corner Darts | Reading Rows | Peripheral | Focus Pulse | Near / Far | Blink Break | Rest
+// i18n-keys: Follow the dot with your eyes only — keep your head still.
+// i18n-keys: Up and down — track the dot along the vertical, head still.
+// i18n-keys: Trace the infinity loop smoothly — no jumps, no shortcuts.
+// i18n-keys: Smooth circles — clockwise, then counter-clockwise.
+// i18n-keys: Wind inward to the centre, then unwind back out — stay smooth.
+// i18n-keys: Chase the wandering dot — don’t predict, just follow.
+// i18n-keys: Snap your eyes to the dot the instant it lands.
+// i18n-keys: Dart corner to corner — a Z pattern, then an X.
+// i18n-keys: Hop along each line and flick back — the reading pattern itself.
+// i18n-keys: Stare at the cross. Catch the flashes without looking at them.
+// i18n-keys: Ride the target as it swells and shrinks — breathe with it.
+// i18n-keys: Let the two dots meet in the middle, then drift apart — relax between.
+// i18n-keys: Blink fully each time it pulses — wet, restful, complete blinks.
+// i18n-keys: Soften your gaze or close your eyes. Blink gently, breathe slow.
 export const EXERCISES = [
   { id: 'sweeps', kind: 'dot', group: 'Pursuit', name: 'Sweeps', tip: 'Follow the dot with your eyes only — keep your head still.', dur: 25, fade: 0.2, color: '#4fd8ff', sample: sweep, default: true },
   { id: 'vsweeps', kind: 'dot', group: 'Pursuit', name: 'Vertical Sweeps', tip: 'Up and down — track the dot along the vertical, head still.', dur: 20, fade: 0.2, color: '#59c2ff', sample: (t, u) => vsweep(t, u), default: false },

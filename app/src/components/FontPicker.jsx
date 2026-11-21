@@ -3,6 +3,7 @@ import {
   SYSTEM_FONTS, BUNDLED, GOOGLE_FAMILIES, CATEGORY_LABELS, fontStack, primaryFamily,
   loadFontEntry, queryInstalledFonts, LOCAL_FONTS_SUPPORTED, ensureGoogleFont,
 } from '../state/fonts.js';
+import { t } from '../i18n.js';
 
 const PREVIEW = 'Aa Bb Cc — The quick brown fox 0123';
 
@@ -19,7 +20,7 @@ export default function FontPicker({ value, onChange, googleEnabled = false, def
   const [custom, setCustom] = useState('');
   const rootRef = useRef(null);
 
-  const current = primaryFamily(value) || '(theme default)';
+  const current = primaryFamily(value) || t('(theme default)');
 
   useEffect(() => {
     if (!open) return;
@@ -33,10 +34,10 @@ export default function FontPicker({ value, onChange, googleEnabled = false, def
     const q = query.trim().toLowerCase();
     const match = (f) => !q || f.name.toLowerCase().includes(q);
     const g = [];
-    g.push({ key: 'system', label: 'System & web-safe', items: SYSTEM_FONTS.filter(match) });
-    g.push({ key: 'bundled', label: 'Bundled (offline, libre)', items: BUNDLED.filter(match) });
-    if (localFonts) g.push({ key: 'local', label: `Installed on this device (${localFonts.length})`, items: localFonts.filter(match) });
-    if (googleEnabled) g.push({ key: 'google', label: 'Google Fonts (loads from CDN)', items: GOOGLE_FAMILIES.filter(match) });
+    g.push({ key: 'system', label: t('System & web-safe'), items: SYSTEM_FONTS.filter(match) });
+    g.push({ key: 'bundled', label: t('Bundled (offline, libre)'), items: BUNDLED.filter(match) });
+    if (localFonts) g.push({ key: 'local', label: t('Installed on this device ({n})', { n: localFonts.length }), items: localFonts.filter(match) });
+    if (googleEnabled) g.push({ key: 'google', label: t('Google Fonts (loads from CDN)'), items: GOOGLE_FAMILIES.filter(match) });
     return g.filter((grp) => grp.items.length);
   }, [query, localFonts, googleEnabled]);
 
@@ -48,12 +49,12 @@ export default function FontPicker({ value, onChange, googleEnabled = false, def
   }
 
   async function loadLocal() {
-    if (!LOCAL_FONTS_SUPPORTED) { setLocalStatus('Not supported in this browser (try Chrome/Edge).'); return; }
-    setLocalStatus('Requesting permission…');
+    if (!LOCAL_FONTS_SUPPORTED) { setLocalStatus(t('Not supported in this browser (try Chrome/Edge).')); return; }
+    setLocalStatus(t('Requesting permission…'));
     const list = await queryInstalledFonts();
-    if (!list) { setLocalStatus('Permission denied or unavailable.'); return; }
+    if (!list) { setLocalStatus(t('Permission denied or unavailable.')); return; }
     setLocalFonts(list);
-    setLocalStatus(`${list.length} families loaded.`);
+    setLocalStatus(t.n('{n} family loaded.', '{n} families loaded.', list.length));
   }
 
   function applyCustom() {
@@ -85,7 +86,7 @@ export default function FontPicker({ value, onChange, googleEnabled = false, def
             type="text"
             className="fp-search"
             autoFocus
-            placeholder="Search fonts…"
+            placeholder={t('Search fonts…')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -107,20 +108,20 @@ export default function FontPicker({ value, onChange, googleEnabled = false, def
                     >
                       <span className="fp-name">{entry.name}</span>
                       <span className="fp-preview" style={{ fontFamily: fontStack(entry) }}>{PREVIEW}</span>
-                      {entry.cat && <span className="fp-cat">{CATEGORY_LABELS[entry.cat] || entry.cat}</span>}
+                      {entry.cat && <span className="fp-cat">{CATEGORY_LABELS[entry.cat] ? t(CATEGORY_LABELS[entry.cat]) : entry.cat}</span>}
                     </button>
                   );
                 })}
               </div>
             ))}
-            {!groups.length && <div className="fp-empty">No matches.</div>}
+            {!groups.length && <div className="fp-empty">{t('No matches.')}</div>}
           </div>
 
           <div className="fp-footer">
             {!localFonts && (
               <button type="button" className="fp-action" onClick={loadLocal} disabled={!LOCAL_FONTS_SUPPORTED}
-                title={LOCAL_FONTS_SUPPORTED ? 'Enumerate the fonts installed on this device' : 'Chromium-only feature'}>
-                ＋ Use my installed fonts
+                title={LOCAL_FONTS_SUPPORTED ? t('Enumerate the fonts installed on this device') : t('Chromium-only feature')}>
+                ＋ {t('Use my installed fonts')}
               </button>
             )}
             {localStatus && <span className="fp-status">{localStatus}</span>}
@@ -128,12 +129,12 @@ export default function FontPicker({ value, onChange, googleEnabled = false, def
               <div className="fp-custom">
                 <input
                   type="text"
-                  placeholder="…or type any Google family name"
+                  placeholder={t('…or type any Google family name')}
                   value={custom}
                   onChange={(e) => setCustom(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyCustom(); } }}
                 />
-                <button type="button" onClick={applyCustom}>Use</button>
+                <button type="button" onClick={applyCustom}>{t('Use')}</button>
               </div>
             )}
           </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_COMFORT, shouldBreak, fatigueScore, backoffWpm, eyeStrainAccruing } from '../engine/comfort.js';
+import { t } from '../i18n.js';
 
 // Comfort & calibration monitor. Accumulates *active* reading time (it only ticks while playing
 // forward, and the playback gate already pauses on a hidden tab, so background time is never
@@ -104,17 +105,17 @@ export default function ComfortMonitor({
             <div className="comfort-eyes" aria-hidden>
               👁️ 👁️
             </div>
-            <div className="comfort-head">Microbreak — rest your eyes</div>
+            <div className="comfort-head">{t('Microbreak — rest your eyes')}</div>
             <p className="comfort-tip">
-              Look at something about <strong>20 feet (6 m)</strong> away until the timer ends.
+              {t('Look at something about 20 feet (6 m) away until the timer ends.')}
             </p>
             <div className="comfort-count">{brk.remain}</div>
             <div className="comfort-foot">
               <button className="comfort-skip" onClick={close}>
-                Skip break
+                {t('Skip break')}
               </button>
               <span className="settings-note" style={{ margin: 0 }}>
-                Every {intervalMin} min of reading · keeps your eyes fresh.
+                {t('Every {n} min of reading · keeps your eyes fresh.', { n: intervalMin })}
               </span>
             </div>
           </>
@@ -123,17 +124,17 @@ export default function ComfortMonitor({
             <div className="comfort-eyes" aria-hidden>
               ✓
             </div>
-            <div className="comfort-head">Eyes rested</div>
+            <div className="comfort-head">{t('Eyes rested')}</div>
             {brk.eased ? (
               <p className="comfort-tip">
-                Eased to <strong>{brk.eased} wpm</strong> to keep comprehension comfortable.
+                {t('Eased to {wpm} wpm to keep comprehension comfortable.', { wpm: brk.eased })}
               </p>
             ) : (
-              <p className="comfort-tip">Looking good — speed unchanged.</p>
+              <p className="comfort-tip">{t('Looking good — speed unchanged.')}</p>
             )}
             <div className="comfort-foot" style={{ justifyContent: 'center' }}>
               <button className="comfort-resume" onClick={close}>
-                {wasPlayingRef.current ? 'Resume reading' : 'Back to reading'}
+                {wasPlayingRef.current ? t('Resume reading') : t('Back to reading')}
               </button>
             </div>
           </>

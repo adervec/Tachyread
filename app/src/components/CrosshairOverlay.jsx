@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { normalizeCrosshair, backdropFilterOf, moveCrosshair, animPeriodSecs } from '../features/crosshairs.js';
 import { wordDurationMs } from '../engine/rsvpEngine.js';
+import { t } from '../i18n.js';
 
 // The placed crosshairs floating over the Lines area. Each is draggable in place (grab it, drop it
 // where your eye should anchor); position persists per tab as pane fractions, so it stays put
@@ -10,13 +11,13 @@ import { wordDurationMs } from '../engine/rsvpEngine.js';
 
 // One shape layer as SVG elements in a 100×100 viewBox (stroke-width in viewBox units).
 function ShapeBits({ shape, thickness }) {
-  const t = thickness * 1.6; // viewBox units ≈ px at the default 60px size
+  const tk = thickness * 1.6; // viewBox units ≈ px at the default 60px size
   switch (shape) {
     case 'cross': return <><line x1="50" y1="8" x2="50" y2="92" /><line x1="8" y1="50" x2="92" y2="50" /></>;
     case 'x': return <><line x1="16" y1="16" x2="84" y2="84" /><line x1="84" y1="16" x2="16" y2="84" /></>;
     case 'circle': return <circle cx="50" cy="50" r="40" fill="none" />;
-    case 'ring': return <circle cx="50" cy="50" r="36" fill="none" strokeWidth={t * 2} />;
-    case 'dot': return <circle cx="50" cy="50" r={Math.max(4, t * 2)} stroke="none" fill="currentColor" />;
+    case 'ring': return <circle cx="50" cy="50" r="36" fill="none" strokeWidth={tk * 2} />;
+    case 'dot': return <circle cx="50" cy="50" r={Math.max(4, tk * 2)} stroke="none" fill="currentColor" />;
     case 'square': return <rect x="14" y="14" width="72" height="72" fill="none" />;
     case 'triangle': return <polygon points="50,12 90,84 10,84" fill="none" />;
     case 'brackets': return <><path d="M30 14 H14 V86 H30" fill="none" /><path d="M70 14 H86 V86 H70" fill="none" /></>;
@@ -86,7 +87,7 @@ export function Crosshair({ design, size = 90, interactive = false, onDrag, onDr
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      title={interactive ? `${d.name} — drag to place` : d.name}
+      title={interactive ? t('{name} — drag to place', { name: d.name }) : d.name}
     >
       {d.fx.warp > 0 && (
         <svg width="0" height="0" className="xh-defs" aria-hidden="true">

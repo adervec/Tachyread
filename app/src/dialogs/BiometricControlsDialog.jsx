@@ -30,6 +30,7 @@ function captureBioProfile(g) {
 }
 import { createRecognizer, speechRecognitionSupported } from '../features/speechRecognition.js';
 import { getLanguage } from '../state/languages.js';
+import { t } from '../i18n.js';
 
 // One page for every hands-free control: camera attention guards, hand gestures + their command
 // mapping, and voice/clap commands with custom, recordable trigger phrases. Replaces the old separate
@@ -54,8 +55,8 @@ function CommandSelect({ value, onChange, disabled }) {
         disabled={disabled}
         onChange={(e) => onChange(e.target.value === '__setwpm' ? setWpmCommandId(setWpm ?? 300) : e.target.value)}
       >
-        <option value="">— none —</option>
-        <option value="__setwpm">🎯 Set specific WPM…</option>
+        <option value="">{t('— none —')}</option>
+        <option value="__setwpm">🎯 {t('Set specific WPM…')}</option>
         {COMMANDS.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}
       </select>
       {setWpm != null && (
@@ -63,7 +64,7 @@ function CommandSelect({ value, onChange, disabled }) {
           type="number" min={50} max={2000} step={25} className="cmd-wpm" disabled={disabled}
           value={setWpm}
           onChange={(e) => onChange(setWpmCommandId(e.target.value))}
-          title="Target reading speed for this trigger"
+          title={t('Target reading speed for this trigger')}
         />
       )}
     </span>
@@ -104,7 +105,7 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
   useEffect(() => () => stopRec(), []);
   function recordPhrase(idx) {
     if (recIdx >= 0) { stopRec(); return; }
-    if (!speechRecognitionSupported()) { setRecErr('Voice recording needs a Chromium browser with microphone access.'); return; }
+    if (!speechRecognitionSupported()) { setRecErr(t('Voice recording needs a Chromium browser with microphone access.')); return; }
     setRecErr('');
     const rec = createRecognizer({
       lang: getLanguage(g.language || 'en').bcp,
@@ -118,7 +119,7 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
       },
       onError: () => stopRec(),
     });
-    if (!rec) { setRecErr('Speech recognition is unavailable.'); return; }
+    if (!rec) { setRecErr(t('Speech recognition is unavailable.')); return; }
     recRef.current = rec;
     setRecIdx(idx);
     try { rec.start(); } catch { stopRec(); }
@@ -134,8 +135,8 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
   const patchHoldScroll = (dir, p) => patch({ holdScroll: hsRows.map((r) => (r.dir === dir ? { ...r, ...p } : r)) });
 
   return (
-    <Dialog title="Biometric Controls" onClose={onClose} width={600} buttons={<button onClick={onClose}>Close</button>}>
-      <DeviceInfo note="Your camera, calibration and gesture/voice/eye mappings are specific to this device — they’re tuned to its screen and camera and don’t sync." />
+    <Dialog title={t('Biometric Controls')} onClose={onClose} width={600} buttons={<button onClick={onClose}>{t('Close')}</button>}>
+      <DeviceInfo note={t('Your camera, calibration and gesture/voice/eye mappings are specific to this device — they’re tuned to its screen and camera and don’t sync.')} />
       <ProfilesBar
         kind="bio"
         profiles={g.settingsProfiles}
@@ -144,132 +145,130 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
         apply={(data) => patch({ ...data })}
       />
       <div className={`bio-check${profileFlags.some((f) => f.level === 'error') ? ' has-error' : profileFlags.length ? ' has-warn' : ''}`}>
-        <div className="bio-check-head">🩺 Profile check</div>
+        <div className="bio-check-head">🩺 {t('Profile check')}</div>
         {profileFlags.length === 0
-          ? <p className="settings-note" style={{ margin: 0 }}>✓ No conflicts or overlaps in this setup.</p>
+          ? <p className="settings-note" style={{ margin: 0 }}>✓ {t('No conflicts or overlaps in this setup.')}</p>
           : profileFlags.map((f, i) => (
             <div key={i} className={`bio-check-flag ${f.level}`}>
               {f.level === 'error' ? '⛔' : f.level === 'warn' ? '⚠' : 'ℹ'} {f.message}
             </div>
           ))}
       </div>
-      <Field label="Front camera on phones & tablets">
+      <Field label={t('Front camera on phones & tablets')}>
         <label className="inline-check">
           <input type="checkbox" checked={!!g.mobileCamera} onChange={(e) => patch({ mobileCamera: e.target.checked })} />
-          Let the camera features below run on a small screen too
+          {t('Let the camera features below run on a small screen too')}
         </label>
       </Field>
       <p className="settings-note" style={{ marginTop: 0 }}>
         {g.mobileCamera
-          ? '📱 Camera features are enabled on mobile. They are battery- and CPU-heavy, and a hand-held phone rarely faces you squarely — if reading gets sluggish or warm, turn this back off.'
-          : '📵 Off by default on mobile: the camera guards (attention, doze, alarms, posture) and hand gestures run on desktop only, because they are battery/CPU-heavy and a phone rarely faces you squarely. Voice and clap commands work everywhere; eye gestures below bring the camera up on any device on their own.'}
+          ? `📱 ${t('Camera features are enabled on mobile. They are battery- and CPU-heavy, and a hand-held phone rarely faces you squarely — if reading gets sluggish or warm, turn this back off.')}`
+          : `📵 ${t('Off by default on mobile: the camera guards (attention, doze, alarms, posture) and hand gestures run on desktop only, because they are battery/CPU-heavy and a phone rarely faces you squarely. Voice and clap commands work everywhere; eye gestures below bring the camera up on any device on their own.')}`}
       </p>
       {isCompact && !g.mobileCamera && (
         <p className="settings-note" style={{ marginTop: 0, color: 'var(--ox-bright, #b0413e)' }}>
-          You’re on a small screen, so the camera settings below are inactive until you tick that box.
+          {t('You’re on a small screen, so the camera settings below are inactive until you tick that box.')}
         </p>
       )}
 
-      <div className="field-section">Attention guards (experimental)</div>
-      <Field label="Webcam attention">
+      <div className="field-section">{t('Attention guards (experimental)')}</div>
+      <Field label={t('Webcam attention')}>
         <label className="inline-check">
           <input type="checkbox" checked={!!g.webcamAttention} onChange={(e) => patch({ webcamAttention: e.target.checked })} />
-          Pause fast reading when the camera can’t see you facing the screen with eyes open
+          {t('Pause fast reading when the camera can’t see you facing the screen with eyes open')}
         </label>
       </Field>
-      <Field label="Presenting score">
+      <Field label={t('Presenting score')}>
         <label className="inline-check">
           <input type="checkbox" checked={!!g.speakFace} onChange={(e) => patch({ speakFace: e.target.checked })} />
-          While advancing by reading aloud, watch your face too and score the presenting — eye contact, head steadiness, expressiveness, articulation (0–100, saved with the session; nothing is recorded). Goes to SpeechImprover with the session.
+          {t('While advancing by reading aloud, watch your face too and score the presenting — eye contact, head steadiness, expressiveness, articulation (0–100, saved with the session; nothing is recorded). Goes to SpeechImprover with the session.')}
         </label>
       </Field>
-      <Field label="Doze detection">
+      <Field label={t('Doze detection')}>
         <label className="inline-check">
           <input type="checkbox" checked={!!g.webcamDoze} onChange={(e) => patch({ webcamDoze: e.target.checked })} />
-          Stop read-aloud if your eyes stay shut or you’re away for a while
+          {t('Stop read-aloud if your eyes stay shut or you’re away for a while')}
         </label>
       </Field>
-      <Field label="Away alarm">
+      <Field label={t('Away alarm')}>
         <label className="inline-check">
           <input type="checkbox" checked={!!g.webcamAwayAlarm} onChange={(e) => patch({ webcamAwayAlarm: e.target.checked })} />
-          Sound an alarm if you look away for too long
+          {t('Sound an alarm if you look away for too long')}
         </label>
       </Field>
-      <Field label="Alarm after (seconds)">
+      <Field label={t('Alarm after (seconds)')}>
         <input type="number" min={3} max={300} value={g.webcamAwayAlarmSec ?? 15} disabled={!g.webcamAwayAlarm}
           onChange={(e) => patch({ webcamAwayAlarmSec: Math.max(3, Math.min(300, Number(e.target.value) || 15)) })} style={{ width: 70 }} />
       </Field>
-      <Field label="Escalating alarm">
+      <Field label={t('Escalating alarm')}>
         <label className="inline-check">
           <input type="checkbox" checked={!!g.webcamEscalatingAlarm} disabled={!g.webcamAwayAlarm} onChange={(e) => patch({ webcamEscalatingAlarm: e.target.checked })} />
-          Start quiet and get louder the longer you stay away
+          {t('Start quiet and get louder the longer you stay away')}
         </label>
       </Field>
-      <Field label="Posture nudge">
+      <Field label={t('Posture nudge')}>
         <label className="inline-check">
           <input type="checkbox" checked={!!g.webcamDistanceNudge} onChange={(e) => patch({ webcamDistanceNudge: e.target.checked })} />
-          Remind me to ease back when I’m sitting too close to the screen
+          {t('Remind me to ease back when I’m sitting too close to the screen')}
         </label>
       </Field>
-      <Field label="Look-away analytics">
+      <Field label={t('Look-away analytics')}>
         <label className="inline-check">
           <input type="checkbox" checked={!!g.webcamFocusStats} onChange={(e) => patch({ webcamFocusStats: e.target.checked })} />
-          Log focus % and distractions per session into Reading History
+          {t('Log focus % and distractions per session into Reading History')}
         </label>
       </Field>
-      <Field label="Show the feed">
+      <Field label={t('Show the feed')}>
         <label className="inline-check">
           <input type="checkbox" checked={g.webcamPreview !== false} onChange={(e) => patch({ webcamPreview: e.target.checked })} />
-          Show the Biometric Control Feed popup (self-view + oscilloscope + event log) while active
+          {t('Show the Biometric Control Feed popup (self-view + oscilloscope + event log) while active')}
         </label>
       </Field>
-      <Field label="Eye calibration">
-        <button onClick={onCalibrate} disabled={!onCalibrate}>⚙ Calibrate eye detection…</button>
+      <Field label={t('Eye calibration')}>
+        <button onClick={onCalibrate} disabled={!onCalibrate}>⚙ {t('Calibrate eye detection…')}</button>
       </Field>
 
-      <div className="field-section">🎥 Camera feed looks (display only)</div>
+      <div className="field-section">🎥 {t('Camera feed looks (display only)')}</div>
       <p className="settings-note" style={{ marginTop: 0 }}>
-        Pure flavour for the self-view popup — detection always reads the raw frames. The eye
-        rotoscope pins graphics over your detected eyes; with the WPM glow on they burn brighter the
-        faster you read, like the reader avatars.
+        {t('Pure flavour for the self-view popup — detection always reads the raw frames. The eye rotoscope pins graphics over your detected eyes; with the WPM glow on they burn brighter the faster you read, like the reader avatars.')}
       </p>
       {(() => {
         const fx = { ...DEFAULT_EYE_FX, ...(g.camEyeFx || {}) };
         const patchFx = (p) => patch({ camEyeFx: { ...fx, ...p } });
         return (
           <>
-            <Field label="👁 Eye rotoscope">
+            <Field label={`👁 ${t('Eye rotoscope')}`}>
               <label className="inline-check">
                 <input type="checkbox" checked={!!fx.on} onChange={(e) => patchFx({ on: e.target.checked })} />
-                Draw eye graphics over your eyes on the self-view (needs a camera feature running)
+                {t('Draw eye graphics over your eyes on the self-view (needs a camera feature running)')}
               </label>
             </Field>
             {fx.on && (
               <>
-                <Field label="Eye style">
+                <Field label={t('Eye style')}>
                   <div className="bio-gesture-maps">
                     <select value={fx.style} onChange={(e) => patchFx({ style: e.target.value })}>
                       {EYE_FX_STYLES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
                     </select>
                     {fx.style === 'emoji' && (
                       <input type="text" maxLength={4} value={fx.emoji} style={{ width: 52, textAlign: 'center', fontSize: 16 }}
-                        onChange={(e) => patchFx({ emoji: e.target.value })} title="The emoji drawn over each eye" />
+                        onChange={(e) => patchFx({ emoji: e.target.value })} title={t('The emoji drawn over each eye')} />
                     )}
-                    <input type="color" value={fx.color} onChange={(e) => patchFx({ color: e.target.value })} title="Eye colour / glow colour" />
+                    <input type="color" value={fx.color} onChange={(e) => patchFx({ color: e.target.value })} title={t('Eye colour / glow colour')} />
                   </div>
                 </Field>
-                <Field label="Eye size">
+                <Field label={t('Eye size')}>
                   <input type="range" min={0.3} max={2.2} step={0.1} value={fx.size} onChange={(e) => patchFx({ size: Number(e.target.value) })} />
                   <span className="range-val">{fx.size}×</span>
                 </Field>
-                <Field label="Eye opacity">
+                <Field label={t('Eye opacity')}>
                   <input type="range" min={0.1} max={1} step={0.05} value={fx.opacity} onChange={(e) => patchFx({ opacity: Number(e.target.value) })} />
                   <span className="range-val">{Math.round(fx.opacity * 100)}%</span>
                 </Field>
-                <Field label="🔥 Glow with WPM">
+                <Field label={`🔥 ${t('Glow with WPM')}`}>
                   <label className="inline-check">
                     <input type="checkbox" checked={!!fx.wpmGlow} onChange={(e) => patchFx({ wpmGlow: e.target.checked })} />
-                    The glow swells with your live reading speed
+                    {t('The glow swells with your live reading speed')}
                   </label>
                 </Field>
               </>
@@ -277,18 +276,18 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
           </>
         );
       })()}
-      <Field label="Camera filter">
+      <Field label={t('Camera filter')}>
         <FilterControls value={g.camFilter} onChange={(v) => patch({ camFilter: v })} />
       </Field>
 
-      <div className="field-section">Hand gestures (experimental)</div>
-      <Field label="Hand gestures">
+      <div className="field-section">{t('Hand gestures (experimental)')}</div>
+      <Field label={t('Hand gestures')}>
         <label className="inline-check">
           <input type="checkbox" checked={!!g.handGestures} onChange={(e) => patch({ handGestures: e.target.checked })} />
-          Control the reader with hand gestures via the camera (enable + map each below)
+          {t('Control the reader with hand gestures via the camera (enable + map each below)')}
         </label>
       </Field>
-      <Field label="Enabled gestures">
+      <Field label={t('Enabled gestures')}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {Object.entries(GESTURE_INFO).map(([k, info]) => {
             const gset = { ...DEFAULT_GESTURES, ...(g.handGestureSet || {}) };
@@ -301,11 +300,11 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
           })}
         </div>
       </Field>
-      <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>Gesture → command</div>
-      <Field label="Distinguish hands">
+      <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>{t('Gesture → command')}</div>
+      <Field label={t('Distinguish hands')}>
         <label className="inline-check">
           <input type="checkbox" checked={!!g.gestureHands} onChange={(e) => patch({ gestureHands: e.target.checked })} />
-          Map the left and right hand separately (per-hand override wins; empty = the any-hand mapping)
+          {t('Map the left and right hand separately (per-hand override wins; empty = the any-hand mapping)')}
         </label>
       </Field>
       {Object.entries(GESTURE_INFO).filter(([k]) => k !== 'scroll').map(([k, info]) => (
@@ -314,17 +313,17 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
             <CommandSelect value={gestureMap[k]} disabled={!g.handGestures} onChange={(v) => patch({ gestureMap: { ...gestureMap, [k]: v } })} />
             {g.gestureHands && (
               <>
-                <span className="bio-hand-lbl" title="Left-hand override">L</span>
+                <span className="bio-hand-lbl" title={t('Left-hand override')}>L</span>
                 <CommandSelect value={gestureMap[`${k}:L`]} disabled={!g.handGestures} onChange={(v) => patch({ gestureMap: { ...gestureMap, [`${k}:L`]: v } })} />
-                <span className="bio-hand-lbl" title="Right-hand override">R</span>
+                <span className="bio-hand-lbl" title={t('Right-hand override')}>R</span>
                 <CommandSelect value={gestureMap[`${k}:R`]} disabled={!g.handGestures} onChange={(v) => patch({ gestureMap: { ...gestureMap, [`${k}:R`]: v } })} />
               </>
             )}
             {/* Held gestures only — a wave/swipe is motion, not a hold, so a minimum hold makes no
                 sense for them. Raise this to reject accidental flicks. */}
             {HELD_GESTURES.includes(k) && (
-              <label className="bio-hold" title="Hold this gesture at least this long before it fires — raise it to filter accidental flicks">
-                <span className="bio-hand-lbl">hold</span>
+              <label className="bio-hold" title={t('Hold this gesture at least this long before it fires — raise it to filter accidental flicks')}>
+                <span className="bio-hand-lbl">{t('hold')}</span>
                 <input
                   type="number" min={HOLD_MIN_MS} max={HOLD_MAX_MS} step={50}
                   disabled={!g.handGestures}
@@ -338,53 +337,45 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
         </Field>
       ))}
       <p className="settings-note">
-        The open-palm <strong>joystick</strong> (scroll) isn’t remappable — it scrolls the Lines pane by how
-        far your palm is from its rest height. Fewer enabled gestures = fewer false positives, and each
-        held gesture only fires after you hold it for its <strong>hold time</strong> (default {DEFAULT_HOLD_MS}ms) —
-        raise a jittery one to filter accidentals. Unticking a gesture above <strong>disables it but keeps
-        its mapping</strong> for later.
+        {t('The open-palm joystick (scroll) isn’t remappable — it scrolls the Lines pane by how far your palm is from its rest height. Fewer enabled gestures = fewer false positives, and each held gesture only fires after you hold it for its hold time (default {ms}ms) — raise a jittery one to filter accidentals. Unticking a gesture above disables it but keeps its mapping for later.', { ms: DEFAULT_HOLD_MS })}
       </p>
-      <Field label="Hold-to-pause gesture">
+      <Field label={t('Hold-to-pause gesture')}>
         <div className="bio-gesture-maps">
           <select value={g.holdPauseGesture || ''} disabled={!g.handGestures} onChange={(e) => patch({ holdPauseGesture: e.target.value })}>
-            <option value="">— off —</option>
-            <option value="openPalm">✋ Open palm (raised hand)</option>
-            <option value="fist">✊ Fist</option>
-            <option value="victory">✌ Victory</option>
-            <option value="pointUp">☝ Point up</option>
-            <option value="iLoveYou">🤟 Rock / ILY</option>
-            <option value="thumbUp">👍 Thumb up</option>
-            <option value="thumbDown">👎 Thumb down</option>
+            <option value="">{t('— off —')}</option>
+            <option value="openPalm">✋ {t('Open palm (raised hand)')}</option>
+            <option value="fist">✊ {t('Fist')}</option>
+            <option value="victory">✌ {t('Victory')}</option>
+            <option value="pointUp">☝ {t('Point up')}</option>
+            <option value="iLoveYou">🤟 {t('Rock / ILY')}</option>
+            <option value="thumbUp">👍 {t('Thumb up')}</option>
+            <option value="thumbDown">👎 {t('Thumb down')}</option>
           </select>
         </div>
       </Field>
       <p className="settings-note">
-        Momentary: autoplay pauses <b>while you hold this gesture up</b> and resumes the moment you drop it —
-        unlike a mapped command, which toggles once. Pick a gesture you haven’t mapped to a command (and note
-        the open palm also drives the scroll joystick).
+        {t('Momentary: autoplay pauses while you hold this gesture up and resumes the moment you drop it — unlike a mapped command, which toggles once. Pick a gesture you haven’t mapped to a command (and note the open palm also drives the scroll joystick).')}
       </p>
-      <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>Hold to scroll</div>
+      <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>{t('Hold to scroll')}</div>
       <p className="settings-note" style={{ marginTop: 0 }}>
-        Map scroll up / down to <b>holding a gesture for longer than a threshold</b>: once the hold
-        crosses it, the Lines pane scrolls steadily until you let go. A gesture used here is owned by
-        hold-to-scroll — its one-shot command mapping above won’t fire (the profile check flags it).
+        {t('Map scroll up / down to holding a gesture for longer than a threshold: once the hold crosses it, the Lines pane scrolls steadily until you let go. A gesture used here is owned by hold-to-scroll — its one-shot command mapping above won’t fire (the profile check flags it).')}
       </p>
       {hsRows.map((r) => (
-        <Field key={r.dir} label={r.dir === 'up' ? '⬆ Hold to scroll up' : '⬇ Hold to scroll down'}>
+        <Field key={r.dir} label={r.dir === 'up' ? `⬆ ${t('Hold to scroll up')}` : `⬇ ${t('Hold to scroll down')}`}>
           <div className="bio-gesture-maps">
             <select
               value={r.gesture}
               disabled={!g.handGestures}
               onChange={(e) => patchHoldScroll(r.dir, { gesture: e.target.value })}
             >
-              <option value="">— off —</option>
+              <option value="">{t('— off —')}</option>
               {HELD_GESTURES.map((k) => (
                 <option key={k} value={k}>{GESTURE_INFO[k].icon} {GESTURE_INFO[k].label}</option>
               ))}
             </select>
             {r.gesture && (
-              <label className="bio-hold" title="Hold the gesture longer than this before scrolling starts">
-                <span className="bio-hand-lbl">for &gt;</span>
+              <label className="bio-hold" title={t('Hold the gesture longer than this before scrolling starts')}>
+                <span className="bio-hand-lbl">{t('for >')}</span>
                 <input
                   type="number" min={HOLD_SCROLL_MIN_SECS} max={HOLD_SCROLL_MAX_SECS} step={0.1}
                   disabled={!g.handGestures}
@@ -397,65 +388,63 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
           </div>
         </Field>
       ))}
-      <Field label="Hand calibration">
-        <button onClick={onCalibrateHand} disabled={!onCalibrateHand || !g.handGestures} title={g.handGestures ? '' : 'Turn on Hand gestures first'}>
-          🖐 Calibrate hand range…
+      <Field label={t('Hand calibration')}>
+        <button onClick={onCalibrateHand} disabled={!onCalibrateHand || !g.handGestures} title={g.handGestures ? '' : t('Turn on Hand gestures first')}>
+          🖐 {t('Calibrate hand range…')}
         </button>
       </Field>
 
-      <div className="field-section">Voice &amp; clap commands</div>
-      <Field label="Hands-free mode">
+      <div className="field-section">{t('Voice & clap commands')}</div>
+      <Field label={t('Hands-free mode')}>
         <select value={g.audioCtrlMode || 'Both'} onChange={(e) => patch({ audioCtrlMode: e.target.value })}>
-          <option>Voice</option>
-          <option>Claps</option>
-          <option>Both</option>
+          <option value="Voice">{t('Voice')}</option>
+          <option value="Claps">{t('Claps')}</option>
+          <option value="Both">{t('Both')}</option>
         </select>
       </Field>
       <p className="settings-note">
-        Turn listening on per tab with <strong>VOICE COMMAND</strong> in the controls bar. Voice needs a
-        Chromium browser + microphone; audio is analysed on your device.
+        {t('Turn listening on per tab with VOICE COMMAND in the controls bar. Voice needs a Chromium browser + microphone; audio is analysed on your device.')}
       </p>
 
-      <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>Spoken phrases → command</div>
+      <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>{t('Spoken phrases → command')}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {voiceRows.map((row, i) => (
           <div key={i} className="bio-voice-row" style={{ display: 'flex', gap: 6, alignItems: 'center', opacity: row.on === false ? 0.55 : 1 }}>
             <input
               type="checkbox"
               checked={row.on !== false}
-              title="Enable / disable this phrase (the mapping is kept while disabled; it can still be a sequence step)"
+              title={t('Enable / disable this phrase (the mapping is kept while disabled; it can still be a sequence step)')}
               onChange={(e) => setRows(voiceRows.map((r, j) => (j === i ? { ...r, on: e.target.checked } : r)))}
             />
             <input
               type="text"
               value={row.phrase}
-              placeholder="say…"
+              placeholder={t('say…')}
               onChange={(e) => setRows(voiceRows.map((r, j) => (j === i ? { ...r, phrase: e.target.value } : r)))}
               style={{ flex: '1 1 auto', minWidth: 0 }}
             />
-            <button title={recIdx === i ? 'Listening… stop' : 'Record what you say and use it as the phrase'} onClick={() => recordPhrase(i)}>
-              {recIdx === i ? '● …' : '● Record'}
+            <button title={recIdx === i ? t('Listening… stop') : t('Record what you say and use it as the phrase')} onClick={() => recordPhrase(i)}>
+              {recIdx === i ? '● …' : `● ${t('Record')}`}
             </button>
             <CommandSelect value={row.commandId} onChange={(v) => setRows(voiceRows.map((r, j) => (j === i ? { ...r, commandId: v } : r)))} />
-            <button title="Remove this phrase" onClick={() => setRows(voiceRows.filter((_, j) => j !== i))}>✕</button>
+            <button title={t('Remove this phrase')} onClick={() => setRows(voiceRows.filter((_, j) => j !== i))}>✕</button>
           </div>
         ))}
       </div>
-      <button style={{ marginTop: 6 }} onClick={() => setRows([...voiceRows, { phrase: '', commandId: 'nextWord' }])}>+ Add phrase</button>
+      <button style={{ marginTop: 6 }} onClick={() => setRows([...voiceRows, { phrase: '', commandId: 'nextWord' }])}>+ {t('Add phrase')}</button>
       {recErr && <p className="settings-note" style={{ color: 'var(--ox-bright, #b0413e)' }}>{recErr}</p>}
       <p className="settings-note">
-        Several phrases can point at one command. A phrase matches when the words you speak contain it,
-        so short, distinct words work best.
+        {t('Several phrases can point at one command. A phrase matches when the words you speak contain it, so short, distinct words work best.')}
       </p>
 
-      <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>Claps → command</div>
+      <div className="field-section" style={{ fontSize: 12, opacity: 0.85 }}>{t('Claps → command')}</div>
       {[1, 2, 3].map((n) => (
-        <Field key={n} label={`${'👏'.repeat(n)} ${n} clap${n > 1 ? 's' : ''}`}>
+        <Field key={n} label={`${'👏'.repeat(n)} ${t.n('{n} clap', '{n} claps', n)}`}>
           <div className="bio-gesture-maps">
             <input
               type="checkbox"
               checked={!(g.clapOff || {})[n]}
-              title="Enable / disable this clap pattern (the mapping is kept while disabled; it can still be a sequence step)"
+              title={t('Enable / disable this clap pattern (the mapping is kept while disabled; it can still be a sequence step)')}
               onChange={(e) => patch({ clapOff: { ...(g.clapOff || {}), [n]: !e.target.checked } })}
             />
             <CommandSelect value={clapMap[n]} disabled={!!(g.clapOff || {})[n]} onChange={(v) => patch({ clapMap: { ...clapMap, [n]: v } })} />
@@ -463,12 +452,9 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
         </Field>
       ))}
 
-      <div className="field-section">Sequences (combos)</div>
+      <div className="field-section">{t('Sequences (combos)')}</div>
       <p className="settings-note">
-        Chain 2–3 triggers — any mix of gestures, phrases, and claps — into one command (e.g. ✊ fist
-        then “go” = restart). Steps must follow each other within ~5 seconds, in order, with nothing
-        in between. Note: each step ALSO runs its own mapping — untick a step’s own mapping above if
-        it should only count inside the sequence.
+        {t('Chain 2–3 triggers — any mix of gestures, phrases, and claps — into one command (e.g. ✊ fist then “go” = restart). Steps must follow each other within ~5 seconds, in order, with nothing in between. Note: each step ALSO runs its own mapping — untick a step’s own mapping above if it should only count inside the sequence.')}
       </p>
       {(g.triggerSeqs || []).map((seq, i) => {
         const setSeq = (p) => patch({ triggerSeqs: g.triggerSeqs.map((s, j) => (j === i ? { ...s, ...p } : s)) });
@@ -478,80 +464,74 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
             <input
               type="checkbox"
               checked={seq.on !== false}
-              title="Enable / disable this sequence (kept while disabled)"
+              title={t('Enable / disable this sequence (kept while disabled)')}
               onChange={(e) => setSeq({ on: e.target.checked })}
             />
             {[0, 1, 2].map((si) => (
-              <select key={si} value={(seq.steps || [])[si] || ''} onChange={(e) => setStep(si, e.target.value)} title={si === 2 ? 'Optional third step' : `Step ${si + 1}`}>
-                <option value="">{si === 2 ? '(no 3rd step)' : `step ${si + 1}…`}</option>
-                <optgroup label="Gestures">
+              <select key={si} value={(seq.steps || [])[si] || ''} onChange={(e) => setStep(si, e.target.value)} title={si === 2 ? t('Optional third step') : t('Step {n}', { n: si + 1 })}>
+                <option value="">{si === 2 ? t('(no 3rd step)') : t('step {n}…', { n: si + 1 })}</option>
+                <optgroup label={t('Gestures')}>
                   {Object.entries(GESTURE_INFO).filter(([k]) => k !== 'scroll').flatMap(([k, info]) => [
                     <option key={k} value={`g:${k}`}>{info.icon} {info.label}</option>,
                     ...(g.gestureHands ? [
-                      <option key={`${k}L`} value={`g:${k}:L`}>{info.icon} {info.label} (left)</option>,
-                      <option key={`${k}R`} value={`g:${k}:R`}>{info.icon} {info.label} (right)</option>,
+                      <option key={`${k}L`} value={`g:${k}:L`}>{info.icon} {t('{gesture} (left)', { gesture: info.label })}</option>,
+                      <option key={`${k}R`} value={`g:${k}:R`}>{info.icon} {t('{gesture} (right)', { gesture: info.label })}</option>,
                     ] : []),
                   ])}
                 </optgroup>
-                <optgroup label="Phrases">
+                <optgroup label={t('Phrases')}>
                   {voiceRows.filter((r) => r.phrase).map((r) => <option key={r.phrase} value={`v:${r.phrase}`}>🗣 “{r.phrase}”</option>)}
                 </optgroup>
-                <optgroup label="Claps">
+                <optgroup label={t('Claps')}>
                   {[1, 2, 3].map((n) => <option key={n} value={`c:${n}`}>👏×{n}</option>)}
                 </optgroup>
               </select>
             ))}
             <span className="bio-seq-arrow">→</span>
             <CommandSelect value={seq.commandId} onChange={(v) => setSeq({ commandId: v })} />
-            <button title="Remove this sequence" onClick={() => patch({ triggerSeqs: g.triggerSeqs.filter((_, j) => j !== i) })}>✕</button>
+            <button title={t('Remove this sequence')} onClick={() => patch({ triggerSeqs: g.triggerSeqs.filter((_, j) => j !== i) })}>✕</button>
             <span className="settings-note" style={{ margin: 0, flexBasis: '100%' }}>
-              {(seq.steps || []).filter(Boolean).map((s) => stepLabel(s, GESTURE_INFO)).join('  →  ') || 'pick the steps…'}
+              {(seq.steps || []).filter(Boolean).map((s) => stepLabel(s, GESTURE_INFO)).join('  →  ') || t('pick the steps…')}
             </span>
           </div>
         );
       })}
-      <button style={{ marginTop: 6 }} onClick={() => patch({ triggerSeqs: [...(g.triggerSeqs || []), { steps: ['', ''], commandId: '', on: true }] })}>+ Add sequence</button>
+      <button style={{ marginTop: 6 }} onClick={() => patch({ triggerSeqs: [...(g.triggerSeqs || []), { steps: ['', ''], commandId: '', on: true }] })}>+ {t('Add sequence')}</button>
 
-      <div className="field-section">👁 Eye &amp; face gestures</div>
+      <div className="field-section">👁 {t('Eye & face gestures')}</div>
       <p className="settings-note">
-        Deliberate blinks, winks, eye rolls and held face poses (tongue out, puffed cheeks, raised
-        brows…), mapped by <b>how long you hold them</b>. Each gesture has a floor below which it's
-        just a face you were making anyway — {DELIBERATE_MS}ms for the eyes, longer for the poses
-        people strike without meaning to — so reading, talking and smiling never trigger anything.
-        These run on a phone whether or not the camera box above is ticked: switching them on is
-        consent enough.
+        {t('Deliberate blinks, winks, eye rolls and held face poses (tongue out, puffed cheeks, raised brows…), mapped by how long you hold them. Each gesture has a floor below which it’s just a face you were making anyway — {ms}ms for the eyes, longer for the poses people strike without meaning to — so reading, talking and smiling never trigger anything. These run on a phone whether or not the camera box above is ticked: switching them on is consent enough.', { ms: DELIBERATE_MS })}
       </p>
-      <Field label="Eye gestures on">
+      <Field label={t('Eye gestures on')}>
         <input
           type="checkbox"
           checked={!!eye.on}
           disabled={!eyeOk && !eye.on}
-          title={!eyeOk && !eye.on ? 'Fix the mapping problems below first' : 'Turns on the front camera while reading'}
+          title={!eyeOk && !eye.on ? t('Fix the mapping problems below first') : t('Turns on the front camera while reading')}
           onChange={(e) => patchEye({ on: e.target.checked })}
         />
       </Field>
       {eye.on && !eyeOk && (
         <p className="settings-note" style={{ color: 'var(--ox-bright, #b0413e)' }}>
-          ⚠ These mappings can’t be armed until the errors below are fixed.
+          ⚠ {t('These mappings can’t be armed until the errors below are fixed.')}
         </p>
       )}
-      <Field label="Audio timing cue">
+      <Field label={t('Audio timing cue')}>
         <div className="bio-gesture-maps">
           <input type="checkbox" checked={!!eye.cue} onChange={(e) => patchEye({ cue: e.target.checked })} />
           <span className="settings-note" style={{ margin: 0 }}>
-            A tick when the hold enters a window (let go now), a lower one when it drops into a gap, a
-            buzz once you’re past them all.
+            {t('A tick when the hold enters a window (let go now), a lower one when it drops into a gap, a buzz once you’re past them all.')}
           </span>
         </div>
       </Field>
       {eye.cue && (
-        <Field label="Cue volume">
+        <Field label={t('Cue volume')}>
           <input
             type="range" min={0} max={100} step={5}
             value={Math.round((eye.cueVolume ?? 1) * 100)}
             onChange={(e) => patchEye({ cueVolume: Number(e.target.value) / 100 })}
           />
-          <button style={{ marginLeft: 6 }} onClick={() => cueRef.current.play('enter', eye.cueVolume ?? 1)}>Test ♪</button>
+          <button style={{ marginLeft: 6 }} onClick={() => cueRef.current.play('enter', eye.cueVolume ?? 1)}>{t('Test')} ♪</button>
         </Field>
       )}
       {/* Live meter: the hold you're doing right now and which window it's in. Without it, tuning
@@ -564,11 +544,11 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
               <span className={`bio-eye-ms${hold.inWindow ? ' in' : ''}`}>{Math.round(hold.ms)}ms</span>
               <span className="settings-note" style={{ margin: 0 }}>
                 {hold.inWindow
-                  ? `→ ${COMMANDS.find((c) => c.id === hold.inWindow.commandId)?.label || hold.inWindow.commandId} — release now`
-                  : hold.next ? `next window at ${hold.next.minMs}ms` : 'past every window'}
+                  ? `→ ${t('{command} — release now', { command: COMMANDS.find((c) => c.id === hold.inWindow.commandId)?.label || hold.inWindow.commandId })}`
+                  : hold.next ? t('next window at {ms}ms', { ms: hold.next.minMs }) : t('past every window')}
               </span>
             </>
-          ) : <span className="settings-note" style={{ margin: 0 }}>Hold a blink, wink or face pose to see it measured here…</span>}
+          ) : <span className="settings-note" style={{ margin: 0 }}>{t('Hold a blink, wink or face pose to see it measured here…')}</span>}
         </div>
       )}
       {eyeRows.map((r, i) => {
@@ -580,44 +560,43 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
             <input
               type="checkbox"
               checked={r.on !== false}
-              title="Enable / disable this mapping (kept while disabled — a disabled row can't conflict)"
+              title={t("Enable / disable this mapping (kept while disabled — a disabled row can't conflict)")}
               onChange={(e) => setRow({ on: e.target.checked })}
             />
             <select value={r.kind || ''} onChange={(e) => setRow({ kind: e.target.value })}>
-              <option value="">gesture…</option>
-              <optgroup label="Eyes">
+              <option value="">{t('gesture…')}</option>
+              <optgroup label={t('Eyes')}>
                 {EYE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {k.label}</option>)}
               </optgroup>
-              <optgroup label="Gaze (held, head still)">
-                {GAZE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {k.label} — min {k.floor}ms</option>)}
+              <optgroup label={t('Gaze (held, head still)')}>
+                {GAZE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {t('{gesture} — min {ms}ms', { gesture: k.label, ms: k.floor })}</option>)}
               </optgroup>
-              <optgroup label="Face poses (held)">
-                {FACE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {k.label} — min {k.floor}ms</option>)}
+              <optgroup label={t('Face poses (held)')}>
+                {FACE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {t('{gesture} — min {ms}ms', { gesture: k.label, ms: k.floor })}</option>)}
               </optgroup>
             </select>
             <span className="bio-eye-range">
               <input
                 type="number" min={kindFloorMs(r.kind)} max={MAX_HOLD_MS} step={50} value={r.minMs ?? ''}
-                title={`Shortest hold that counts (at least ${kindFloorMs(r.kind)}ms for this gesture)`}
+                title={t('Shortest hold that counts (at least {ms}ms for this gesture)', { ms: kindFloorMs(r.kind) })}
                 onChange={(e) => setRow({ minMs: Number(e.target.value) })}
               />
               <span>–</span>
               <input
                 type="number" min={kindFloorMs(r.kind)} max={MAX_HOLD_MS} step={50} value={r.maxMs ?? ''}
-                title="Longest hold that counts" onChange={(e) => setRow({ maxMs: Number(e.target.value) })}
+                title={t('Longest hold that counts')} onChange={(e) => setRow({ maxMs: Number(e.target.value) })}
               />
               <span>ms</span>
             </span>
             <span className="bio-seq-arrow">→</span>
             <CommandSelect value={r.commandId} onChange={(v) => setRow({ commandId: v })} />
-            <button title="Remove this mapping" onClick={() => setEyeRows(eyeRows.filter((_, j) => j !== i))}>✕</button>
+            <button title={t('Remove this mapping')} onClick={() => setEyeRows(eyeRows.filter((_, j) => j !== i))}>✕</button>
             {mine.map((p, k) => (
               <span key={k} className={`bio-eye-problem ${p.level}`}>{p.level === 'error' ? '⛔' : '⚠'} {p.message}</span>
             ))}
             {ALL_KINDS.find((k) => k.id === r.kind)?.natural && (
               <span className="bio-eye-problem warn">
-                ⚠ You’ll do this without meaning to — hold it noticeably longer than feels natural, and
-                prefer it for harmless actions.
+                ⚠ {t('You’ll do this without meaning to — hold it noticeably longer than feels natural, and prefer it for harmless actions.')}
               </span>
             )}
             {ALL_KINDS.find((k) => k.id === r.kind)?.hint && (
@@ -630,12 +609,12 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
         style={{ marginTop: 6 }}
         onClick={() => setEyeRows([...eyeRows, { kind: 'blink', minMs: 600, maxMs: 1000, commandId: '', on: true }])}
       >
-        + Add eye mapping
+        + {t('Add eye mapping')}
       </button>
       {!eyeRows.length && (
         <button
           style={{ marginTop: 6, marginLeft: 6 }}
-          title="A sane starting set you can edit"
+          title={t('A sane starting set you can edit')}
           onClick={() => setEyeRows([
             { kind: 'blink', minMs: 600, maxMs: 1000, commandId: 'playPause', on: true },
             { kind: 'winkL', minMs: 600, maxMs: 1200, commandId: 'prevLine', on: true },
@@ -643,14 +622,12 @@ export default function BiometricControlsDialog({ global, onPatch, onCalibrate, 
             { kind: 'tongueOut', minMs: 500, maxMs: 1400, commandId: 'jumpToCurrent', on: true },
           ])}
         >
-          Use a starter set
+          {t('Use a starter set')}
         </button>
       )}
 
       <p className="settings-note">
-        Everything runs on-device — camera frames and microphone audio are analysed locally and never
-        recorded or uploaded; the camera/mic only run while a control here is on. The face/hand models
-        download once on first use and need a WebGL browser.
+        {t('Everything runs on-device — camera frames and microphone audio are analysed locally and never recorded or uploaded; the camera/mic only run while a control here is on. The face/hand models download once on first use and need a WebGL browser.')}
       </p>
     </Dialog>
   );

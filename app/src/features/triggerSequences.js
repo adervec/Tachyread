@@ -8,6 +8,8 @@
 // `windowMs` — a stray event in between breaks the chain (predictability beats cleverness here).
 // Rows: { steps: ['g:fist','v:play'], commandId, on }. Pure — see triggerSequences.test.mjs.
 
+import { t } from '../i18n.js';
+
 export function stepMatches(step, eventKey) {
   if (step === eventKey) return true;
   // Hand-agnostic gesture step matches a hand-qualified event (g:fist matches g:fist:L / g:fist:R).
@@ -41,7 +43,8 @@ export function stepLabel(key, gestureInfo = {}) {
   if (key.startsWith('g:')) {
     const [, kind, hand] = key.split(':');
     const gi = gestureInfo[kind];
-    return `${gi?.icon || '🖐'} ${gi?.label || kind}${hand ? ` (${hand === 'L' ? 'left' : 'right'})` : ''}`;
+    const name = gi?.label || kind;
+    return `${gi?.icon || '🖐'} ${hand ? (hand === 'L' ? t('{gesture} (left)', { gesture: name }) : t('{gesture} (right)', { gesture: name })) : name}`;
   }
   if (key.startsWith('v:')) return `🗣 “${key.slice(2)}”`;
   if (key.startsWith('c:')) return `👏×${key.slice(2)}`;

@@ -1,5 +1,11 @@
 [
   {
+    "date": "2026-11-21",
+    "items": [
+      "The rest of Tachyread now speaks your language: Help, Grab Text (OCR), the biometric and camera controls, eye warm-up, comfort reminders and the avatar and font pickers. The narrated Help slideshow still speaks English, since its voices are English-only."
+    ]
+  },
+  {
     "date": "2026-11-20",
     "items": [
       "Audio is now in your language too: the Audiobook Command Centre, narration and recording, audio settings, audiobook export and sync, and the reading-aloud voice feedback. Voice names stay as they are, since narration tags use them.",

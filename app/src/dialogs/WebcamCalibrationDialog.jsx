@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
+import { t } from '../i18n.js';
 
 // Calibrates the eyes-open vs eyes-shut threshold for the current user, so doze / attention detection
 // is robust across faces, glasses and lighting. Drives the live monitor (passed in) through an open
@@ -34,26 +35,25 @@ export default function WebcamCalibrationDialog({ monitor, onSave, onClose }) {
   }
 
   return (
-    <Dialog title="Calibrate eye detection" onClose={onClose} width={460} buttons={<button onClick={onClose}>Close</button>}>
+    <Dialog title={t('Calibrate eye detection')} onClose={onClose} width={460} buttons={<button onClick={onClose}>{t('Close')}</button>}>
       {phase === 'intro' && (
         <>
           <p className="settings-note">
-            This learns your eyes-open vs eyes-shut so doze / attention detection works across faces,
-            glasses and lighting. You’ll look at the screen for a moment, then gently close your eyes.
-            The camera must be running (turn on a webcam guard first).
+            {t('This learns your eyes-open vs eyes-shut so doze / attention detection works across faces, glasses and lighting. You’ll look at the screen for a moment, then gently close your eyes. The camera must be running (turn on a webcam guard first).')}
           </p>
-          <button className="dict-rec" onClick={run}>● Start calibration</button>
+          <button className="dict-rec" onClick={run}>● {t('Start calibration')}</button>
         </>
       )}
-      {phase === 'open' && <Step text="Look at the screen with your eyes open…" remain={remain} />}
-      {phase === 'closed' && <Step text="Now gently close your eyes…" remain={remain} />}
+      {phase === 'open' && <Step text={t('Look at the screen with your eyes open…')} remain={remain} />}
+      {phase === 'closed' && <Step text={t('Now gently close your eyes…')} remain={remain} />}
       {phase === 'done' && result && (
-        <p className="tw-detected">✓ Calibrated — eyes-shut threshold set to {result.threshold.toFixed(2)} (open ≈ {result.open?.toFixed(2)}{result.closed != null ? `, shut ≈ ${result.closed.toFixed(2)}` : ''}).</p>
+        <p className="tw-detected">✓ {result.closed != null
+            ? t('Calibrated — eyes-shut threshold set to {threshold} (open ≈ {open}, shut ≈ {shut}).', { threshold: result.threshold.toFixed(2), open: result.open?.toFixed(2), shut: result.closed.toFixed(2) })
+            : t('Calibrated — eyes-shut threshold set to {threshold} (open ≈ {open}).', { threshold: result.threshold.toFixed(2), open: result.open?.toFixed(2) })}</p>
       )}
       {phase === 'unsupported' && (
         <p className="settings-note">
-          Calibration needs the eye-landmark model running — turn on a webcam guard (Attention or Doze)
-          so the camera + model are active, in a WebGL/Chromium browser, then try again.
+          {t('Calibration needs the eye-landmark model running — turn on a webcam guard (Attention or Doze) so the camera + model are active, in a WebGL/Chromium browser, then try again.')}
         </p>
       )}
     </Dialog>

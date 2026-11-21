@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import Dialog from './Dialog.jsx';
 import { HELP_SECTIONS, sectionText } from '../features/helpContent.js';
 import { printHtml, slideshowHtml } from '../features/helpExport.js';
+import { t } from '../i18n.js';
 
 // In-app help: navigable sections (the app has grown, so there's a jump-to sidebar) with full-text
 // search, and one-click export to PDF (print) or a self-contained narrated slideshow. Content lives
@@ -38,31 +39,31 @@ export default function HelpDialog({ onClose }) {
 
   return (
     <Dialog
-      title="Help"
+      title={t('Help')}
       onClose={onClose}
       width={860}
       buttons={<>
-        <button onClick={exportPdf} title="Open a print-ready version — choose “Save as PDF”">⭳ PDF</button>
-        <button onClick={exportSlideshow} title="Download a self-contained narrated slideshow (HTML) with speech narration">⭳ Slideshow</button>
+        <button onClick={exportPdf} title={t('Open a print-ready version — choose “Save as PDF”')}>⭳ PDF</button>
+        <button onClick={exportSlideshow} title={t('Download a self-contained narrated slideshow (HTML) with speech narration')}>⭳ {t('Slideshow')}</button>
         <span style={{ flex: 1 }} />
-        <button onClick={onClose}>Close</button>
+        <button onClick={onClose}>{t('Close')}</button>
       </>}
     >
       <input
         type="text"
         className="fp-search"
         autoFocus
-        placeholder="Search help… (e.g. scroll, wpm, ocr, gestures, covers)"
+        placeholder={t('Search help… (e.g. scroll, wpm, ocr, gestures, covers)')}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         style={{ width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
       />
       <div className="help-layout">
-        <nav className="help-nav" aria-label="Help sections">
+        <nav className="help-nav" aria-label={t('Help sections')}>
           {shown.map((s) => (
             <button key={s.id} className="help-navlink" onClick={() => jumpTo(s.id)}>{s.title}</button>
           ))}
-          {!shown.length && <span className="settings-note">No matches</span>}
+          {!shown.length && <span className="settings-note">{t('No matches')}</span>}
         </nav>
         <div className="help-body" ref={bodyRef}>
           {shown.map((s) => (
@@ -87,7 +88,7 @@ export default function HelpDialog({ onClose }) {
               )}
             </section>
           ))}
-          {!shown.length && <p className="settings-note">No matches — try a shorter term.</p>}
+          {!shown.length && <p className="settings-note">{t('No matches — try a shorter term.')}</p>}
         </div>
       </div>
     </Dialog>

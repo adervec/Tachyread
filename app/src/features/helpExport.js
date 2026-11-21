@@ -3,6 +3,7 @@
 // browser's speech synthesis, auto-advancing). Both are pure string builders — see helpExport.test.mjs.
 
 import { sectionNarration } from './helpContent.js';
+import { t } from '../i18n.js';
 
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // First emoji-ish glyph in a title, for the slide poster. Falls back to a book.
@@ -23,7 +24,7 @@ function sectionPoints(s) {
 // ── print / PDF ────────────────────────────────────────────────────────────────
 // A clean, paginated HTML document. The caller opens it in a window and calls print() → the user
 // picks "Save as PDF". Self-contained (inline CSS), so it prints identically anywhere.
-export function printHtml(sections, { title = 'Tachyread — Help' } = {}) {
+export function printHtml(sections, { title = t('Tachyread — Help') } = {}) {
   const body = (sections || []).map((s) => `
     <section>
       <h2>${esc(s.title)}</h2>
@@ -43,7 +44,7 @@ export function printHtml(sections, { title = 'Tachyread — Help' } = {}) {
   @media print { .noprint { display: none; } body { padding: 0; } }
 </style></head><body>
   <h1>${esc(title)}</h1>
-  <p class="sub">Generated from the in-app help. Print → Save as PDF.</p>
+  <p class="sub">${esc(t('Generated from the in-app help. Print → Save as PDF.'))}</p>
   <ul class="toc">${toc}</ul>
   ${body}
 </body></html>`;
@@ -53,7 +54,7 @@ export function printHtml(sections, { title = 'Tachyread — Help' } = {}) {
 // One slide per section: a poster (the section's screenshot if provided, else a themed title card),
 // the key points, and spoken narration via speechSynthesis. Auto-advances when narration ends (with a
 // timed fallback if speech is unavailable/blocked). Fully self-contained — no external requests.
-export function slideshowHtml(sections, { title = 'Tachyread — Guided Tour' } = {}) {
+export function slideshowHtml(sections, { title = t('Tachyread — Guided Tour') } = {}) {
   const slides = (sections || []).map((s) => ({
     title: titleText(s.title),
     emoji: titleEmoji(s.title),
@@ -62,6 +63,8 @@ export function slideshowHtml(sections, { title = 'Tachyread — Guided Tour' } 
     shot: typeof s.shot === 'string' && /^data:image\//.test(s.shot) ? s.shot : null,
   }));
   const data = JSON.stringify(slides).replace(/</g, '\\u003c'); // safe inside <script>
+  // The page's own button labels (the script swaps Play / Pause), embedded the same safe way.
+  const labels = JSON.stringify({ play: `▶ ${t('Play')}`, pause: `⏸ ${t('Pause')}` }).replace(/</g, '\\u003c');
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
@@ -100,9 +103,9 @@ export function slideshowHtml(sections, { title = 'Tachyread — Guided Tour' } 
     <div class="panel"><h2 id="stitle"></h2><ul id="points"></ul></div>
   </main>
   <footer>
-    <button id="prev">‹ Prev</button>
-    <button id="play">⏸ Pause</button>
-    <button id="next">Next ›</button>
+    <button id="prev">‹ ${esc(t('Prev'))}</button>
+    <button id="play">⏸ ${esc(t('Pause'))}</button>
+    <button id="next">${esc(t('Next'))} ›</button>
     <div class="dots" id="dots"></div>
     <span class="grow"></span>
     <span class="say" id="saytext"></span>
@@ -110,6 +113,7 @@ export function slideshowHtml(sections, { title = 'Tachyread — Guided Tour' } 
 </div>
 <script>
 const SLIDES = ${data};
+const LABELS = ${labels};
 let i = 0, playing = true, timer = null;
 const $ = (id) => document.getElementById(id);
 function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
@@ -148,7 +152,7 @@ function go(n) {
   else if (window.speechSynthesis) speechSynthesis.cancel();
 }
 function setPlaying(p) {
-  playing = p; $('play').textContent = p ? '⏸ Pause' : '▶ Play';
+  playing = p; $('play').textContent = p ? LABELS.pause : LABELS.play;
   if (p) go(i); else { if (timer) clearTimeout(timer); if (window.speechSynthesis) speechSynthesis.cancel(); }
 }
 $('next').onclick = () => go(i+1);

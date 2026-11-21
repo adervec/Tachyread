@@ -3,6 +3,7 @@ import { GESTURE_INFO } from '../features/handGestures.js';
 import { actionLabel } from '../features/commandRegistry.js';
 import { filterCss } from '../features/displayFilters.js';
 import { normalizeEyeFx, wpmGlowIntensity, eyeShadow, mapEyePoint } from '../features/eyeFx.js';
+import { t } from '../i18n.js';
 
 // Eye rotoscope: graphics pinned over the reader's detected iris centres on the (mirrored,
 // cover-cropped) self-view. Pure flavour — detection reads the raw frames, never this overlay.
@@ -39,18 +40,18 @@ function EyeRoto({ eyes, fx, wpm, videoRef }) {
 // possible trigger and whether it's active. Everything is analysed on-device; nothing is uploaded.
 
 const CAM_EVENT = {
-  starting: { icon: '📷', text: 'starting camera…' },
-  watching: { icon: '👀', text: 'watching' },
-  away: { icon: '🙈', text: 'looked away' },
-  drowsy: { icon: '💤', text: 'drowsy' },
-  denied: { icon: '🚫', text: 'camera blocked' },
-  error: { icon: '⚠', text: 'camera error' },
-  unsupported: { icon: '⚠', text: 'detection unsupported' },
+  starting: { icon: '📷', text: t('starting camera…') },
+  watching: { icon: '👀', text: t('watching') },
+  away: { icon: '🙈', text: t('looked away') },
+  drowsy: { icon: '💤', text: t('drowsy') },
+  denied: { icon: '🚫', text: t('camera blocked') },
+  error: { icon: '⚠', text: t('camera error') },
+  unsupported: { icon: '⚠', text: t('detection unsupported') },
 };
 const HAND_EVENT = {
-  hand: { icon: '✋', text: 'hand' },
-  'scroll-up': { icon: '⬆', text: 'scroll up' },
-  'scroll-down': { icon: '⬇', text: 'scroll down' },
+  hand: { icon: '✋', text: t('hand') },
+  'scroll-up': { icon: '⬆', text: t('scroll up') },
+  'scroll-down': { icon: '⬇', text: t('scroll down') },
 };
 export default function BiometricFeed({
   stream, camState, handState, scope, mode = 'Both', log,
@@ -128,28 +129,28 @@ export default function BiometricFeed({
   // show the command each gesture is currently mapped to (scroll stays the built-in joystick).
   const camLegend = [];
   if (features) {
-    camLegend.push({ on: features.attention, icon: '👀', label: 'Attention pause', desc: 'Pauses fast reading when you’re not facing the screen' });
-    camLegend.push({ on: features.doze, icon: '💤', label: 'Doze stop', desc: 'Stops read-aloud if your eyes stay shut or you’re away' });
-    camLegend.push({ on: features.awayAlarm, icon: '🔔', label: 'Away alarm', desc: 'Sounds an alarm after you look away too long' });
-    camLegend.push({ on: features.distanceNudge, icon: '↔', label: 'Posture nudge', desc: 'Reminds you to ease back when you’re too close' });
-    camLegend.push({ on: features.focusStats, icon: '📊', label: 'Focus analytics', desc: 'Logs focus % and distractions to Reading History' });
+    camLegend.push({ on: features.attention, icon: '👀', label: t('Attention pause'), desc: t('Pauses fast reading when you’re not facing the screen') });
+    camLegend.push({ on: features.doze, icon: '💤', label: t('Doze stop'), desc: t('Stops read-aloud if your eyes stay shut or you’re away') });
+    camLegend.push({ on: features.awayAlarm, icon: '🔔', label: t('Away alarm'), desc: t('Sounds an alarm after you look away too long') });
+    camLegend.push({ on: features.distanceNudge, icon: '↔', label: t('Posture nudge'), desc: t('Reminds you to ease back when you’re too close') });
+    camLegend.push({ on: features.focusStats, icon: '📊', label: t('Focus analytics'), desc: t('Logs focus % and distractions to Reading History') });
     for (const [k, info] of Object.entries(GESTURE_INFO)) {
-      const does = k === 'scroll' ? 'scroll joystick' : (actionLabel(gestureMap?.[k]) || 'unassigned');
-      camLegend.push({ on: !!features.handGestures && !!(features.gestures && features.gestures[k]), icon: info.icon, label: `${info.label} → ${does}`, desc: info.desc });
+      const does = k === 'scroll' ? t('scroll joystick') : (actionLabel(gestureMap?.[k]) || t('unassigned'));
+      camLegend.push({ on: !!features.handGestures && !!(features.gestures && features.gestures[k]), icon: info.icon, label: t('{gesture} → {action}', { gesture: info.label, action: does }), desc: info.desc });
     }
   }
 
   return (
     <div ref={elRef} className={`bio-feed wb-${ring}`} role="log" aria-live="polite" style={posStyle}>
-      <div className="bio-feed-head" onPointerDown={onDown} onPointerMove={onPointerMove} onPointerUp={onUp} onPointerCancel={onUp} title="Drag to move">
+      <div className="bio-feed-head" onPointerDown={onDown} onPointerMove={onPointerMove} onPointerUp={onUp} onPointerCancel={onUp} title={t('Drag to move')}>
         <span className="wpv-dot" />
-        <span className="bf-title">Biometric Control Feed</span>
+        <span className="bf-title">{t('Biometric Control Feed')}</span>
         <span style={{ flex: 1 }} />
-        <button className={showLegend ? 'on' : ''} title={showLegend ? 'Back to the event feed' : 'Legend of every trigger'} onClick={() => setShowLegend((v) => !v)}>{showLegend ? '☰' : '?'}</button>
-        {canCalibrate && <button title="Calibrate eye detection" onClick={onCalibrate}>🎯</button>}
-        {onOpenSettings && <button title="Open Biometric Controls settings — mappings, calibration, eye gestures, alarms" onClick={onOpenSettings}>⚙️</button>}
-        <button title="Minimize (keeps running)" onClick={onMinimize}>➖</button>
-        <button title="Close — turns every biometric control off" onClick={onClose}>❌</button>
+        <button className={showLegend ? 'on' : ''} title={showLegend ? t('Back to the event feed') : t('Legend of every trigger')} onClick={() => setShowLegend((v) => !v)}>{showLegend ? '☰' : '?'}</button>
+        {canCalibrate && <button title={t('Calibrate eye detection')} onClick={onCalibrate}>🎯</button>}
+        {onOpenSettings && <button title={t('Open Biometric Controls settings — mappings, calibration, eye gestures, alarms')} onClick={onOpenSettings}>⚙️</button>}
+        <button title={t('Minimize (keeps running)')} onClick={onMinimize}>➖</button>
+        <button title={t('Close — turns every biometric control off')} onClick={onClose}>❌</button>
       </div>
 
       {stream && (
@@ -169,7 +170,7 @@ export default function BiometricFeed({
         <div className="bio-legend">
           {camLegend.length > 0 && (
             <div className="bl-group">
-              <div className="bl-title">🎥 Camera &amp; gestures — ✓ = active</div>
+              <div className="bl-title">🎥 {t('Camera & gestures — ✓ = active')}</div>
               {camLegend.map((r, i) => (
                 <div key={i} className={`bl-row${r.on ? ' on' : ' off'}`} title={r.desc}>
                   <span className="bl-state">{r.on ? '✓' : '·'}</span>
@@ -177,17 +178,17 @@ export default function BiometricFeed({
                   <span className="bl-label">{r.label}</span>
                 </div>
               ))}
-              {features?.handGestures && <button className="bl-cal" onClick={onCalibrateHand}>🖐 Calibrate hand range…</button>}
+              {features?.handGestures && <button className="bl-cal" onClick={onCalibrateHand}>🖐 {t('Calibrate hand range…')}</button>}
             </div>
           )}
           {voiceOn && (
             <>
               <div className={`bl-group${spokenOn ? '' : ' off'}`}>
-                <div className="bl-title">🗣 Voice {spokenOn ? '· active' : '· off'}</div>
+                <div className="bl-title">🗣 {spokenOn ? t('Voice · active') : t('Voice · off')}</div>
                 {(voiceCommands || []).map((c, i) => <div key={i} className="bl-cmd"><span className="bl-say">“{c.phrase}”</span><span className="bl-does">{actionLabel(c.commandId) || '—'}</span></div>)}
               </div>
               <div className={`bl-group${clapOn ? '' : ' off'}`}>
-                <div className="bl-title">👏 Claps {clapOn ? '· active' : '· off'}</div>
+                <div className="bl-title">👏 {clapOn ? t('Claps · active') : t('Claps · off')}</div>
                 {[1, 2, 3].map((n) => <div key={n} className="bl-cmd"><span className="bl-say">{'👏'.repeat(n)}</span><span className="bl-does">{actionLabel(clapMap?.[n]) || '—'}</span></div>)}
               </div>
             </>
@@ -200,7 +201,7 @@ export default function BiometricFeed({
           style={feedHeight ? { height: feedHeight } : undefined}
           onPointerUp={persistFeedHeight}
         >
-          {(!log || log.length === 0) && <div className="bio-feed-empty">Watching &amp; listening… detected events appear here.</div>}
+          {(!log || log.length === 0) && <div className="bio-feed-empty">{t('Watching & listening… detected events appear here.')}</div>}
           {(log || []).map((e) => (
             <div key={e.id} className={`bio-feed-line src-${e.source} ${e.tone || ''}`}>
               <span className="bf-ts">{e.time}</span>
