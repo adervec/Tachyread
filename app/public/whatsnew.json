@@ -2,7 +2,7 @@
   {
     "date": "2026-11-21",
     "items": [
-      "Numbers, dates and times now follow your language and region (decimal comma, day-first dates, 12- or 24-hour clock as set under the font picker), and Arabic, Persian and Urdu lay the whole app out right to left. A book or typing passage keeps its own direction.",
+      "Numbers now follow your language (a decimal comma in French, for example). Dates and times show as 2026-11-21 and 14:05 everywhere, or in your region’s style if you choose Regional under the font picker. Arabic, Persian and Urdu lay the whole app out right to left; a book or typing passage keeps its own direction.",
       "The rest of Tachyread now speaks your language: Help, Grab Text (OCR), the biometric and camera controls, eye warm-up, comfort reminders and the avatar and font pickers. The narrated Help slideshow still speaks English, since its voices are English-only."
     ]
   },
