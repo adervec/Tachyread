@@ -1,5 +1,11 @@
 [
   {
+    "date": "2026-11-22",
+    "items": [
+      "Cloud sync is safer: every sync reads the cloud copy first and merges it item by item, so a phone that was offline can no longer overwrite newer reading, notes or library changes from another device, and a deletion stays deleted. Sync now uses the cloud you chose once for every app (Google Drive); the old option of syncing through a folder on this computer is gone, and Back up and Restore are one Sync now button."
+    ]
+  },
+  {
     "date": "2026-11-21",
     "items": [
       "Numbers now follow your language (a decimal comma in French, for example). Dates and times show as 2026-11-21 and 14:05 everywhere, or in your region’s style if you choose Regional under the font picker. Arabic, Persian and Urdu lay the whole app out right to left; a book or typing passage keeps its own direction.",

@@ -313,9 +313,9 @@ export function defaultGlobalSettings() {
     // Ambient background soundscape — last-used type + volume. Volume is hard-capped low by the
     // engine (features/ambient.js) so it can never overpower read-aloud / TTS.
     ambient: { type: 'Brown', volume: 0.18 },
-    // Cloud sync / backup target. provider: 'localFolder' | 'googleDrive'; driveClientId is the user's
-    // own Google OAuth client ID (kept local). lastSync is a timestamp for the UI.
-    sync: { provider: 'localFolder', driveClientId: '', lastSync: 0, autoBackup: false, autoBackupMinutes: 30, auto: false },
+    // Cloud sync: always the shared cloud door (appFont.cloud); provider stays 'googleDrive' for older
+    // saved settings. lastSync is a timestamp for the UI.
+    sync: { provider: 'googleDrive', lastSync: 0, autoBackup: false, autoBackupMinutes: 30, auto: false },
     // When the syncable application settings (prefs + Default Tab Settings) last changed on this
     // device — the last-write-wins clock for settings sync. Bumped by updateGlobal, never by data churn.
     settingsUpdatedAt: 0,

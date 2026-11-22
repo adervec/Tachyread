@@ -1,8 +1,14 @@
 {
-  "schema": 13,
-  "localStorage": ["tachyread-*"],
-  "indexedDB": ["Tachyread"],
-  "drive": ["tachyread-*.json"],
+  "schema": 14,
+  "localStorage": [
+    "tachyread-*"
+  ],
+  "indexedDB": [
+    "Tachyread"
+  ],
+  "drive": [
+    "tachyread-*.json"
+  ],
   "caches": [],
   "export": "Settings > Data Management > Backup & restore"
 }

@@ -102,6 +102,8 @@ export async function pushWindow(books, cfg, { hours, capBytes, voice, device, o
     if (!Object.keys(cloud.books[r.cs].chunks).length) delete cloud.books[r.cs];
   }
   Object.assign(cloud, { v: 1, at: Date.now(), voice: voice || cloud.voice || '', device: device || '' });
+  // ponytail: only the device that pushes the window writes the manifest (the listener only reads it), so a
+  // read-then-write is enough; move it to syncDoc if a second device ever writes it
   await p.upload(conn, LISTEN_MANIFEST, new Blob([JSON.stringify(cloud)], { type: 'application/json' }));
   const chunks = Object.values(cloud.books).reduce((a, b) => a + Object.keys(b.chunks).length, 0);
   const bytes = Object.values(cloud.books).reduce((a, b) => a + Object.values(b.chunks).reduce((x, c) => x + (c.bytes || 0), 0), 0);

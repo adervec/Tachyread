@@ -1,257 +1,55 @@
-// Cloud-sync provider infrastructure. A provider is a tiny async interface the sync manager drives:
-//   supported()            -> can this browser use it at all?
-//   available(cfg)         -> true | { ok:false, reason } (config gate, e.g. a missing client ID)
-//   connect(cfg)           -> an opaque connection (dir handle, access token, …) or throws
-//   isConnected()          -> remembered connection still usable?
-//   disconnect()
-//   upload(conn,name,blob) / download(conn,name) -> Blob | null
-//
-// Two ship today:
-//   • LOCAL FOLDER — File System Access directory handle. Point it at your Google Drive / Dropbox /
-//     OneDrive *desktop sync folder* and you get cloud sync for free, with no accounts or API keys.
-//   • GOOGLE DRIVE — direct upload into a private app-data folder via Google Identity Services + the
-//     Drive REST API. Needs your own OAuth client ID (see the setup note in the dialog). The Drive
-//     bytes still never touch any server of ours; it's your browser talking to your Drive.
-
-import { setFsHandle } from '../../state/storage.js';
-import { subDir, subDirLabel, pickRoot, forgetRoot, folderSupported } from '../tachyFolder.js';
+// Cloud sync goes through the shared door, font.js's appFont.cloud (house standards 1 and 30): the
+// reader's private app folder in the cloud they chose once for every app (Google Drive today). No
+// Google code of Tachyread's own, and no "sync folder on this computer" any more: a folder cannot
+// read the cloud before writing and never reaches the phone. The sync manager drives this interface:
+//   supported() / available(cfg) / connect(cfg, { silent }) / isConnected() / disconnect()
+//   upload(conn, name, blob) / download(conn, name) -> Blob | null / stat(conn, name)
+//   putFile / getFile / removeFile: the pocket-listening clips
+// It keeps the id 'googleDrive' so a saved sync setting (and the menu bar's ☁) carries on.
 import { t } from '../../i18n.js';
 
 export const BACKUP_FILE_NAME = 'tachyread-backup.json';
-// Cloud sync carries reading PROGRESS only (see storage.exportProgressData) — a separate, smaller
-// file from the full local backup, so a Drive/Dropbox sync folder never holds your file bodies.
+// Cloud sync carries reading PROGRESS only (see storage.exportProgressData), never file bodies.
 export const PROGRESS_FILE_NAME = 'tachyread-progress.json';
-// The Literary Journey tracker (the user's ~5 MB book library + edits) rides its OWN file, not the
-// 5-second progress bundle — it's large and mostly static, so it syncs on explicit action / a long
-// interval instead of every few seconds while reading.
+// The Literary Journey tracker rides its own file: large and mostly static, synced less often.
 export const LIBRARY_FILE_NAME = 'tachyread-library.json';
 
-// The sync/ subfolder of the one Tachyread folder (tachyFolder.js); a legacy sync-only folder
-// keeps working until the one folder is chosen.
-export const localFolderProvider = {
-  id: 'localFolder',
-  label: t('Tachyread folder (in a Drive / Dropbox / OneDrive sync folder)'),
-  supported: folderSupported,
-  available: () => true,
-  async connect(cfg, { silent = false } = {}) {
-    const dir = await subDir('sync', { ask: !silent });
-    if (dir) return dir;
-    if (silent) throw new Error(t('The Tachyread folder isn’t connected on this device.'));
-    await pickRoot();
-    return subDir('sync', { ask: true });
-  },
-  async isConnected() { return !!(await subDir('sync')); },
-  async folderName() { return (await subDirLabel('sync')) || null; },
-  async disconnect() { await forgetRoot(); await setFsHandle('syncDir', null); },
-  async upload(dir, name, blob) {
-    const fh = await dir.getFileHandle(name, { create: true });
-    const w = await fh.createWritable();
-    await w.write(blob);
-    await w.close();
-  },
-  async download(dir, name) {
-    try {
-      const fh = await dir.getFileHandle(name);
-      return await fh.getFile();
-    } catch {
-      return null;
-    }
-  },
-  // Cheap change probe: the file's mtime without reading its bytes. null = no file yet.
-  async stat(dir, name) {
-    try {
-      const fh = await dir.getFileHandle(name);
-      return (await fh.getFile()).lastModified || null;
-    } catch {
-      return null;
-    }
-  },
-  // Pocket-listening audio: one file per chunk under sync/listen/; the id is the file name.
-  async putFile(dir, name, blob) {
-    const d = await dir.getDirectoryHandle('listen', { create: true });
-    const w = await (await d.getFileHandle(name, { create: true })).createWritable();
-    await w.write(blob); await w.close();
-    return name;
-  },
-  async getFile(dir, id) {
-    try { return await (await (await dir.getDirectoryHandle('listen')).getFileHandle(id)).getFile(); } catch { return null; }
-  },
-  async removeFile(dir, id) {
-    try { await (await dir.getDirectoryHandle('listen')).removeEntry(id); } catch { /* already gone */ }
-  },
-};
+const door = () => (typeof window !== 'undefined' ? window.appFont?.cloud || null : null);
 
-// ---- Google Drive (private appDataFolder) -------------------------------------------------------
-// Public OAuth client id (shared with the GymTracker app — an identifier, not a secret). It only
-// works from the JavaScript origins registered with Google; the origin gate below ALSO refuses it
-// app-side on any other origin (e.g. a fork deployed elsewhere) so a different deployment must
-// supply its own client id. With this, Drive sync needs zero per-user setup on the authorized site.
-export const BUILTIN_DRIVE_CLIENT_ID = '547617739897-br6dj2facmsc34qnkjb5u4dbfhju39pu.apps.googleusercontent.com';
-const OAUTH_ORIGINS = ['https://adervec.github.io'];
-export function driveOriginAllowed() {
-  try {
-    const h = location.hostname;
-    if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]') return true; // local dev, any port
-    return OAUTH_ORIGINS.indexOf(location.origin) !== -1;
-  } catch { return false; }
-}
-// Effective client id: a user-supplied one (fork / self-host) wins; otherwise the built-in id on the
-// authorized origin. Empty → Drive isn't available here (a fork without its own id).
-export function driveClientId(cfg) {
-  return (cfg?.driveClientId || '').trim() || (driveOriginAllowed() ? BUILTIN_DRIVE_CLIENT_ID : '');
-}
-
-let gisLoaded = null;
-function loadGis() {
-  if (gisLoaded) return gisLoaded;
-  gisLoaded = new Promise((resolve, reject) => {
-    if (window.google?.accounts?.oauth2) return resolve();
-    const s = document.createElement('script');
-    s.src = 'https://accounts.google.com/gsi/client';
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error(t('Could not load Google sign-in.')));
-    document.head.appendChild(s);
-  });
-  return gisLoaded;
-}
-// Scopes: the private app-data folder for sync, plus the standard identity scopes so we can show
-// which Google account is signed in (name + photo). `drive.appdata` only sees this app's own folder.
-const DRIVE_SCOPE = 'openid email profile https://www.googleapis.com/auth/drive.appdata';
-
-// Access token cached in memory only (never persisted). Lets isConnected() report a live session so
-// the auto-sync timer can fire for Drive, and lets a silent (prompt:'') refresh reconnect on boot.
-let _driveToken = null; // { value, exp }
-let _driveProfile = null; // { name, picture, email } — the signed-in Google account (cosmetic)
-function driveTokenValid() { return !!_driveToken && _driveToken.exp > Date.now() + 60000; }
-export function getDriveProfile() { return _driveProfile; }
-
-// Best-effort: fetch the signed-in account's name/photo for display. Never blocks or fails sync.
-async function fetchDriveProfile(token) {
-  try {
-    const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${token}` } });
-    if (r.ok) {
-      const j = await r.json();
-      _driveProfile = { name: j.name || j.email || t('Google account'), picture: j.picture || '', email: j.email || '' };
-    }
-  } catch { /* cosmetic only */ }
-  return _driveProfile;
-}
-
-function requestToken(clientId, prompt = '') {
-  return new Promise((resolve, reject) => {
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: DRIVE_SCOPE,
-      callback: (resp) => {
-        if (resp && resp.access_token) {
-          _driveToken = { value: resp.access_token, exp: Date.now() + ((resp.expires_in || 3600) * 1000) };
-          resolve(resp.access_token);
-        } else reject(new Error(resp?.error || t('Sign-in failed.')));
-      },
-      // Fires when the flow can't even produce a response (popup closed/blocked, network) — without
-      // this the promise would hang on a dismissed popup.
-      error_callback: (err) => reject(new Error(err?.message || err?.type || t('Sign-in was dismissed.'))),
-    });
-    // prompt:'' → silent when a prior grant + active Google session exist (boot/auto); a consent
-    // popup only when needed (call from a click). prompt:'consent' forces the chooser.
-    client.requestAccessToken({ prompt });
-  });
-}
-async function driveFind(token, name) {
-  const q = encodeURIComponent(`name='${name}' and trashed=false`);
-  const r = await fetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime)`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!r.ok) throw new Error(t('Drive list failed ({status}).', { status: r.status }));
-  const j = await r.json();
-  return j.files?.[0] || null;
-}
-async function driveFindId(token, name) {
-  return (await driveFind(token, name))?.id || null;
-}
-
-export const googleDriveProvider = {
+export const cloudProvider = {
   id: 'googleDrive',
-  label: t('Google Drive (private app folder)'),
-  supported: () => true,
-  available: (cfg) => (driveClientId(cfg) ? true : { ok: false, reason: t('Google Drive sync isn’t enabled on this deployment — add your own OAuth client ID below.') }),
-  // `silent` (used by auto-sync / boot) only reuses an existing grant — it never opens a popup.
+  get label() { return door()?.label?.() || t('Google Drive (private app folder)'); },
+  supported: () => !!door(),
+  available: () => (door() ? true : { ok: false, reason: t('Cloud sync isn’t available here.') }),
+  // `silent` (auto-sync, boot) never shows the sign-in window; it fails instead
   async connect(cfg, { silent = false } = {}) {
-    const clientId = driveClientId(cfg);
-    if (!clientId) throw new Error(t('Google Drive sync isn’t available here.'));
-    if (driveTokenValid()) {
-      if (!_driveProfile) await fetchDriveProfile(_driveToken.value);
-      return { token: _driveToken.value };
-    }
-    await loadGis();
-    let token;
-    try {
-      token = await requestToken(clientId, '');            // try silent (existing grant) first
-    } catch (e) {
-      if (silent) throw e;                                 // auto/boot: never pop a sign-in
-      token = await requestToken(clientId, 'consent');     // user-initiated: ask once
-    }
-    await fetchDriveProfile(token);                        // load name/photo (best-effort)
-    return { token };
+    const c = door();
+    if (!c) throw new Error(t('Cloud sync isn’t available here.'));
+    await c.signIn({ silent });
+    return c;
   },
-  async isConnected() { return driveTokenValid(); }, // a live in-session token → auto-sync may fire
-  async disconnect() { _driveToken = null; _driveProfile = null; },
-  async upload(conn, name, blob) {
-    const existing = await driveFindId(conn.token, name);
-    const meta = existing ? {} : { name, parents: ['appDataFolder'] };
-    // Drive's multipart upload is capped at 5 MB — the Trackyread library file sits right at that
-    // size, so big payloads go through the RESUMABLE protocol (init → one PUT of the bytes; no cap
-    // that matters here). Small files (the progress bundle) keep the single multipart request.
-    if (blob.size > 4 * 1024 * 1024) {
-      const initUrl = existing
-        ? `https://www.googleapis.com/upload/drive/v3/files/${existing}?uploadType=resumable`
-        : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable';
-      const init = await fetch(initUrl, {
-        method: existing ? 'PATCH' : 'POST',
-        headers: { Authorization: `Bearer ${conn.token}`, 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': blob.type || 'application/json' },
-        body: JSON.stringify(meta),
-      });
-      if (!init.ok) throw new Error(t('Drive upload init failed ({status}).', { status: init.status }));
-      const session = init.headers.get('Location');
-      if (!session) throw new Error(t('Drive upload init returned no session URL.'));
-      const put = await fetch(session, { method: 'PUT', body: blob });
-      if (!put.ok) throw new Error(t('Drive upload failed ({status}).', { status: put.status }));
-      return (await put.json().catch(() => null))?.id || existing;
-    }
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
-    form.append('file', blob);
-    const url = existing
-      ? `https://www.googleapis.com/upload/drive/v3/files/${existing}?uploadType=multipart`
-      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-    const r = await fetch(url, { method: existing ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${conn.token}` }, body: form });
-    if (!r.ok) throw new Error(t('Drive upload failed ({status}).', { status: r.status }));
-    return (await r.json().catch(() => null))?.id || existing; // the file id (pocket-listening clips are fetched by id)
+  async isConnected() { return !!door()?.signedIn(); },
+  async disconnect() { door()?.signOut(); },
+  async upload(c, name, blob) { await c.write(name, blob, blob.type || 'application/json'); return name; },
+  async download(c, name) { const b = await c.readBytes(name); return b ? new Blob([b]) : null; },
+  async stat(c, name) { return (await c.stat(name))?.version ?? null; },
+  // Pocket-listening clips: one file per chunk, addressed by name (older clips by their Drive id)
+  putFile(c, name, blob) { return cloudProvider.upload(c, name, blob); },
+  async getFile(c, id) {
+    const b = await c.readBytes(String(id).includes('.') ? id : { id }).catch(() => null);
+    return b ? new Blob([b]) : null;
   },
-  // Pocket-listening audio: one Drive file per chunk, addressed by id.
-  putFile(conn, name, blob) { return googleDriveProvider.upload(conn, name, blob); },
-  async getFile(conn, id) {
-    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, { headers: { Authorization: `Bearer ${conn.token}` } });
-    return r.ok ? await r.blob() : null;
-  },
-  async removeFile(conn, id) {
-    await fetch(`https://www.googleapis.com/drive/v3/files/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${conn.token}` } }).catch(() => {});
-  },
-  async download(conn, name) {
-    const id = await driveFindId(conn.token, name);
-    if (!id) return null;
-    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, { headers: { Authorization: `Bearer ${conn.token}` } });
-    return r.ok ? await r.blob() : null;
-  },
-  // Cheap change probe: one metadata query (no file body). null = no file yet.
-  async stat(conn, name) {
-    const f = await driveFind(conn.token, name);
-    return f?.modifiedTime ? Date.parse(f.modifiedTime) : null;
+  async removeFile(c, id) {
+    let name = id;
+    if (!String(id).includes('.')) name = (await c.list('').catch(() => [])).find((f) => f.id === id)?.name; // an older clip, saved by id
+    if (name) await c.remove(name).catch(() => {});
   },
 };
 
-export const SYNC_PROVIDERS = [localFolderProvider, googleDriveProvider];
-export function getSyncProvider(id) {
-  return SYNC_PROVIDERS.find((p) => p.id === id) || null;
-}
+export const SYNC_PROVIDERS = [cloudProvider];
+// Every saved setting (an old 'localFolder' one included) now means the shared cloud.
+export function getSyncProvider() { return door() ? cloudProvider : null; }
+// The signed-in account, as font.js knows it (shown in the top bar by <app-account>).
+export function getDriveProfile() { return (typeof window !== 'undefined' && window.appFont?.getAccount?.()) || null; }
+export function driveOriginAllowed() { return !!door(); }
+export function driveClientId() { return door() ? 'shared' : ''; }

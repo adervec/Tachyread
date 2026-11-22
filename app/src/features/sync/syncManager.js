@@ -1,118 +1,52 @@
-// Sync manager — pushes/pulls reading PROGRESS (not a full backup) through any provider.
-// Provider-agnostic: it only knows export → upload and download → merge-import. The bytes that
-// travel are progress-only (reading history keyed by file checksum + grab markers + book groups);
-// file bodies and grab images never leave the device. See storage.exportProgressData.
-
-import { exportProgressData, importProgressData, exportLibraryData, importLibraryData, getLibraryChangedAt, getLibrarySyncState, setLibrarySyncState, stampSync } from '../../state/storage.js';
+// Sync manager: reading PROGRESS and the Trackyread LIBRARY, each one file in the reader's cloud,
+// kept in step through font.js's appFont.cloud.syncDoc (house standard 30). syncDoc reads the cloud
+// copy first whenever it changed, merges, and writes only when the result differs, checking just
+// before writing that nobody wrote meanwhile. The merges are record by record (mergeDocs.js).
+// This device's copy is its last merged copy joined with what it holds now, so a phone that was
+// offline for a week adds its reading and never pushes an old view over the desktop's.
+// File bodies and grab images never leave the device (see storage.exportProgressData).
+import {
+  exportProgressData, importProgressData, exportLibraryData, importLibraryData,
+  getSyncCache, setSyncCache, stampSync, setLibrarySyncState, getLibraryChangedAt,
+} from '../../state/storage.js';
 import { getSyncProvider, PROGRESS_FILE_NAME, LIBRARY_FILE_NAME } from './syncProviders.js';
+import { mergeProgressDocs, mergeLibraryDocs } from './mergeDocs.js';
+import { t } from '../../i18n.js';
 
-// Read + parse a downloaded sync blob, turning a truncated/corrupt cloud file into a clear message
-// instead of a raw "Unexpected token" JSON error surfaced to the user.
-async function parseSyncBlob(blob, what) {
-  const text = await blob.text();
-  try { return JSON.parse(text); }
-  catch { throw new Error(`The ${what} sync file is corrupt or incomplete — try “Back up now” from a device that has your data.`); }
+async function syncOne(kind, name, exportFn, importFn, merge, opts) {
+  const p = getSyncProvider();
+  if (!p) throw new Error(t('Cloud sync isn’t available here.'));
+  const c = await p.connect(null, opts);
+  let doc = null;
+  const r = await c.syncDoc(name, {
+    load: async () => (doc = merge(await getSyncCache(kind), await exportFn())),
+    merge,
+    save: async (merged) => { doc = merged; await importFn(merged); },
+  });
+  if (doc) await setSyncCache(kind, doc);
+  const now = Date.now();
+  if (r.pulled) await stampSync(kind, { pulledAt: now, pulledFrom: '', remoteAt: now });
+  if (r.pushed) await stampSync(kind, { pushedAt: now });
+  return { at: now, pulled: r.pulled, pushed: r.pushed, doc };
 }
 
-export async function backupToProvider(providerId, cfg, opts = {}) {
-  const p = getSyncProvider(providerId);
-  if (!p) throw new Error('Unknown sync target.');
-  if (!p.supported()) throw new Error('This browser can’t use that sync target.');
-  const conn = await p.connect(cfg, opts);
-  const bundle = await exportProgressData();
-  const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
-  await p.upload(conn, PROGRESS_FILE_NAME, blob);
-  await stampSync('progress', { pushedAt: Date.now() });
-  return { at: Date.now(), bytes: blob.size };
-}
-// Whose copy did we just pull? (bundle.device = the device name that wrote it)
-const pulledStamp = (bundle) => ({ pulledAt: Date.now(), pulledFrom: bundle?.device || '', remoteAt: bundle?.exportedAt || bundle?.generatedAt || 0 });
+const size = (doc) => (doc ? JSON.stringify(doc).length : 0);
+const progress = (opts) => syncOne('progress', PROGRESS_FILE_NAME, exportProgressData, importProgressData, mergeProgressDocs, opts);
 
-export async function restoreFromProvider(providerId, cfg, opts = {}) {
-  const p = getSyncProvider(providerId);
-  if (!p) throw new Error('Unknown sync target.');
-  if (!p.supported()) throw new Error('This browser can’t use that sync target.');
-  const conn = await p.connect(cfg, opts);
-  const blob = await p.download(conn, PROGRESS_FILE_NAME);
-  if (!blob) throw new Error('No Tachyread progress sync found in that location yet — back up first.');
-  const bundle = await parseSyncBlob(blob, 'progress');
-  const r = await importProgressData(bundle);
-  await stampSync('progress', pulledStamp(bundle));
-  return { at: Date.now(), merged: r.merged };
-}
-
-// Read-merge-write: pull remote, merge into local, then push the merged result. Used by auto-sync so
-// concurrent edits on two devices converge instead of clobbering. `silent` connects without a popup.
+// Every way in is the same safe two-way sync now: "back up" and "restore" never overwrite blindly.
 export async function syncWithProvider(providerId, cfg, opts = {}) {
-  try { await restoreFromProvider(providerId, cfg, opts); }
-  catch (e) { if (!/No Tachyread progress sync/.test(e?.message || '')) throw e; } // first sync: nothing remote yet
-  return backupToProvider(providerId, cfg, opts);
+  const r = await progress(opts);
+  return { ...r, bytes: size(r.doc), merged: r.pulled ? 1 : 0 };
 }
+export const backupToProvider = syncWithProvider;
+export const restoreFromProvider = syncWithProvider;
 
-// ── Literary Journey library — its own file, same providers, but NOT on the reading-progress timer.
-export async function backupLibraryToProvider(providerId, cfg, opts = {}) {
-  const p = getSyncProvider(providerId);
-  if (!p) throw new Error('Unknown sync target.');
-  if (!p.supported()) throw new Error('This browser can’t use that sync target.');
-  const conn = await p.connect(cfg, opts);
-  const bundle = await exportLibraryData();
-  const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
-  await p.upload(conn, LIBRARY_FILE_NAME, blob);
-  await stampSync('library', { pushedAt: Date.now() });
-  return { at: Date.now(), bytes: blob.size, books: bundle.books.length };
-}
-
-export async function restoreLibraryFromProvider(providerId, cfg, opts = {}) {
-  const p = getSyncProvider(providerId);
-  if (!p) throw new Error('Unknown sync target.');
-  if (!p.supported()) throw new Error('This browser can’t use that sync target.');
-  const conn = await p.connect(cfg, opts);
-  const blob = await p.download(conn, LIBRARY_FILE_NAME);
-  if (!blob) throw new Error('No Tachyread library sync found in that location yet — back up first.');
-  const bundle = await parseSyncBlob(blob, 'library');
-  await stampSync('library', pulledStamp(bundle));
-  return importLibraryData(bundle, { mode: 'merge' });
-}
-
-// Diff-aware read-merge-write. A cheap stat (mtime / one Drive metadata query) decides whether the
-// remote changed, and a local change stamp decides whether we have anything to say — steady-state
-// sync compares two numbers and moves NO payload instead of shipping ~3,000 books each way.
 export async function syncLibraryWithProvider(providerId, cfg, opts = {}) {
-  const p = getSyncProvider(providerId);
-  if (!p) throw new Error('Unknown sync target.');
-  if (!p.supported()) throw new Error('This browser can’t use that sync target.');
-  const conn = await p.connect(cfg, opts);
-  const [state, changedAt] = await Promise.all([getLibrarySyncState(), getLibraryChangedAt()]);
-  const remoteStamp = p.stat ? await p.stat(conn, LIBRARY_FILE_NAME) : undefined; // undefined = provider can't stat
-  const localDirty = changedAt > (state?.localChange || 0);
-  const remoteNew = remoteStamp === undefined || (remoteStamp != null && remoteStamp !== (state?.remoteStamp || 0));
-
-  if (!localDirty && !remoteNew && remoteStamp != null) {
-    return { at: Date.now(), skipped: true, bytes: 0, books: null };
-  }
-
-  // Pull + merge only when the remote actually changed (per-book LWW; tombstones win deletes).
-  let pulled = false;
-  if (remoteNew && remoteStamp !== null) {
-    const blob = await p.download(conn, LIBRARY_FILE_NAME);
-    if (blob) {
-      const bundle = await parseSyncBlob(blob, 'library');
-      await importLibraryData(bundle, { mode: 'merge', fromSync: true });
-      await stampSync('library', pulledStamp(bundle));
-      pulled = true;
-    }
-  }
-
-  // Push only when we have local changes (or the remote file doesn't exist yet).
-  let bytes = 0, books = null, newStamp = remoteStamp ?? null;
-  if (localDirty || remoteStamp === null) {
-    const bundle = await exportLibraryData();
-    const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
-    await p.upload(conn, LIBRARY_FILE_NAME, blob);
-    bytes = blob.size; books = bundle.books.length;
-    await stampSync('library', { pushedAt: Date.now() });
-    newStamp = p.stat ? await p.stat(conn, LIBRARY_FILE_NAME) : null;
-  }
-  await setLibrarySyncState({ remoteStamp: newStamp, localChange: changedAt, syncedAt: Date.now() });
-  return { at: Date.now(), skipped: false, pulled, pushed: bytes > 0, bytes, books };
+  const changedAt = await getLibraryChangedAt();
+  const r = await syncOne('library', LIBRARY_FILE_NAME, exportLibraryData,
+    (doc) => importLibraryData(doc, { mode: 'merge', fromSync: true }), mergeLibraryDocs, opts);
+  await setLibrarySyncState({ localChange: changedAt, syncedAt: r.at });
+  return { at: r.at, skipped: !r.pulled && !r.pushed, pulled: r.pulled, pushed: r.pushed, bytes: r.pushed ? size(r.doc) : 0, books: r.doc?.books?.length ?? null };
 }
+export const backupLibraryToProvider = syncLibraryWithProvider;
+export const restoreLibraryFromProvider = syncLibraryWithProvider;

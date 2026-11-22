@@ -9,23 +9,20 @@ import {
 import { saveBlobToFile, pickFile, readFileText, fsSaveSupported } from '../features/fileSystem.js';
 import { blobLines, readBackup, isStreamableHeader } from '../features/backupStream.js';
 import { SPEECH_LOG_FIELDS } from '../features/speechLog.js';
-import { SYNC_PROVIDERS, getSyncProvider, driveOriginAllowed, getDriveProfile } from '../features/sync/syncProviders.js';
-import { backupToProvider, restoreFromProvider, syncWithProvider } from '../features/sync/syncManager.js';
-import { getRoot, pickRoot, forgetRoot, subDirLabel, folderSupported } from '../features/tachyFolder.js';
+import { getSyncProvider, getDriveProfile } from '../features/sync/syncProviders.js';
+import { syncWithProvider } from '../features/sync/syncManager.js';
 import { getSyncStamps } from '../state/storage.js';
 import { compressAllClips } from '../features/clipCodec.js';
 import { t, fmtNum } from '../i18n.js';
 
 // Where each kind of data goes and when it last moved — the honest answer to "is it syncing?".
 // Book files and audio have no cloud copy at all today; saying so beats letting people assume.
-function SyncStatus({ sync, folderName }) {
+function SyncStatus({ sync }) {
   const [stamps, setStamps] = useState({});
-  const [folder, setFolder] = useState('');
   useEffect(() => {
     getSyncStamps().then(setStamps).catch(() => {});
-    subDirLabel('sync').then(setFolder).catch(() => {});
-  }, [sync.provider, sync.lastSync, sync.lastLibrarySync, folderName]);
-  const where = sync.provider === 'googleDrive' ? t('Google Drive › private app folder') : folder ? `📁 ${folder}` : t('Tachyread folder — none chosen yet');
+  }, [sync.lastSync, sync.lastLibrarySync]);
+  const where = t('{cloud} › private app folder', { cloud: getSyncProvider()?.label || 'Google Drive' });
   const cell = (s, k) => (s ? (s[k] ? fmtDateTime(s[k]) : t('never')) : '—'); // null = this data never syncs
   const rows = [
     [t('Reading progress & tab settings'), where, stamps.progress || {}],
@@ -100,7 +97,7 @@ export default function DataDialog({ onClose }) {
   const [logEntries, setLogEntries] = useState(null);
   useEffect(() => { if (tab === 'log') getAppLog().then((l) => setLogEntries([...l].reverse())); }, [tab]);
 
-  const sync = { provider: 'localFolder', driveClientId: '', lastSync: 0, autoBackupMinutes: 30, ...(state.global.sync || {}) };
+  const sync = { provider: 'googleDrive', lastSync: 0, autoBackupMinutes: 30, ...(state.global.sync || {}) };
   function patchSync(p) { updateGlobal({ sync: { ...sync, ...p } }); }
   const provider = getSyncProvider(sync.provider);
   const providerOk = provider && provider.supported() && (provider.available(sync) === true);
@@ -111,17 +108,8 @@ export default function DataDialog({ onClose }) {
   const totalRecords = counts ? STORE_ORDER.reduce((a, k) => a + (counts[k] || 0), 0) : 0;
 
   // The signed-in Google account (live token's profile, or the last one we persisted for display).
-  const account = (sync.provider === 'googleDrive' && (getDriveProfile() || sync.profile)) || null;
+  const account = getDriveProfile() || sync.profile || null;
 
-  // The one Tachyread folder (sync/, cowork/, speech/ inside it).
-  const [folderName, setFolderName] = useState('');
-  const refreshFolder = () => getRoot().then((h) => setFolderName(h?.name || '')).catch(() => {});
-  useEffect(() => { refreshFolder(); }, []);
-  async function chooseFolder() {
-    try { await pickRoot(); await refreshFolder(); setMsg(t('Tachyread folder chosen — sync files go to its {folder} subfolder; Sync now to push.', { folder: 'sync/' })); }
-    catch (e) { if (e?.name !== 'AbortError') setMsg(t('Folder not chosen: {error}', { error: e?.message || e })); }
-  }
-  async function forgetFolder() { await forgetRoot(); await refreshFolder(); }
 
   // Re-encode stored WAV clips to AAC (clipCodec.js) — the one-off catch-up; new clips get it on save.
   async function compressClips() {
@@ -148,24 +136,6 @@ export default function DataDialog({ onClose }) {
       setMsg(t('Synced — reloading to apply…'));
       setTimeout(() => window.location.reload(), 1000);
     } catch (e) { setBusy(false); setMsg(t('Sync failed: {error}', { error: e?.message || e })); }
-  }
-  async function cloudBackup() {
-    setBusy(true); setMsg(t('Backing up to your sync target…'));
-    try {
-      const r = await backupToProvider(sync.provider, sync);
-      patchSync({ lastSync: r.at, auto: true, profile: getDriveProfile() || sync.profile });
-      setMsg(t('Backed up to {target} ({kb} KB).', { target: provider.label, kb: Math.round(r.bytes / 1024) }));
-    } catch (e) { setMsg(t('Sync backup failed: {error}', { error: e?.message || e })); }
-    setBusy(false);
-  }
-  async function cloudRestore() {
-    setBusy(true); setMsg(t('Restoring from your sync target…'));
-    try {
-      const r = await restoreFromProvider(sync.provider, sync);
-      patchSync({ auto: true, profile: getDriveProfile() || sync.profile });
-      setMsg(t.n('Merged {n} item — reloading…', 'Merged {n} items — reloading…', r.merged));
-      setTimeout(() => window.location.reload(), 1000);
-    } catch (e) { setBusy(false); setMsg(t('Sync restore failed: {error}', { error: e?.message || e })); }
   }
   // Sign in to Google without syncing yet — verifies OAuth and loads the account name/photo.
   async function connectGoogle() {
@@ -303,7 +273,7 @@ export default function DataDialog({ onClose }) {
             </tbody>
           </table>
           <div className="data-row">
-            <button className="toggle-on" onClick={cloudBackup} disabled={busy || !providerOk} title={providerOk ? '' : t('Set up a sync target on the Cloud sync tab')}>☁ {t('Back up now')}</button>
+            <button className="toggle-on" onClick={cloudSyncNow} disabled={busy || !providerOk} title={providerOk ? '' : t('Set up a sync target on the Cloud sync tab')}>☁ {t('Back up now')}</button>
             <button onClick={() => { setTab('backup'); doExport(); }} disabled={busy}>⬇ {t('Export to file')}</button>
             {sync.lastSync > 0 && <span className="settings-note" style={{ margin: 0 }}>{t('Last cloud sync: {date}', { date: fmtDateTime(sync.lastSync) })}</span>}
           </div>
@@ -357,9 +327,10 @@ export default function DataDialog({ onClose }) {
             {t('Your application & biometric settings are device-specific and stay put (they’re tuned to each device’s screen, camera and habits).')}{' '}
             {t('Tabs also show a small 🖥 badge when the same file is open on another synced device (as of the last sync).')}{' '}
             <strong>{t('Book files, document text, grabbed pages and audiobook audio never leave this device — there is no cloud copy of them.')}</strong>{' '}
-            {t('Nothing goes through our servers: it’s your browser talking to your own Google Drive (a private app-data folder) or to the Tachyread folder, which you put inside a folder your Drive / Dropbox / OneDrive desktop app already syncs.')}
+            {t('Nothing goes through our servers: it’s your browser talking to your own cloud’s private app folder, the one every app here shares (chosen once, in the hub).')}{' '}
+            {t('Each sync reads the cloud copy first and merges it item by item, so a device that was offline never overwrites newer reading from another.')}
           </p>
-          <SyncStatus sync={sync} folderName={folderName} />
+          <SyncStatus sync={sync} />
           <div className="field-row">
             <label>{t('This device’s name')}</label>
             <div>
@@ -367,27 +338,7 @@ export default function DataDialog({ onClose }) {
               <span className="settings-note" style={{ margin: '0 0 0 8px' }}>{t('Shown to your other devices on grabs made here.')}</span>
             </div>
           </div>
-          <div className="field-row">
-            <label>{t('Sync target')}</label>
-            <div>
-              <select value={sync.provider} onChange={(e) => patchSync({ provider: e.target.value })}>
-                {SYNC_PROVIDERS.map((p) => (
-                  <option key={p.id} value={p.id} disabled={!p.supported()}>{p.supported() ? p.label : t('{name} — unsupported here', { name: p.label })}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          {sync.provider === 'localFolder' && folderSupported() && (
-            <div className="field-row">
-              <label>{t('Tachyread folder')}</label>
-              <div className="data-row" style={{ margin: 0 }}>
-                <button onClick={chooseFolder} disabled={busy}>{folderName ? `📁 ${folderName}` : `📁 ${t('Choose folder…')}`}</button>
-                {folderName && <button onClick={forgetFolder} disabled={busy} title={t('Forget the folder on this device (nothing on disk is deleted)')}>{t('Forget')}</button>}
-                <span className="settings-note" style={{ margin: 0 }}>{t('One folder for everything Tachyread writes to disk: {sync}, {cowork} and {speech} inside it.', { sync: 'sync/', cowork: 'cowork/', speech: 'speech/' })}</span>
-              </div>
-            </div>
-          )}
-          {sync.provider === 'googleDrive' && account && (
+          {account && (
             <div className="gsync-account">
               {account.picture
                 ? <img className="gsync-pfp" src={account.picture} alt="" referrerPolicy="no-referrer" />
@@ -399,31 +350,14 @@ export default function DataDialog({ onClose }) {
               <button onClick={signOutGoogle} disabled={busy}>{t('Sign out')}</button>
             </div>
           )}
-          {sync.provider === 'googleDrive' && !account && driveOriginAllowed() && (
+          {!account && providerOk && (
             <div className="data-row">
               <button className="toggle-on" onClick={connectGoogle} disabled={busy || !providerOk}> {t('Sign in with Google')}</button>
               <span className="settings-note" style={{ margin: 0 }}>{t('Connect your Google account, then Sync now.')} {t('Data goes to a private Drive app-data folder only this app can see.')}</span>
             </div>
           )}
-          {sync.provider === 'googleDrive' && (
-            driveOriginAllowed() ? null : (
-              <>
-                <div className="field-row">
-                  <label>{t('Google OAuth client ID')}</label>
-                  <div>
-                    <input type="text" value={sync.driveClientId} onChange={(e) => patchSync({ driveClientId: e.target.value.trim() })} placeholder="xxxxx.apps.googleusercontent.com" style={{ width: '100%' }} />
-                  </div>
-                </div>
-                <p className="settings-note">
-                  {t('This isn’t the authorized deployment, so Drive needs your own OAuth client ID (kept on this device): in Google Cloud Console create an OAuth client ID → Web application, add this page’s origin to the authorized JavaScript origins, enable the Drive API, and paste the client ID.')}
-                </p>
-              </>
-            )
-          )}
           <div className="data-row">
             <button className="toggle-on" onClick={cloudSyncNow} disabled={busy || !providerOk}>🔄 {t('Sync now')}</button>
-            <button onClick={cloudBackup} disabled={busy || !providerOk}>☁ {t('Back up only')}</button>
-            <button onClick={cloudRestore} disabled={busy || !providerOk}>⬇ {t('Restore from sync')}</button>
             {!providerOk && providerReason && providerReason.reason && <span className="settings-note" style={{ margin: 0 }}>{providerReason.reason}</span>}
             {!providerOk && provider && !provider.supported() && <span className="settings-note" style={{ margin: 0 }}>{t('Needs a Chromium browser.')}</span>}
             {sync.lastSync > 0 && <span className="settings-note" style={{ margin: 0 }}>{t('Last sync: {date}', { date: fmtDateTime(sync.lastSync) })}</span>}

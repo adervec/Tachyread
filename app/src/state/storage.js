@@ -992,6 +992,17 @@ export async function getSyncStamps() {
   const db = await getDB();
   return (await db.get('library', 'syncStamps')) || {};
 }
+// This device's last merged copy of each cloud sync file (features/sync/mergeDocs.js): the next sync
+// joins local changes into it, so a device never pushes an older view. In the `library` store, which
+// stays out of backups (it is only a copy of what the cloud holds).
+export async function getSyncCache(kind) {
+  const db = await getDB();
+  return (await db.get('library', `syncCache:${kind}`)) || null;
+}
+export async function setSyncCache(kind, doc) {
+  const db = await getDB();
+  await db.put('library', doc, `syncCache:${kind}`);
+}
 export async function stampSync(kind, patch) {
   const db = await getDB();
   const cur = (await db.get('library', 'syncStamps')) || {};
@@ -1020,6 +1031,9 @@ export async function exportLibraryData(opts = {}) {
     subgenres: (await db.get('library', 'refs:subgenres'))?.data || null,
     goals: (await db.get('library', 'refs:goals'))?.data || null,
     queues: (await db.get('library', 'refs:queues'))?.data || null, // named reading queues
+    // when each list last changed, so a sync merge keeps the newer list rather than the newer file
+    stamps: Object.fromEntries(await Promise.all(['meta', 'authors', 'genres', 'subgenres', 'goals', 'queues']
+      .map(async (k) => [k, (await db.get('library', k === 'meta' ? 'meta' : `refs:${k}`))?.updatedAt || 0]))),
     crossNotes: (await db.get('library', 'crossNotes'))?.list || null,
     ai: includeAi ? (await db.get('library', 'ai')) || null : null,
     binding: includeBinding ? (await db.get('library', 'binding'))?.map || null : null,
@@ -1052,9 +1066,10 @@ export async function importLibraryData(bundle, opts = {}) {
     if (!existing) { await store.put(incoming, key); added++; }
     else if ((incoming.updatedAt || 0) >= (existing.updatedAt || 0)) { await store.put(incoming, key); merged++; }
   }
-  const stamp = bundle.generatedAt || Date.now();
+  const fileStamp = bundle.generatedAt || Date.now();
   for (const [k, val] of [['meta', bundle.meta], ['refs:authors', bundle.authors], ['refs:genres', bundle.genres], ['refs:subgenres', bundle.subgenres], ['refs:goals', bundle.goals], ['refs:queues', bundle.queues]]) {
     if (val == null) continue;
+    const stamp = bundle.stamps?.[k.replace('refs:', '')] || fileStamp; // a sync copy stamps each list
     const existing = await store.get(k);
     if (!existing || stamp >= (existing.updatedAt || 0)) await store.put({ data: val, updatedAt: stamp }, k);
   }

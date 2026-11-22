@@ -255,7 +255,7 @@ export default function MenuBar({ onFileOpen, onAction }) {
   // render stays pure; the token itself lives in memory only and a click re-auths silently.
   const sync = state.global.sync || {};
   const driveHere = !!driveClientId(sync);
-  const driveChosen = sync.provider === 'googleDrive';
+  const driveChosen = true; // ponytail: the shared cloud is the only sync target now
   const account = (driveChosen && sync.profile) || null;
   const gsyncTitle = !driveChosen
     ? t('Google Drive sync isn’t set up yet — click to choose it under Backup & Data')
