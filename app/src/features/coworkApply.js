@@ -1,5 +1,5 @@
 // Cowork I/O shared by the Cowork page and the scheduler: write the read-only activity snapshot into
-// the folder, commit an approved set of review rows (with an undo snapshot + log entry), and undo
+// the cowork folder in the reader's cloud (coworkCloud.js: read / write / list / remove by path), commit an approved set of review rows (with an undo snapshot + log entry), and undo
 // the last commit. The decisions are pure (coworkOps.js / coworkSnapshot.js); this only does I/O.
 import {
   allFiles, getLibraryBooks, getBinding, getLibraryRef, allTypingRuns, getSpeechLog, allFocusSessions,
@@ -13,11 +13,6 @@ import { makePlan, makeStep } from '../engine/typingPlans.js';
 import { COWORK_MANIFEST } from './coworkOps.js';
 import { t } from '../i18n.js';
 
-async function writeFile(dir, name, text) {
-  const fh = await dir.getFileHandle(name, { create: true });
-  const w = await fh.createWritable(); await w.write(text); await w.close();
-}
-
 // Gather everything and write snapshot/* into the cowork folder. Returns the file count.
 export async function writeSnapshot(dir, now = Date.now()) {
   const [files, books, bindMap, queues, goals, typingRuns, speechLog, focusSessions, manifests] = await Promise.all([
@@ -26,9 +21,8 @@ export async function writeSnapshot(dir, now = Date.now()) {
     allTypingRuns().catch(() => []), getSpeechLog().catch(() => []), allFocusSessions().catch(() => []), allAudiobookManifests().catch(() => []),
   ]);
   const out = buildSnapshot({ files, books, bindMap, queues: queues || [], goals: goals || {}, typingRuns, speechLog, focusSessions, manifests, now });
-  const sub = await dir.getDirectoryHandle('snapshot', { create: true });
   // What changed since the previous snapshot — read it back BEFORE overwriting.
-  const prevText = async (n) => { try { return await (await (await sub.getFileHandle(n)).getFile()).text(); } catch { return null; } };
+  const prevText = (n) => dir.read(`snapshot/${n}`);
   const [pb, pq, pm] = await Promise.all([prevText('books.json'), prevText('queues.json'), prevText('meta.json')]);
   let prev = null;
   try { if (pb) prev = { books: JSON.parse(pb), queues: pq ? JSON.parse(pq) : [], at: pm ? JSON.parse(pm).generatedAt : null }; } catch { prev = null; }
@@ -36,9 +30,9 @@ export async function writeSnapshot(dir, now = Date.now()) {
   const nowIso = new Date(now).toISOString();
   out['changes.json'] = JSON.stringify({ since: prev?.at || null, until: nowIso, changes }, null, 1);
   out['changes.md'] = changesMarkdown(changes, prev?.at || null, nowIso);
-  for (const [name, text] of Object.entries(out)) await writeFile(sub, name, text);
-  await writeFile(await dir.getDirectoryHandle('inbox', { create: true }), 'README.md', INBOX_README);
-  await writeFile(dir, 'cowork.json', JSON.stringify(COWORK_MANIFEST, null, 2)); // discovery manifest
+  for (const [name, text] of Object.entries(out)) await dir.write(`snapshot/${name}`, text);
+  await dir.write('inbox/README.md', INBOX_README);
+  await dir.write('cowork.json', JSON.stringify(COWORK_MANIFEST, null, 2)); // discovery manifest: the runner finds the app by it
   return Object.keys(out).length;
 }
 
@@ -64,23 +58,17 @@ applied from the Cowork page.)
 Reviewed files move to inbox/processed/ (or inbox/rejected/ if unreadable).
 `;
 export async function listInbox(dir) {
-  try {
-    const box = await dir.getDirectoryHandle('inbox', { create: true });
-    const names = [];
-    for await (const [n, h] of box.entries()) if (h.kind === 'file' && /\.json$/i.test(n)) names.push(n);
-    return names.sort();
-  } catch { return []; }
+  try { return (await dir.list('inbox')).filter((n) => /\.json$/i.test(n)); } catch { return []; }
 }
 export async function readInbox(dir, name) {
-  const box = await dir.getDirectoryHandle('inbox');
-  return (await (await box.getFileHandle(name)).getFile()).text();
+  const text = await dir.read(`inbox/${name}`);
+  if (text == null) throw new Error(t('{file} is no longer in the inbox', { file: name }));
+  return text;
 }
 export async function moveInbox(dir, name, to = 'processed') {
-  const box = await dir.getDirectoryHandle('inbox');
-  const text = await (await (await box.getFileHandle(name)).getFile()).text();
-  const dest = await box.getDirectoryHandle(to, { create: true });
-  await writeFile(dest, `${new Date().toISOString().replace(/[:.]/g, '-')}-${name}`, text);
-  await box.removeEntry(name);
+  const text = await dir.read(`inbox/${name}`);
+  if (text != null) await dir.write(`inbox/${to}/${new Date().toISOString().replace(/[:.]/g, '-')}-${name}`, text); // iso-ok: a file-name stamp
+  await dir.remove(`inbox/${name}`);
 }
 
 // Apply the ticked rows. `ai` is the current AI record; returns the next one (already saved).

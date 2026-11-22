@@ -12,7 +12,7 @@ import {
   buildDataset, buildProgress, buildDigest, buildCoworkRequest,
   buildApiMessages, parseAiOutput, contentHash,
 } from './journeyAi.js';
-import { subDir, subDirLabel } from './tachyFolder.js';
+import { cloudCoworkDir, NOT_SIGNED_IN } from './coworkCloud.js';
 import { opsInstruction, sanitizeOutput, planRows, isReportOnly, queuesForDataset, logRequest, reviewFirst, parkReply } from './coworkOps.js';
 import { writeSnapshot, commitRows } from './coworkApply.js';
 import { liveQueues } from './readingQueues.js';
@@ -24,14 +24,8 @@ import { dueActions, syncRole, recordRun, combineCoworkInstruction } from './cow
 import { sessionsForReview } from './sessionReview.js';
 import { t } from '../i18n.js';
 // The run notes below are shown in the sync history, so they are translated.
-const NOT_CONNECTED = () => t('skipped — Tachyread folder not connected (open the Cowork page once to re-grant)');
 
 const TICK_MS = 60_000;
-
-async function writeToDir(dir, name, text) {
-  const fh = await dir.getFileHandle(name, { create: true });
-  const w = await fh.createWritable(); await w.write(text); await w.close();
-}
 
 async function datasetWithProgress(light, books, ops = []) {
   const bindMap = await getBinding().catch(() => ({})); // real links — "link files" must see which are linked
@@ -76,12 +70,12 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
   // ── Cowork folder actions: one combined request write ──
   const coworkIds = due.filter((id) => id.startsWith('cw-') && id !== 'cw-snapshot');
   if (coworkIds.length) {
-    let note; let ok = true; let target = ai?.coworkDirPath || '';
+    let note; let ok = true; let target = '';
     try {
-      const dir = await subDir('cowork'); // silent: null when not chosen or permission lapsed
-      if (!dir) { ok = false; note = NOT_CONNECTED(); }
+      const dir = await cloudCoworkDir(); // silent: null when not signed in on this device
+      if (!dir) { ok = false; note = NOT_SIGNED_IN(); }
       else {
-        target = target || (await subDirLabel('cowork'));
+        target = dir.label;
         // One request file: if the last request hasn't been answered yet, fold its operations in
         // rather than overwriting it (the agent would never see the earlier, often bigger, request).
         const pending = ai?.requestLog?.[0] && ai.requestLog[0].at > (ai?.lastReplyAt || 0) ? ai.requestLog[0].ops : [];
@@ -91,8 +85,8 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
         const dataset = await datasetWithProgress(instr.mode === 'light', books, instr.ops);
         await writeSnapshot(dir, now); // the request's agent reads snapshot/ too
         const req = buildCoworkRequest(dataset, instr);
-        await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(req, null, 2));
-        await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, instr));
+        await dir.write('journey-cowork-request.json', JSON.stringify(req, null, 2));
+        await dir.write('journey-instructions.md', buildDigest(dataset, instr));
         ai = logRequest({ ...ai, instruction: { ...instr, updatedAt: now } }, { hash: req.requestHash, ops: instr.ops, at: now, auto: true }); // replies are matched back by hash
         note = t('auto-wrote cowork request ({mode})', { mode: instr.mode });
       }
@@ -104,11 +98,11 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
   if (due.includes('cw-snapshot')) {
     let ok = true; let note;
     try {
-      const dir = await subDir('cowork');
-      if (!dir) { ok = false; note = NOT_CONNECTED(); }
+      const dir = await cloudCoworkDir();
+      if (!dir) { ok = false; note = NOT_SIGNED_IN(); }
       else note = t('auto snapshot ({n} files)', { n: await writeSnapshot(dir, now) });
     } catch (e) { ok = false; note = t('snapshot failed: {error}', { error: e?.message || e }); }
-    ai = recordRun(ai, ['cw-snapshot'], { at: now, kind: 'cowork', target: ai?.coworkDirPath || t('cowork folder'), ok, note, auto: true });
+    ai = recordRun(ai, ['cw-snapshot'], { at: now, kind: 'cowork', target: t('cowork folder'), ok, note, auto: true });
   }
 
   // ── Direct API action ──

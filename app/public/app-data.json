@@ -7,7 +7,8 @@
     "Tachyread"
   ],
   "drive": [
-    "tachyread-*.json"
+    "tachyread-*.json",
+    "cowork-tachyread--*"
   ],
   "caches": [],
   "export": "Settings > Data Management > Backup & restore"

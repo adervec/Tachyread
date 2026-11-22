@@ -61,7 +61,7 @@ import {
 import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset, logRequest, opsForReply, opForRow, opForReport, PREP_NOTE_TYPES, reviewFirst, unparkReply } from '../features/coworkOps.js';
 import { writeSnapshot, commitRows, undoLastApply, listInbox, readInbox, moveInbox } from '../features/coworkApply.js';
 import { getDeviceId } from '../state/storage.js';
-import { subDir, subDirLabel, pickRoot } from '../features/tachyFolder.js';
+import { cloudCoworkDir, wasApplied, markApplied } from '../features/coworkCloud.js';
 import { deviceKind } from '../state/device.js';
 import { AXES, READER_ARCHETYPES, readerProfile, matchArchetype, currentArchetype, archetypeTrend, archetypeAxes } from '../features/readerArchetype.js';
 import { localDay, parseDay } from '../features/localDay.js';
@@ -3307,14 +3307,8 @@ function AnalyticsView({ books, dayAgg = [], ai = null, splitTypes = false, onSp
 }
 
 // ── AI / Cowork view ─────────────────────────────────────────────────────────────────────────────
-// The cowork files live in the Tachyread folder's cowork/ subfolder (tachyFolder.js).
-async function writeToDir(dir, name, text) {
-  const fh = await dir.getFileHandle(name, { create: true });
-  const w = await fh.createWritable(); await w.write(text); await w.close();
-}
-async function readFromDir(dir, name) {
-  try { const fh = await dir.getFileHandle(name); return await (await fh.getFile()).text(); } catch { return null; }
-}
+// The cowork files live in the reader's private cloud folder (features/coworkCloud.js), where the AI
+// runner answers them; `dir` is that folder once the reader is signed in on this device.
 
 function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onReloadAi = onReload }) {
   // Reading-progress bundle (daily/weekly totals, streak, in-flight books) attached to every export,
@@ -3339,8 +3333,6 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   const [openExplain, setOpenExplain] = useState(null);
   const [question, setQuestion] = useState(ai?.question || ''); // for the "Ask a question" operation
   const [dir, setDir] = useState(null);
-  const [dirName, setDirName] = useState(''); // "Tachyread/cowork" — dir.name alone would just say "cowork"
-  const [dirPath, setDirPath] = useState(ai?.coworkDirPath || '');
   const [pasted, setPasted] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -3380,9 +3372,9 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   const outs = outputs.filter((o) => focus === 'all' || o.op === focus);
   const [opQ, setOpQ] = useState('');
   const [opGroup, setOpGroup] = useState('all');
-  const coworkTarget = (dirPath || '').trim() || dirName;
+  const coworkTarget = dir?.label || '';
 
-  const loadDir = () => { subDir('cowork').then(setDir).catch(() => {}); subDirLabel('cowork').then(setDirName).catch(() => {}); };
+  const loadDir = () => { cloudCoworkDir().then(setDir).catch(() => {}); };
   useEffect(loadDir, []);
 
   // Related-activity feed entries (kept for compatibility — the merged history displays them).
@@ -3405,7 +3397,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   // (coworkOps.sanitizeOutput: anything else is dropped, with the reason) and staged as review rows.
   async function stageReply(text, ops, source, extra = {}) {
     const hash = contentHash(text);
-    if ((ai?.ledger || []).includes(hash)) { setMsg(t('That reply was already applied.')); return; }
+    if ((ai?.ledger || []).includes(hash) || await wasApplied(hash)) { setMsg(t('That reply was already applied.')); return; }
     const queues = (await getLibraryRef('queues').catch(() => null)) || [];
     const queuedIds = new Set(liveQueues(queues).flatMap((q) => q.ids || []));
     const [runs, speech] = await Promise.all([allTypingRuns().catch(() => []), getSpeechLog().catch(() => [])]);
@@ -3431,6 +3423,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     setBusy(true);
     try {
       const base = { ...(ai || {}), ledger: [...(ai?.ledger || []), review.hash].slice(-50) };
+      markApplied(review.hash); // every device: never applied twice (applied.json in the cloud)
       const r = await commitRows(rows, { books, ai: base, ops: review.ops, source: review.source, global, patchGlobal: onPatchGlobal, reviewed: review.rows });
       const left = review.rows.filter((x) => !picked.has(x.key));
       // Rows not applied this time stay up for the next page (only for big replies split by the cap).
@@ -3471,20 +3464,20 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     }
   }
   async function snapshotNow() {
-    if (!dir) { setMsg(t('Choose the cowork folder first.')); return; }
+    if (!dir) { setMsg(t('Sign in to your cloud first.')); return; }
     setBusy(true);
     try {
       const n = await writeSnapshot(dir);
       const cur = recordRun((await getJourneyAi().catch(() => null)) || ai || {}, ['cw-snapshot'], { at: Date.now(), kind: 'cowork', target: coworkTarget, ok: true, note: t('wrote snapshot ({n} files)', { n }) });
       await saveJourneyAi(cur); onReloadAi();
-      setMsg(t('Snapshot written: {n} files in {folder}/snapshot/ (read-only for agents — see its README.md).', { n, folder: coworkTarget || dir.name }));
+      setMsg(t('Snapshot written: {n} files in {folder}/snapshot/ (read-only for agents — see its README.md).', { n, folder: coworkTarget }));
     } catch (e) { setMsg(t('Snapshot failed: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
 
   async function chooseFolder() {
-    try { await pickRoot(); setDir(await subDir('cowork', { ask: true })); setDirName(await subDirLabel('cowork')); }
-    catch { /* cancelled */ }
+    const d = await cloudCoworkDir({ ask: true });
+    if (d) setDir(d); else setMsg(t('Cloud sign-in didn’t finish — try again.'));
   }
 
   // Run everything checked in the tree, in transport order: API first (its apply saves the ai
@@ -3518,7 +3511,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     const coworkIds = ids.filter((id) => COWORK_OPS[id]);
     if (coworkIds.length) {
       let ok = true; let note;
-      if (!dir) { ok = false; note = t('no cowork folder chosen'); parts.push(t('cowork skipped (no folder)')); }
+      if (!dir) { ok = false; note = t('not signed in to your cloud'); parts.push(t('cowork skipped (not signed in)')); }
       else {
         try {
           const ci = combineCoworkInstruction(coworkIds, { question });
@@ -3526,8 +3519,8 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
           const dataset = await datasetWithProgress(ci.mode === 'light', ci.ops);
           if (!ids.includes('cw-snapshot')) await writeSnapshot(dir); // the agent reads snapshot/ too
           const req = buildCoworkRequest(dataset, ci);
-          await writeToDir(dir, 'journey-cowork-request.json', JSON.stringify(req, null, 2));
-          await writeToDir(dir, 'journey-instructions.md', buildDigest(dataset, ci));
+          await dir.write('journey-cowork-request.json', JSON.stringify(req, null, 2));
+          await dir.write('journey-instructions.md', buildDigest(dataset, ci));
           cur = logRequest({ ...cur, instruction: { ...ci, updatedAt: now } }, { hash: req.requestHash, ops: ci.ops, at: now }); // replies are matched back to this
           note = t('wrote request ({mode})', { mode: ci.mode }); parts.push(t('cowork request written ({mode})', { mode: ci.mode }));
         } catch (e) { ok = false; note = String(e?.message || e); parts.push(t('cowork write failed')); }
@@ -3557,8 +3550,8 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   async function readResponse() {
     if (!dir) return; setBusy(true); setMsg(t('Reading response…'));
     try {
-      const txt = await readFromDir(dir, 'journey-cowork-response.json');
-      if (!txt) { setMsg(t('No {file} in the folder yet.', { file: 'journey-cowork-response.json' })); }
+      const txt = await dir.read('journey-cowork-response.json');
+      if (!txt) { setMsg(t('No reply in your cloud yet ({file}).', { file: 'journey-cowork-response.json' })); }
       else {
         // Filtered by the operations of the request this reply answers (matched by its echoed
         // requestHash; otherwise every request from the last 3 days — still reviewed row by row).
@@ -3567,7 +3560,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
         const how = m.how === 'matched' ? t('matched to your request of {when}', { when: fmtDateTime(m.at) })
           : m.how === 'recent' ? t('no request id in the reply — checked against your {n} request(s) from the last 3 days', { n: m.count })
             : t('checked against your last request');
-        await stageReply(txt, m.ops, t('cowork folder · {how}', { how }));
+        await stageReply(txt, m.ops, t('cloud · {how}', { how }));
         await saveJourneyAi({ ...((await getJourneyAi().catch(() => null)) || ai || {}), lastReplyAt: Date.now() }); onReloadAi(); // scheduler: request answered
       }
     } catch (e) { setMsg(t('Read failed: {error}', { error: e?.message || e })); }
@@ -3717,12 +3710,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
             })}
             {g.id === 'cowork' && (
               <div className="lj-inline cwt-foot">
-                <button onClick={chooseFolder} disabled={viewer} title={t("Requests, replies and snapshots go to the Tachyread folder's cowork/ subfolder")}>{dir ? `📁 ${dirName || dir.name}` : `📁 ${t('Choose the Tachyread folder…')}`}</button>
-                <input
-                  className="cwt-path" type="text" disabled={viewer}
-                  placeholder={t("Full folder path (annotation — shown in history; browsers can't read real paths)")}
-                  value={dirPath} onChange={(e) => setDirPath(e.target.value)} onBlur={() => persistAi({ coworkDirPath: dirPath })}
-                />
+                <button onClick={chooseFolder} disabled={viewer || !!dir} title={t('Requests, replies and snapshots go to your cloud’s private app folder, where your AI runner answers them — on any device.')}>{dir ? `☁ ${dir.label}` : `☁ ${t('Sign in to your cloud…')}`}</button>
               </div>
             )}
           </div>
@@ -3803,7 +3791,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
             {review.rows.length > APPLY_CAP && <span className="settings-note" style={{ margin: 0 }}>{t('{n} changes — applied in pages of up to {cap}', { n: review.rows.length, cap: APPLY_CAP })}</span>}
             <button onClick={() => setPicked((s0) => new Set([...s0, ...revRows.map((r) => r.key)]))}>{focusOp ? t('Tick all here') : t('Tick all')}</button>
             <button onClick={() => setPicked((s0) => { const s1 = new Set(s0); revRows.forEach((r) => s1.delete(r.key)); return s1; })}>{focusOp ? t('Untick all here') : t('Untick all')}</button>
-            <button onClick={async () => { if (review.inboxFile) { await moveInbox(dir, review.inboxFile).catch(() => {}); refreshInbox(); } setReview(null); setMsg(t('Reply discarded — nothing was changed.')); }}>{t('Discard reply')}</button>
+            <button onClick={async () => { markApplied(review.hash); if (review.inboxFile) { await moveInbox(dir, review.inboxFile).catch(() => {}); refreshInbox(); } setReview(null); setMsg(t('Reply discarded — nothing was changed.')); }}>{t('Discard reply')}</button>
           </div>
         </div>
       )}

@@ -2,6 +2,7 @@
   {
     "date": "2026-11-22",
     "items": [
+      "Cowork now runs through your cloud: requests, replies and the activity snapshot go to your private app folder, where your AI runner answers them, so the Cowork page works the same on a phone as on the computer. Sign in once on the Cowork page instead of choosing a folder. A reply applied (or discarded) on one device is never applied again on another.",
       "Cloud sync is safer: every sync reads the cloud copy first and merges it item by item, so a phone that was offline can no longer overwrite newer reading, notes or library changes from another device, and a deletion stays deleted. Sync now uses the cloud you chose once for every app (Google Drive); the old option of syncing through a folder on this computer is gone, and Back up and Restore are one Sync now button."
     ]
   },
