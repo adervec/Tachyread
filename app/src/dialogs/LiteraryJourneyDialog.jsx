@@ -9,7 +9,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { scanMiscategorized, applyRecat, recatSummary } from '../features/journeyRecat.js';
 import { forgettingScan, driftingScan } from '../features/journeyForgetting.js';
 import { bookCovers, bookCoverSrc, addCover, removeCover, setMaster, coverId, coverSpecToSvg, proceduralCover, coverPromptFor, parseCoverSpec } from '../features/bookCovers.js';
-import { fmtDate, fmtDateTime } from '../features/dateFmt.js';
+import { fmtDate, fmtDateTime, fmtDay } from '../features/dateFmt.js';
 import { t, fmtNum } from '../i18n.js';
 import {
   getLibraryBooks, saveLibraryBook, deleteLibraryBook, getLibraryRef, saveLibraryRef,
@@ -211,7 +211,7 @@ function TodayCard({ books, goals, dayAgg, fileStats, bindMap, linkedIds, openCh
     <div className="lj-today">
       <div className="lj-today-head">
         <b>{t('Today')}</b>
-        <span className="settings-note" style={{ margin: 0 }}>{new Date(now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+        <span className="settings-note" style={{ margin: 0 }}>{fmtDay(now)}</span>
         <span className="lj-spacer" />
         <span className={`lj-today-streak${ts.streak.readToday ? ' on' : ''}`} title={t('Consecutive days with some reading')}>
           🔥 {!ts.streak.readToday && ts.streak.days ? t.n('{n} day — read today to keep it', '{n} days — read today to keep it', ts.streak.days) : t.n('{n} day', '{n} days', ts.streak.days)}

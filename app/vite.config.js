@@ -12,7 +12,7 @@ function git(cmd, fallback) {
 }
 const BUILD_NUMBER = git('rev-list --count HEAD', '0');
 const BUILD_SHA = (process.env.GITHUB_SHA || git('rev-parse --short HEAD', 'dev')).slice(0, 7);
-const BUILD_DATE = new Date().toLocaleDateString('sv-SE'); // the build machine's local day, YYYY-MM-DD
+const BUILD_DATE = new Date().toLocaleDateString('sv-SE'); // iso-ok: the build machine's local day as YYYY-MM-DD (a build stamp, not a displayed date)
 
 // House standard: no third-party requests. The camera (MediaPipe) and OCR (Tesseract) engines
 // would otherwise download their wasm from cdn.jsdelivr.net; the installed packages already ship
