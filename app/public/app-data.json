@@ -8,6 +8,7 @@
   ],
   "drive": [
     "tachyread-*.json",
+    "listen-*.opus",
     "cowork-tachyread--*"
   ],
   "caches": [],

@@ -21,8 +21,9 @@ export const LISTEN_TAG = 'listen';
 const clipName = (cs, line) => `listen-${cs}-${String(line).padStart(5, '0')}.opus`;
 
 // The queue's unfinished books, in order, that this device has the text of — with chunks, position
-// and the active clip per chunk ({ ms, bytes, id, tag }).
-export async function listenBooks(qid) {
+// and the active clip per chunk ({ ms, bytes, id, tag }). `skipped` collects the others with why
+// ('finished' | 'no-text'), so the Listen window can say what it left out.
+export async function listenBooks(qid, skipped = []) {
   const [queues, books, map] = await Promise.all([getLibraryRef('queues'), getLibraryBooks(), getBinding()]);
   const q = (queues || []).find((x) => x.id === qid && !x.deleted);
   if (!q) return [];
@@ -31,9 +32,9 @@ export async function listenBooks(qid) {
   const out = [];
   for (const b of queueBooks(q, books)) {
     const cs = csOf[b.id];
-    if (!cs || ['finished', 'abandoned'].includes(readStatus(b))) continue;
-    const rec = await loadDocPayload(cs).catch(() => null);
-    if (!rec?.fullText) continue;
+    if (['finished', 'abandoned'].includes(readStatus(b))) { skipped.push({ title: b.title, why: 'finished' }); continue; }
+    const rec = cs ? await loadDocPayload(cs).catch(() => null) : null;
+    if (!rec?.fullText) { skipped.push({ title: b.title, why: 'no-text' }); continue; }
     const doc = readerDocFromText(rec.fullText, rec.fileName || b.title);
     const manifest = await getAudiobookManifest(cs);
     const clips = {};
@@ -47,9 +48,10 @@ export async function listenBooks(qid) {
 }
 
 // Render the window's chunks that have no clip yet, in listening order, one at a time.
-export async function renderWindow(books, { voice, hours, capBytes, onProgress, shouldStop } = {}) {
+// `max` renders at most that many (a batch), so a long window reaches the cloud a piece at a time.
+export async function renderWindow(books, { voice, hours, capBytes, onProgress, shouldStop, max = Infinity } = {}) {
   if (!isKokoro(voice)) return 0;
-  const todo = planWindow(books, { hours, capBytes }).filter((e) => !e.hasClip);
+  const todo = planWindow(books, { hours, capBytes }).filter((e) => !e.hasClip).slice(0, max);
   if (!todo.length) return 0;
   const engine = createLocalEngine();
   let made = 0;
@@ -117,7 +119,8 @@ export async function pushWindow(books, cfg, { hours, capBytes, voice, device, o
   await setSyncCache('listen', cloud); // the Listen window's "ready" count on this device too
   const chunks = Object.values(cloud.books).reduce((a, b) => a + Object.keys(b.chunks).length, 0);
   const bytes = Object.values(cloud.books).reduce((a, b) => a + Object.values(b.chunks).reduce((x, c) => x + (c.bytes || 0), 0), 0);
-  return { uploaded: n, removed: remove.length, chunks, bytes };
+  const perBook = Object.fromEntries(Object.entries(cloud.books).map(([cs, b]) => [cs, Object.keys(b.chunks).length]));
+  return { uploaded: n, removed: remove.length, chunks, bytes, perBook };
 }
 
 // On the listening device: fetch the cloud window's clips this device lacks (and hasn't heard).

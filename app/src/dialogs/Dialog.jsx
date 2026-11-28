@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect } from 'react';
+import { createContext, useContext, useEffect, useRef } from 'react';
 import { t } from '../i18n.js';
 
 // One Settings window: every settings dialog (app, this tab, defaults, fonts, audio, typing,
@@ -7,8 +7,28 @@ import { t } from '../i18n.js';
 // as the title. Each section stays its own dialog component, so nothing inside them changed.
 export const SettingsNav = createContext(null);
 
+// Settings filter: hide the rows of the open section that don't mention the words typed (kept while
+// switching sections, so the reader can step through them). Rows: the dialogs' field rows, data
+// rows and tick boxes; section headings hide while a filter is on.
+// ponytail: filters the section on screen only; an index across sections if this proves too little
+const ROWS = '.field-row, .data-row, label.inline-check, .field-section';
+function filterRows(body, q) {
+  if (!body) return;
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  let hits = 0;
+  for (const el of body.querySelectorAll(ROWS)) {
+    const txt = (el.textContent || '').toLowerCase();
+    const miss = words.length > 0 && (el.classList.contains('field-section') || !words.every((w) => txt.includes(w)));
+    el.classList.toggle('settings-miss', miss);
+    if (!miss && !el.classList.contains('field-section')) hits++;
+  }
+  body.dataset.nomatch = words.length && !hits ? '1' : '';
+}
+
 export default function Dialog({ title, onClose, children, buttons, width = 520, dismissable = true }) {
   const nav = useContext(SettingsNav);
+  const bodyRef = useRef(null);
+  useEffect(() => { if (nav) filterRows(bodyRef.current, nav.query || ''); });
   useEffect(() => {
     function onKey(e) {
       if (e.key !== 'Escape' || !dismissable) return;
@@ -39,9 +59,11 @@ export default function Dialog({ title, onClose, children, buttons, width = 520,
               <button key={s.kind} role="tab" aria-selected={s.kind === nav.current} className={`rh-tab${s.kind === nav.current ? ' on' : ''}`}
                 disabled={s.disabled} title={s.disabled ? t('Open a document first') : undefined} onClick={() => nav.pick(s.kind)}>{s.label}</button>
             ))}
+            <input type="search" className="settings-search" value={nav.query || ''} onChange={(e) => nav.setQuery(e.target.value)}
+              placeholder={t('Find a setting…')} aria-label={t('Find a setting')} />
           </div>
         )}
-        <div className="dialog-body">{children}</div>
+        <div className="dialog-body" ref={bodyRef} data-nomatch-text={nav ? t('Nothing in this section matches — try the other sections.') : undefined}>{children}</div>
         {buttons && <div className="dialog-buttons">{buttons}</div>}
       </div>
     </div>

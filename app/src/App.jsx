@@ -227,6 +227,7 @@ function AppInner() {
   const [recenterKey, setRecenterKey] = useState(0); // bump to snap the Lines pane back to the current word
   const [bioFeedPos, setBioFeedPos] = useState(() => state.global.bioFeedPos || null); // draggable Biometric Control Feed
   const [controlsCollapsed, setControlsCollapsed] = useState(false); // minimize the bottom dock for text room
+  const [settingsQuery, setSettingsQuery] = useState(''); // the Settings window's filter (dialogs/Dialog.jsx)
   const [chromeHidden, setChromeHidden] = useState(false); // mobile: hide menu+tabs above the reader for text room
   const [immersive, setImmersive] = useState(false);
   // Teleprompter: full-screen Lines restyled (huge centred text, black stage, optional mirror for
@@ -3836,7 +3837,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
         // The settings dialogs are sections of one Settings window (dialogs/Dialog.jsx SettingsNav).
         const sec = SETTINGS_SECTIONS.find(([k]) => k === dialog.kind);
         if (sec) {
-          const nav = { current: dialog.kind, pick: (kind) => switchDialog({ kind }),
+          const nav = { current: dialog.kind, pick: (kind) => switchDialog({ kind }), query: settingsQuery, setQuery: setSettingsQuery,
             sections: SETTINGS_SECTIONS.map(([kind, label, needsTab]) => ({ kind, label: t(label), disabled: needsTab && !activeTab })) };
           inner = <SettingsNav.Provider value={nav}>{inner}</SettingsNav.Provider>;
         }
