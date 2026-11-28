@@ -13,7 +13,8 @@
       "Preparing audio for your phone is now one checklist: on your computer open Audio → Listen to the Queue & Prepare Phone Audio, and tick off sign-in, sync machine, voice, queue and rendering in one place.",
       "The start screen has buttons to open a book, paste text, open your library or listen. Rarely used tools (teleprompter, avatars, crosshairs, reading cursor, biometric controls, HTML tools) moved to a new Extras menu.",
       "Trackyread's AI page now only sends work to your AI runner: the copy-and-paste, direct-API, manual snapshot and inbox options are gone, and syncing is automatic so it is no longer listed there.",
-      "Listen to your queue on the phone without the book files: Audio → Listen to the Queue plays the passages your computer rendered ahead, with lock-screen controls and speed. Your place moves as you listen, and finishing a book marks it read in Trackyread, on every device. Your phone and computer now also sync whenever you come back to the app, so Trackyread, its AI analysis and your queues are up to date on both."
+      "Listen to your queue on the phone without the book files: Audio → Listen to the Queue plays the passages your computer rendered ahead, with lock-screen controls and speed. Your place moves as you listen, and finishing a book marks it read in Trackyread, on every device. Your phone and computer now also sync whenever you come back to the app, so Trackyread, its AI analysis and your queues are up to date on both.",
+      "Your read-aloud and narration sessions now go to your own cloud folder too (when you are signed in), so SpeechImprover can analyse them on any device, no folder to pick. Sessions you already recorded on this device are sent once."
     ]
   },
   {

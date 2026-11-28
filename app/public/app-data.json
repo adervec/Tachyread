@@ -9,7 +9,8 @@
   "drive": [
     "tachyread-*.json",
     "listen-*.opus",
-    "cowork-tachyread--*"
+    "cowork-tachyread--*",
+    "shared-speech.json"
   ],
   "caches": [],
   "export": "Settings > Data Management > Backup & restore"

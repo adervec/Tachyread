@@ -8,6 +8,7 @@ import {
   rmsOf, adaptiveThreshold, cleanTake, expectedMs, shouldAdvance, sessionQueue,
 } from '../features/readThrough.js';
 import { takeQuality, sessionConsistency, buildNarrationLog } from '../features/narrationQuality.js';
+import { shareSpeechLog } from '../features/sharedSpeech.js';
 import { scoreSamples } from '../features/voice/voiceScore.js';
 import { scoreReading } from '../features/speakAlign.js';
 import { useApp } from '../state/AppContext.jsx';
@@ -290,6 +291,8 @@ export default function ReadThroughWizard({ checksum, docName = '', chunks, isCo
   }
   function finish() {
     teardownAudio();
+    // the whole session, once, into the reader's cloud for SpeechImprover (shared-speech.json)
+    if (takesRef.current.some(Boolean)) shareSpeechLog(logNameRef.current, buildNarrationLog({ docName, startedAt: sessionStartRef.current, takes: takesRef.current }));
     setPhase('done');
   }
 

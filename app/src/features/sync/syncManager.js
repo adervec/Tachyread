@@ -12,6 +12,7 @@ import {
 import { getSyncProvider, PROGRESS_FILE_NAME, LIBRARY_FILE_NAME } from './syncProviders.js';
 import { mergeProgressDocs, mergeLibraryDocs } from './mergeDocs.js';
 import { t } from '../../i18n.js';
+import { flushSharedSpeech } from '../sharedSpeech.js';
 
 async function syncOne(kind, name, exportFn, importFn, merge, opts) {
   const p = getSyncProvider();
@@ -36,6 +37,7 @@ const progress = (opts) => syncOne('progress', PROGRESS_FILE_NAME, exportProgres
 // Every way in is the same safe two-way sync now: "back up" and "restore" never overwrite blindly.
 export async function syncWithProvider(providerId, cfg, opts = {}) {
   const r = await progress(opts);
+  flushSharedSpeech().catch(() => { /* queued logs wait for the next sync */ }); // speaking, for SpeechImprover (standard 27)
   if (r.pulled && typeof window !== 'undefined') { try { window.dispatchEvent(new Event('tachyread-progress-pulled')); } catch { /* non-DOM */ } }
   return { ...r, bytes: size(r.doc), merged: r.pulled ? 1 : 0 };
 }

@@ -11,11 +11,11 @@ One line per overlap:
 
 `state` is `idea` (noticed), `planned` (the maker said yes), `done`, or `dropped` (with the reason).
 
-Reviewed: 2026-11-21
+Reviewed: 2026-11-28
 
 ## Already connected
 
-- [done] Tachyread + SpeechImprover: both record you reading aloud -> Tachyread writes its narration and reading-aloud session logs into the Tachyread folder's `speech/` subfolder, which SpeechImprover reads (one-way, files only)
+- [done] Tachyread + SpeechImprover: both record you reading aloud -> Tachyread writes its narration and reading-aloud session logs into the Tachyread folder's `speech/` subfolder, and into `shared-speech.json` in the reader's cloud folder (Tachyread owns it, SpeechImprover only reads it, so it works on a phone too)
 - [done] Tachyread + SimpleClicker: Grab Text's hands-free capture needs pages turned -> SimpleClicker's "Remote arm (HTTP)" loopback endpoint turns them (features/pageArm.js)
 - [done] Tachyread + hub: finished reading sections, typing runs and reading-aloud sittings -> one row each in the hub's session ledger via appFont.logSession
 - [done] Tachyread + every app: app font, language, units, clock, base themes, update / crash notices -> taken from the shared font.js, not kept here

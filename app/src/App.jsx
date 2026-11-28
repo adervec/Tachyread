@@ -110,7 +110,8 @@ import { createRecognizer, speechRecognitionSupported } from './features/speechR
 import { alignOrResync, speakParams, moveQuality, strictnessOf } from './features/speakAlign.js';
 import { speechSession, keepSession, countFillers } from './features/speechLog.js';
 import { presentingScorer } from './features/voice/presenting.js';
-import { writeSpeakingLog } from './features/speakingBridge.js';
+import { writeSpeakingLog, speakingLog, speakingLogName } from './features/speakingBridge.js';
+import { shareSpeechLog } from './features/sharedSpeech.js';
 import { playWordFx } from './features/wordFx.js';
 import VoiceFeedback from './components/VoiceFeedback.jsx';
 import { recordClip } from './features/audioRecorder.js';
@@ -2204,10 +2205,10 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
         if (fs.articulation != null) scores.push(t('articulation {n}', { n: fs.articulation }));
         setStatus(`🎥 ${t('Presenting (0–100): {scores}.', { scores: scores.join(', ') })}`);
       }
-      // Kept on this device (Data → Speech log) and, when the Tachyread folder is set up, written to
-      // its speech/ subfolder for SpeechImprover.
+      // Kept on this device (Data → Speech log), added to shared-speech.json in the reader's cloud for
+      // SpeechImprover, and, when the Tachyread folder is set up, written to its speech/ subfolder.
       if (keepSession(rec)) {
-        appendSpeechLog(rec); writeSpeakingLog(rec).catch(() => {}); sessionEnded();
+        appendSpeechLog(rec); writeSpeakingLog(rec).catch(() => {}); shareSpeechLog(speakingLogName(rec), speakingLog(rec)); sessionEnded();
         window.appFont?.logSession?.({ kind: 'speak', minutes: ((rec.end || rec.at) - rec.at) / 60000, id: `speech:${rec.at}`, at: rec.end || rec.at }); // hub ledger
       }
     };
