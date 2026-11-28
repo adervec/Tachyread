@@ -5459,3 +5459,9 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .vf-live { width: 64px; height: 48px; object-fit: cover; border-radius: 4px; transform: scaleX(-1); background: #000; }
 .vf-playback { width: 100%; max-height: 40vh; border-radius: 4px; background: #000; }
 .tr-sprint input[type=range] { width: 64px; height: 12px; margin: 2px 0 0; }
+
+/* Listen to the queue (dialogs/ListenDialog.jsx) */
+.listen-now { display: grid; gap: 8px; margin-block-end: 10px; }
+.listen-text { margin: 0; line-height: 1.5; }
+.listen-now .data-row button { min-width: 44px; min-height: 44px; font-size: 1.2em; }
+.listen-books { margin: 8px 0; padding-inline-start: 1.4em; }

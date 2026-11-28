@@ -371,6 +371,15 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
   useEffect(() => { if (focusBookId) { setTab('library'); setSelected(focusBookId); } }, [focusBookId]);
   useEffect(() => { if (focusQueueId) setTab('queue'); }, [focusQueueId]); // tab menu → "Go to queue"
 
+  // Another device's changes (books, queues, AI analysis) arrive with a sync: show them.
+  const reloadRef = useRef(null);
+  useEffect(() => {
+    const pulled = () => reloadRef.current?.();
+    window.addEventListener('tachyread-library-pulled', pulled);
+    window.addEventListener('tachyread-progress-pulled', pulled); // reading progress, queue percentages
+    return () => { window.removeEventListener('tachyread-library-pulled', pulled); window.removeEventListener('tachyread-progress-pulled', pulled); };
+  }, []);
+  reloadRef.current = () => reload(); // eslint-disable-line react-hooks/immutability
   async function reload() {
     const [bs, a, g, sg, goalsRec, aiRec, sz, bind, secs, xNotes, docs, files] = await Promise.all([
       getLibraryBooks(), getLibraryRef('authors'), getLibraryRef('genres'), getLibraryRef('subgenres'), getLibraryRef('goals'),
@@ -2152,7 +2161,8 @@ function QueueView({ initialSel = null, books, onOpen, fileStats = {}, bindMap =
     }).catch(() => { if (live) setQueues([]); });
     load();
     window.addEventListener('tachyread-library-changed', load); // a sync can bring queues in
-    return () => { live = false; window.removeEventListener('tachyread-library-changed', load); };
+    window.addEventListener('tachyread-library-pulled', load);
+    return () => { live = false; window.removeEventListener('tachyread-library-changed', load); window.removeEventListener('tachyread-library-pulled', load); };
   }, [books]);
   const saveQueues = (next) => { setQueues(next); saveLibraryRef('queues', next).catch((e) => setFindMsg(t('Could not save queues: {error}', { error: e?.message || e }))); };
   const bulk = (fn, label) => { setUndo({ queues, label }); saveQueues(fn(queues)); };

@@ -121,7 +121,7 @@ export default function AudioSettingsDialog({ settings, onPatch, global, onPatch
 
       <div className="field-section">{t('Pocket listening (queue audio across devices)')}</div>
       <p className="settings-note">
-        {t('The sync machine renders the next hours of your listen queue with the Kokoro voice above and mirrors them to the sync target (Google Drive’s private app folder, or the Tachyread folder’s {path}); your other devices pull them over Wi-Fi and drop what you’ve heard. Needs a queue (TTS → QUEUE) and Data → Cloud sync set up. Only rendered clips are ever deleted — never your own recordings.', { path: 'sync/listen/' })}
+        {t('The sync machine renders the next hours of your listen queue with the Kokoro voice above and puts them in your cloud’s private app folder; your other devices pull them over Wi-Fi and drop what you’ve heard. On the phone, play them with Audio → Listen to the Queue: no book files needed there. Needs a queue (TTS → QUEUE) and Data → Cloud sync set up. Only rendered clips are ever deleted — never your own recordings.')}
       </p>
       <Field label={t('Render ahead here')}>
         <label className="inline-check"><input type="checkbox" checked={!!global.listenRender} onChange={(e) => onPatchGlobal({ listenRender: e.target.checked })} /> {t('render the window on this device — the sync machine (Trackyread → AI / Cowork) also uploads it; any other device renders for itself only, while charging')}</label>

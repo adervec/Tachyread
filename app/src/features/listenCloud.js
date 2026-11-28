@@ -7,7 +7,7 @@
 // reading position (from any device) is past it — no separate "listened" bookkeeping.
 import {
   getLibraryRef, getLibraryBooks, getBinding, loadDocPayload, loadFile, getAudiobookManifest, allAudiobookManifests,
-  entryClips, addAudioClip, getAudioClipById, deleteAudioClipById,
+  entryClips, addAudioClip, getAudioClipById, deleteAudioClipById, setSyncCache,
 } from '../state/storage.js';
 import { readerDocFromText, audiobookChunks } from '../document/readerDocument.js';
 import { queueBooks } from './readingQueues.js';
@@ -41,7 +41,7 @@ export async function listenBooks(qid) {
       const c = entryClips(entry)[0];
       if (c) clips[line] = { ms: c.durationMs || 0, bytes: c.sizeBytes || 0, id: c.id, tag: c.tag || null };
     }
-    out.push({ cs, fileName: rec.fileName || b.title, title: b.title, wordIndex: (await loadFile(cs).catch(() => null))?.wordIndex || 0, chunks: audiobookChunks(doc), clips });
+    out.push({ cs, fileName: rec.fileName || b.title, title: b.title, author: b.author || '', wordIndex: (await loadFile(cs).catch(() => null))?.wordIndex || 0, chunks: audiobookChunks(doc), clips });
   }
   return out;
 }
@@ -101,6 +101,15 @@ export async function pushWindow(books, cfg, { hours, capBytes, voice, device, o
     delete cloud.books[r.cs].chunks[r.startLine];
     if (!Object.keys(cloud.books[r.cs].chunks).length) delete cloud.books[r.cs];
   }
+  // What the phone's listen-only player needs without the book file: each chunk's text, and per book
+  // its title, queue order, length and last chunk (to know when the book is finished).
+  books.forEach((b, order) => {
+    const cb = cloud.books[b.cs];
+    if (!cb) return;
+    const last = b.chunks[b.chunks.length - 1];
+    Object.assign(cb, { fileName: b.fileName, title: b.title, author: b.author || '', order, totalWords: last ? last.endWordIndex + 1 : 0, lastLine: last ? last.startLine : null });
+    for (const [line, c] of Object.entries(cb.chunks)) if (!c.text) c.text = b.chunks.find((x) => x.startLine === +line)?.text || '';
+  });
   Object.assign(cloud, { v: 1, at: Date.now(), voice: voice || cloud.voice || '', device: device || '' });
   // ponytail: only the device that pushes the window writes the manifest (the listener only reads it), so a
   // read-then-write is enough; move it to syncDoc if a second device ever writes it
@@ -131,6 +140,7 @@ export async function pullWindow(cfg, { wifiOnly = true, onProgress } = {}) {
       onProgress?.({ got: ++got, total });
     }
   }
+  await setSyncCache('listen', cloud); // the phone's player works from this copy (features/listenPlayer.js)
   return { got, total, at: cloud.at || 0 };
 }
 

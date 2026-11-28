@@ -74,6 +74,7 @@ import ProgressDetailDialog from './dialogs/ProgressDetailDialog.jsx';
 import { fmtTime, fmtDateTime } from './features/dateFmt.js';
 import { startCoworkScheduler } from './features/coworkScheduler.js';
 import { startListenAgent } from './features/listenAgent.js';
+import ListenDialog from './dialogs/ListenDialog.jsx';
 import { promptInstall, installState, installHelp, runningStandalone } from './features/pwaInstall.js';
 import { revealFile, rememberFile, revealSupported } from './features/revealFile.js';
 import { openFilterContext, skipOpen } from './features/openFilter.js';
@@ -155,7 +156,7 @@ const HAND_LABEL = {
   unsupported: t('hand tracking not supported here'), denied: t('camera blocked'), error: t('camera error'), off: '',
 };
 import { getSyncProvider, getDriveProfile } from './features/sync/syncProviders.js';
-import { backupToProvider, syncWithProvider } from './features/sync/syncManager.js';
+import { backupToProvider, syncWithProvider, syncLibraryWithProvider } from './features/sync/syncManager.js';
 import { applyTheme, tabThemeName, systemPrefersDark, houseThemeId } from './state/themes.js';
 import { ensureFamilyLoaded } from './state/fonts.js';
 import './App.css';
@@ -2468,6 +2469,18 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     const cfg = state.global.sync;
     if (didBootSync.current || !autoReady(cfg)) return;
     didBootSync.current = true;
+    syncAllRef.current(cfg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.global.sync?.auto, state.global.sync?.provider]);
+  // Both files, both ways (house standard 30): at launch, whenever the app comes back to the front or
+  // the network returns (the phone picking up what the desktop did, and the other way round), and a
+  // little after any Trackyread change. Silent: only with a sign-in this device already has.
+  const syncAllRef = useRef(null);
+  const lastSyncAll = useRef(0);
+  syncAllRef.current = async (cfg = stateGlobalRef.current.sync) => {
+    if (!autoReady(cfg) || Date.now() - lastSyncAll.current < 30000) return;
+    lastSyncAll.current = Date.now();
+    try { await syncLibraryWithProvider(cfg.provider, cfg, { silent: true }); } catch { /* offline: next time */ }
     (async () => {
       try {
         await syncWithProvider(cfg.provider, cfg, { silent: true });
@@ -2482,8 +2495,28 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
         await saveGlobal(merged);
       } catch { /* offline or no prior grant — use “Sync now” in Data once to grant */ }
     })();
+  };
+  useEffect(() => {
+    const again = () => { if (document.visibilityState === 'visible') syncAllRef.current?.(); };
+    let libTimer = null;
+    const libChanged = () => {
+      clearTimeout(libTimer);
+      libTimer = setTimeout(async () => {
+        const cfg = stateGlobalRef.current.sync;
+        if (autoReady(cfg)) { try { await syncLibraryWithProvider(cfg.provider, cfg, { silent: true }); } catch { /* next time */ } }
+      }, 20000);
+    };
+    document.addEventListener('visibilitychange', again);
+    window.addEventListener('online', again);
+    window.addEventListener('tachyread-library-changed', libChanged);
+    return () => {
+      clearTimeout(libTimer);
+      document.removeEventListener('visibilitychange', again);
+      window.removeEventListener('online', again);
+      window.removeEventListener('tachyread-library-changed', libChanged);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.global.sync?.auto, state.global.sync?.provider]);
+  }, []);
   useEffect(() => {
     const cfg = state.global.sync;
     const p = autoReady(cfg);
@@ -2644,6 +2677,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     if (action === 'toggle-lines') { dispatch({ type: 'TOGGLE_LINES' }); return; }
     if (action === 'companion' && activeTab) { patchSettings(activeTab.id, { companion: activeTab.settings.companion ? null : { checksum: null, follow: true } }); return; }
     if (action === 'typing-settings' && activeTab) return openDialog({ kind: 'typing-settings' });
+    if (action === 'listen-player') return openDialog({ kind: 'listen-player' }); // no tab needed: plays the queue without book files
     if (action === 'audio-settings' && activeTab) return openDialog({ kind: 'audio-settings' });
     if (action === 'font-manager' && activeTab) return openDialog({ kind: 'font-manager' });
     if (action === 'help') return openDialog({ kind: 'help' });
@@ -3604,6 +3638,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           onClose={closeDialog}
         />
       )}
+      {dialog?.kind === 'listen-player' && <ListenDialog global={state.global} onClose={closeDialog} />}
       {dialog?.kind === 'audio-settings' && dlgTab && (
         <AudioSettingsDialog
           settings={dlgTab.settings}

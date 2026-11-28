@@ -16,7 +16,7 @@ import { t, fmtNum } from '../i18n.js';
 
 // Short labels for the dialog tabs (menus use longer "…" titles). Fallback is the raw kind.
 const PANEL_LABELS = {
-  'tab-settings': t('Tab Settings'), 'typing-settings': t('Typing Settings'), 'audio-settings': t('Audio Settings'),
+  'tab-settings': t('Tab Settings'), 'typing-settings': t('Typing Settings'), 'audio-settings': t('Audio Settings'), 'listen-player': t('Listen'),
   'font-manager': t('Fonts'), 'help': t('Help'), 'def-settings': t('Default Settings'), 'app-settings': t('App Settings'),
   'biometric-settings': t('Biometric Controls'), 'comfort-settings': t('Comfort'), 'data': t('Data'), 'book-groups': t('Book Groups'),
   'stats': t('Statistics'), 'history': t('History'), 'literary-journey': t('Trackyread'), 'proper-names': t('Proper Names'),
@@ -111,7 +111,8 @@ export default function TabBar() {
     };
     load();
     window.addEventListener('tachyread-library-changed', load);
-    return () => { live = false; window.removeEventListener('tachyread-library-changed', load); };
+    window.addEventListener('tachyread-library-pulled', load);
+    return () => { live = false; window.removeEventListener('tachyread-library-changed', load); window.removeEventListener('tachyread-library-pulled', load); };
   }, [boundKey]);
 
   // Cross-device presence: checksum → other devices that have it open (from the last sync pull).

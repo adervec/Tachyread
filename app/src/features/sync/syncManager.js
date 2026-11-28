@@ -36,6 +36,7 @@ const progress = (opts) => syncOne('progress', PROGRESS_FILE_NAME, exportProgres
 // Every way in is the same safe two-way sync now: "back up" and "restore" never overwrite blindly.
 export async function syncWithProvider(providerId, cfg, opts = {}) {
   const r = await progress(opts);
+  if (r.pulled && typeof window !== 'undefined') { try { window.dispatchEvent(new Event('tachyread-progress-pulled')); } catch { /* non-DOM */ } }
   return { ...r, bytes: size(r.doc), merged: r.pulled ? 1 : 0 };
 }
 export const backupToProvider = syncWithProvider;
@@ -46,6 +47,8 @@ export async function syncLibraryWithProvider(providerId, cfg, opts = {}) {
   const r = await syncOne('library', LIBRARY_FILE_NAME, exportLibraryData,
     (doc) => importLibraryData(doc, { mode: 'merge', fromSync: true }), mergeLibraryDocs, opts);
   await setLibrarySyncState({ localChange: changedAt, syncedAt: r.at });
+  // Open screens (Trackyread, its AI page, the tab bar's ★) reload what another device changed.
+  if (r.pulled && typeof window !== 'undefined') { try { window.dispatchEvent(new Event('tachyread-library-pulled')); } catch { /* non-DOM */ } }
   return { at: r.at, skipped: !r.pulled && !r.pushed, pulled: r.pulled, pushed: r.pushed, bytes: r.pushed ? size(r.doc) : 0, books: r.doc?.books?.length ?? null };
 }
 export const backupLibraryToProvider = syncLibraryWithProvider;

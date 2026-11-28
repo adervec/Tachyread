@@ -102,6 +102,7 @@ const MENUS = {
     { label: t('Text-to-Speech Reader...'), shortcut: 'Ctrl+Shift+T', action: 'tts-popup', icon: '🔊'},
     { label: t('Ambient Sound...'), action: 'ambient', icon: '🌊'},
     { kind: 'separator' },
+    { label: t('Listen to the Queue (phone player)...'), action: 'listen-player', icon: '🎧'},
     { label: t('Audio Settings...'), action: 'audio-settings', icon: '🎚️'},
   ],
   settings: [
