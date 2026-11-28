@@ -271,7 +271,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
               <select
                 value={state.global.ttsSpeed ?? 1}
                 onChange={(e) => updateGlobal({ ttsSpeed: Number(e.target.value) })}
-                title={t('Read-aloud playback speed (applies to the native and offline voices). For finer steps use the slider in Audio → Audio Settings.')}
+                title={t('Read-aloud playback speed (applies to the native and offline voices). For finer steps use the slider in Listen → Audio Settings.')}
               >
                 {/* Always include the current value so an off-grid speed set via the Audio Settings
                     slider (e.g. 0.85) shows its real label instead of collapsing to the first option. */}
@@ -383,7 +383,7 @@ export default function ControlsBar({ tab, onPeek, peekIdx, onPlayPause, onPrevW
                 onClick={() => patchSettings(tab.id, { scrollReadCrosshair: !settings.scrollReadCrosshair })}
                 title={(settings.linesCrosshairs || []).length
                   ? t('Tie the read point to your first placed crosshair — drag the crosshair to move where scrolled text counts as read')
-                  : t('Place a crosshair first (View → Crosshairs) to tie the read point to it')}
+                  : t('Place a crosshair first (Extras → Crosshairs) to tie the read point to it')}
               >
                 🎯
               </button>

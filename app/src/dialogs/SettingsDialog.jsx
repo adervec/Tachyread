@@ -632,7 +632,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = t('
         </div>
       </Field>
       <Field label={t('Tie read point to crosshair')}>
-        <label className="inline-check" title={t('The scroll-read line sits at your first placed crosshair’s height — drag the crosshair in the Lines area to move where scrolled text counts as read (View → Crosshairs to place one)')}>
+        <label className="inline-check" title={t('The scroll-read line sits at your first placed crosshair’s height — drag the crosshair in the Lines area to move where scrolled text counts as read (Extras → Crosshairs to place one)')}>
           <input type="checkbox" checked={!!s.scrollReadCrosshair} onChange={(e) => patch({ scrollReadCrosshair: e.target.checked })} />
           {t('Use the first placed crosshair as the scroll-read line')}
         </label>
@@ -985,7 +985,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = t('
       </Field>
       {(s.obscureMode === 'translate') && (
         <p className="settings-note" style={{ margin: '2px 0 0' }}>
-          {t('Windowed lines are shown translated into another language instead of English — pick the service and target under Settings → Application Settings → Translation.')}
+          {t('Windowed lines are shown translated into another language instead of English — pick the service and target under Settings → General → Translation.')}
         </p>
       )}
       <Field label={t('Side-by-side translation')}>
@@ -1166,7 +1166,7 @@ export default function SettingsDialog({ settings, onPatch, onClose, title = t('
       )}
       <p className="settings-note" style={{ margin: '2px 0 0' }}>{t('Spends more time on rare/informative words and less on common ones — your average WPM is unchanged.')}</p>
 
-      {/* Read-aloud voice/rate live in Audio → Audio Settings; typing rules in Typing → Typing Settings. */}
+      {/* Read-aloud voice/rate live in Listen → Audio Settings; typing rules in Practice → Typing Settings. */}
       <Section>{t('Advance by reading aloud')}</Section>
       <p className="settings-note" style={{ marginTop: 0 }}>{t('Turn it on from the controls bar (Biometric → 🗣); the card that appears has a one-slider Strictness control.')}{' '}{t('Fine-tune here: how strict the text follows your voice — loose enough that a missed word doesn’t stop it, strict enough that a grunt can’t move it.')}</p>
       {(() => {

@@ -75,6 +75,9 @@ import { fmtTime, fmtDateTime } from './features/dateFmt.js';
 import { startCoworkScheduler } from './features/coworkScheduler.js';
 import { startListenAgent } from './features/listenAgent.js';
 import ListenDialog from './dialogs/ListenDialog.jsx';
+import { SettingsNav } from './dialogs/Dialog.jsx';
+import { SETTINGS_SECTIONS } from './state/AppContext.jsx';
+import BottomNav from './components/BottomNav.jsx';
 import { promptInstall, installState, installHelp, runningStandalone } from './features/pwaInstall.js';
 import { revealFile, rememberFile, revealSupported } from './features/revealFile.js';
 import { openFilterContext, skipOpen } from './features/openFilter.js';
@@ -212,7 +215,7 @@ function StatusText({ text, seq }) {
 }
 
 function AppInner() {
-  const { state, activeTab: rawActiveTab, hydrateTab, openFiles, openClipboard, openRecent, setStatus, patchSettings, patchTab, openDialog, closeDialog, setActiveTab, setActivePanel, dispatch, updateGlobal, flushReadState, closeAllTabs, closeTab } = useApp();
+  const { state, activeTab: rawActiveTab, hydrateTab, openFiles, openClipboard, openRecent, setStatus, patchSettings, patchTab, openDialog, closeDialog, switchDialog, setActiveTab, setActivePanel, dispatch, updateGlobal, flushReadState, closeAllTabs, closeTab } = useApp();
   // A lazy (restored, not-yet-loaded) tab has no parsed document — treat it as "no active reader"
   // until it hydrates, so nothing downstream touches activeTab.doc before it exists.
   const activeTab = rawActiveTab && !rawActiveTab.lazy ? rawActiveTab : null;
@@ -872,7 +875,7 @@ function AppInner() {
   }, [playing, activeTab?.settings?.readAloud, activeTab?.id, state.global.offlineVoice]);
 
   useEffect(() => {
-    if (state.global.offlineVoice && ttsStatus === 'error') setStatus(t('Offline voice unavailable — download its model in Audio → Audio Settings.'));
+    if (state.global.offlineVoice && ttsStatus === 'error') setStatus(t('Offline voice unavailable — download its model in Listen → Audio Settings.'));
   }, [ttsStatus, state.global.offlineVoice]);
 
   // Audiobook coverage of the active doc while read-aloud is on — for the status badge (nudges you to
@@ -2304,7 +2307,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
   }, [activeTab?.id, activeTab?.settings.audioCtrl, state.global.audioCtrlMode]);
 
   // First-run disclaimer (seizure / not-advice / non-affiliation). Shown once;
-  // reopen any time from View → About / Disclaimer.
+  // reopen any time from Reader → About / Disclaimer.
   useEffect(() => {
     try {
       if (!localStorage.getItem('tachyread-disclaimer-ack')) openDialog({ kind: 'disclaimer' });
@@ -2545,7 +2548,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
     onRan: (ids) => setStatus(`🗓 ${t('Cowork schedule ran: {ids}', { ids: ids.join(', ') })}`),
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
-  // Pocket listening: render-ahead on the sync machine, pull on the others (Audio → Audio Settings).
+  // Pocket listening: render-ahead on the sync machine, pull on the others (Listen → Audio Settings).
   useEffect(() => startListenAgent({ getGlobal: () => globalSnapRef.current }), []);
 
   // Save a copy of the active tab's text to an external file (native Save dialog where supported).
@@ -3094,7 +3097,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
 
   return (
     <div
-      className={`app${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}${forcePortrait != null ? ' force-portrait' : ''}${immersive ? ' immersive' : ''}${!isCompact && immersive === 'lines' ? ' lines-full' : ''}${prompter ? ` prompter${prompter === 'mirror' ? ' prompter-mirror' : ''}` : ''}${!isCompact && immersive === 'source' ? ' source-full' : ''}${idleBlurred ? ' idle-blurred' : ''}`}
+      className={`app${isCompact ? ' has-bottom-nav' : ''}${state.incognito ? ' incognito' : ''}${state.global.focusMode ? ' focus-on' : ''}${forcePortrait != null ? ' force-portrait' : ''}${immersive ? ' immersive' : ''}${!isCompact && immersive === 'lines' ? ' lines-full' : ''}${prompter ? ` prompter${prompter === 'mirror' ? ' prompter-mirror' : ''}` : ''}${!isCompact && immersive === 'source' ? ' source-full' : ''}${idleBlurred ? ' idle-blurred' : ''}`}
       style={forcePortrait != null ? { transform: `translate(-50%, -50%) rotate(${forcePortrait}deg)` } : undefined}
     >
       {/* Idle veil. A sibling of the blurred content, not a child — a CSS filter blurs its own
@@ -3573,11 +3576,17 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           onReplayVideo={(on) => updateGlobal({ replayVideo: on })}
         />
       )}
+      {isCompact && (
+        <BottomNav dialog={dialog}
+          onOpen={(k) => { window.dispatchEvent(new CustomEvent('tachyread-open-menu', { detail: { close: true } })); handleMenuAction(k); }}
+          onRead={() => { window.dispatchEvent(new CustomEvent('tachyread-open-menu', { detail: { close: true } })); if (state.modal) closeDialog(); else dispatch({ type: 'SET_ACTIVE_PANEL', id: null }); }}
+          onMenu={(sub) => { setChromeHidden(false); window.dispatchEvent(new CustomEvent('tachyread-open-menu', { detail: { sub } })); }} />
+      )}
       <div className="app-status">
         {state.global.showPerfMeter && <PerfMonitor />}
         <StatusText text={state.appStatus} seq={state.appStatusSeq} />
         {playing && !!activeTab?.settings?.readAloud && (
-          <span className="webcam-badge wb-watching" title={t('Read-aloud voice + how much of this book is pre-generated as an audiobook. Pre-generate more in Audio → Audiobook Manager for lock-screen playback (ungenerated parts use the light native voice).')}>
+          <span className="webcam-badge wb-watching" title={t('Read-aloud voice + how much of this book is pre-generated as an audiobook. Pre-generate more in Listen → Audiobook Manager for lock-screen playback (ungenerated parts use the light native voice).')}>
             🗣 {state.global.offlineVoice ? voiceLabel(state.global.offlineVoiceId || defaultVoiceForLang(state.global.language || 'en')).split(' · ')[0] : (activeTab.settings.annunciateVoice || t('browser voice'))}{state.global.offlineVoice && state.global.kokoroLive ? ` + ${t('Kokoro gaps')}` : ''}
             {abCoverage ? ` · 📚 ${abCoverage.pct}%` : ''}
             {ttsStatus === 'native' ? ` · ${t('native')}` : ttsStatus === 'synth' ? ' · Kokoro…' : ''}
@@ -3605,7 +3614,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
       {/* Dialogs. A docked (tab) panel portals into the .dialog-slot inside .content-area so it fills
           the tab's page; a blocking modal renders here as a centered full-screen overlay. */}
       {dialog && (() => {
-        const inner = (<>
+        let inner = (<>
       {dialog?.kind === 'find' && activeTab && (
         <FindDialog
           tab={activeTab}
@@ -3824,6 +3833,13 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
         />
       )}
         </>);
+        // The settings dialogs are sections of one Settings window (dialogs/Dialog.jsx SettingsNav).
+        const sec = SETTINGS_SECTIONS.find(([k]) => k === dialog.kind);
+        if (sec) {
+          const nav = { current: dialog.kind, pick: (kind) => switchDialog({ kind }),
+            sections: SETTINGS_SECTIONS.map(([kind, label, needsTab]) => ({ kind, label: t(label), disabled: needsTab && !activeTab })) };
+          inner = <SettingsNav.Provider value={nav}>{inner}</SettingsNav.Provider>;
+        }
         // Docked tab → portal into the content-area slot (fills the page). Modal → inline overlay.
         if (dialogDocked) return dialogSlotRef.current ? createPortal(<div className="dialog-dock">{inner}</div>, dialogSlotRef.current) : null;
         return inner;

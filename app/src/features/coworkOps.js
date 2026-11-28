@@ -263,7 +263,7 @@ export const COWORK_OPS = {
     never: t('Existing vocabulary cards and their review progress; all books.'),
     explain: {
       sends: t('The full library list and the words already in your vocabulary deck.'),
-      changes: t('Adds NEW cards to Train → Vocabulary. Words already in the deck are skipped; existing cards are never edited.'),
+      changes: t('Adds NEW cards to Practice → Vocabulary. Words already in the deck are skipped; existing cards are never edited.'),
       review: t('Row per word. Undo removes the added cards you haven\'t started reviewing.'),
     },
   },
@@ -274,7 +274,7 @@ export const COWORK_OPS = {
     never: t('Your existing typing plans and runs.'),
     explain: {
       sends: t('The compact dataset; the agent reads snapshot/typing.json.'),
-      changes: t('Adds ONE new plan to Typing → Plans. Steps with an unknown drill or out-of-range numbers are dropped; your existing plans are untouched.'),
+      changes: t('Adds ONE new plan to Practice → Plans. Steps with an unknown drill or out-of-range numbers are dropped; your existing plans are untouched.'),
       review: t('One row with the plan\'s steps. Undo removes the plan.'),
     },
   },

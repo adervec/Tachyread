@@ -7,7 +7,7 @@ import { t } from '../i18n.js';
 // credited), prompts a 20-20-20 eye-rest microbreak every breakIntervalMin, and — when autoBackoff
 // is on — eases the target WPM down once behavioral fatigue is high, so comprehension stays
 // comfortable. A voluntary break can be taken any time via the manualSignal token
-// (View → Take a Break Now).
+// (Reader → Take a Break Now).
 //
 // Live note: a backgrounded tab auto-pauses playback (see App's visibilitychange handler), so the
 // scheduled time-on-task break only accrues while the app is the foreground tab; the voluntary
@@ -88,7 +88,7 @@ export default function ComfortMonitor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brk]);
 
-  // Voluntary break (View → Take a Break Now). The token increments on each request; 0 = idle.
+  // Voluntary break (Reader → Take a Break Now). The token increments on each request; 0 = idle.
   useEffect(() => {
     if (manualSignal) startBreak('manual');
     // eslint-disable-next-line react-hooks/exhaustive-deps

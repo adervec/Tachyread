@@ -399,7 +399,7 @@ export default function AppSettingsDialog({ global, onPatch, onClose }) {
         </select>
       </Field>
       <p className="settings-note">
-        {t('Enables Summarize / Analyze / Discuss in View → Notes & Annotations.')}{' '}
+        {t('Enables Summarize / Analyze / Discuss in Reader → Notes & Annotations.')}{' '}
         {t('The key is stored only on this device and is never synced; text you send (document excerpts + your notes) goes to Anthropic and spends your own API credits.')}
       </p>
 

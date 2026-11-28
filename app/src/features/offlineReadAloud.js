@@ -9,7 +9,7 @@
 //   • …unless "fill gaps with Kokoro" is on (getLiveVoice → a kokoro: voice): then a chunk with no
 //     clip is synthesized on the device as you reach it (the next one while this one plays) and SAVED
 //     as a clip, so each chunk is generated once. A failed synthesis still falls back to native.
-//   • a book synced to YOUR audiobook (Audio → Sync My Audiobook) plays those files instead: from the
+//   • a book synced to YOUR audiobook (Listen → Sync My Audiobook) plays those files instead: from the
 //     time mapped to the reading position, with the position following the audio's word map.
 
 import { getSpeechAudio } from './mediaSession.js';

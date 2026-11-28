@@ -1323,7 +1323,7 @@ export default function LinePane({ tab, onJumpWord, hideMode = 'None', peek = { 
           />
         </div>
       )}
-      {/* Placed reading crosshairs (View → Crosshairs): per-tab overlay markers, draggable in place. */}
+      {/* Placed reading crosshairs (Extras → Crosshairs): per-tab overlay markers, draggable in place. */}
       <CrosshairOverlay
         placements={settings.linesCrosshairs}
         stable={gt.crosshairStable}

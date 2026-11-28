@@ -4,7 +4,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { getSentenceIndex } from '../document/readerDocument.js';
 import { t } from '../i18n.js';
 
-// Train → Pronunciation Check: read the sentence at your place aloud; a phoneme recogniser (on this
+// Practice → Pronunciation Check: read the sentence at your place aloud; a phoneme recogniser (on this
 // device) hears the sounds you made and each word is scored against how it should sound, with the
 // expected vs heard sounds (IPA) on hover. First use downloads the model (~320 MB, once).
 const ESPEAK = { en: 'en-us', de: 'de', fr: 'fr-fr', es: 'es', it: 'it', pt: 'pt', nl: 'nl', hr: 'hr', pl: 'pl', sv: 'sv', ru: 'ru' };

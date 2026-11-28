@@ -112,6 +112,15 @@ const MODAL_KINDS = new Set([
 // name in its title, renders grouped next to its file tab, and closes when the file tab closes.
 // The Audiobook console is deliberately NOT here: narration is shelf-wide work, so it is one
 // singleton tab that outlives any document and picks its book from its own Library view.
+// One Settings window: [dialog kind, section label, needs an open document].
+// i18n-keys: General | This tab | New-tab defaults | Fonts | Audio | Typing | Comfort & breaks | Sync & data | Book groups
+export const SETTINGS_SECTIONS = [
+  ['app-settings', 'General'], ['tab-settings', 'This tab', true], ['def-settings', 'New-tab defaults'],
+  ['font-manager', 'Fonts', true], ['audio-settings', 'Audio', true], ['typing-settings', 'Typing', true],
+  ['comfort-settings', 'Comfort & breaks'], ['data', 'Sync & data'], ['book-groups', 'Book groups'],
+];
+const SETTINGS_KINDS = new Set(SETTINGS_SECTIONS.map(([k]) => k));
+
 export const DOC_SCOPED_KINDS = new Set([
   'tab-settings', 'typing-settings', 'audio-settings', 'font-manager', 'proper-names',
   'notes', 'tts-popup', 'regressions', 'progress-detail', 'attention',
@@ -213,13 +222,26 @@ function reducer(state, action) {
       const docTabId = scoped ? state.activeTabId : undefined;
       // Dedupe: same kind refocuses (per FILE for doc-scoped kinds — Audiobook for book A and for
       // book B are two different tabs; there's still never two Audiobook tabs for the same book).
-      const existing = state.panels.find((p) => p.kind === d.kind && (!scoped || p.docTabId === docTabId));
+      // Settings sections share ONE Settings tab: opening any of them swaps that tab's section.
+      const existing = state.panels.find((p) => (p.kind === d.kind && (!scoped || p.docTabId === docTabId))
+        || (SETTINGS_KINDS.has(d.kind) && SETTINGS_KINDS.has(p.kind)));
       if (existing) {
         return { ...state, activePanelId: existing.id,
-          panels: state.panels.map((p) => (p.id === existing.id ? { ...p, ...d } : p)) };
+          panels: state.panels.map((p) => (p.id === existing.id ? { ...p, ...d, docTabId: p.kind === d.kind ? p.docTabId : docTabId } : p)) };
       }
       const id = state.panelSeq + 1;
       return { ...state, panels: [...state.panels, { ...d, id, docTabId }], activePanelId: id, panelSeq: id };
+    }
+    // The Settings window's section strip: swap what the open settings dialog shows, in place
+    // (same tab, or the same modal), instead of opening one dialog tab per section.
+    case 'SWITCH_DIALOG': {
+      const d = action.dialog;
+      const docTabId = DOC_SCOPED_KINDS.has(d.kind) ? state.activeTabId : undefined;
+      if (state.modal) return { ...state, modal: d };
+      if (state.activePanelId == null) return state;
+      return { ...state, panels: state.panels
+        .filter((p) => p.id === state.activePanelId || p.kind !== d.kind)
+        .map((p) => (p.id === state.activePanelId ? { ...d, id: p.id, docTabId } : p)) };
     }
     case 'CLOSE_DIALOG': {
       // A dialog's own ×/Esc closes whatever is focused: a modal first, else the active panel tab.
@@ -764,6 +786,7 @@ export function AppProvider({ children }) {
 
   const openDialog = useCallback((dialog) => dispatch({ type: 'OPEN_DIALOG', dialog }), []);
   const closeDialog = useCallback(() => dispatch({ type: 'CLOSE_DIALOG' }), []);
+  const switchDialog = useCallback((dialog) => dispatch({ type: 'SWITCH_DIALOG', dialog }), []);
   const setActivePanel = useCallback((id) => {
     // Clicking the already-focused tab minimizes it (back to reading); otherwise focus it.
     dispatch({ type: 'SET_ACTIVE_PANEL', id: stateRef.current.activePanelId === id ? null : id });
@@ -807,6 +830,7 @@ export function AppProvider({ children }) {
     patchTab,
     setStatus,
     openDialog,
+    switchDialog,
     closeDialog,
     setActivePanel,
     closePanel,

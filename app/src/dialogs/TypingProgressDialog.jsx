@@ -157,7 +157,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
     >
       {!runs && <p>{t('Loading…')}</p>}
       {runs && runs.length === 0 && (
-        <p className="settings-note">{t('No typing runs yet. Open a document, then View → Typing Practice and complete a run.')}</p>
+        <p className="settings-note">{t('No typing runs yet. Open a document, then Practice → Typing Practice and complete a run.')}</p>
       )}
       {stats && (
         <>
@@ -302,7 +302,7 @@ export default function TypingProgressDialog({ keyboards = [], onClose }) {
                     </tbody>
                   </table>
                 </div>
-                <p className="settings-note">{t('Rename a keyboard in Typing → Typing Settings.')}</p>
+                <p className="settings-note">{t('Rename a keyboard in Practice → Typing Settings.')}</p>
               </>
             );
           })()}

@@ -123,7 +123,7 @@ export default function AllNotesView({ books, crossNotes, fileStats, onSaveBook,
           </button>
         ))}
       </div>
-      {shown.length === 0 && <p className="settings-note">{t('No notes match. Document notes come from the reader (View → Notes & Annotations); book, AI and shared notes live on your tracker books.')}</p>}
+      {shown.length === 0 && <p className="settings-note">{t('No notes match. Document notes come from the reader (Reader → Notes & Annotations); book, AI and shared notes live on your tracker books.')}</p>}
       <div className="an-list">
         {shown.map((it) => {
           const hidden = it.spoiler && !revealed.has(it.key);

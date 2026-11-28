@@ -2,6 +2,11 @@
   {
     "date": "2026-11-28",
     "items": [
+      "New menus, organised by what you're doing: File, Reader, Library, Listen, Practice, Settings, Extras and Help. The panel switches (Fast Reader, Lines, ToC, Stats, Index, Avatars, Chips, Incognito) now live in one Panels menu, so the bar fits on one row.",
+      "One Settings window: General, This tab, New-tab defaults, Fonts, Audio, Typing, Comfort & breaks, Sync & data and Book groups are sections across its top, in a single tab.",
+      "On the phone, a tab bar along the bottom: Reader, Library, Listen, Practice and More.",
+      "Trackyread's views are grouped into Books, Queues, Insights, AI and Import / Export, so they no longer scroll sideways on a phone.",
+      "Right-click a tab (long-press on a phone) for two new options: close the others that are in a queue, or close the others that aren't.",
       "Preparing audio for your phone is now one checklist: on your computer open Audio → Listen to the Queue & Prepare Phone Audio, and tick off sign-in, sync machine, voice, queue and rendering in one place.",
       "The start screen has buttons to open a book, paste text, open your library or listen. Rarely used tools (teleprompter, avatars, crosshairs, reading cursor, biometric controls, HTML tools) moved to a new Extras menu.",
       "Trackyread's AI page now only sends work to your AI runner: the copy-and-paste, direct-API, manual snapshot and inbox options are gone, and syncing is automatic so it is no longer listed there.",

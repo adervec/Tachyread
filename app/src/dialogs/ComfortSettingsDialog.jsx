@@ -76,7 +76,7 @@ export default function ComfortSettingsDialog({ global, onPatch, onClose }) {
         </label>
       </Field>
       <p className="settings-note">
-        {t('Speed-reading removes the natural pauses paged reading gives you, so eye strain builds up quietly. Breaks follow the 20-20-20 guideline (every ~20 min, look ~20 ft / 6 m away for ~20 s) and speed-easing nudges WPM down only when comprehension checks and time-on-task both suggest you are tiring. This is a comfort aid, not medical advice. Take a break any time from Train → Take a Break Now.')}
+        {t('Speed-reading removes the natural pauses paged reading gives you, so eye strain builds up quietly. Breaks follow the 20-20-20 guideline (every ~20 min, look ~20 ft / 6 m away for ~20 s) and speed-easing nudges WPM down only when comprehension checks and time-on-task both suggest you are tiring. This is a comfort aid, not medical advice. Take a break any time from Practice → Take a Break Now.')}
       </p>
     </Dialog>
   );

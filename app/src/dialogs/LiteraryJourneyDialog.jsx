@@ -852,6 +852,16 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
     { id: 'ai', label: t('AI / Cowork') },
     { id: 'data', label: t('Import / Export') },
   ];
+  // Five groups on top (the 15 views were one long sideways-scrolling row on a phone); the group's
+  // own views, when it has more than one, sit in a second row.
+  const GROUPS = [
+    { id: 'books', label: `📚 ${t('Books')}`, tabs: ['dashboard', 'library', 'series', 'groups', 'authors', 'genres', 'notes'] },
+    { id: 'queues', label: `🎧 ${t('Queues')}`, tabs: ['queue'] },
+    { id: 'insights', label: `📈 ${t('Insights')}`, tabs: ['analytics', 'timeline', 'rhistory', 'archetype', 'constellation'] },
+    { id: 'ai', label: `🤖 ${t('AI')}`, tabs: ['ai'] },
+    { id: 'data', label: `⇅ ${t('Import / Export')}`, tabs: ['data'] },
+  ];
+  const grp = GROUPS.find((g) => g.tabs.includes(tab)) || GROUPS[0];
 
   return (
     <Dialog title="Trackyread" onClose={handleClose} width={tab === 'queue' ? 1500 : 880} buttons={<button onClick={handleClose}>{t('Close')}</button>}>
@@ -859,11 +869,18 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
       {books && (
         <>
           {empty && <p className="settings-note">{t('Your reading tracker is empty — import your library.json under Import / Export (nothing is bundled with the app).')}</p>}
-          <div className="rh-tabs">
-            {TABS.map((tb) => (
-              <button key={tb.id} className={`rh-tab${tab === tb.id ? ' on' : ''}`} onClick={() => { setTab(tb.id); setSelected(null); }}>{tb.label}</button>
+          <div className="rh-tabs rh-groups" role="tablist">
+            {GROUPS.map((g) => (
+              <button key={g.id} role="tab" aria-selected={grp.id === g.id} className={`rh-tab${grp.id === g.id ? ' on' : ''}`} onClick={() => { if (grp.id !== g.id) { setTab(g.tabs[0]); setSelected(null); } }}>{g.label}</button>
             ))}
           </div>
+          {grp.tabs.length > 1 && (
+            <div className="rh-tabs rh-subtabs" role="tablist">
+              {TABS.filter((tb) => grp.tabs.includes(tb.id)).map((tb) => (
+                <button key={tb.id} role="tab" aria-selected={tab === tb.id} className={`rh-tab${tab === tb.id ? ' on' : ''}`} onClick={() => { setTab(tb.id); setSelected(null); }}>{tb.label}</button>
+              ))}
+            </div>
+          )}
 
           {tab === 'dashboard' && stats && (
             <div className="lj-dash">
@@ -1251,7 +1268,7 @@ export default function LiteraryJourneyDialog({ global, onPatch, initialTab, foc
               <p className="settings-note">{t('Filtered / partial exports live on the Library tab (“Export view”).')}</p>
 
               <div className="rh-section-h">{t('Cloud sync (whole tracker)')}</div>
-              <p className="settings-note">{t('Syncs the entire tracker as its own file ({target}) — separate from reading-progress sync. Set up / sign in to the target under Settings → Data Management → Cloud sync.', { target: provider?.label || t('no target set') })}</p>
+              <p className="settings-note">{t('Syncs the entire tracker as its own file ({target}) — separate from reading-progress sync. Set up / sign in to the target under Settings → Sync & Data → Cloud sync.', { target: provider?.label || t('no target set') })}</p>
               <div className="lj-inline">
                 <button disabled={!providerOk || syncBusy} onClick={syncTracker}>{t('Sync tracker now')}</button>
                 {sync.lastLibrarySync ? <span className="settings-note">{t('Last: {when}', { when: fmtDateTime(sync.lastLibrarySync) })}</span> : null}
@@ -1875,7 +1892,7 @@ function BookEditor({ book, isNew = false, books = [], docMeta = [], bindMap = {
           </label>
           {suggested && <button className="link-btn" onClick={() => onBind(suggested.checksum, b.id)}>{t('Link “{file}”?', { file: suggested.fileName })}</button>}
           {currentLink && onProgress && <button className="link-btn" title={t("Reading progress detail for the linked document — works even when the file isn't on this device (uses the synced reading state)")} onClick={() => onProgress(currentLink)}>📈 {t('Progress')}</button>}
-          {linkedGroup && <span className="settings-note">📚 {t('Also in book group {group} (Settings → Book Groups).', { group: linkedGroup.name })}</span>}
+          {linkedGroup && <span className="settings-note">📚 {t('Also in book group {group} (Library → Book Groups).', { group: linkedGroup.name })}</span>}
           <span className="settings-note">{t('Linking auto-marks this book finished when you complete that document.')}</span>
         </div>
       )}
@@ -2796,7 +2813,7 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
     })
     .filter((g) => (g.members || []).length >= 2));
   const forgetGrp = (id) => { onGroups(groups.filter((g) => g.id !== id)); setEditGrp(null); setMsg(t('Group forgotten on this device — its files keep their own progress.')); };
-  // Create a group right here (same makeGroup as Settings → Book Groups).
+  // Create a group right here (same makeGroup as Library → Book Groups).
   const [newSel, setNewSel] = useState(() => new Set());
   const [newName, setNewName] = useState('');
   function createGroup() {
@@ -2884,7 +2901,7 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
   return (
     <div className="lj-groupsview">
       <div className="rh-section-h">{t('Book groups ↔ tracker books')}</div>
-      {groups.length === 0 && <p className="settings-note">{t('No book groups yet — group edition files under Settings → Book Groups, then link each group to its tracker book here.')}</p>}
+      {groups.length === 0 && <p className="settings-note">{t('No book groups yet — group edition files under Library → Book Groups, then link each group to its tracker book here.')}</p>}
       {groups.map((g) => {
         const master = masterOf(g);
         const linkedId = bindMap[master] || (g.members || []).map((m) => bindMap[m]).find(Boolean);
@@ -3022,8 +3039,8 @@ function GroupsView({ books, groups, bindMap, secBind, docMeta, fileStats, onBin
                             )}
                           </select>)}
                           {r.state === 'failed' && <span className="lj-bulk-warn" title={r.outcome}>⚠ {r.outcome}</span>}
-                          {dupe && !r.state && <span className="lj-bulk-warn" title={t('Another row targets the same book. A book keeps one linked file, so only the last one applied stays linked — group editions under Settings → Book Groups instead.')}>⚠ {t('twice')}</span>}
-                          {taken && !dupe && !r.state && <span className="lj-bulk-warn" title={t('Already linked to “{file}” — applying moves that link to this file (group editions under Settings → Book Groups instead)', { file: nameOf(taken) })}>⚠ {t('relink')}</span>}
+                          {dupe && !r.state && <span className="lj-bulk-warn" title={t('Another row targets the same book. A book keeps one linked file, so only the last one applied stays linked — group editions under Library → Book Groups instead.')}>⚠ {t('twice')}</span>}
+                          {taken && !dupe && !r.state && <span className="lj-bulk-warn" title={t('Already linked to “{file}” — applying moves that link to this file (group editions under Library → Book Groups instead)', { file: nameOf(taken) })}>⚠ {t('relink')}</span>}
                         </td>
                         <td className="lj-bulk-acts">{r.state !== 'linked' && r.state !== 'created' && <button disabled={!!busy} onClick={() => setPick(pick?.cs === r.cs ? null : { cs: r.cs, q: '' })} title={t('Search the whole library for the right book')}>🔍</button>}</td>
                       </tr>

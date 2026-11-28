@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { useApp } from '../state/AppContext.jsx';
+import { useApp, SETTINGS_SECTIONS } from '../state/AppContext.jsx';
 import { groupForChecksum, masterOf } from '../features/bookGroups.js';
 import { finishedNotRereading } from '../features/recentFilter.js';
 import { getBinding, getLibraryBook, getLibraryBooks, getLibraryRef, getPresencePeers, loadFile, saveLibraryBook, setBinding } from '../state/storage.js';
-import { queueOf, queueBooks, nextInQueue } from '../features/readingQueues.js';
+import { queueOf, queueBooks, nextInQueue, liveQueues } from '../features/readingQueues.js';
 import { openBookFile } from '../features/openBook.js';
 import { getSearchDirs } from '../features/fileLocator.js';
 import { contentType, readStatus } from '../features/journeyLibrary.js';
@@ -16,9 +16,9 @@ import { t, fmtNum } from '../i18n.js';
 
 // Short labels for the dialog tabs (menus use longer "…" titles). Fallback is the raw kind.
 const PANEL_LABELS = {
-  'tab-settings': t('Tab Settings'), 'typing-settings': t('Typing Settings'), 'audio-settings': t('Audio Settings'), 'listen-player': t('Listen'),
-  'font-manager': t('Fonts'), 'help': t('Help'), 'def-settings': t('Default Settings'), 'app-settings': t('App Settings'),
-  'biometric-settings': t('Biometric Controls'), 'comfort-settings': t('Comfort'), 'data': t('Data'), 'book-groups': t('Book Groups'),
+  // The settings sections share one Settings tab (state/AppContext.jsx SETTINGS_SECTIONS).
+  ...Object.fromEntries(SETTINGS_SECTIONS.map(([k]) => [k, `⚙ ${t('Settings')}`])), 'listen-player': t('Listen'),
+  'help': t('Help'), 'biometric-settings': t('Biometric Controls'),
   'stats': t('Statistics'), 'history': t('History'), 'literary-journey': t('Trackyread'), 'proper-names': t('Proper Names'),
   'audiobook': t('Audiobook Centre'), 'notes': t('Notes'), 'tts-popup': t('Text-to-Speech'), 'face-library': t('Avatars'),
   'typing-progress': t('Typing Progress'), 'span-drill': t('Span Drill'), 'eye-warmup': t('Eye Warmup'),
@@ -49,12 +49,17 @@ export default function TabBar() {
   // The menu tab's queue (if its book is queued): { queue, next: { book, cs } | null } — looked up
   // when the menu opens, for "Open next in queue" / "Go to queue".
   const [menuQ, setMenuQ] = useState(null);
+  const pressRef = useRef(null); // phone: a long press opens the same menu (kept on screen)
+  const openTabMenu = (x, y, tab) => { setMenu({ x: Math.max(4, Math.min(x, window.innerWidth - 270)), y: Math.min(y, window.innerHeight * 0.35), tabId: tab.id }); lookupQueue(tab); };
+  const [queuedIds, setQueuedIds] = useState(null); // book ids in any live queue, for "Close others in / not in a queue"
   async function lookupQueue(tab) {
     setMenuQ(null);
+    const queues = await getLibraryRef('queues').catch(() => null);
+    setQueuedIds(new Set(liveQueues(queues || []).flatMap((q) => q.ids || [])));
     const cs = tab.lazy ? tab.settings?.contentChecksum : tab.doc?.contentChecksum;
     const bookId = cs && bindings[cs];
     if (!bookId) return;
-    const [queues, books] = await Promise.all([getLibraryRef('queues').catch(() => null), getLibraryBooks().catch(() => [])]);
+    const books = await getLibraryBooks().catch(() => []);
     const q = queueOf(queues || [], bookId);
     if (!q) return;
     const csOf = {};
@@ -232,6 +237,9 @@ export default function TabBar() {
     const trackedIds = tabs.filter((tb) => bindings[csOf(tb)]).map((tb) => tb.id);
     const untrackedIds = tabs.filter((tb) => !bindings[csOf(tb)]).map((tb) => tb.id);
     const untouchedIds = tabs.filter((tb) => tabPct(tb) < 2).map((tb) => tb.id);
+    const inQueue = (tb) => !!queuedIds?.has(bindings[csOf(tb)]);
+    const othersQueued = tabs.filter((tb) => tb.id !== menu.tabId && inQueue(tb)).map((tb) => tb.id);
+    const othersUnqueued = tabs.filter((tb) => tb.id !== menu.tabId && !inQueue(tb)).map((tb) => tb.id);
     const menuTab = tabs[i];
     const menuCs = menuTab.lazy ? menuTab.settings?.contentChecksum : menuTab.doc?.contentChecksum;
     const untracked = !!menuCs && !bindings[menuCs];
@@ -271,6 +279,8 @@ export default function TabBar() {
       ] : []),
       { label: t('Close'), fn: () => closeTab(menu.tabId) },
       { label: t('Close others'), n: otherIds.length, fn: () => closeTabs(otherIds) },
+      { label: t('Close others in a queue'), n: queuedIds ? othersQueued.length : 0, fn: () => closeTabs(othersQueued) },
+      { label: t('Close others not in a queue'), n: queuedIds ? othersUnqueued.length : 0, fn: () => closeTabs(othersUnqueued) },
       { label: t('Close to the left'), n: leftIds.length, fn: () => closeTabs(leftIds) },
       { label: t('Close to the right'), n: rightIds.length, fn: () => closeTabs(rightIds) },
       { label: t('Close finished'), n: finishedIds.length, fn: () => closeTabs(finishedIds) },
@@ -338,7 +348,10 @@ export default function TabBar() {
             // doesn't start its autoscroll on the way.
             onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeTab(tab.id); } }}
             onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}
-            onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, tabId: tab.id }); lookupQueue(tab); }}
+            onContextMenu={(e) => { e.preventDefault(); openTabMenu(e.clientX, e.clientY, tab); }}
+            onTouchStart={(e) => { const p = e.touches[0]; clearTimeout(pressRef.current); pressRef.current = setTimeout(() => openTabMenu(p.clientX, p.clientY, tab), 550); }}
+            onTouchMove={() => clearTimeout(pressRef.current)}
+            onTouchEnd={() => clearTimeout(pressRef.current)}
             onDragStart={(e) => { dragId.current = tab.id; e.dataTransfer.effectAllowed = 'move'; }}
             onDragOver={(e) => { if (dragId.current && dragId.current !== tab.id) { e.preventDefault(); setDropId(tab.id); } }}
             onDragLeave={() => setDropId((d) => (d === tab.id ? null : d))}

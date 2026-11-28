@@ -5,7 +5,7 @@ import { alignTranscript, syncCoverage } from '../features/audioSync.js';
 import { saveAudioSync, getAudioSync, deleteAudioSync } from '../state/storage.js';
 import { t } from '../i18n.js';
 
-// Audio → Sync My Audiobook: pick the audio files of this book's audiobook (MP3 / M4B / M4A / WAV…),
+// Listen → Sync My Audiobook: pick the audio files of this book's audiobook (MP3 / M4B / M4A / WAV…),
 // in order. Whisper transcribes them on this device with word timings, the words are aligned to the
 // book, and read-aloud (offline voice) then plays YOUR narration with the reading position following
 // it. It's slow — roughly the length of the audio on a typical laptop with the fast model — so leave it

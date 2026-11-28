@@ -20,32 +20,33 @@ function ThemeOptions() {
 }
 
 const MENUS = {
+  // Bring books in, save, close.
   file: [
     { label: t('Open TXT...'), shortcut: 'Ctrl+O', action: 'open-txt', icon: '📄'},
     { label: t('Open Document (PDF, EPUB, HTML, DOCX, MD)...'), shortcut: 'Ctrl+D', action: 'open-doc', icon: '📚'},
     { label: t('Open HTML (choose content region)...'), action: 'open-html-pick', icon: '🌐'},
     { label: t('Open Untracked Only (skip what is in Trackyread)...'), action: 'open-untracked', icon: '🆕'},
     { label: t('Open Unfinished Only (skip what is finished)...'), action: 'open-unfinished', icon: '📖'},
+    { label: t('Open from Clipboard'), shortcut: 'Ctrl+B', action: 'open-clip', icon: '📋'},
+    { kind: 'separator' },
     { label: t('Bulk Add from Folder...'), action: 'bulk-add', icon: '📂'},
     { label: t('Add Untracked Files to Trackyread (from folder, nothing stays open)...'), action: 'bulk-track', icon: '🏷️'},
-    { label: t('Open from Clipboard'), shortcut: 'Ctrl+B', action: 'open-clip', icon: '📋'},
-    { label: t('Export as Bionic EPUB (e-ink)...'), action: 'export-bionic', icon: '📗'},
     { label: t('Grab Text (OCR)...'), shortcut: 'Ctrl+Shift+G', action: 'grab', icon: '📸'},
     { label: t('Grab from Web URL...'), action: 'web-grab', icon: '🕸️'},
     { label: t('Browse Online Catalogs (OPDS)...'), action: 'opds', icon: '🏛️'},
+    { kind: 'separator' },
+    { label: t('Export as Bionic EPUB (e-ink)...'), action: 'export-bionic', icon: '📗'},
     { label: t('Show File Location...'), action: 'reveal-file', icon: '📁'},
     { label: t('Save Tab Text...'), action: 'save-tab', icon: '💾'},
     { kind: 'separator' },
-    { label: t('Find...'), shortcut: 'Ctrl+F', action: 'find', icon: '🔎'},
-    { label: t('Go to Line...'), shortcut: 'Ctrl+G', action: 'goto', icon: '📍'},
     { label: t('Close Tab'), action: 'close-tab', icon: '❌'},
     { label: t('Close All Tabs'), action: 'close-all', icon: '🧹'},
     { kind: 'separator' },
     { label: t('Disconnect (keep session for next time)'), action: 'disconnect', icon: '🔌'},
     { label: t('Shut Down (close all, start clean next time)'), action: 'shutdown', icon: '🛑'},
   ],
-  // What's on screen right now.
-  view: [
+  // The book open now: what is on screen, finding your way, building its contents.
+  read: [
     { label: t('Notes & Annotations...'), shortcut: 'Ctrl+Shift+N', action: 'notes', icon: '📝'},
     { label: t('Show / Hide Lines Pane'), action: 'toggle-lines', icon: '📃'},
     { label: t('Side-by-Side Companion (read two documents)'), action: 'companion', icon: '📖'},
@@ -53,64 +54,65 @@ const MENUS = {
     { label: t('Preview Footnote'), shortcut: 'Ctrl+Shift+F', action: 'footnote', icon: '📑'},
     { label: t('Incognito Reading (no tracking)'), action: 'toggle-incognito', icon: '🕶️'},
     { label: t('Reduce Blue Light (bedtime)'), shortcut: 'B', action: 'toggle-bluelight', icon: '🌙'},
+    { kind: 'separator' },
+    { label: t('Find...'), shortcut: 'Ctrl+F', action: 'find', icon: '🔎'},
+    { label: t('Go to Line...'), shortcut: 'Ctrl+G', action: 'goto', icon: '📍'},
+    { kind: 'separator' },
+    { label: t('Generate Contents (Wizard)...'), action: 'toc-wizard', icon: '🧭'},
+    { label: t('Generate Proper Names (Wizard)...'), action: 'names-wizard', icon: '🏷️'},
+    { label: t('Generate Index (Wizard)...'), action: 'index-wizard', icon: '🔖'},
+    { label: t('Locate Footnotes (Wizard)...'), action: 'notes-wizard', icon: '📌'},
   ],
-  // Drills & practice.
-  train: [
+  // Trackyread and your reading numbers.
+  library: [
+    { label: t('Trackyread (Reading Tracker)...'), action: 'literary-journey', icon: '🗺️'},
+    { label: t('This Book in Trackyread...'), action: 'trackyread-book', icon: '📖'},
+    { label: t('Reading History...'), shortcut: 'Ctrl+H', action: 'history', icon: '🕰️'},
+    { label: t('Book Groups...'), action: 'book-groups', icon: '📚'},
+    { kind: 'separator' },
+    { label: t('Statistics...'), shortcut: 'Ctrl+T', action: 'stats', icon: '📊'},
+    { label: t('Progress Detail...'), action: 'progress-detail', icon: '📈'},
+    { label: t('Regression Report...'), action: 'regressions', icon: '↩️'},
+    { label: t('Attention Check...'), action: 'attention', icon: '🧐'},
+    { kind: 'separator' },
+    { label: t('API Usage & Spend...'), action: 'api-usage', icon: '💳'},
+  ],
+  // Listening: the phone player, audiobooks, read-aloud.
+  listen: [
+    { label: t('Listen to the Queue & Prepare Phone Audio...'), action: 'listen-player', icon: '🎧'},
+    { kind: 'separator' },
+    { label: t('Audiobook Command Centre...'), shortcut: 'Ctrl+Shift+A', action: 'audiobook', icon: '🎧'},
+    { label: t('Sync My Audiobook to This Book...'), action: 'audio-sync', icon: '🔗'},
+    { label: t('Text-to-Speech Reader...'), shortcut: 'Ctrl+Shift+T', action: 'tts-popup', icon: '🔊'},
+    { label: t('Ambient Sound...'), action: 'ambient', icon: '🌊'},
+    { kind: 'separator' },
+    { label: t('Audio Settings...'), action: 'audio-settings', icon: '🎚️'},
+  ],
+  // Drills, typing and breaks.
+  practice: [
     { label: t('Eye Warmup...'), action: 'eye-warmup', icon: '👀'},
     { label: t('Span Drill...'), action: 'span-drill', icon: '↔️'},
     { label: t('Dictation (speak to write)...'), action: 'dictation', icon: '🎙️'},
     { label: t('Vocabulary...'), action: 'vocab', icon: '🧠'},
     { label: t('Pronunciation Check...'), action: 'pronounce', icon: '👄'},
     { kind: 'separator' },
-    { label: t('Take a Break Now'), action: 'take-break', icon: '☕'},
-  ],
-  // Progress & analytics.
-  stats: [
-    { label: t('Statistics...'), shortcut: 'Ctrl+T', action: 'stats', icon: '📊'},
-    { label: t('Progress Detail...'), action: 'progress-detail', icon: '📈'},
-    { label: t('Regression Report...'), action: 'regressions', icon: '↩️'},
-    { label: t('Attention Check...'), action: 'attention', icon: '🧐'},
-    { label: t('Reading History...'), shortcut: 'Ctrl+H', action: 'history', icon: '🕰️'},
-    { label: t('Trackyread (Reading Tracker)...'), action: 'literary-journey', icon: '🗺️'},
-    { label: t('This Book in Trackyread...'), action: 'trackyread-book', icon: '📖'},
-    { label: t('API Usage & Spend...'), action: 'api-usage', icon: '💳'},
-  ],
-  // Document-resource generators.
-  tools: [
-    { label: t('Generate Contents (Wizard)...'), action: 'toc-wizard', icon: '🧭'},
-    { label: t('Generate Proper Names (Wizard)...'), action: 'names-wizard', icon: '🏷️'},
-    { label: t('Generate Index (Wizard)...'), action: 'index-wizard', icon: '🔖'},
-    { label: t('Locate Footnotes (Wizard)...'), action: 'notes-wizard', icon: '📌'},
-  ],
-  typing: [
     { label: t('Typing Practice'), action: 'typing', icon: '⌨️'},
     { label: t('Flow Writer...'), action: 'flow-writer', icon: '✍️'},
     { label: t('Typing Plans...'), action: 'typing-plans', icon: '🗓️'},
     { label: t('Typing Progress...'), action: 'typing-progress', icon: '📈'},
-    { kind: 'separator' },
     { label: t('Typing Settings...'), action: 'typing-settings', icon: '🎛️'},
-  ],
-  audio: [
-    { label: t('Audiobook Command Centre...'), shortcut: 'Ctrl+Shift+A', action: 'audiobook', icon: '🎧'},
-    { label: t('Sync My Audiobook to This Book...'), action: 'audio-sync', icon: '🔗'},
-    { label: t('Text-to-Speech Reader...'), shortcut: 'Ctrl+Shift+T', action: 'tts-popup', icon: '🔊'},
-    { label: t('Ambient Sound...'), action: 'ambient', icon: '🌊'},
     { kind: 'separator' },
-    { label: t('Listen to the Queue & Prepare Phone Audio...'), action: 'listen-player', icon: '🎧'},
-    { label: t('Audio Settings...'), action: 'audio-settings', icon: '🎚️'},
+    { label: t('Take a Break Now'), action: 'take-break', icon: '☕'},
   ],
+  // Everything opens in the one Settings window (its sections cover the rest).
   settings: [
+    { label: t('Settings...'), action: 'app-settings', icon: '⚙️'},
     { label: t('Tab Settings...'), shortcut: 'Ctrl+,', action: 'tab-settings', icon: '🗂️'},
-    { label: t('Application Settings...'), action: 'app-settings', icon: '⚙️'},
-    { label: t('Default Tab Settings...'), action: 'def-settings', icon: '🧾'},
+    { kind: 'separator' },
     { label: t('Reset Tab to Default Settings'), action: 'reset-tab', icon: '♻️'},
     { label: t('Apply Default Settings to All Tabs'), action: 'apply-defaults-all', icon: '🔁'},
     { kind: 'separator' },
-    { label: t('Font Manager...'), action: 'font-manager', icon: '🔤'},
-    { label: t('Comfort & Breaks...'), action: 'comfort-settings', icon: '🛋️'},
-    { kind: 'separator' },
-    { label: t('Data Management...'), action: 'data', icon: '💽'},
-    { label: t('Book Groups...'), action: 'book-groups', icon: '📚'},
+    { label: t('Sync & Data...'), action: 'data', icon: '☁'},
   ],
   // Rarely used extras, kept out of the main menus.
   extras: [
@@ -122,6 +124,7 @@ const MENUS = {
     { label: t('Avatar Library...'), action: 'face-library', icon: '🙂'},
     { label: t('Biometric Controls...'), action: 'biometric-settings', icon: '👁️'},
   ],
+  // Help, install, about.
   help: [
     { label: t('Help...'), shortcut: 'F1', action: 'help', icon: '❓'},
     { label: t('Install as App...'), action: 'install-pwa', icon: '⬇️'},
@@ -132,12 +135,10 @@ const MENUS = {
 // Menu-bar order + display titles (desktop dropdowns and the mobile drawer sections).
 const MENU_ORDER = [
   ['file', t('File'), '📁'],
-  ['view', t('View'), '👁️'],
-  ['train', t('Train'), '🏋️'],
-  ['stats', t('Stats'), '📊'],
-  ['tools', t('Tools'), '🧰'],
-  ['typing', t('Typing'), '⌨️'],
-  ['audio', t('Audio'), '🔊'],
+  ['read', t('Reader'), '📖'],
+  ['library', t('Library'), '🗺️'],
+  ['listen', t('Listen'), '🎧'],
+  ['practice', t('Practice'), '🏋️'],
   ['settings', t('Settings'), '⚙️'],
   ['extras', t('Extras'), '🧪'],
   ['help', t('Help'), '❓'],
@@ -191,7 +192,7 @@ function RecentFiles({ recent, onPick }) {
 }
 
 // Quick reading-font picker for the top bar: very legible picks, common system fonts, and your
-// recently used ones. The full searchable catalogue stays in Settings → Font Manager.
+// recently used ones. The full searchable catalogue stays in Settings → Fonts.
 const QUICK_FONTS_LEGIBLE = [
   ["'Lexend', sans-serif", 'Lexend'],
   ["'Atkinson Hyperlegible', sans-serif", 'Atkinson Hyperlegible'],
@@ -224,7 +225,7 @@ function FontQuickPick({ activeTab, patchSettings, global, updateGlobal }) {
       className="menu-font-pick"
       value={current}
       disabled={!activeTab}
-      title={t('Reading font — legible / common / recent picks (full catalogue in Settings → Font Manager)')}
+      title={t('Reading font — legible / common / recent picks (full catalogue in Settings → Fonts)')}
       aria-label={t('Reading font')}
       onChange={(e) => pick(e.target.value)}
     >
@@ -286,6 +287,12 @@ export default function MenuBar({ onFileOpen, onAction }) {
   const [openMenu, setOpenMenu] = useState(null);
   const [sub, setSub] = useState(null); // mobile drawer: which submenu is drilled into (null = top level)
   const ref = useRef(null);
+  // The phone's bottom tab bar (Practice, More) opens the drawer, optionally at one menu.
+  useEffect(() => {
+    const on = (e) => { if (e.detail?.close) { setOpenMenu(null); setSub(null); return; } setOpenMenu('mobile'); setSub(e.detail?.sub || null); };
+    window.addEventListener('tachyread-open-menu', on);
+    return () => window.removeEventListener('tachyread-open-menu', on);
+  }, []);
 
   // Badge the "Tab Settings…" item with how many of the active tab's settings differ from the
   // user's Default Tab Settings (so it's visible at a glance that the tab has been customised).
@@ -377,25 +384,6 @@ export default function MenuBar({ onFileOpen, onAction }) {
         </button>
         <div className="grow" />
         {gsync}
-        <FontQuickPick activeTab={activeTab} patchSettings={patchSettings} global={state.global} updateGlobal={updateGlobal} />
-        <button
-          className="menu-font-btn"
-          disabled={!activeTab}
-          title={t('Smaller reading font')}
-          aria-label={t('Smaller reading font')}
-          onClick={() => adjustReadingFont(-1)}
-        >
-          A−
-        </button>
-        <button
-          className="menu-font-btn"
-          disabled={!activeTab}
-          title={t('Larger reading font')}
-          aria-label={t('Larger reading font')}
-          onClick={() => adjustReadingFont(1)}
-        >
-          A+
-        </button>
         {/* Full-screen was reachable only by shaking the phone — the ⛶ lived on the desktop bar. */}
         <button
           className="menu-font-btn"
@@ -406,16 +394,6 @@ export default function MenuBar({ onFileOpen, onAction }) {
         >
           ⛶
         </button>
-        <select
-          className="menu-theme-compact"
-          value={themeName}
-          disabled={!activeTab}
-          title={t('Reading theme for the current tab')}
-          aria-label={t('Theme')}
-          onChange={(e) => activeTab && patchSettings(activeTab.id, { themeName: e.target.value })}
-        >
-          <ThemeOptions />
-        </select>
         {open && <div className="menu-scrim" onClick={closeDrawer} aria-hidden="true" />}
         {open && (
           <div className="menu-drawer">
@@ -423,6 +401,39 @@ export default function MenuBar({ onFileOpen, onAction }) {
               // Top level: a short list of menus to drill into (so the whole menu tree isn't one
               // long scroll). The reader-area toggles live on the top bar with rotate/lock, not here.
               <>
+                {/* Reading look (font, size, theme) sits here, not on the phone's top bar. */}
+                <div className="menu-drawer-section">{t('Display')}</div>
+                <div className="menu-drawer-display">
+                <FontQuickPick activeTab={activeTab} patchSettings={patchSettings} global={state.global} updateGlobal={updateGlobal} />
+                <button
+                  className="menu-font-btn"
+                  disabled={!activeTab}
+                  title={t('Smaller reading font')}
+                  aria-label={t('Smaller reading font')}
+                  onClick={() => adjustReadingFont(-1)}
+                >
+                  A−
+                </button>
+                <button
+                  className="menu-font-btn"
+                  disabled={!activeTab}
+                  title={t('Larger reading font')}
+                  aria-label={t('Larger reading font')}
+                  onClick={() => adjustReadingFont(1)}
+                >
+                  A+
+                </button>
+                <select
+                  className="menu-theme-compact"
+                  value={themeName}
+                  disabled={!activeTab}
+                  title={t('Reading theme for the current tab')}
+                  aria-label={t('Theme')}
+                  onChange={(e) => activeTab && patchSettings(activeTab.id, { themeName: e.target.value })}
+                >
+                  <ThemeOptions />
+                </select>
+                </div>
                 <div className="menu-drawer-section">{t('Menus')}</div>
                 {/* Tap-friendly tile grid (not a list) — bigger targets, two per row. */}
                 <div className="menu-cat-grid">
@@ -454,6 +465,17 @@ export default function MenuBar({ onFileOpen, onAction }) {
     );
   }
 
+  const panelToggles = [
+    { label: t('Fast Reader'), key: '1', on: state.showRsvp, fn: () => dispatch({ type: 'TOGGLE_SHOW_RSVP' }), title: t('Show the Fast Reader pane') },
+    { label: t('Lines'), key: '2', on: state.showLines !== false, fn: () => dispatch({ type: 'TOGGLE_LINES' }), title: t('Show the Lines pane') },
+    { label: t('ToC'), key: '3', on: state.showToc, fn: () => dispatch({ type: 'TOGGLE_TOC' }), title: t('Toggle Table of Contents panel') },
+    { label: t('Stats'), key: '4', on: state.showStats, fn: () => dispatch({ type: 'TOGGLE_STATS' }), title: t('Toggle the reading-stats panel') },
+    { label: t('Index'), key: '5', on: state.showIndex, fn: () => dispatch({ type: 'TOGGLE_INDEX' }), title: t('Toggle Index panel') },
+    { label: t('Avatars'), key: '6', on: activeTab?.settings?.showEyes, fn: () => activeTab && patchSettings(activeTab.id, { showEyes: !activeTab.settings.showEyes }), title: t('Toggle the animated reader avatars') },
+    { label: t('Source'), on: state.showSource, show: !!activeTab?.doc?.source, fn: () => dispatch({ type: 'TOGGLE_SOURCE' }), title: t('Show the original PDF page / EPUB section side-by-side') },
+    { label: t('Chips'), on: state.global.chipMode, fn: () => updateGlobal({ chipMode: !state.global.chipMode }), title: t('Chip mode: float the avatar, stats and goal as transparent draggable chips instead of docking them') },
+    { label: t('Incognito'), key: 'I', on: state.incognito, fn: () => dispatch({ type: 'TOGGLE_INCOGNITO' }), title: t('Incognito reading — pause all tracking and persistence') },
+  ];
   return (
     <div className="menu-bar" ref={ref}>
       {MENU_ORDER.map(([key, title, icon]) => (
@@ -471,70 +493,20 @@ export default function MenuBar({ onFileOpen, onAction }) {
           )}
         </div>
       ))}
-      <div
-        className={`menu-item ${state.showToc ? 'open' : ''}`}
-        onClick={() => dispatch({ type: 'TOGGLE_TOC' })}
-        title={t('Toggle Table of Contents panel')}
-      >
-        {state.showToc ? '☑ ' : '☐ '}{t('ToC')}<kbd className="key-hint">3</kbd>
-      </div>
-      <div
-        className={`menu-item ${activeTab?.settings?.showEyes ? 'open' : ''}`}
-        onClick={() => activeTab && patchSettings(activeTab.id, { showEyes: !activeTab.settings.showEyes })}
-        title={t('Toggle the animated reader avatars')}
-      >
-        {activeTab?.settings?.showEyes ? '☑ ' : '☐ '}{t('Avatars')}<kbd className="key-hint">6</kbd>
-      </div>
-      <div
-        className={`menu-item ${state.showStats ? 'open' : ''}`}
-        onClick={() => dispatch({ type: 'TOGGLE_STATS' })}
-        title={t('Toggle the reading-stats panel')}
-      >
-        {state.showStats ? '☑ ' : '☐ '}{t('Stats')}<kbd className="key-hint">4</kbd>
-      </div>
-      <div
-        className={`menu-item ${state.global.chipMode ? 'open' : ''}`}
-        onClick={() => updateGlobal({ chipMode: !state.global.chipMode })}
-        title={t('Chip mode: float the avatar, stats and goal as transparent draggable chips instead of docking them')}
-      >
-        {state.global.chipMode ? '☑ ' : '☐ '}{t('Chips')}
-      </div>
-      {activeTab?.doc?.source && (
-        <div
-          className={`menu-item ${state.showSource ? 'open' : ''}`}
-          onClick={() => dispatch({ type: 'TOGGLE_SOURCE' })}
-          title={t('Show the original PDF page / EPUB section side-by-side')}
-        >
-          {state.showSource ? '☑ ' : '☐ '}{t('Source')}
-        </div>
-      )}
-      <div
-        className={`menu-item ${state.showIndex ? 'open' : ''}`}
-        onClick={() => dispatch({ type: 'TOGGLE_INDEX' })}
-        title={t('Toggle Index panel')}
-      >
-        {state.showIndex ? '☑ ' : '☐ '}{t('Index')}<kbd className="key-hint">5</kbd>
-      </div>
-      <div
-        className={`menu-item ${state.showRsvp ? 'open' : ''}`}
-        onClick={() => dispatch({ type: 'TOGGLE_SHOW_RSVP' })}
-        title={t('Show the Fast Reader pane')}
-      >
-        {state.showRsvp ? '☑ ' : '☐ '}{t('Fast Reader')}<kbd className="key-hint">1</kbd>
-      </div>
-      <div
-        className={`menu-item ${state.showLines !== false ? 'open' : ''}`}
-        onClick={() => dispatch({ type: 'TOGGLE_LINES' })}
-        title={t('Show the Lines pane')}
-      >
-        {state.showLines !== false ? '☑ ' : '☐ '}{t('Lines')}<kbd className="key-hint">2</kbd>
-      </div>
-      <div
-        className={`menu-item incognito-menu ${state.incognito ? 'open' : ''}`}
-        onClick={() => dispatch({ type: 'TOGGLE_INCOGNITO' })}
-        title={t('Incognito reading — pause all tracking and persistence')}
-      >
-        {state.incognito ? '🕶 ' : '☐ '}{t('Incognito')}<kbd className="key-hint">I</kbd>
+      {/* The panel switches live in one Panels menu (they used to wrap the bar onto two rows). */}
+      <div className={`menu-item ${openMenu === 'panels' ? 'open' : ''}${state.incognito ? ' incognito-menu' : ''}`} onClick={() => setOpenMenu(openMenu === 'panels' ? null : 'panels')}>
+        <span className="item-icon" aria-hidden="true">🪟</span>{t('Panels')}{state.incognito ? ' 🕶' : ''}
+        {openMenu === 'panels' && (
+          <div className="menu-dropdown" role="menu" onClick={(e) => e.stopPropagation()}>
+            {panelToggles.filter((p) => p.show !== false).map((p) => (
+              <div key={p.label} className="item" role="menuitemcheckbox" aria-checked={!!p.on} onClick={p.fn} title={p.title}>
+                <span className="item-icon" aria-hidden="true">{p.on ? '☑' : '☐'}</span>
+                <span className="item-label">{p.label}</span>
+                {p.key && <span className="shortcut">{p.key}</span>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <div className="grow" />
       <div className="right-toggles">
