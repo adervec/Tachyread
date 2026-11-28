@@ -3381,11 +3381,17 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
         <div className="empty-state">
           <img className="empty-logo" src={`${import.meta.env.BASE_URL}favicon.svg`} alt={t('Tachyread — the astral gavage goose')} width="132" height="132" />
           <h1>Tachyread</h1>
-          <p>{t('Open a file (File → Open TXT, Ctrl+O), open a document (Ctrl+D), or drop a file here.')}</p>
+          <p>{isCompact ? t('Open a book or paste some text to start reading.') : t('Open a file (File → Open TXT, Ctrl+O), open a document (Ctrl+D), or drop a file here.')}</p>
+          <div className="empty-actions">
+            <button className="toggle-on" onClick={() => handleMenuAction('open-doc')}>📚 {t('Open a book')}</button>
+            <button onClick={() => handleMenuAction('open-clip')}>📋 {t('Paste text')}</button>
+            <button onClick={() => handleMenuAction('literary-journey')}>🗺️ {t('Library')}</button>
+            <button onClick={() => handleMenuAction('listen-player')}>🎧 {t('Listen')}</button>
+          </div>
           <p>{t('Supports {formats}.', { formats: '.txt, .md, .html, .docx, .pdf, .epub' })}</p>
           {state.tabs.length > 0 && <p>{t.n('Or pick your {n} open tab above.', 'Or pick one of your {n} open tabs above.', state.tabs.length)}</p>}
           <SplashActivity />
-          <p className="hint">{t('Shortcuts: Space play, ←→ word, ↑↓ line, Ctrl+↑↓ paragraph, Home restart, Ctrl+F find')}</p>
+          {!isCompact && <p className="hint">{t('Shortcuts: Space play, ←→ word, ↑↓ line, Ctrl+↑↓ paragraph, Home restart, Ctrl+F find')}</p>}
         </div>
       ))}
       {/* A docked dialog tab portals its content in here, filling the tab's page (controls stay below). */}
@@ -3638,7 +3644,7 @@ ${sh.text}` : sh.text], shareFileName(sh.title, ''), { type: 'text/plain' })]);
           onClose={closeDialog}
         />
       )}
-      {dialog?.kind === 'listen-player' && <ListenDialog global={state.global} onClose={closeDialog} />}
+      {dialog?.kind === 'listen-player' && <ListenDialog global={state.global} onPatchGlobal={updateGlobal} onClose={closeDialog} />}
       {dialog?.kind === 'audio-settings' && dlgTab && (
         <AudioSettingsDialog
           settings={dlgTab.settings}

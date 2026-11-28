@@ -21,10 +21,10 @@ import {
 import { extractTextMeta } from '../features/textMeta.js';
 import { createReadingTracker } from '../engine/readingTracker.js';
 import { sectionSpan } from '../document/toc.js';
-import { askClaude, anthropicConfigured } from '../features/anthropic.js';
+import { askClaude } from '../features/anthropic.js';
 import {
   buildDataset, buildDigest, buildProgress, AI_NOTE_TYPES,
-  buildCoworkRequest, buildApiMessages, parseAiOutput, contentHash,
+  buildCoworkRequest, parseAiOutput, contentHash,
 } from '../features/journeyAi.js';
 import {
   normalizeSeed, filterBooks, libraryStats, exportJourneyMarkdown,
@@ -53,13 +53,13 @@ import ShelfImportPanel from './ShelfImportPanel.jsx';
 import IsbnAdd from '../components/IsbnAdd.jsx';
 import ProgressDetailDialog from './ProgressDetailDialog.jsx';
 import { getSyncProvider } from '../features/sync/syncProviders.js';
-import { syncLibraryWithProvider, syncWithProvider } from '../features/sync/syncManager.js';
+import { syncLibraryWithProvider } from '../features/sync/syncManager.js';
 import {
   SYNC_ACTION_GROUPS, actionById, combineCoworkInstruction, SCHEDULE_OPTS,
   syncRole, recordRun, mergedHistory, calendarCells, fmtAgo, dayKey,
 } from '../features/coworkActions.js';
-import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset, logRequest, opsForReply, opForRow, opForReport, PREP_NOTE_TYPES, reviewFirst, unparkReply } from '../features/coworkOps.js';
-import { writeSnapshot, commitRows, undoLastApply, listInbox, readInbox, moveInbox, snapshotForOps } from '../features/coworkApply.js';
+import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, queuesForDataset, logRequest, opsForReply, opForRow, opForReport, PREP_NOTE_TYPES, reviewFirst, unparkReply } from '../features/coworkOps.js';
+import { writeSnapshot, commitRows, undoLastApply, snapshotForOps } from '../features/coworkApply.js';
 import { getDeviceId } from '../state/storage.js';
 import { cloudCoworkDir, wasApplied, markApplied } from '../features/coworkCloud.js';
 import { deviceKind } from '../state/device.js';
@@ -3334,7 +3334,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     if (ops.includes('cw-session-review')) ds.sessions = sessionsForReview(await allTypingRuns().catch(() => []), await getSpeechLog().catch(() => []), ai?.sessionReviews);
     return ds;
   };
-  // Request builder: a checkbox TREE of every sync action (cowork folder / direct API / cloud),
+  // Request builder: a checkbox TREE of the runner's operations,
   // each row carrying its last-run info and its own schedule. Selection is session-local.
   const [sel, setSel] = useState(() => new Set(['cw-light']));
   // A reply waiting for review: { rows, dropped, ops, source, hash } — nothing is written until Apply.
@@ -3343,14 +3343,11 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   const [openExplain, setOpenExplain] = useState(null);
   const [question, setQuestion] = useState(ai?.question || ''); // for the "Ask a question" operation
   const [dir, setDir] = useState(null);
-  const [pasted, setPasted] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [histView, setHistView] = useState('list');
   const [calCursor, setCalCursor] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [dayFilter, setDayFilter] = useState(null);
-  const keyOk = anthropicConfigured(global?.anthropicKey);
-  const model = global?.anthropicModel || 'claude-sonnet-5';
   const booksById = useMemo(() => Object.fromEntries(books.map((b) => [b.id, b])), [books]);
   // Device role: once a sync machine is designated, every other device drops to view-only status.
   const deviceId = getDeviceId();
@@ -3387,13 +3384,6 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   const loadDir = () => { cloudCoworkDir().then(setDir).catch(() => {}); };
   useEffect(loadDir, []);
 
-  // Related-activity feed entries (kept for compatibility — the merged history displays them).
-  const actEntry = (kind, text) => ({ at: Date.now(), kind, text });
-  async function logActivity(kind, text) {
-    await saveJourneyAi({ ...(ai || {}), activity: [...(ai?.activity || []), actEntry(kind, text)].slice(-40) });
-    onReloadAi();
-  }
-
   // AI-record-only changes re-read just that record (onReloadAi). The schedule dropdowns, question
   // and folder path used to trigger the whole dialog's reload — every book and file record — and a
   // dropdown sat on its old value until that finished.
@@ -3403,7 +3393,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
   const designate = () => persistAi({ syncMachine: { deviceId, name: (global?.deviceName || '').trim() || deviceKind(), at: Date.now() } });
   const releaseRole = () => persistAi({ syncMachine: null });
 
-  // Every reply — folder, paste or API — is filtered by the operations it was REQUESTED for
+  // Every runner reply is filtered by the operations it was REQUESTED for
   // (coworkOps.sanitizeOutput: anything else is dropped, with the reason) and staged as review rows.
   async function stageReply(text, ops, source, extra = {}) {
     const hash = contentHash(text);
@@ -3443,10 +3433,8 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
         setMsg(t('Applied: {summary}. {n} more change(s) still to review below.', { summary: r.summary, n: left.length }));
         onReload(); setBusy(false); return;
       }
-      if (review.inboxFile) await moveInbox(dir, review.inboxFile).catch(() => {});
       setMsg(t('Applied: {summary}. ↶ Undo puts it all back.', { summary: r.summary }));
       setReview(null);
-      refreshInbox();
       onReload();
     } catch (e) { setMsg(t('Apply failed: {error}', { error: e?.message || e })); }
     setBusy(false);
@@ -3457,41 +3445,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     catch (e) { setMsg(t('Undo failed: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
-  // Agent inbox (inbox/*.json): suggestions dropped without a request — same filter, same review.
-  const [inbox, setInbox] = useState([]);
-  const refreshInbox = () => { if (dir) listInbox(dir).then(setInbox).catch(() => {}); };
-  useEffect(() => { refreshInbox(); }, [dir]); // eslint-disable-line react-hooks/exhaustive-deps
-  async function reviewInbox(name) {
-    try {
-      const json = JSON.parse(await readInbox(dir, name));
-      const ops = (Array.isArray(json?.ops) ? json.ops : []).filter((id) => COWORK_OPS[id]);
-      if (!ops.length) { await moveInbox(dir, name, 'rejected'); setMsg(t('{file}: no known operations declared ("ops") — moved to inbox/rejected/.', { file: name })); refreshInbox(); return; }
-      const { ops: _o, ...reply } = json; // eslint-disable-line no-unused-vars
-      await stageReply(JSON.stringify(reply), ops, `inbox: ${name}`, { inboxFile: name });
-    } catch (e) {
-      await moveInbox(dir, name, 'rejected').catch(() => {});
-      setMsg(t("{file} couldn't be read ({error}) — moved to inbox/rejected/.", { file: name, error: e?.message || e })); refreshInbox();
-    }
-  }
-  async function snapshotNow() {
-    if (!dir) { setMsg(t('Sign in to your cloud first.')); return; }
-    setBusy(true);
-    try {
-      const n = Object.keys(await writeSnapshot(dir)).length;
-      const cur = recordRun((await getJourneyAi().catch(() => null)) || ai || {}, ['cw-snapshot'], { at: Date.now(), kind: 'cowork', target: coworkTarget, ok: true, note: t('wrote snapshot ({n} files)', { n }) });
-      await saveJourneyAi(cur); onReloadAi();
-      setMsg(t('Snapshot written: {n} files in {folder}/snapshot/ (read-only for agents — see its README.md).', { n, folder: coworkTarget }));
-    } catch (e) { setMsg(t('Snapshot failed: {error}', { error: e?.message || e })); }
-    setBusy(false);
-  }
-
-  async function chooseFolder() {
-    const d = await cloudCoworkDir({ ask: true });
-    if (d) setDir(d); else setMsg(t('Cloud sign-in didn’t finish — try again.'));
-  }
-
-  // Run everything checked in the tree, in transport order: API first (its apply saves the ai
-  // record), then re-read the record and fold in the cowork write + cloud syncs + run stamps.
+  // Send everything ticked as ONE runner request in the cloud (the snapshot files it names ride along).
   async function runSelected(only = null) { // only: an explicit id list (a focused subtask) instead of the ticked set
     const ids = (only || [...sel]).filter((id) => actionById(id));
     if (!ids.length) { setMsg(t('Nothing checked — tick at least one action in the tree.')); return; }
@@ -3499,26 +3453,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     const now = Date.now();
     let snapFiles = null; // the snapshot written this run (the request carries the files it names)
     const parts = [];
-    let apiTried = false; let apiOk = true; let apiNote = '';
-    if (ids.includes('api-light')) {
-      apiTried = true;
-      if (!keyOk) { apiOk = false; apiNote = t('skipped — no Anthropic API key'); }
-      else {
-        try {
-          const dataset = await datasetWithProgress(true); // API path is always the compact subset
-          const instr = opsInstruction(['cw-light']);
-          const { system, messages } = buildApiMessages(dataset, instr);
-          const reply = await askClaude(messages, { key: global.anthropicKey, model, system, maxTokens: 2048, source: 'trackyread-ai' });
-          await stageReply(reply, instr.ops, `API (${model})`);
-          apiNote = t('ran — reply staged for review'); parts.push(t('API reply ready for review below'));
-        } catch (e) { apiOk = false; apiNote = String(e?.message || e); parts.push(t('API failed')); }
-      }
-    }
     let cur = (await getJourneyAi().catch(() => null)) || ai || {};
-    if (ids.includes('cw-snapshot') && dir) {
-      try { const n = Object.keys(snapFiles = await writeSnapshot(dir)).length; cur = recordRun(cur, ['cw-snapshot'], { at: now, kind: 'cowork', target: coworkTarget, ok: true, note: t('wrote snapshot ({n} files)', { n }) }); parts.push(t('snapshot written')); }
-      catch (e) { cur = recordRun(cur, ['cw-snapshot'], { at: now, kind: 'cowork', target: coworkTarget, ok: false, note: String(e?.message || e) }); parts.push(t('snapshot failed')); }
-    }
     const coworkIds = ids.filter((id) => COWORK_OPS[id]);
     if (coworkIds.length) {
       let ok = true; let note;
@@ -3539,22 +3474,8 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
       }
       cur = recordRun(cur, coworkIds, { at: now, kind: 'cowork', target: coworkTarget, ok, note });
     }
-    for (const id of ids.filter((d) => d.startsWith('cloud-'))) {
-      let ok = true; let note;
-      const cfg = global?.sync || {};
-      const p = getSyncProvider(cfg.provider);
-      const target = p?.label || cfg.provider || t('no provider');
-      try {
-        if (!p || !p.supported()) { ok = false; note = t('no sync provider configured (Data → Cloud sync)'); }
-        else if (id === 'cloud-progress') { const r = await syncWithProvider(cfg.provider, cfg); note = t('progress synced ({kb} KB)', { kb: Math.round((r.bytes || 0) / 1024) }); }
-        else { const r = await syncLibraryWithProvider(cfg.provider, cfg); note = r.skipped ? t('library already in sync') : t('library synced ({n} books)', { n: r.books ?? '?' }); }
-      } catch (e) { ok = false; note = String(e?.message || e); }
-      parts.push(id === 'cloud-progress' ? t('progress: {note}', { note }) : t('library: {note}', { note }));
-      cur = recordRun(cur, [id], { at: now, kind: 'cloud', target, ok, note });
-    }
-    if (apiTried) cur = recordRun(cur, ['api-light'], { at: now, kind: 'api', target: model, ok: apiOk, note: apiNote });
     await saveJourneyAi(cur);
-    if (ids.some((d) => d.startsWith('cloud-'))) onReload(); else onReloadAi(); // only a cloud sync can change books
+    onReloadAi();
     setMsg(parts.length ? parts.join(' · ') : t('Done.'));
     setBusy(false);
   }
@@ -3578,28 +3499,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     } catch (e) { setMsg(t('Read failed: {error}', { error: e?.message || e })); }
     setBusy(false);
   }
-  async function copyDigest() {
-    try {
-      const ci = combineCoworkInstruction([...sel], { question }) || opsInstruction(['cw-light']);
-      await navigator.clipboard.writeText(buildDigest(await datasetWithProgress(ci.mode === 'light', ci.ops), ci));
-      await logActivity('digest', t('Copied {mode} digest to clipboard', { mode: ci.mode }));
-      setMsg(t('Digest copied — paste it into a Claude chat, then paste the JSON reply below.'));
-    } catch { setMsg(t('Clipboard blocked — use the cowork folder instead.')); }
-  }
-  async function applyPasted() {
-    setBusy(true);
-    const ticked = [...sel].filter((id) => COWORK_OPS[id]);
-    try {
-      let parsed = null; try { parsed = parseAiOutput(pasted); } catch { /* stageReply reports it */ }
-      await stageReply(pasted, ticked.length ? ticked : opsForReply(parsed, ai).ops, t('pasted reply')); setPasted('');
-    }
-    catch (e) { setMsg(t('Could not parse that reply: {error}', { error: e?.message || e })); }
-    setBusy(false);
-  }
-
-  const targetOf = (g) => (g.kind === 'cowork' ? (coworkTarget || t('no folder chosen'))
-    : g.kind === 'api' ? model
-      : (getSyncProvider(global?.sync?.provider)?.label || global?.sync?.provider || t('no provider')));
+  const targetOf = () => coworkTarget || t('not signed in');
   const focusHistory = focus === 'all' ? history : history.filter((h) => inFocus(h.ids));
   const filteredHistory = dayFilter ? focusHistory.filter((h) => dayKey(h.at) === dayFilter) : focusHistory;
 
@@ -3643,18 +3543,17 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
         <div className="lj-inline cw-opfilter">
           <TextF value={opQ} onChange={setOpQ} label={t('operations (name or description)')} />
           <select value={opGroup} onChange={(e) => setOpGroup(e.target.value)} aria-label={t('Operation group')}>
-            <option value="all">{t('All kinds')}</option><option value="snapshot">{t('Snapshot')}</option>{OP_GROUPS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+            <option value="all">{t('All kinds')}</option>{OP_GROUPS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
           </select>
           {(opQ || opGroup !== 'all') && <button onClick={() => { setOpQ(''); setOpGroup('all'); }}>{t('Show all')}</button>}
         </div>
       )}
       {SYNC_ACTION_GROUPS.map((g) => {
-        if (g.needsKey && !keyOk) return null; // no key → the whole group vanishes, no nagging note
         const opT = textMatcher(opQ).test;
         const shown = g.actions.filter((a) => {
           if (focusOp) return a.id === focus;
           const op = COWORK_OPS[a.id];
-          return !((opT && !opT(`${a.label} ${a.desc || ''}`)) || (opGroup !== 'all' && g.id === 'cowork' && (op ? op.group : 'snapshot') !== opGroup));
+          return !((opT && !opT(`${a.label} ${a.desc || ''}`)) || (opGroup !== 'all' && op?.group !== opGroup));
         });
         if (!shown.length) return null;
         const onCount = g.actions.filter((a) => sel.has(a.id)).length;
@@ -3675,11 +3574,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
               const op = COWORK_OPS[a.id];
               const prevOp = COWORK_OPS[shown[ai2 - 1]?.id];
               const sub = op && op.group !== prevOp?.group ? OP_GROUPS.find((x) => x.id === op.group) : null;
-              const ex = op ? op.explain : a.id === 'cw-snapshot' ? {
-                sends: t("Nothing goes to an AI. Writes read-only files into the folder's snapshot/ subfolder: reading days, books, queues, goals, typing, reading aloud, narration quality, focus, an activity log and a README explaining every field."),
-                changes: t('Nothing in Tachyread — the app never reads these files back. Files in snapshot/ are overwritten each time. No document text, audio or keys are written.'),
-                review: t('Nothing to review. Also written automatically with every operation request.'),
-              } : null;
+              const ex = op?.explain;
               return (
                 <Fragment key={a.id}>
                 {sub && <div className="cwt-sub">{sub.label}</div>}
@@ -3722,7 +3617,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
             })}
             {g.id === 'cowork' && (
               <div className="lj-inline cwt-foot">
-                <button onClick={chooseFolder} disabled={viewer || !!dir} title={t('Requests, replies and snapshots go to your cloud’s private app folder, where your AI runner answers them — on any device.')}>{dir ? `☁ ${dir.label}` : `☁ ${t('Sign in to your cloud…')}`}</button>
+                <button onClick={async () => { const d = await cloudCoworkDir({ ask: true }); if (d) setDir(d); else setMsg(t('Cloud sign-in didn’t finish — try again.')); }} disabled={viewer || !!dir} title={t('Requests and replies go to your cloud’s private app folder, where your AI runner answers them — on any device.')}>{dir ? `☁ ${dir.label}` : `☁ ${t('Sign in to your cloud…')}`}</button>
               </div>
             )}
           </div>
@@ -3745,20 +3640,10 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
             ? null
             : <button className="toggle-on" disabled={busy || sel.size === 0} onClick={() => runSelected()}>▶ {t('Run selected ({n})', { n: [...sel].filter((id) => actionById(id)).length })}</button>}
           {dir && <button disabled={busy} onClick={readResponse} title={t("Read the agent's reply — it is filtered and shown for review, never applied straight away")}>📥 {t('Read response')}</button>}
-          {dir && <button disabled={busy} onClick={snapshotNow} title={t('Write the read-only activity snapshot now')}>📸 {t('Snapshot now')}</button>}
           <span className="settings-note">{t('Scheduled actions run automatically — on the sync machine only.')}</span>
         </div>
       )}
 
-      {!viewer && dir && (
-        <div className="lj-inline cw-inbox">
-          <span className="settings-note" style={{ margin: 0 }} title={t("Agents can drop suggestion files into the folder's inbox/ at any time (format in inbox/README.md). Each is filtered by the operations it declares and reviewed here — nothing is applied automatically.")}>
-            📬 {inbox.length ? t.n('Agent inbox: {n} suggestion file', 'Agent inbox: {n} suggestion files', inbox.length) : t('Agent inbox: empty')}
-          </span>
-          {inbox.slice(0, 5).map((n) => <button key={n} disabled={busy || !!review} onClick={() => reviewInbox(n)} title={t('Review {file}', { file: n })}>{t('Review {file}', { file: n })}</button>)}
-          <button onClick={refreshInbox} title={t('Look in inbox/ again')}>⟳</button>
-        </div>
-      )}
       {!review && ai?.pendingReplies?.length > 0 && (
         <div className="settings-note" role="status">
           ⏳ {t.n('{n} scheduled reply is waiting for your review:', '{n} scheduled replies are waiting for your review:', ai.pendingReplies.length)}
@@ -3803,7 +3688,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
             {review.rows.length > APPLY_CAP && <span className="settings-note" style={{ margin: 0 }}>{t('{n} changes — applied in pages of up to {cap}', { n: review.rows.length, cap: APPLY_CAP })}</span>}
             <button onClick={() => setPicked((s0) => new Set([...s0, ...revRows.map((r) => r.key)]))}>{focusOp ? t('Tick all here') : t('Tick all')}</button>
             <button onClick={() => setPicked((s0) => { const s1 = new Set(s0); revRows.forEach((r) => s1.delete(r.key)); return s1; })}>{focusOp ? t('Untick all here') : t('Untick all')}</button>
-            <button onClick={async () => { markApplied(review.hash); if (review.inboxFile) { await moveInbox(dir, review.inboxFile).catch(() => {}); refreshInbox(); } setReview(null); setMsg(t('Reply discarded — nothing was changed.')); }}>{t('Discard reply')}</button>
+            <button onClick={() => { markApplied(review.hash); setReview(null); setMsg(t('Reply discarded — nothing was changed.')); }}>{t('Discard reply')}</button>
           </div>
         </div>
       )}
@@ -3889,15 +3774,6 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
             { key: 'auto', label: t('Auto'), type: 'select', get: (h) => (h.auto ? 'yes' : 'no'), options: [['yes', t('auto')], ['no', t('manual')]] },
             { key: 'ok', label: t('Result'), type: 'select', get: (h) => (h.ok ? 'ok' : 'failed'), render: (h) => (h.ok ? '✓' : <span className="cw-herr">{t('failed')}</span>), options: [['ok', t('ok')], ['failed', t('failed')]] },
           ]} />
-      )}
-
-      {!viewer && (
-        <details className="lj-fold">
-          <summary>{t('Copy / paste (manual chat fallback)')}</summary>
-          <div className="lj-inline"><button onClick={copyDigest}>{t('Copy digest to clipboard')}</button></div>
-          <textarea className="lj-instr" rows={3} placeholder={t("Paste Claude's JSON reply here…")} value={pasted} onChange={(e) => setPasted(e.target.value)} />
-          <div className="lj-inline"><button disabled={busy || !pasted.trim()} onClick={applyPasted}>{t('Review pasted reply')}</button><span className="settings-note" style={{ margin: 0 }}>{t('Filtered by the ticked operations (or the last request’s).')}</span></div>
-        </details>
       )}
 
       {msg && <p className="settings-note lj-aimsg">{msg}</p>}

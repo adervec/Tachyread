@@ -18,29 +18,13 @@ import { t } from '../i18n.js';
 // instruction a cowork/API action contributes; cloud actions have neither.
 export const SYNC_ACTION_GROUPS = [
   {
-    id: 'cowork', icon: '🤝', label: t('Cowork folder'), kind: 'cowork',
-    // The well-defined operations (coworkOps.js — each with its own enforced write permission and a
-    // full explanation), plus the read-only activity snapshot. The old free-text custom instruction
-    // is gone: a reply could ask for anything; now the app only accepts what the ticked ops allow.
-    actions: [
-      { id: 'cw-snapshot', icon: '📸', label: t('Write activity snapshot'), desc: t('Read-only files for observing agents — changes nothing in Tachyread') },
-      ...Object.entries(COWORK_OPS)
-        .sort((x, y) => OP_GROUPS.findIndex((g) => g.id === x[1].group) - OP_GROUPS.findIndex((g) => g.id === y[1].group)) // stable: group order, catalog order within
-        .map(([id, op]) => ({ id, icon: op.icon, label: op.label, desc: op.explain.changes, op: true })),
-    ],
-  },
-  {
-    id: 'api', icon: '🤖', label: t('Direct API (Anthropic)'), kind: 'api', needsKey: true,
-    actions: [
-      { id: 'api-light', icon: '⚡', label: t('Analysis + read-next via API'), desc: t('Asks Claude directly (same operation as "Reading-profile analysis") — report only, no book changes') },
-    ],
-  },
-  {
-    id: 'cloud', icon: '☁️', label: t('Cloud sync'), kind: 'cloud',
-    actions: [
-      { id: 'cloud-progress', icon: '📈', label: t('Reading progress (two-way)'), desc: t('Read-merge-write of reading history, positions and markers') },
-      { id: 'cloud-library', icon: '📚', label: t('Tracker library (two-way)'), desc: t('Diff-aware sync of the whole Trackyread library') },
-    ],
+    // Everything goes to the reader's AI runner through the cloud (house standard 3). The activity
+    // snapshot rides with every request; the old copy-and-paste, direct-API and cloud-sync rows are
+    // gone (sync runs on its own now).
+    id: 'cowork', icon: '🤝', label: t('AI runner'), kind: 'cowork',
+    actions: Object.entries(COWORK_OPS)
+      .sort((x, y) => OP_GROUPS.findIndex((g) => g.id === x[1].group) - OP_GROUPS.findIndex((g) => g.id === y[1].group)) // stable: group order, catalog order within
+      .map(([id, op]) => ({ id, icon: op.icon, label: op.label, desc: op.explain.changes, op: true })),
   },
 ];
 

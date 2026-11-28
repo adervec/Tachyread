@@ -10,7 +10,66 @@ import { pullWindow, LISTEN_TAG } from '../features/listenCloud.js';
 import { finishBoundBook } from '../features/listenQueue.js';
 import { getSyncProvider } from '../features/sync/syncProviders.js';
 import { syncWithProvider, syncLibraryWithProvider } from '../features/sync/syncManager.js';
-import { getSyncCache, loadFile, applySyncedPosition, getAudiobookManifest, entryClips, getAudioClipById, deleteAudioClipById } from '../state/storage.js';
+import { getSyncCache, loadFile, applySyncedPosition, getAudiobookManifest, entryClips, getAudioClipById, deleteAudioClipById, getJourneyAi, saveJourneyAi, getDeviceId, getLibraryRef } from '../state/storage.js';
+import { syncRole } from '../features/coworkActions.js';
+import { liveQueues } from '../features/readingQueues.js';
+import { KOKORO_VOICES } from '../features/localTts.js';
+import { listenStatus, onListenStatus, runListenNow } from '../features/listenAgent.js';
+import { deviceKind, useIsCompact } from '../state/device.js';
+
+// Everything the computer needs to prepare the phone's audio, in one place (it used to be spread over
+// Audio Settings, the TTS controls and Trackyread's AI page): signed in, the sync machine, a voice,
+// a queue, rendering on. The agent (features/listenAgent.js) does the rest every 10 minutes.
+function PrepareCard({ global, onPatchGlobal, readyMs, fold }) {
+  const [signed, setSigned] = useState(false);
+  const [role, setRole] = useState(null);
+  const [queues, setQueues] = useState([]);
+  const [ls, setLs] = useState(listenStatus());
+  const cloud = typeof window !== 'undefined' ? window.appFont?.cloud : null;
+  const loadRole = () => getJourneyAi().then((ai) => setRole(syncRole(ai, getDeviceId()))).catch(() => {});
+  useEffect(() => {
+    loadRole();
+    getLibraryRef('queues').then((q) => setQueues(liveQueues(q || []))).catch(() => {});
+    cloud?.signIn({ silent: true }).then(() => setSigned(true), () => setSigned(!!cloud?.signedIn()));
+    return onListenStatus(setLs);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  async function designate() {
+    const ai = await getJourneyAi().catch(() => null);
+    await saveJourneyAi({ ...(ai || {}), syncMachine: { deviceId: getDeviceId(), name: (global.deviceName || '').trim() || deviceKind(), at: Date.now() } });
+    loadRole();
+  }
+  const machine = role?.role === 'machine';
+  const ready = signed && machine && global.kokoroLive && global.listenQueue && global.listenRender;
+  const mark = (ok) => <span aria-hidden="true">{ok ? '✅' : '⬜'}</span>;
+  return (
+    <details className="listen-prep" open={(!ready && !fold) || undefined}>
+      <summary>{ready ? `✅ ${t('This device prepares the audio for your phone')}` : `📦 ${t('Prepare audio for your phone on this device')}`}</summary>
+      <ol className="listen-steps">
+        <li>{mark(signed)} {t('Signed in to your cloud')}
+          {!signed && <button onClick={() => cloud?.signIn({}).then(() => setSigned(true), () => {})}>☁ {t('Sign in')}</button>}</li>
+        <li>{mark(machine)} {machine ? t('This is the sync machine') : role?.role === 'viewer'
+          ? t('The sync machine is “{name}”', { name: role.machine?.name || '?' }) : t('No sync machine chosen yet')}
+          {!machine && <button onClick={designate}>{t('Make this the sync machine')}</button>}</li>
+        <li>{mark(!!global.kokoroLive)} <label>{t('Voice')}{' '}
+          <select value={global.kokoroLive || ''} onChange={(e) => onPatchGlobal({ kokoroLive: e.target.value })}>
+            <option value="">{t('— pick a voice —')}</option>
+            {KOKORO_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+          </select></label></li>
+        <li>{mark(!!global.listenQueue)} <label>{t('Queue')}{' '}
+          <select value={global.listenQueue || ''} onChange={(e) => onPatchGlobal({ listenQueue: e.target.value })}>
+            <option value="">{t('— pick a queue —')}</option>
+            {queues.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
+          </select></label></li>
+        <li>{mark(!!global.listenRender)} <label className="inline-check"><input type="checkbox" checked={!!global.listenRender} onChange={(e) => onPatchGlobal({ listenRender: e.target.checked })} /> {t('Render the next {n} hours ahead and upload them', { n: global.listenHours ?? 20 })}</label></li>
+      </ol>
+      <p className="settings-note" role="status">
+        {t('Ready ahead: about {h} h of listening.', { h: fmtNum(readyMs / 3600e3, 1, 1) })} {t('Last run: {text}', { text: ls.text })}{' '}
+        <button disabled={ls.busy || !ready} onClick={() => runListenNow()}>▶ {t('Run now')}</button>
+      </p>
+      <p className="settings-note">{t('On the phone: open this same window and press “Get the latest”, or tick “Pull audio here” there to download over Wi-Fi in the background.')}</p>
+    </details>
+  );
+}
 
 const RATES = [0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6, 1.8, 2];
 const RATE_KEY = 'tachyread-listen-rate';
@@ -28,7 +87,8 @@ async function blobFor(e) {
   return p.getFile(conn, e.id);
 }
 
-export default function ListenDialog({ global, onClose }) {
+export default function ListenDialog({ global, onPatchGlobal, onClose }) {
+  const compact = useIsCompact();
   const [manifest, setManifest] = useState(null);
   const [pos, setPos] = useState({});
   const [idx, setIdx] = useState(0);
@@ -46,7 +106,7 @@ export default function ListenDialog({ global, onClose }) {
     const p = {};
     for (const cs of Object.keys(m?.books || {})) p[cs] = (await loadFile(cs).catch(() => null))?.wordIndex || 0;
     setManifest(m); setPos(p); setIdx(0);
-    if (!m) setMsg(t('Nothing downloaded yet — press “Get the latest”. The sync machine renders the queue ahead (Audio Settings → Pocket listening).'));
+    if (!m) setMsg(t('Nothing downloaded yet — press “Get the latest”. Your computer prepares the audio: on it, open this window and follow “Prepare audio for your phone”.'));
   }
   // Positions may have moved on another device: sync first, then build the list.
   useEffect(() => {
@@ -131,8 +191,10 @@ export default function ListenDialog({ global, onClose }) {
 
   const books = Object.entries(manifest?.books || {}).sort(([, a], [, b]) => (a.order ?? 1e9) - (b.order ?? 1e9));
   const left = list.reduce((s, e) => s + (e.ms || 0), 0);
+  const prep = onPatchGlobal && <PrepareCard global={global} onPatchGlobal={onPatchGlobal} readyMs={left} fold={compact} />;
   return (
     <Dialog title={`🎧 ${t('Listen to the queue')}`} onClose={onClose} width={520} buttons={<button onClick={onClose}>{t('Close')}</button>}>
+      {!compact && prep}
       <audio ref={audio} onEnded={ended} onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} preload="auto" />
       {cur ? (
         <div className="listen-now">
@@ -162,7 +224,10 @@ export default function ListenDialog({ global, onClose }) {
           ))}
         </ol>
       )}
+      <label className="inline-check"><input type="checkbox" checked={!!global.listenPull} onChange={(e) => onPatchGlobal({ listenPull: e.target.checked })} /> {t('Pull audio here — download new passages in the background (Wi-Fi only)')}</label>
       <p className="settings-note">{t('Your place moves with each passage you finish and reaches your other devices on the next sync. No book files are needed on this device.')}</p>
+      {/* the phone can be the sync machine too, so the card is there as well, folded away at the end */}
+      {compact && prep}
     </Dialog>
   );
 }

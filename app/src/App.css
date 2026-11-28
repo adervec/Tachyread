@@ -5465,3 +5465,10 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .listen-text { margin: 0; line-height: 1.5; }
 .listen-now .data-row button { min-width: 44px; min-height: 44px; font-size: 1.2em; }
 .listen-books { margin: 8px 0; padding-inline-start: 1.4em; }
+.listen-prep { margin: 12px 0; padding: 8px 12px; border: 1px solid var(--border, #ccc); border-radius: 8px; }
+.listen-prep > summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+.listen-steps { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 8px; }
+.listen-steps li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.listen-steps select { max-width: 100%; }
+.empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 12px 0; }
+.empty-actions button { min-height: 44px; padding-inline: 16px; }

@@ -35,7 +35,6 @@ const MENUS = {
     { label: t('Browse Online Catalogs (OPDS)...'), action: 'opds', icon: '🏛️'},
     { label: t('Show File Location...'), action: 'reveal-file', icon: '📁'},
     { label: t('Save Tab Text...'), action: 'save-tab', icon: '💾'},
-    { label: t('HTML Tools (guide & print to HTML)...'), action: 'html-tools', icon: '🧰'},
     { kind: 'separator' },
     { label: t('Find...'), shortcut: 'Ctrl+F', action: 'find', icon: '🔎'},
     { label: t('Go to Line...'), shortcut: 'Ctrl+G', action: 'goto', icon: '📍'},
@@ -50,15 +49,10 @@ const MENUS = {
     { label: t('Notes & Annotations...'), shortcut: 'Ctrl+Shift+N', action: 'notes', icon: '📝'},
     { label: t('Show / Hide Lines Pane'), action: 'toggle-lines', icon: '📃'},
     { label: t('Side-by-Side Companion (read two documents)'), action: 'companion', icon: '📖'},
-    { label: t('Teleprompter'), action: 'teleprompter', icon: '🎬'},
-    { label: t('Teleprompter (mirrored, for prompter glass)'), action: 'teleprompter-mirror', icon: '🪞'},
     { label: t('Proper Names Index...'), shortcut: 'Ctrl+I', action: 'proper-names', icon: '🏷️'},
     { label: t('Preview Footnote'), shortcut: 'Ctrl+Shift+F', action: 'footnote', icon: '📑'},
     { label: t('Incognito Reading (no tracking)'), action: 'toggle-incognito', icon: '🕶️'},
     { label: t('Reduce Blue Light (bedtime)'), shortcut: 'B', action: 'toggle-bluelight', icon: '🌙'},
-    { label: t('Reading Cursor & Trail...'), action: 'cursor-manager', icon: '🖱️'},
-    { label: t('Crosshairs (Lines overlays)...'), action: 'crosshairs', icon: '🎯'},
-    { label: t('Avatar Library...'), action: 'face-library', icon: '🙂'},
   ],
   // Drills & practice.
   train: [
@@ -102,7 +96,7 @@ const MENUS = {
     { label: t('Text-to-Speech Reader...'), shortcut: 'Ctrl+Shift+T', action: 'tts-popup', icon: '🔊'},
     { label: t('Ambient Sound...'), action: 'ambient', icon: '🌊'},
     { kind: 'separator' },
-    { label: t('Listen to the Queue (phone player)...'), action: 'listen-player', icon: '🎧'},
+    { label: t('Listen to the Queue & Prepare Phone Audio...'), action: 'listen-player', icon: '🎧'},
     { label: t('Audio Settings...'), action: 'audio-settings', icon: '🎚️'},
   ],
   settings: [
@@ -113,11 +107,20 @@ const MENUS = {
     { label: t('Apply Default Settings to All Tabs'), action: 'apply-defaults-all', icon: '🔁'},
     { kind: 'separator' },
     { label: t('Font Manager...'), action: 'font-manager', icon: '🔤'},
-    { label: t('Biometric Controls...'), action: 'biometric-settings', icon: '👁️'},
     { label: t('Comfort & Breaks...'), action: 'comfort-settings', icon: '🛋️'},
     { kind: 'separator' },
     { label: t('Data Management...'), action: 'data', icon: '💽'},
     { label: t('Book Groups...'), action: 'book-groups', icon: '📚'},
+  ],
+  // Rarely used extras, kept out of the main menus.
+  extras: [
+    { label: t('HTML Tools (guide & print to HTML)...'), action: 'html-tools', icon: '🧰'},
+    { label: t('Teleprompter'), action: 'teleprompter', icon: '🎬'},
+    { label: t('Teleprompter (mirrored, for prompter glass)'), action: 'teleprompter-mirror', icon: '🪞'},
+    { label: t('Reading Cursor & Trail...'), action: 'cursor-manager', icon: '🖱️'},
+    { label: t('Crosshairs (Lines overlays)...'), action: 'crosshairs', icon: '🎯'},
+    { label: t('Avatar Library...'), action: 'face-library', icon: '🙂'},
+    { label: t('Biometric Controls...'), action: 'biometric-settings', icon: '👁️'},
   ],
   help: [
     { label: t('Help...'), shortcut: 'F1', action: 'help', icon: '❓'},
@@ -136,6 +139,7 @@ const MENU_ORDER = [
   ['typing', t('Typing'), '⌨️'],
   ['audio', t('Audio'), '🔊'],
   ['settings', t('Settings'), '⚙️'],
+  ['extras', t('Extras'), '🧪'],
   ['help', t('Help'), '❓'],
 ];
 const MENU_TITLE = Object.fromEntries(MENU_ORDER.map(([k, title]) => [k, title]));

@@ -8,13 +8,14 @@ import {
 } from './coworkActions.js';
 import { LIGHT_INSTRUCTION, HEAVY_PLACEHOLDER } from './journeyAi.js';
 
-// Catalog shape: unique ids, every action carries group/kind, the API group is key-gated.
+// Catalog shape: unique ids, every action is a runner operation (no paste / API / cloud-sync rows).
 const ids = SYNC_ACTIONS.map((a) => a.id);
 assert.equal(new Set(ids).size, ids.length, 'action ids unique');
 assert.ok(SYNC_ACTIONS.length >= 8, 'a rich action set');
-assert.ok(SYNC_ACTION_GROUPS.find((g) => g.id === 'api')?.needsKey, 'API group gated on the key');
+assert.deepEqual(SYNC_ACTION_GROUPS.map((g) => g.id), ['cowork'], 'one group: the runner');
 assert.equal(actionById('cw-tree').kind, 'cowork');
-assert.equal(actionById('cloud-library').kind, 'cloud');
+assert.equal(actionById('cloud-library'), null, 'sync runs on its own now');
+assert.equal(actionById('cw-snapshot'), null, 'the snapshot rides with every request');
 assert.equal(actionById('nope'), null);
 
 // Instruction combining: none → null; light only → light; any heavy → heavy; custom text rides along.
@@ -38,7 +39,8 @@ const runs = {
   'cloud-progress': { at: NOW - 2 * 86400e3 }, // 2 days ago → daily due
   // api-light never ran → weekly due immediately
 };
-assert.deepEqual(dueActions(scheds, runs, NOW), ['api-light', 'cloud-progress'], 'due list in catalog order');
+assert.deepEqual(dueActions(scheds, runs, NOW), [], 'retired api / cloud schedules are never due');
+assert.deepEqual(dueActions({ ...scheds, 'cw-tree': 'daily' }, runs, NOW), ['cw-tree'], 'a runner operation never run is due at once');
 assert.deepEqual(dueActions({}, {}, NOW), [], 'no schedules → nothing due');
 assert.ok(SCHEDULE_OPTS.some((o) => o.id === '30m') && SCHEDULE_OPTS.some((o) => o.id === 'weekly'), 'range of cadences');
 

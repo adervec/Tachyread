@@ -31,7 +31,6 @@ export async function writeSnapshot(dir, now = Date.now()) {
   out['changes.json'] = JSON.stringify({ since: prev?.at || null, until: nowIso, changes }, null, 1);
   out['changes.md'] = changesMarkdown(changes, prev?.at || null, nowIso);
   for (const [name, text] of Object.entries(out)) await dir.write(`snapshot/${name}`, text);
-  await dir.write('inbox/README.md', INBOX_README);
   await dir.write('cowork.json', JSON.stringify(COWORK_MANIFEST, null, 2)); // discovery manifest: the runner finds the app by it
   return out;
 }
@@ -49,41 +48,6 @@ export function snapshotForOps(files, instructionText) {
   const out = {};
   for (const n of [...named].sort()) if (files?.[n] != null) out[n] = files[n].length > SNAP_CAP ? `${files[n].slice(0, SNAP_CAP)}\n… (cut here: too long to send whole)` : files[n];
   return out;
-}
-
-// ── Agent inbox ──────────────────────────────────────────────────────────────────────────────────
-// An agent may drop a suggestion file into inbox/ at any time (no request needed). The app lists
-// them on the Cowork page; reviewing one runs it through the SAME permission filter (the ops it
-// declares) and review table — nothing is applied without you. Afterwards the file moves to
-// inbox/processed/ (or inbox/rejected/ when unusable).
-export const INBOX_README = `# Tachyread agent inbox
-
-Drop a JSON file here (any name ending in .json) to suggest changes without waiting for a request.
-Nothing is applied automatically: the user reviews every file on the Cowork page, row by row.
-
-Format: { "ops": ["<operation id>", …], …reply fields for those operations… }
-The reply fields are exactly those of a normal cowork reply (see journey-instructions.md / the
-operation's reply schema). Anything the declared operations may not change is discarded.
-Operation ids: cw-brief, cw-weeklies, cw-light, cw-retro, cw-typing-coach, cw-speak-coach,
-cw-narration-qa, cw-health, cw-ask, cw-fill-genre, cw-fill-desc, cw-fill-type, cw-fill-diff,
-cw-add-recs, cw-series-gaps, cw-tags, cw-vocab, cw-typing-plan, cw-rescore, cw-links, cw-notes,
-cw-classify, cw-genre-merge, cw-author-tidy, cw-goal-advice, cw-queue-advice, cw-queue-fill,
-cw-requeue, cw-queue-prep, cw-dupes, cw-tree, cw-graph. (Vocabulary and typing plans can only be
-applied from the Cowork page.)
-Reviewed files move to inbox/processed/ (or inbox/rejected/ if unreadable).
-`;
-export async function listInbox(dir) {
-  try { return (await dir.list('inbox')).filter((n) => /\.json$/i.test(n)); } catch { return []; }
-}
-export async function readInbox(dir, name) {
-  const text = await dir.read(`inbox/${name}`);
-  if (text == null) throw new Error(t('{file} is no longer in the inbox', { file: name }));
-  return text;
-}
-export async function moveInbox(dir, name, to = 'processed') {
-  const text = await dir.read(`inbox/${name}`);
-  if (text != null) await dir.write(`inbox/${to}/${new Date().toISOString().replace(/[:.]/g, '-')}-${name}`, text); // iso-ok: a file-name stamp
-  await dir.remove(`inbox/${name}`);
 }
 
 // Apply the ticked rows. `ai` is the current AI record; returns the next one (already saved).
