@@ -15,7 +15,7 @@ export function playlist(manifest, pos = {}) {
     const at = pos[cs] || 0;
     for (const [line, c] of Object.entries(b.chunks || {}).sort(([x], [y]) => x - y)) {
       if (c.endWordIndex < at) continue; // heard
-      out.push({ cs, title: b.title || b.fileName || '', author: b.author || '', line: +line, startWordIndex: c.startWordIndex, endWordIndex: c.endWordIndex, ms: c.durationMs || 0, id: c.id, text: c.text || '', last: b.lastLine != null && +line === b.lastLine });
+      out.push({ cs, title: b.title || b.fileName || '', author: b.author || '', line: +line, startWordIndex: c.startWordIndex, endWordIndex: c.endWordIndex, ms: c.durationMs || 0, bytes: c.bytes || 0, queue: b.queue || '', id: c.id, text: c.text || '', last: b.lastLine != null && +line === b.lastLine });
     }
   }
   return out;

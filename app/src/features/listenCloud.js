@@ -23,18 +23,23 @@ const clipName = (cs, line) => `listen-${cs}-${String(line).padStart(5, '0')}.op
 // The queue's unfinished books, in order, that this device has the text of — with chunks, position
 // and the active clip per chunk ({ ms, bytes, id, tag }). `skipped` collects the others with why
 // ('finished' | 'no-text'), so the Listen window can say what it left out.
-export async function listenBooks(qid, skipped = []) {
+// `qids`: one queue id or several; a book in two queues counts for the first. Each book carries
+// its `queue` (id) and `queueName`.
+export async function listenBooks(qids, skipped = []) {
   const [queues, books, map] = await Promise.all([getLibraryRef('queues'), getLibraryBooks(), getBinding()]);
-  const q = (queues || []).find((x) => x.id === qid && !x.deleted);
-  if (!q) return [];
   const csOf = {};
   for (const [cs, id] of Object.entries(map || {})) if (!csOf[id]) csOf[id] = cs;
   const out = [];
-  for (const b of queueBooks(q, books)) {
+  const seen = new Set();
+  for (const qid of [].concat(qids || [])) {
+   const q = (queues || []).find((x) => x.id === qid && !x.deleted);
+   for (const b of q ? queueBooks(q, books) : []) {
+    if (seen.has(b.id)) continue;
+    seen.add(b.id);
     const cs = csOf[b.id];
-    if (['finished', 'abandoned'].includes(readStatus(b))) { skipped.push({ title: b.title, why: 'finished' }); continue; }
+    if (['finished', 'abandoned'].includes(readStatus(b))) { skipped.push({ title: b.title, queue: q.name, why: 'finished' }); continue; }
     const rec = cs ? await loadDocPayload(cs).catch(() => null) : null;
-    if (!rec?.fullText) { skipped.push({ title: b.title, why: 'no-text' }); continue; }
+    if (!rec?.fullText) { skipped.push({ title: b.title, queue: q.name, why: 'no-text' }); continue; }
     const doc = readerDocFromText(rec.fullText, rec.fileName || b.title);
     const manifest = await getAudiobookManifest(cs);
     const clips = {};
@@ -42,7 +47,8 @@ export async function listenBooks(qid, skipped = []) {
       const c = entryClips(entry)[0];
       if (c) clips[line] = { ms: c.durationMs || 0, bytes: c.sizeBytes || 0, id: c.id, tag: c.tag || null };
     }
-    out.push({ cs, fileName: rec.fileName || b.title, title: b.title, author: b.author || '', wordIndex: (await loadFile(cs).catch(() => null))?.wordIndex || 0, chunks: audiobookChunks(doc), clips });
+    out.push({ cs, queue: q.id, queueName: q.name, fileName: rec.fileName || b.title, title: b.title, author: b.author || '', wordIndex: (await loadFile(cs).catch(() => null))?.wordIndex || 0, chunks: audiobookChunks(doc), clips });
+   }
   }
   return out;
 }
@@ -109,7 +115,7 @@ export async function pushWindow(books, cfg, { hours, capBytes, voice, device, o
     const cb = cloud.books[b.cs];
     if (!cb) return;
     const last = b.chunks[b.chunks.length - 1];
-    Object.assign(cb, { fileName: b.fileName, title: b.title, author: b.author || '', order, totalWords: last ? last.endWordIndex + 1 : 0, lastLine: last ? last.startLine : null });
+    Object.assign(cb, { fileName: b.fileName, title: b.title, queue: b.queueName || '', author: b.author || '', order, totalWords: last ? last.endWordIndex + 1 : 0, lastLine: last ? last.startLine : null });
     for (const [line, c] of Object.entries(cb.chunks)) if (!c.text) c.text = b.chunks.find((x) => x.startLine === +line)?.text || '';
   });
   Object.assign(cloud, { v: 1, at: Date.now(), voice: voice || cloud.voice || '', device: device || '' });
@@ -119,8 +125,7 @@ export async function pushWindow(books, cfg, { hours, capBytes, voice, device, o
   await setSyncCache('listen', cloud); // the Listen window's "ready" count on this device too
   const chunks = Object.values(cloud.books).reduce((a, b) => a + Object.keys(b.chunks).length, 0);
   const bytes = Object.values(cloud.books).reduce((a, b) => a + Object.values(b.chunks).reduce((x, c) => x + (c.bytes || 0), 0), 0);
-  const perBook = Object.fromEntries(Object.entries(cloud.books).map(([cs, b]) => [cs, Object.keys(b.chunks).length]));
-  return { uploaded: n, removed: remove.length, chunks, bytes, perBook };
+  return { uploaded: n, removed: remove.length, chunks, bytes };
 }
 
 // On the listening device: fetch the cloud window's clips this device lacks (and hasn't heard).

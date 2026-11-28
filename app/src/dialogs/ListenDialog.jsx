@@ -13,8 +13,9 @@ import { syncWithProvider, syncLibraryWithProvider } from '../features/sync/sync
 import { getSyncCache, loadFile, applySyncedPosition, getAudiobookManifest, entryClips, getAudioClipById, deleteAudioClipById, getJourneyAi, saveJourneyAi, getDeviceId, getLibraryRef } from '../state/storage.js';
 import { syncRole } from '../features/coworkActions.js';
 import { liveQueues } from '../features/readingQueues.js';
-import { KOKORO_VOICES } from '../features/localTts.js';
-import { listenStatus, onListenStatus, runListenNow, stopListenRun } from '../features/listenAgent.js';
+import { listenQueueIds } from '../features/listenWindow.js';
+import { KOKORO_VOICES, kokoroLabel } from '../features/localTts.js';
+import { listenStatus, onListenStatus, runListenNow, stopListenRun, refreshListenReport } from '../features/listenAgent.js';
 import { fmtDateTime } from '../features/dateFmt.js';
 import { deviceKind, useIsCompact } from '../state/device.js';
 
@@ -25,29 +26,67 @@ import { deviceKind, useIsCompact } from '../state/device.js';
 // the passages ahead have audio here and in the cloud, plus the books it left out and why.
 // i18n-keys: finished — skipped | its text isn’t on this computer — open the book here once
 const WHY = { finished: 'finished — skipped', 'no-text': 'its text isn’t on this computer — open the book here once' };
+// Durations and sizes as the reader sees them.
+const dur = (ms) => (ms > 0 && ms < 60e3 ? t('under 1 min') : ms < 3600e3 ? t('{m} min', { m: fmtNum(Math.round(ms / 60e3), 0) }) : t('{h} h', { h: fmtNum(ms / 3600e3, 1, 1) }));
+const mb = (bytes) => t('{mb} MB', { mb: fmtNum(bytes / 1e6, bytes < 10e6 ? 1 : 0) });
+const pct = (x) => `${fmtNum(x * 100, 0)}%`;
+const cell = (n, ms) => (n ? `${fmtNum(n, 0)} · ${dur(ms)}` : '—');
+
 function RunReport({ ls, ready }) {
   const r = ls.report;
+  const books = r?.books || [];
+  const tot = (k) => books.reduce((x, b) => x + (b[k] || 0), 0);
+  const ahead = books.filter((b) => b.inWindow), later = books.filter((b) => !b.inWindow);
+  const queues = [...new Set(ahead.map((b) => b.queue))];
+  const todo = tot('inWindow') - tot('rendered');
   return (
     <div className="listen-report" role="status">
+      <h4>{t('What is prepared for your phone')}</h4>
+      {ahead.length > 0 && (
+        <>
+          <p className="settings-note">{t('The phone’s Listen player plays this: from your place in each book, the next {n} hours of every chosen queue, read by {voice}. Passages you have heard are removed, and new ones are prepared every 10 minutes while Tachyread is open on this device.', { n: fmtNum(r.hours, 0), voice: r.voice || '?' })}</p>
+          <progress className="listen-progress" value={tot('cloudMs')} max={tot('windowMs') || 1} aria-label={t('In the cloud')} />
+          <ul className="listen-totals">
+            <li><strong>{t('In the cloud, ready for the phone: {have} of {want}', { have: dur(tot('cloudMs')), want: dur(tot('windowMs')) })}</strong>
+              {' · '}{t('{used} of the {cap} GB allowed', { used: mb(tot('cloudBytes')), cap: fmtNum(r.capBytes / 1e9, 2) })}</li>
+            <li>{t('Prepared on this device: {have} of {want}', { have: dur(tot('renderedMs')), want: dur(tot('windowMs')) })}</li>
+            <li>{todo > 0 ? t('Still to prepare: {n} passages, about {d} of listening', { n: fmtNum(todo, 0), d: dur(tot('windowMs') - tot('renderedMs')) }) : t('Everything in the window is prepared.')}</li>
+          </ul>
+          <div className="listen-scroll">
+            <table className="listen-table">
+              <thead><tr><th>{t('Book')}</th><th>{t('Covers')}</th><th>{t('Coming up')}</th><th>{t('Prepared here')}</th><th>{t('In the cloud')}</th></tr></thead>
+              {queues.map((q) => (
+                <tbody key={q}>
+                  <tr className="listen-q"><th colSpan={5} scope="rowgroup">{t('Queue: {name}', { name: q || '?' })}</th></tr>
+                  {ahead.filter((b) => b.queue === q).map((b) => (
+                    <tr key={b.title}>
+                      <td>{b.title}</td>
+                      <td>{t('{from} to {to}', { from: pct(b.from), to: pct(b.to ?? b.from) })}</td>
+                      <td>{cell(b.inWindow, b.windowMs)}</td>
+                      <td>{cell(b.rendered, b.renderedMs)}</td>
+                      <td>{cell(b.inCloud, b.cloudMs)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
+              <tfoot><tr><th scope="row">{t('Total')}</th><td /><td>{cell(tot('inWindow'), tot('windowMs'))}</td><td>{cell(tot('rendered'), tot('renderedMs'))}</td><td>{cell(tot('inCloud'), tot('cloudMs'))}</td></tr></tfoot>
+            </table>
+          </div>
+          <p className="settings-note">{t('Covers: the part of the book this audio spans. The other columns: passages · listening time; times for passages not prepared yet are estimates.')}</p>
+        </>
+      )}
+      {later.length > 0 && <p className="settings-note">{t('Later in the queues, beyond the next {n} hours: {titles}', { n: fmtNum(r.hours, 0), titles: later.map((b) => b.title).join(' · ') })}</p>}
+      {r?.skipped?.length > 0 && (
+        <>
+          <p className="settings-note">{t('Left out:')}</p>
+          <ul className="listen-skipped">{r.skipped.map((b) => <li key={b.title}>{b.title}{b.queue ? ` (${b.queue})` : ''} — {t(WHY[b.why] || b.why)}</li>)}</ul>
+        </>
+      )}
       <p className="settings-note">
-        {ls.busy ? '⏳ ' : r && !r.ok ? '⚠ ' : ''}{ls.text}{!ls.busy && ls.at ? ` · ${fmtDateTime(ls.at)}` : ''}{' '}
+        {ls.busy ? '⏳ ' : r && !r.ok ? '⚠ ' : ''}{ls.busy ? ls.text : t('Last run: {text}', { text: ls.text })}{!ls.busy && ls.at ? ` · ${fmtDateTime(ls.at)}` : ''}{' '}
         {ls.busy ? <button onClick={stopListenRun}>■ {t('Stop')}</button>
           : <button disabled={!ready} onClick={() => runListenNow()} title={ready ? undefined : t('Finish the checklist first')}>▶ {t('Run now')}</button>}
       </p>
-      {r?.books?.length > 0 && (
-        <table className="listen-table">
-          <thead><tr><th>{t('Book')}</th><th>{t('Passages ahead')}</th><th>{t('Rendered here')}</th><th>{t('In the cloud')}</th></tr></thead>
-          <tbody>{r.books.map((b) => (
-            <tr key={b.title}><td>{b.title}</td><td>{fmtNum(b.inWindow, 0)}</td><td>{fmtNum(b.rendered, 0)}</td><td>{b.inCloud == null ? '—' : fmtNum(b.inCloud, 0)}</td></tr>
-          ))}</tbody>
-        </table>
-      )}
-      {r?.cloudMs != null && <p className="settings-note">{r.cloudMs < 3600e3
-        ? t('In the cloud for your phone: about {m} min of listening.', { m: fmtNum(Math.ceil(r.cloudMs / 60e3), 0) })
-        : t('In the cloud for your phone: about {h} h of listening.', { h: fmtNum(r.cloudMs / 3600e3, 1, 1) })}</p>}
-      {r?.skipped?.length > 0 && (
-        <ul className="listen-skipped">{r.skipped.map((b) => <li key={b.title}>{b.title} — {t(WHY[b.why] || b.why)}</li>)}</ul>
-      )}
     </div>
   );
 }
@@ -71,7 +110,14 @@ function PrepareCard({ global, onPatchGlobal, fold }) {
     loadRole();
   }
   const machine = role?.role === 'machine';
-  const ready = signed && machine && global.kokoroLive && global.listenQueue && global.listenRender;
+  const qids = listenQueueIds(global);
+  const ready = signed && machine && global.kokoroLive && qids.length > 0 && global.listenRender;
+  // Show what is prepared without waiting for a run, and again when a choice changes.
+  const qkey = qids.join();
+  useEffect(() => {
+    const id = setTimeout(() => refreshListenReport().catch(() => {}), 400);
+    return () => clearTimeout(id);
+  }, [qkey, global.listenHours, global.listenCapGb, global.kokoroLive]);
   const mark = (ok) => <span aria-hidden="true">{ok ? '✅' : '⬜'}</span>;
   return (
     <>
@@ -88,17 +134,22 @@ function PrepareCard({ global, onPatchGlobal, fold }) {
             <option value="">{t('— pick a voice —')}</option>
             {KOKORO_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
           </select></label></li>
-        <li>{mark(!!global.listenQueue)} <label>{t('Queue')}{' '}
-          <select value={global.listenQueue || ''} onChange={(e) => onPatchGlobal({ listenQueue: e.target.value })}>
-            <option value="">{t('— pick a queue —')}</option>
-            {queues.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
-          </select></label></li>
+        <li role="group" aria-label={t('Queues')}>{mark(qids.length > 0)} {t('Queues')}
+          {queues.map((q) => (
+            <label key={q.id} className="inline-check"><input type="checkbox" checked={qids.includes(q.id)}
+              onChange={(e) => onPatchGlobal({ listenQueues: e.target.checked ? [...qids, q.id] : qids.filter((x) => x !== q.id) })} /> {q.name}</label>
+          ))}
+          {!queues.length && <span className="settings-note">{t('No queues yet — make one in the Library.')}</span>}</li>
         <li>{mark(!!global.listenRender)} <label className="inline-check"><input type="checkbox" checked={!!global.listenRender}
-          onChange={(e) => { onPatchGlobal({ listenRender: e.target.checked }); if (e.target.checked) setTimeout(() => runListenNow(), 300); }} /> {t('Render the next {n} hours ahead and upload them', { n: global.listenHours ?? 20 })}</label></li>
+          onChange={(e) => { onPatchGlobal({ listenRender: e.target.checked }); if (e.target.checked) setTimeout(() => runListenNow(), 300); }} /> {t('Render the next {n} hours of each queue and upload them', { n: global.listenHours ?? 20 })}</label></li>
+        <li><label>{t('Hours ahead')}{' '}
+          <input type="number" min={1} max={48} value={global.listenHours ?? 20} onChange={(e) => onPatchGlobal({ listenHours: Math.max(1, Math.min(48, Number(e.target.value) || 20)) })} style={{ width: 70 }} /></label>
+          <label>{t('Cloud cap')}{' '}
+          <input type="number" min={0.25} max={10} step={0.25} value={global.listenCapGb ?? 1} onChange={(e) => onPatchGlobal({ listenCapGb: Math.max(0.25, Math.min(10, Number(e.target.value) || 1)) })} style={{ width: 70 }} /> GB</label></li>
       </ol>
       <p className="settings-note">{t('On the phone: open this same window and press “Get the latest”, or tick “Pull audio here” there to download over Wi-Fi in the background.')}</p>
     </details>
-    {(global.listenRender || ls.report) && <RunReport ls={ls} ready={ready} />}
+    {(global.listenRender || ls.report?.books?.length > 0) && <RunReport ls={ls} ready={ready} />}
     </>
   );
 }
@@ -132,14 +183,22 @@ export default function ListenDialog({ global, onPatchGlobal, onClose }) {
   const [busy, setBusy] = useState(false);
   const audio = useRef(null);
   const lastSync = useRef(0);
-  const list = useMemo(() => playlist(manifest, pos), [manifest, pos]);
+  const [queue, setQueue] = useState(''); // ponytail: not remembered between openings; store it if that annoys
+  const [have, setHave] = useState({}); // { [cs]: Set of passage lines downloaded on this device }
+  const full = useMemo(() => playlist(manifest, pos), [manifest, pos]);
+  const list = useMemo(() => full.filter((e) => !queue || e.queue === queue), [full, queue]);
   const cur = list[Math.min(idx, Math.max(0, list.length - 1))];
 
   async function load() {
     const m = await getSyncCache('listen');
     const p = {};
     for (const cs of Object.keys(m?.books || {})) p[cs] = (await loadFile(cs).catch(() => null))?.wordIndex || 0;
-    setManifest(m); setPos(p); setIdx(0);
+    const h = {};
+    for (const cs of Object.keys(m?.books || {})) {
+      const am = await getAudiobookManifest(cs).catch(() => null);
+      h[cs] = new Set(Object.keys(am?.lines || {}).filter((l) => entryClips(am.lines[l]).length).map(Number));
+    }
+    setManifest(m); setPos(p); setHave(h); setIdx(0);
     if (m) setMsg('');
     else setMsg(global.listenRender ? t('Nothing to play on this device yet.') : t('Nothing downloaded yet — press “Get the latest”. Your computer prepares the audio: on it, open this window and follow “Prepare audio for your phone”.'));
   }
@@ -231,10 +290,18 @@ export default function ListenDialog({ global, onPatchGlobal, onClose }) {
   useEffect(() => () => { if (audio.current?.src) URL.revokeObjectURL(audio.current.src); syncSoon(true); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const books = Object.entries(manifest?.books || {}).sort(([, a], [, b]) => (a.order ?? 1e9) - (b.order ?? 1e9));
-  const left = list.reduce((s, e) => s + (e.ms || 0), 0);
+  const qnames = [...new Set(books.map(([, b]) => b.queue || ''))].filter(Boolean);
+  // Per book: what is ahead in the cloud, and how much of it is already on this device.
+  const rows = books.filter(([, b]) => !queue || b.queue === queue).map(([cs, b]) => {
+    const mine = full.filter((e) => e.cs === cs), here = mine.filter((e) => have[cs]?.has(e.line));
+    const sum = (a, k) => a.reduce((x, e) => x + (e[k] || 0), 0);
+    return { cs, title: b.title || b.fileName, queue: b.queue || '', at: bookShare(b, pos[cs]), n: mine.length, ms: sum(mine, 'ms'), bytes: sum(mine, 'bytes'), hereN: here.length, hereMs: sum(here, 'ms'), hereBytes: sum(here, 'bytes') };
+  });
+  const tot = (k) => rows.reduce((x, r) => x + r[k], 0);
+  const onMachine = global.listenRender && !compact;
   const prep = onPatchGlobal && <PrepareCard global={global} onPatchGlobal={onPatchGlobal} fold={compact} />;
   return (
-    <Dialog title={`🎧 ${t('Listen to the queue')}`} onClose={onClose} width={520} buttons={<button onClick={onClose}>{t('Close')}</button>}>
+    <Dialog title={`🎧 ${t('Listen to the queue')}`} onClose={onClose} width={720} buttons={<button onClick={onClose}>{t('Close')}</button>}>
       {!compact && prep}
       <audio ref={audio} onEnded={ended} onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} preload="auto" />
       {cur ? (
@@ -251,7 +318,6 @@ export default function ListenDialog({ global, onPatchGlobal, onClose }) {
               </select>
             </label>
           </div>
-          <p className="settings-note">{t('{n} passages · about {h} h downloaded ahead', { n: fmtNum(list.length, 0), h: fmtNum(left / 3600e3, 1, 1) })}</p>
         </div>
       ) : manifest && <p className="settings-note">{t('Nothing left to play here — get the latest.')}</p>}
       <div className="data-row">
@@ -259,19 +325,35 @@ export default function ListenDialog({ global, onPatchGlobal, onClose }) {
         {msg && <span className="settings-note" role="status" style={{ margin: 0 }}>{msg}</span>}
       </div>
       {!canPlay && <p className="settings-note" role="alert">⚠ {t('This browser can’t play the audio format (Ogg Opus).')}</p>}
+      {qnames.length > 1 && (
+        <label>{t('Queue')}{' '}
+          <select value={queue} onChange={(e) => { setQueue(e.target.value); setIdx(0); audio.current?.pause(); audio.current?.removeAttribute('src'); }}>
+            <option value="">{t('All queues')}</option>
+            {qnames.map((q) => <option key={q} value={q}>{q}</option>)}
+          </select></label>
+      )}
       {manifest?.at > 0 && (
-        <p className="settings-note">{t('Audio prepared by {device}, cloud last updated {when} · {n} passages there.', {
-          device: manifest.device || t('your computer'), when: fmtDateTime(manifest.at),
-          n: fmtNum(Object.values(manifest.books || {}).reduce((a, b) => a + Object.keys(b.chunks || {}).length, 0), 0) })}</p>
+        <p className="settings-note">{t('Audio prepared by {device}, read by {voice}, cloud last updated {when}.', {
+          device: manifest.device || t('your computer'), voice: manifest.voice ? kokoroLabel(manifest.voice) : '?', when: fmtDateTime(manifest.at) })}</p>
       )}
-      {books.length > 0 && (
-        <ol className="listen-books">
-          {books.map(([cs, b]) => (
-            <li key={cs}>{b.title || b.fileName} <span className="settings-note">{fmtNum(bookShare(b, pos[cs]) * 100, 0)}%</span></li>
-          ))}
-        </ol>
+      {rows.length > 0 && !onMachine && (
+        <>
+          <h4>{t('What there is to listen to')}</h4>
+          <ul className="listen-totals">
+            <li><strong>{t('Ahead of you in the cloud: {d} in {n} passages', { d: dur(tot('ms')), n: fmtNum(tot('n'), 0) })}</strong></li>
+            <li>{t('Downloaded to this device: {d} in {n} passages ({size}) — these play offline; the rest plays from the cloud while you are online.', { d: dur(tot('hereMs')), n: fmtNum(tot('hereN'), 0), size: mb(tot('hereBytes')) })}</li>
+          </ul>
+          <div className="listen-scroll">
+            <table className="listen-table">
+              <thead><tr><th>{t('Book')}</th><th>{t('Your place')}</th><th>{t('In the cloud')}</th><th>{t('On this device')}</th></tr></thead>
+              <tbody>{rows.map((r) => (
+                <tr key={r.cs}><td>{r.title}{qnames.length > 1 && r.queue ? <span className="settings-note"> · {r.queue}</span> : null}</td><td>{pct(r.at)}</td><td>{cell(r.n, r.ms)}</td><td>{cell(r.hereN, r.hereMs)}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </>
       )}
-      {!(global.listenRender && !compact) && <label className="inline-check"><input type="checkbox" checked={!!global.listenPull} onChange={(e) => onPatchGlobal({ listenPull: e.target.checked })} /> {t('Pull audio here — download new passages in the background (Wi-Fi only)')}</label>}
+      {!onMachine && <label className="inline-check"><input type="checkbox" checked={!!global.listenPull} onChange={(e) => onPatchGlobal({ listenPull: e.target.checked })} /> {t('Pull audio here — download new passages in the background (Wi-Fi only)')}</label>}
       <p className="settings-note">{t('Your place moves with each passage you finish and reaches your other devices on the next sync. No book files are needed on this device.')}</p>
       {/* the phone can be the sync machine too, so the card is there as well, folded away at the end */}
       {compact && prep}

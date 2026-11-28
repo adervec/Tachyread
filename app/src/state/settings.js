@@ -364,6 +364,8 @@ export function defaultGlobalSettings() {
     // Pocket listening across devices (listenAgent.js): the sync machine renders `listenHours` of the
     // listen queue ahead with Kokoro and mirrors it to the sync target under `listenCapGb`; devices
     // with listenPull fetch it over Wi-Fi. render/pull are per device (GLOBAL_DATA_KEYS).
+    // Queues prepared for the phone (ids); null = just the listen-mode queue above.
+    listenQueues: null,
     listenRender: false,
     listenPull: false,
     listenHours: 20,

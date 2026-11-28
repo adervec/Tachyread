@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { planWindow, behind, cloudDiff, estMs } from './listenWindow.js';
+import { planWindow, behind, cloudDiff, estMs, listenQueueIds } from './listenWindow.js';
 
 // Two books: A half heard (3 chunks of 150 words = 1 min each), B untouched (2 chunks).
 const ch = (i) => ({ startLine: i * 2, endLine: i * 2 + 1, startWordIndex: i * 150, endWordIndex: i * 150 + 149 });
@@ -13,6 +13,11 @@ assert.equal(all[0].hasClip, false); assert.equal(all[1].hasClip, true); assert.
 assert.deepEqual(planWindow([A, B], { hours: 1.5 / 60 }).map((e) => e.startLine), [2, 4], 'window closes once 90 s of audio are in (60 s est + 50 s clip)');
 assert.deepEqual(planWindow([A, B], { hours: 1, capBytes: 200_000 }).map((e) => `${e.cs}/${e.startLine}`), ['A/2'], 'byte cap: the 150 KB clip would overflow');
 assert.deepEqual(planWindow([], {}), []);
+// Two queues: each gets its own hours, nearest passages first, and the cap trims the far ends.
+const QA = { ...A, queue: 'q1' }, QB = { ...B, queue: 'q2' };
+assert.deepEqual(planWindow([QA, QB], { hours: 1 / 60 }).map((e) => `${e.cs}/${e.startLine}`), ['A/2', 'B/0'], 'a minute each, not just the first queue');
+assert.deepEqual(planWindow([QA, QB], { hours: 1 }).map((e) => `${e.cs}/${e.startLine}`), ['A/2', 'B/0', 'A/4', 'B/2'], 'interleaved by distance ahead');
+assert.deepEqual(listenQueueIds({ listenQueue: 'x' }), ['x']); assert.deepEqual(listenQueueIds({ listenQueue: 'x', listenQueues: [] }), []);
 
 assert.deepEqual(behind(A.chunks, 160), [0]);
 assert.deepEqual(behind(A.chunks, 1000), [0, 2, 4]);

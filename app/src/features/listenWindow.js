@@ -9,25 +9,38 @@ export const estBytes = (ms) => Math.round(ms * 3); // 24 kbps Opus ≈ 3 bytes 
 
 // books: ordered [{ cs, fileName, wordIndex, chunks: [{ startLine, endLine, startWordIndex, endWordIndex }],
 //   clips: { [startLine]: { ms, bytes } } }]
-// → entries [{ cs, fileName, startLine, endLine, startWordIndex, endWordIndex, ms, bytes, hasClip }]
+// → entries [{ cs, fileName, startLine, endLine, startWordIndex, endWordIndex, ms, bytes, hasClip, offset }]
 //   from each book's current chunk onward, book after book, until `hours` of audio or `capBytes`.
+// Books may carry a `queue`: each queue gets its own `hours`, and the entries come nearest-first
+// (`offset` = audio before it in its queue), so every queue gets its first passages early and the
+// byte cap trims the far end of all of them rather than the whole of the last queue.
 export function planWindow(books, { hours = 20, capBytes = Infinity } = {}) {
-  const out = [];
   const limit = hours * 3600e3;
-  let ms = 0, bytes = 0;
+  const at = {}; // ms planned so far, per queue
+  const all = [];
   for (const b of books || []) {
+    const q = b.queue ?? '';
     for (const c of b.chunks || []) {
       if (c.endWordIndex < (b.wordIndex || 0)) continue; // heard
+      if ((at[q] || 0) >= limit) break;
       const clip = b.clips?.[c.startLine];
       const cms = clip?.ms || estMs(c.endWordIndex - c.startWordIndex + 1);
-      const cb = clip?.bytes || estBytes(cms);
-      if (ms >= limit || bytes + cb > capBytes) return out;
-      out.push({ cs: b.cs, fileName: b.fileName, startLine: c.startLine, endLine: c.endLine, startWordIndex: c.startWordIndex, endWordIndex: c.endWordIndex, ms: cms, bytes: cb, hasClip: !!clip });
-      ms += cms; bytes += cb;
+      all.push({ cs: b.cs, fileName: b.fileName, startLine: c.startLine, endLine: c.endLine, startWordIndex: c.startWordIndex, endWordIndex: c.endWordIndex, ms: cms, bytes: clip?.bytes || estBytes(cms), hasClip: !!clip, offset: at[q] || 0 });
+      at[q] = (at[q] || 0) + cms;
     }
+  }
+  all.sort((x, y) => x.offset - y.offset); // stable: one queue keeps its order
+  const out = [];
+  let bytes = 0;
+  for (const e of all) {
+    if (bytes + e.bytes > capBytes) break;
+    out.push(e); bytes += e.bytes;
   }
   return out;
 }
+
+// The queues prepared for the phone: `listenQueues` once chosen, else the listen-mode queue.
+export const listenQueueIds = (g) => (Array.isArray(g?.listenQueues) ? g.listenQueues : g?.listenQueue ? [g.listenQueue] : []);
 
 // Start lines of the chunks entirely behind the reading position.
 export const behind = (chunks, wordIndex) => (chunks || []).filter((c) => c.endWordIndex < wordIndex).map((c) => c.startLine);
