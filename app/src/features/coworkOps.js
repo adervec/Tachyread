@@ -416,11 +416,12 @@ export const unparkReply = (ai, hash) => ({ ...(ai || {}), pendingReplies: (ai?.
 // cowork.json (cowork-manifest v1, CoworkSyncHub/COWORK-PROTOCOL.md) at the cowork folder root, so
 // any agent or hub can discover the channel. snapshot/ is read-only context; inbox/ takes
 // unrequested suggestions (inbox/README.md says how).
+// One channel for the runner. (The inbox/ folder still takes suggestions an agent drops by hand; it is not a
+// runner channel, since its only "request" would be the snapshot README and every snapshot would start a run.)
 export const COWORK_MANIFEST = {
   protocol: 'cowork-manifest', protocolVersion: 1, app: 'tachyread',
   channels: [
     { name: 'journey', label: 'Literary Journey (Trackyread)', request: ['journey-cowork-request.json'], instructions: 'journey-instructions.md', replyPath: 'journey-cowork-response.json', readOnly: ['snapshot/'] },
-    { name: 'inbox', label: 'Unrequested suggestions', request: ['snapshot/README.md'], instructions: 'inbox/README.md', replyDir: 'inbox', replyPrefix: '', readOnly: ['snapshot/'] },
   ],
 };
 

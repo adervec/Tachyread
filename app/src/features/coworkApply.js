@@ -13,7 +13,7 @@ import { makePlan, makeStep } from '../engine/typingPlans.js';
 import { COWORK_MANIFEST } from './coworkOps.js';
 import { t } from '../i18n.js';
 
-// Gather everything and write snapshot/* into the cowork folder. Returns the file count.
+// Gather everything and write snapshot/* into the cowork folder. Returns { name: text } of what it wrote.
 export async function writeSnapshot(dir, now = Date.now()) {
   const [files, books, bindMap, queues, goals, typingRuns, speechLog, focusSessions, manifests] = await Promise.all([
     allFiles().catch(() => []), getLibraryBooks().catch(() => []), getBinding().catch(() => ({})),
@@ -33,7 +33,22 @@ export async function writeSnapshot(dir, now = Date.now()) {
   for (const [name, text] of Object.entries(out)) await dir.write(`snapshot/${name}`, text);
   await dir.write('inbox/README.md', INBOX_README);
   await dir.write('cowork.json', JSON.stringify(COWORK_MANIFEST, null, 2)); // discovery manifest: the runner finds the app by it
-  return Object.keys(out).length;
+  return out;
+}
+
+// The snapshot files a request's operations read, carried INSIDE the request: the AI runner sends an
+// agent only the channel's request files, and listing snapshot/ files as request files would make
+// every scheduled snapshot start a run nobody asked for. Files the instructions name, or the small
+// overview set when they just say "the snapshot/ files"; each capped so one big log can't fill the request.
+const SNAP_OVERVIEW = ['activity-log.md', 'reading-days.json', 'goals.json', 'queues.json', 'changes.md'];
+const SNAP_CAP = 200_000;
+export function snapshotForOps(files, instructionText) {
+  const text = String(instructionText || '');
+  const named = new Set([...text.matchAll(/snapshot\/([\w.-]+\.(?:json|md))/g)].map((m) => m[1]));
+  if (/snapshot\/ (?:files|folder)/.test(text)) SNAP_OVERVIEW.forEach((n) => named.add(n));
+  const out = {};
+  for (const n of [...named].sort()) if (files?.[n] != null) out[n] = files[n].length > SNAP_CAP ? `${files[n].slice(0, SNAP_CAP)}\n… (cut here: too long to send whole)` : files[n];
+  return out;
 }
 
 // ── Agent inbox ──────────────────────────────────────────────────────────────────────────────────

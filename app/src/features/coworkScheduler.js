@@ -13,8 +13,8 @@ import {
   buildApiMessages, parseAiOutput, contentHash,
 } from './journeyAi.js';
 import { cloudCoworkDir, NOT_SIGNED_IN } from './coworkCloud.js';
-import { opsInstruction, sanitizeOutput, planRows, isReportOnly, queuesForDataset, logRequest, reviewFirst, parkReply } from './coworkOps.js';
-import { writeSnapshot, commitRows } from './coworkApply.js';
+import { COWORK_OPS, opsInstruction, sanitizeOutput, planRows, isReportOnly, queuesForDataset, logRequest, reviewFirst, parkReply } from './coworkOps.js';
+import { writeSnapshot, commitRows, snapshotForOps } from './coworkApply.js';
 import { liveQueues } from './readingQueues.js';
 import { weeklySummaries } from './journeyAnalytics.js';
 import { askClaude, anthropicConfigured } from './anthropic.js';
@@ -83,8 +83,9 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
         if (!instr) throw new Error(t('nothing to send ("Ask a question" needs a question)'));
         const books = await getLibraryBooks();
         const dataset = await datasetWithProgress(instr.mode === 'light', books, instr.ops);
-        await writeSnapshot(dir, now); // the request's agent reads snapshot/ too
+        const snap = await writeSnapshot(dir, now);
         const req = buildCoworkRequest(dataset, instr);
+        req.snapshot = snapshotForOps(snap, instr.text || instr.ops?.map((id) => COWORK_OPS[id]?.instruction).join(' ')); // the snapshot/ files the instructions name
         await dir.write('journey-cowork-request.json', JSON.stringify(req, null, 2));
         await dir.write('journey-instructions.md', buildDigest(dataset, instr));
         ai = logRequest({ ...ai, instruction: { ...instr, updatedAt: now } }, { hash: req.requestHash, ops: instr.ops, at: now, auto: true }); // replies are matched back by hash
@@ -100,7 +101,7 @@ export async function coworkSchedulerTick(deps, now = Date.now()) {
     try {
       const dir = await cloudCoworkDir();
       if (!dir) { ok = false; note = NOT_SIGNED_IN(); }
-      else note = t('auto snapshot ({n} files)', { n: await writeSnapshot(dir, now) });
+      else note = t('auto snapshot ({n} files)', { n: Object.keys(await writeSnapshot(dir, now)).length });
     } catch (e) { ok = false; note = t('snapshot failed: {error}', { error: e?.message || e }); }
     ai = recordRun(ai, ['cw-snapshot'], { at: now, kind: 'cowork', target: t('cowork folder'), ok, note, auto: true });
   }

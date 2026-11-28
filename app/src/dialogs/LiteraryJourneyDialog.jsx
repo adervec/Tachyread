@@ -59,7 +59,7 @@ import {
   syncRole, recordRun, mergedHistory, calendarCells, fmtAgo, dayKey,
 } from '../features/coworkActions.js';
 import { COWORK_OPS, OP_GROUPS, NEVER_CHANGED, sanitizeOutput, planRows, opsInstruction, queuesForDataset, logRequest, opsForReply, opForRow, opForReport, PREP_NOTE_TYPES, reviewFirst, unparkReply } from '../features/coworkOps.js';
-import { writeSnapshot, commitRows, undoLastApply, listInbox, readInbox, moveInbox } from '../features/coworkApply.js';
+import { writeSnapshot, commitRows, undoLastApply, listInbox, readInbox, moveInbox, snapshotForOps } from '../features/coworkApply.js';
 import { getDeviceId } from '../state/storage.js';
 import { cloudCoworkDir, wasApplied, markApplied } from '../features/coworkCloud.js';
 import { deviceKind } from '../state/device.js';
@@ -3467,7 +3467,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     if (!dir) { setMsg(t('Sign in to your cloud first.')); return; }
     setBusy(true);
     try {
-      const n = await writeSnapshot(dir);
+      const n = Object.keys(await writeSnapshot(dir)).length;
       const cur = recordRun((await getJourneyAi().catch(() => null)) || ai || {}, ['cw-snapshot'], { at: Date.now(), kind: 'cowork', target: coworkTarget, ok: true, note: t('wrote snapshot ({n} files)', { n }) });
       await saveJourneyAi(cur); onReloadAi();
       setMsg(t('Snapshot written: {n} files in {folder}/snapshot/ (read-only for agents — see its README.md).', { n, folder: coworkTarget }));
@@ -3487,6 +3487,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     if (!ids.length) { setMsg(t('Nothing checked — tick at least one action in the tree.')); return; }
     setBusy(true); setMsg(t('Running selected actions…'));
     const now = Date.now();
+    let snapFiles = null; // the snapshot written this run (the request carries the files it names)
     const parts = [];
     let apiTried = false; let apiOk = true; let apiNote = '';
     if (ids.includes('api-light')) {
@@ -3505,7 +3506,7 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
     }
     let cur = (await getJourneyAi().catch(() => null)) || ai || {};
     if (ids.includes('cw-snapshot') && dir) {
-      try { const n = await writeSnapshot(dir); cur = recordRun(cur, ['cw-snapshot'], { at: now, kind: 'cowork', target: coworkTarget, ok: true, note: t('wrote snapshot ({n} files)', { n }) }); parts.push(t('snapshot written')); }
+      try { const n = Object.keys(snapFiles = await writeSnapshot(dir)).length; cur = recordRun(cur, ['cw-snapshot'], { at: now, kind: 'cowork', target: coworkTarget, ok: true, note: t('wrote snapshot ({n} files)', { n }) }); parts.push(t('snapshot written')); }
       catch (e) { cur = recordRun(cur, ['cw-snapshot'], { at: now, kind: 'cowork', target: coworkTarget, ok: false, note: String(e?.message || e) }); parts.push(t('snapshot failed')); }
     }
     const coworkIds = ids.filter((id) => COWORK_OPS[id]);
@@ -3517,8 +3518,9 @@ function AiView({ books, ai, global, onPatchGlobal, bindMap = {}, onReload, onRe
           const ci = combineCoworkInstruction(coworkIds, { question });
           if (!ci) throw new Error(t('nothing to send — “Ask a question” needs a question'));
           const dataset = await datasetWithProgress(ci.mode === 'light', ci.ops);
-          if (!ids.includes('cw-snapshot')) await writeSnapshot(dir); // the agent reads snapshot/ too
+          if (!snapFiles) snapFiles = await writeSnapshot(dir); // the request carries the snapshot/ files it names
           const req = buildCoworkRequest(dataset, ci);
+          req.snapshot = snapshotForOps(snapFiles, ci.text);
           await dir.write('journey-cowork-request.json', JSON.stringify(req, null, 2));
           await dir.write('journey-instructions.md', buildDigest(dataset, ci));
           cur = logRequest({ ...cur, instruction: { ...ci, updatedAt: now } }, { hash: req.requestHash, ops: ci.ops, at: now }); // replies are matched back to this
