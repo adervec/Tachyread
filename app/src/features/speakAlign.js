@@ -8,6 +8,13 @@
 //   minRun — matched words needed before anything moves
 //   density — matched words per word moved: a jump over N words needs ≥ density·N matches, so one
 //            right word can't carry the position through a whole sentence
+// Repeated text (a name every few words, "it was the … it was the …") gets two extra guards:
+//   - a word that is everywhere (short, or repeated nearby) reached by jumping over text only counts
+//     when the next heard word follows on from it — on its own it would match a few words ahead by
+//     chance, and a trailing one waits for the next word instead of moving the place;
+//   - the text just BEHIND the reader is lined up too: words that fit there better than anything
+//     ahead move nothing, so once the place is slightly ahead of the voice, the words
+//     still being read can't catch the same words further down and pull it on.
 // Punctuation never matters: text tokens are split on it ("stairs—every" is two words, a lone "—"
 // is nothing), and common sound-alikes / digits are folded together ("two" = "to" = "2").
 
@@ -72,6 +79,7 @@ export function wordsMatch(heard, text, fuzz = SPEAK_DEFAULTS.fuzz) {
 // null), stale }] } or null. `idx` = the reader's current word.
 // `fromHeard`: heard parts already used by an earlier move (the recogniser re-sends the whole phrase
 // as it grows) — those are shown but never aligned again. The result's `usedHeard` is the new mark.
+const BACK = 8; // words behind the reader that heard words may be lined up with (never moved to)
 export function alignDetail(docWords, idx, heard, opts = {}) {
   const { window, skip, fuzz, minRun, density, fromHeard = 0 } = { ...SPEAK_DEFAULTS, ...opts };
   const all = String(heard || '').split(/\s+/).flatMap(partsOf);
@@ -81,9 +89,11 @@ export function alignDetail(docWords, idx, heard, opts = {}) {
   // The text ahead as a flat stream of spoken parts, each remembering its word.
   const D = [], owner = [];
   const last = Math.min(docWords.length, idx + window + H.length * (skip + 2) + 8);
-  let windowEnd = 0;
-  for (let i = idx; i < last; i++) {
-    for (const p of partsOf(docWords[i])) { D.push(p); owner.push(i); }
+  let windowEnd = 0, at = 0; // at: where the reader is in D
+  const seen = {};
+  for (let i = Math.max(0, idx - BACK); i < last; i++) {
+    if (i === idx) at = D.length;
+    for (const p of partsOf(docWords[i])) { D.push(p); owner.push(i); seen[p] = (seen[p] || 0) + 1; }
     if (i === Math.min(docWords.length, idx + window) - 1) windowEnd = D.length;
   }
   if (!windowEnd) windowEnd = D.length;
@@ -94,10 +104,13 @@ export function alignDetail(docWords, idx, heard, opts = {}) {
   for (const p of D) W.push(W[W.length - 1] + weight(p));
   // Prefer the match that STARTS nearest the reader, then the one reaching furthest: in repetitive
   // text, stale words from earlier in the phrase would otherwise align further down and jump ahead.
-  let best = null;
+  const common = (w) => w.length <= 3 || seen[w] > 1;
+  // A common word (or a near-miss) reached over a gap is only believed when the next heard word follows on from it.
+  const loose = (h, j) => (common(D[j]) || D[j] !== H[h]) && !(H[h + 1] && D[j + 1] && wordsMatch(H[h + 1], D[j + 1], fuzz));
+  let best = null, behind = null;
   for (let h0 = 0; h0 < H.length; h0++) {
     for (let s = 0; s < windowEnd; s++) {
-      if (!wordsMatch(H[h0], D[s], fuzz)) continue;
+      if (!wordsMatch(H[h0], D[s], fuzz) || (s !== at && loose(h0, s))) continue;
       const pairs = all.slice(0, used + h0).map((w) => ({ w, i: null, stale: true }));
       pairs.push({ w: H[h0], i: owner[s], q: similarity(H[h0], D[s]) });
       let d = s + 1, matched = weight(D[s]), miss = 0, lastH = h0;
@@ -109,20 +122,27 @@ export function alignDetail(docWords, idx, heard, opts = {}) {
         let hit = -1;
         for (let j = d; j <= top; j++) if (D[j] === H[h]) { hit = j; break; }
         if (hit < 0) for (let j = d; j <= top; j++) if (wordsMatch(H[h], D[j], fuzz)) { hit = j; break; }
+        // (Not a jump when as many heard words went unmatched as text words are passed: a misheard word.)
+        if (hit - d > miss && loose(h, hit)) hit = -1;
         if (hit >= 0) { d = hit + 1; matched += weight(D[hit]); miss = 0; lastH = h; pairs.push({ w: H[h], i: owner[hit], q: similarity(H[h], D[hit]) }); }
         else { miss++; pairs.push({ w: H[h], i: null }); }
       }
       const to = owner[d - 1] + 1;
       // Enough evidence for the distance moved (from the reader's place, or from where a re-sync
       // picked up): one right word can't carry it through a sentence.
-      const moved = W[d] - (opts.resync ? W[s] : 0); // text evidence passed over, same weighting
-      if (matched < minRun || matched < density * moved) continue;
-      if (!best || s < best.s || (s === best.s && to > best.to)) best = { s, to, start: owner[s], matched, pairs, usedHeard: used + lastH + 1 };
+      const moved = W[d] - (opts.resync || s < at ? W[s] : W[at]); // text evidence passed over, same weighting
+      if (matched < minRun || matched < density * moved - 1e-9) continue;
+      const cand = { s, to, start: owner[s], matched, pairs, usedHeard: used + lastH + 1 };
+      if (s < at) { if (!behind || matched >= behind.matched) behind = cand; } // the nearest of the strongest
+      else if (!best || s < best.s || (s === best.s && to > best.to)) best = cand;
     }
   }
-  if (!best || best.to <= idx) return null;
-  const { s, ...out } = best; // eslint-disable-line no-unused-vars
-  return out;
+  // Started behind the reader with more evidence than anything ahead: that is what was read.
+  // (On equal evidence it wins only if it reads on past the reader: the nearer start.)
+  if (behind && (!best || behind.matched > best.matched || (behind.matched === best.matched && behind.to > idx))) best = behind;
+  if (!best) return null;
+  const { s, ...out } = best;
+  return out.to > idx ? out : null; // fitted behind the place: no move, and the words stay unspent for the next, longer phrase
 }
 
 // docWords: the document's words; idx: the reader's current word; heard: the recognised phrase.

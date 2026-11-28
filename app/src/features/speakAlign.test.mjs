@@ -24,7 +24,7 @@ assert.equal(alignSpoken(doc, 0, 'age of wisdom', { window: 20 }), null, '3 word
 assert.equal(alignSpoken(doc, 0, 'it was', { minRun: 1 }), 2);
 assert.equal(alignSpoken(doc, 0, 'it', { minRun: 1 }), null, 'a lone short word is half a match');
 // Never moves backwards.
-assert.equal(alignSpoken(doc, 16, 'it was the best of'), null);
+assert.equal(alignSpoken(doc, 16, 'it was the best'), null);
 
 assert.ok(wordsMatch('wisdom', 'wisdon'));
 assert.ok(!wordsMatch('of', 'or'), 'short words need an exact match');
@@ -53,9 +53,20 @@ assert.equal(alignSpoken(ms, 0, 'the old hmm uh er stairs every evening'), 10);
 assert.equal(normWord('two'), normWord('to'));
 assert.equal(alignSpoken(['I', 'went', 'to', 'the', 'shop'], 0, 'i went two the shop'), 5);
 assert.equal(alignSpoken(['chapter', '7', 'begins'], 0, 'chapter seven begins'), 3);
-// The trace marks what matched, what didn't, and what was stale.
+// The trace marks what matched and what was stale; words that fit the text just behind the
+// reader line up there (and the move still ends past the last word).
 const tr = alignDetail(ms, 2, 'the old lighthouse keeper climbed', {});
-assert.deepEqual(tr.pairs.map((p) => [p.w, p.i, !!p.stale]), [['the', null, true], ['old', null, true], ['lighthouse', 2, false], ['keeper', 3, false], ['climbed', 4, false]]);
+assert.equal(tr.to, 5);
+assert.deepEqual(tr.pairs.map((p) => [p.w, p.i, !!p.stale]), [['the', 0, false], ['old', 1, false], ['lighthouse', 2, false], ['keeper', 3, false], ['climbed', 4, false]]);
+assert.deepEqual(alignDetail(ms, 2, 'the old lighthouse keeper climbed', { fromHeard: 2 }).pairs.slice(0, 2).map((p) => !!p.stale), [true, true]);
+// Repeated words must not pull the place ahead (they used to: 5, 11 and 5 here).
+const rp = 'the cat sat on the mat and the dog sat on the log'.split(' ');
+assert.equal(alignSpoken(rp, 0, 'the cat sat the'), null, 'a trailing "the" found two words on waits for the next word');
+assert.equal(alignSpoken(rp, 0, 'the cat sat the mat'), 6, '…and counts once "mat" follows it');
+const nm = 'but Harry did not know and Ron did not know and Hermione said'.split(' ');
+assert.equal(alignSpoken(nm, 3, 'did not know and'), 6, 'the place was a word ahead of the voice: the phrase is the one around it, not its twin further on');
+assert.equal(alignSpoken(nm, 6, 'Ron did not know'), 10, 'reading on into the repeated phrase still moves');
+assert.equal(alignSpoken('that Harry would know what Ron should'.split(' '), 0, 'that that'), null, 'a near-miss ("that"≈"what") four words on is not a match on its own');
 // Strictness presets round-trip.
 for (let k = 1; k < STRICTNESS.length; k++) assert.equal(strictnessOf(STRICTNESS[k]), k);
 assert.equal(strictnessOf({ window: 99 }), null);
